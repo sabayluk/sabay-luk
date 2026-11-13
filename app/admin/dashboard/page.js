@@ -9819,10 +9819,22 @@ export default function UnifiedAdminDashboard() {
 
   // ⭐️ ផ្ទាំង POS ⭐️
     const PosView = () => {
-    const filteredProducts = products.filter(p =>
-      (posCategory === 'all' || p.category === posCategory) &&
-      (p.name.toLowerCase().includes(posSearch.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(posSearch.toLowerCase())))
-    );
+    // ស្វែងរកប្រភេទ Category បន្ថែមដែលមានស្រាប់ក្នុង products ប៉ុន្តែមិនទាន់មានក្នុង categories list
+    const extraCategoryNames = Array.from(new Set(
+      products
+        .map(p => (p.category || '').trim())
+        .filter(c => c && !categories.some(cat => (cat.name || '').trim().toLowerCase() === c.toLowerCase()))
+    ));
+
+    const filteredProducts = products.filter(p => {
+      const matchCat = posCategory === 'all' || 
+        p.category === posCategory || 
+        ((p.category || '').trim().toLowerCase() === (posCategory || '').trim().toLowerCase());
+      const query = (posSearch || '').toLowerCase();
+      const matchSearch = (p.name || '').toLowerCase().includes(query) || 
+        (p.sku && p.sku.toLowerCase().includes(query));
+      return matchCat && matchSearch;
+    });
 
     return (
       <div className="flex h-[calc(100vh-80px)] animate-in fade-in bg-gray-100 -m-10">
@@ -9900,16 +9912,91 @@ export default function UnifiedAdminDashboard() {
           </div>
 
           {/* Categories Tab */}
-          <div className="flex gap-2.5 mb-6 overflow-x-auto pb-2">
-            <button onClick={() => setPosCategory('all')} className={`px-5 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-sm transition ${posCategory === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-blue-50'}`}>
-              ទំនិញទាំងអស់ ({products.length})
+          <div className="flex gap-2.5 mb-6 overflow-x-auto pb-2 items-center">
+            {/* ប៊ូតុង ទំនិញទាំងអស់ */}
+            <button
+              type="button"
+              onClick={() => setPosCategory('all')}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-sm transition flex items-center gap-2 cursor-pointer border ${
+                posCategory === 'all'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/40'
+                  : 'bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 border-gray-200/80'
+              }`}
+            >
+              <span>ទំនិញទាំងអស់</span>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+                posCategory === 'all' ? 'bg-white/25 text-white' : 'bg-blue-50 text-blue-700'
+              }`}>
+                ({products.length})
+              </span>
             </button>
-            {categories.map(cat => (
-              <button key={cat.id || cat.name} onClick={() => setPosCategory(cat.name)} className={`px-5 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-sm transition ${posCategory === cat.name ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-blue-50'}`}>
-                {cat.name}
-              </button>
-            ))}
+
+            {/* ប៊ូតុង ប្រភេទផលិតផលនីមួយៗ (បង្ហាញចំនួនច្បាស់ៗ ឧ. (5)) */}
+            {categories.map(cat => {
+              const catName = cat.name || '';
+              const count = products.filter(
+                p => (p.category || '').trim().toLowerCase() === catName.trim().toLowerCase()
+              ).length;
+              const isSelected = posCategory === catName || (posCategory || '').trim().toLowerCase() === catName.trim().toLowerCase();
+
+              return (
+                <button
+                  key={cat.id || catName}
+                  type="button"
+                  onClick={() => setPosCategory(catName)}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-sm transition flex items-center gap-2 cursor-pointer border ${
+                    isSelected
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/40'
+                      : 'bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 border-gray-200/80'
+                  }`}
+                >
+                  <span>{catName}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+                    isSelected
+                      ? 'bg-white/25 text-white'
+                      : count > 0
+                      ? 'bg-gray-100 text-gray-700'
+                      : 'bg-gray-50 text-gray-400'
+                  }`}>
+                    ({count})
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* ប្រភេទផ្សេងៗប្រសិនបើមានក្នុងផលិតផល ប៉ុន្តែមិនទាន់មានក្នុងតារាង Categories */}
+            {extraCategoryNames.map(extraCat => {
+              const count = products.filter(
+                p => (p.category || '').trim().toLowerCase() === extraCat.trim().toLowerCase()
+              ).length;
+              const isSelected = posCategory === extraCat || (posCategory || '').trim().toLowerCase() === extraCat.trim().toLowerCase();
+
+              return (
+                <button
+                  key={`extra-${extraCat}`}
+                  type="button"
+                  onClick={() => setPosCategory(extraCat)}
+                  className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-sm transition flex items-center gap-2 cursor-pointer border ${
+                    isSelected
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/40'
+                      : 'bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 border-gray-200/80'
+                  }`}
+                >
+                  <span>{extraCat}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+                    isSelected
+                      ? 'bg-white/25 text-white'
+                      : count > 0
+                      ? 'bg-gray-100 text-gray-700'
+                      : 'bg-gray-50 text-gray-400'
+                  }`}>
+                    ({count})
+                  </span>
+                </button>
+              );
+            })}
           </div>
+
 
           {/* Product Grid */}
           <div className="flex-1 overflow-y-auto pr-2 pb-10">
