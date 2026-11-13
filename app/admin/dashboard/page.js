@@ -622,6 +622,120 @@ export default function UnifiedAdminDashboard() {
   const [expRecipient, setExpRecipient] = useState('');
   const [expNote, setExpNote] = useState('');
 
+  // ================= 👥 ផ្នែកគ្រប់គ្រងបុគ្គលិក & បែងចែកសិទ្ធិ (MULTI-STAFF & ROLES) =================
+  const DEFAULT_STAFF_ACCOUNTS = [
+    {
+      id: 'STAFF-1',
+      name: 'វិចិត្រ (ម្ចាស់ហាង)',
+      username: 'admin',
+      pin: '1234',
+      role: 'ADMIN', // 'ADMIN' | 'CASHIER' | 'STOCK'
+      roleLabel: 'ម្ចាស់ហាង (Super Admin)',
+      phone: '0967205522',
+      avatar: '👑',
+      color: 'from-amber-500 to-orange-600',
+      active: true,
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'STAFF-2',
+      name: 'សុខា (អ្នកគិតលុយ)',
+      username: 'cashier',
+      pin: '1111',
+      role: 'CASHIER',
+      roleLabel: 'អ្នកគិតលុយ (Cashier)',
+      phone: '012345678',
+      avatar: '💻',
+      color: 'from-blue-500 to-indigo-600',
+      active: true,
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 'STAFF-3',
+      name: 'ដារ៉ា (អ្នកកាន់ស្តុក)',
+      username: 'stock',
+      pin: '2222',
+      role: 'STOCK',
+      roleLabel: 'អ្នកកាន់ស្តុក (Stock Keeper)',
+      phone: '0978877665',
+      avatar: '🗄️',
+      color: 'from-purple-500 to-violet-600',
+      active: true,
+      created_at: new Date().toISOString()
+    }
+  ];
+
+  const [staffList, setStaffList] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_staff_list');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {}
+      }
+    }
+    return DEFAULT_STAFF_ACCOUNTS;
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
+    }
+  }, [staffList]);
+
+  // Current logged in staff
+  const [currentStaff, setCurrentStaff] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_active_staff');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.id) return parsed;
+        } catch (e) {}
+      }
+    }
+    return DEFAULT_STAFF_ACCOUNTS[0]; // Default to Super Admin
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sabay_active_staff', JSON.stringify(currentStaff));
+    }
+  }, [currentStaff]);
+
+  // Auto redirect if current staff lacks permission for active tab
+  useEffect(() => {
+    if (!currentStaff) return;
+    if (currentStaff.role === 'CASHIER') {
+      if (activeTab !== 'pos' && activeTab !== 'orders') {
+        setActiveTab('pos');
+      }
+    } else if (currentStaff.role === 'STOCK') {
+      if (activeTab !== 'inventory' && activeTab !== 'upload' && activeTab !== 'categories') {
+        setActiveTab('inventory');
+      }
+    }
+  }, [currentStaff, activeTab]);
+
+  // Modals for Staff & Quick Switch
+  const [switchStaffModalOpen, setSwitchStaffModalOpen] = useState(false);
+  const [staffModalOpen, setStaffModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState(null);
+
+  // Form states for Add/Edit Staff
+  const [staffFormName, setStaffFormName] = useState('');
+  const [staffFormUsername, setStaffFormUsername] = useState('');
+  const [staffFormPin, setStaffFormPin] = useState('');
+  const [staffFormRole, setStaffFormRole] = useState('CASHIER');
+  const [staffFormPhone, setStaffFormPhone] = useState('');
+
+  // Switch Staff PIN prompt states
+  const [selectedStaffToLogin, setSelectedStaffToLogin] = useState(null);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [showPinInTable, setShowPinInTable] = useState(false);
+
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerFilterTier, setCustomerFilterTier] = useState('all');
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
@@ -7427,6 +7541,471 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
+  // ================= 👥 ផ្ទាំងគ្រប់គ្រងបុគ្គលិក & បែងចែកសិទ្ធិ (MULTI-STAFF & ROLES VIEW) =================
+  const StaffManagementView = () => {
+    // Save or Edit Staff
+    const handleSaveStaff = (e) => {
+      e.preventDefault();
+      if (!staffFormName.trim() || !staffFormUsername.trim() || !staffFormPin.trim()) {
+        alert('សូមបំពេញឈ្មោះ, ឈ្មោះប្រើប្រាស់ (Username) និងលេខសម្ងាត់ PIN (៤ ខ្ទង់)!');
+        return;
+      }
+      if (staffFormPin.length < 4) {
+        alert('លេខសម្ងាត់ PIN ត្រូវមានយ៉ាងតិច ៤ ខ្ទង់!');
+        return;
+      }
+
+      const roleObj = {
+        'ADMIN': { label: 'ម្ចាស់ហាង (Super Admin)', avatar: '👑', color: 'from-amber-500 to-orange-600' },
+        'CASHIER': { label: 'អ្នកគិតលុយ (Cashier)', avatar: '💻', color: 'from-blue-500 to-indigo-600' },
+        'STOCK': { label: 'អ្នកកាន់ស្តុក (Stock Keeper)', avatar: '🗄️', color: 'from-purple-500 to-violet-600' }
+      }[staffFormRole] || { label: staffFormRole, avatar: '👤', color: 'from-gray-500 to-slate-600' };
+
+      if (editingStaff) {
+        setStaffList(prev => prev.map(s => s.id === editingStaff.id ? {
+          ...s,
+          name: staffFormName.trim(),
+          username: staffFormUsername.trim().toLowerCase(),
+          pin: staffFormPin.trim(),
+          role: staffFormRole,
+          roleLabel: roleObj.label,
+          avatar: roleObj.avatar,
+          color: roleObj.color,
+          phone: staffFormPhone.trim()
+        } : s));
+        setToastNotification(`✅ បានកែប្រែគណនីបុគ្គលិក "${staffFormName}" ជោគជ័យ!`);
+      } else {
+        const newStaff = {
+          id: `STAFF-${Date.now().toString().slice(-4)}`,
+          name: staffFormName.trim(),
+          username: staffFormUsername.trim().toLowerCase(),
+          pin: staffFormPin.trim(),
+          role: staffFormRole,
+          roleLabel: roleObj.label,
+          avatar: roleObj.avatar,
+          color: roleObj.color,
+          phone: staffFormPhone.trim(),
+          active: true,
+          created_at: new Date().toISOString()
+        };
+        setStaffList(prev => [...prev, newStaff]);
+        setToastNotification(`🎉 បានបង្កើតគណនីបុគ្គលិកថ្មី "${staffFormName}" ជោគជ័យ!`);
+      }
+
+      setTimeout(() => setToastNotification(null), 3500);
+      setStaffModalOpen(false);
+      setEditingStaff(null);
+      setStaffFormName('');
+      setStaffFormUsername('');
+      setStaffFormPin('');
+      setStaffFormPhone('');
+    };
+
+    const handleOpenEditStaff = (staff) => {
+      setEditingStaff(staff);
+      setStaffFormName(staff.name || '');
+      setStaffFormUsername(staff.username || '');
+      setStaffFormPin(staff.pin || '');
+      setStaffFormRole(staff.role || 'CASHIER');
+      setStaffFormPhone(staff.phone || '');
+      setStaffModalOpen(true);
+    };
+
+    const handleDeleteStaff = (staff) => {
+      if (staffList.length <= 1) {
+        alert('មិនអាចលុបគណនីបុគ្គលិកចុងក្រោយបានទេ!');
+        return;
+      }
+      if (staff.id === currentStaff?.id) {
+        alert('មិនអាចលុបគណនីដែលកំពុង Log In នេះបានទេ! សូមប្តូរទៅគណនីផ្សេងសិន។');
+        return;
+      }
+      if (!window.confirm(`តើបងពិតជាចង់លុបគណនីបុគ្គលិក "${staff.name}" នេះមែនទេ?`)) return;
+      setStaffList(prev => prev.filter(s => s.id !== staff.id));
+      setToastNotification(`🗑️ បានលុបគណនី "${staff.name}" រួចរាល់!`);
+      setTimeout(() => setToastNotification(null), 3000);
+    };
+
+    const handleToggleActive = (staff) => {
+      if (staff.id === currentStaff?.id) {
+        alert('មិនអាចផ្អាកគណនីដែលកំពុងដំណើរការនេះបានទេ!');
+        return;
+      }
+      setStaffList(prev => prev.map(s => s.id === staff.id ? { ...s, active: !s.active } : s));
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-200">
+        
+        {/* Header Bar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-gray-100 shadow-xs">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl font-bold">
+                👥
+              </span>
+              <div>
+                <h2 className="text-lg sm:text-xl font-black text-gray-900 leading-tight">
+                  គ្រប់គ្រងបុគ្គលិក & បែងចែកសិទ្ធិ (Multi-Staff & Roles Permission)
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  បែងចែកសិទ្ធិបុគ្គលិកដាច់ដោយឡែក (ម្ចាស់ហាង, អ្នកគិតលុយ POS, អ្នកកាន់ស្តុក) ធានាសុវត្ថិភាពទិន្នន័យចំណេញ និងថ្លៃដើម
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStaffToLogin(null);
+                setEnteredPin('');
+                setPinError('');
+                setSwitchStaffModalOpen(true);
+              }}
+              className="bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs px-4 py-2.5 rounded-2xl border border-amber-200 transition flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+            >
+              <span>🔒</span>
+              <span>ប្តូរគណនីបុគ្គលិក (Switch)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingStaff(null);
+                setStaffFormName('');
+                setStaffFormUsername('');
+                setStaffFormPin('');
+                setStaffFormRole('CASHIER');
+                setStaffFormPhone('');
+                setStaffModalOpen(true);
+              }}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 text-white font-black text-xs px-4 py-2.5 rounded-2xl transition shadow-md shadow-blue-600/20 flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>➕</span>
+              <span>បន្ថែមបុគ្គលិកថ្មី</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ⭐️ ROLE EXPLANATION CARDS ⭐️ */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          
+          {/* 1. Super Admin Card */}
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50/60 p-5 rounded-3xl border border-amber-200 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-xl shadow-sm">
+                👑
+              </span>
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                Full Control
+              </span>
+            </div>
+            <div>
+              <h4 className="font-black text-sm text-gray-900">ម្ចាស់ហាង (Super Admin)</h4>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                មានសិទ្ធិមើលឃើញ និងគ្រប់គ្រងបានទាំងអស់៖ របាយការណ៍ចំណេញសុទ្ធ ថ្លៃដើមទំនិញ ស្តុក លក់ POS ចំណាយ និងគ្រប់គ្រងបុគ្គលិក។
+              </p>
+            </div>
+            <div className="pt-2 border-t border-amber-200/60 text-[10px] font-bold text-amber-800 flex items-center gap-1">
+              <span>✅</span> ឃើញថ្លៃដើម & ប្រាក់ចំណេញ ១០០%
+            </div>
+          </div>
+
+          {/* 2. Cashier Card */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50/60 p-5 rounded-3xl border border-blue-200 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xl shadow-sm">
+                💻
+              </span>
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-200/80 text-blue-900">
+                POS Only
+              </span>
+            </div>
+            <div>
+              <h4 className="font-black text-sm text-gray-900">អ្នកគិតលុយ (Cashier)</h4>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                ឃើញ និងប្រើប្រាស់បានតែផ្ទាំងលក់ POS មុខហាង និងវិក្កយបត្រប៉ុណ្ណោះ។ មិនអាចចូលមើលរបាយការណ៍ហិរញ្ញវត្ថុ ឬថ្លៃដើមឡើយ។
+              </p>
+            </div>
+            <div className="pt-2 border-t border-blue-200/60 text-[10px] font-bold text-blue-800 flex items-center gap-1">
+              <span>🔒</span> លាក់ថ្លៃដើម និងប្រាក់ចំណេញសុទ្ធ
+            </div>
+          </div>
+
+          {/* 3. Stock Keeper Card */}
+          <div className="bg-gradient-to-br from-purple-50 to-violet-50/60 p-5 rounded-3xl border border-purple-200 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 text-white flex items-center justify-center text-xl shadow-sm">
+                🗄️
+              </span>
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-200/80 text-purple-900">
+                Inventory Only
+              </span>
+            </div>
+            <div>
+              <h4 className="font-black text-sm text-gray-900">អ្នកកាន់ស្តុក (Stock Keeper)</h4>
+              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                មានសិទ្ធិតែលើការកែប្រែចំនួនស្តុក នាំទំនិញចូល (Stock In) និង Import Excel។ មិនអាចចូលមើលប្រព័ន្ធលក់ ឬលុយកាក់បានឡើយ។
+              </p>
+            </div>
+            <div className="pt-2 border-t border-purple-200/60 text-[10px] font-bold text-purple-800 flex items-center gap-1">
+              <span>🔒</span> មិនមានសិទ្ធិលើប្រព័ន្ធលុយកាក់
+            </div>
+          </div>
+
+        </div>
+
+        {/* ⭐️ STAFF MEMBERS TABLE ⭐️ */}
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-xs overflow-hidden">
+          
+          <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="font-black text-sm text-gray-900">បញ្ជីគណនីបុគ្គលិកទាំងអស់ ({staffList.length})</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPinInTable(prev => !prev)}
+              className="text-xs font-bold text-gray-500 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition cursor-pointer"
+            >
+              {showPinInTable ? '🔒 លាក់លេខ PIN' : '👁️ បង្ហាញលេខ PIN'}
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-50/80 text-[10px] text-gray-400 font-black uppercase tracking-wider border-b border-gray-100">
+                <tr>
+                  <th className="px-5 py-3">បុគ្គលិក</th>
+                  <th className="px-5 py-3">Username</th>
+                  <th className="px-5 py-3">តួនាទី (Role)</th>
+                  <th className="px-5 py-3">លេខទូរស័ព្ទ</th>
+                  <th className="px-5 py-3 text-center">លេខសម្ងាត់ PIN</th>
+                  <th className="px-5 py-3 text-center">ស្ថានភាព</th>
+                  <th className="px-5 py-3 text-right pr-6">សកម្មភាព</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {staffList.map((staff) => {
+                  const isCurrent = staff.id === currentStaff?.id;
+
+                  return (
+                    <tr key={staff.id} className={`hover:bg-gray-50/60 transition ${isCurrent ? 'bg-blue-50/30' : ''}`}>
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <span className={`w-9 h-9 rounded-2xl bg-gradient-to-br ${staff.color || 'from-gray-500 to-slate-600'} text-white flex items-center justify-center text-base shadow-xs shrink-0`}>
+                            {staff.avatar || '👤'}
+                          </span>
+                          <div>
+                            <span className="font-black text-gray-900 text-xs flex items-center gap-1.5">
+                              {staff.name}
+                              {isCurrent && (
+                                <span className="text-[9px] bg-blue-600 text-white px-2 py-0.2 rounded-full font-bold">
+                                  កំពុងប្រើប្រាស់
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-[10px] font-mono text-gray-400">{staff.id}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap font-mono font-bold text-gray-700">
+                        @{staff.username}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-xl border ${
+                          staff.role === 'ADMIN' ? 'bg-amber-50 text-amber-800 border-amber-300' :
+                          staff.role === 'CASHIER' ? 'bg-blue-50 text-blue-800 border-blue-300' :
+                          'bg-purple-50 text-purple-800 border-purple-300'
+                        }`}>
+                          <span>{staff.avatar}</span>
+                          <span>{staff.roleLabel}</span>
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-gray-600 font-medium">
+                        {staff.phone || '-'}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-center">
+                        <span className="font-mono font-bold text-xs bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200 text-gray-800">
+                          {showPinInTable ? staff.pin : '••••'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActive(staff)}
+                          disabled={isCurrent}
+                          className={`text-[10px] font-black px-2.5 py-1 rounded-xl transition ${
+                            staff.active 
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                              : 'bg-gray-100 text-gray-500 border border-gray-200'
+                          }`}
+                        >
+                          {staff.active ? '🟢 សកម្ម' : '⚪ ផ្អាក'}
+                        </button>
+                      </td>
+                      <td className="px-5 py-3.5 text-right pr-6 whitespace-nowrap space-x-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditStaff(staff)}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-[11px] px-2.5 py-1.5 rounded-xl border border-blue-200 transition cursor-pointer"
+                          title="កែប្រែគណនី"
+                        >
+                          ✏️ កែ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteStaff(staff)}
+                          disabled={isCurrent}
+                          className={`font-bold text-[11px] px-2.5 py-1.5 rounded-xl border transition ${
+                            isCurrent 
+                              ? 'opacity-30 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200' 
+                              : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200 cursor-pointer'
+                          }`}
+                          title="លុបគណនី"
+                        >
+                          🗑️
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+        {/* ⭐️ ADD / EDIT STAFF MODAL ⭐️ */}
+        {staffModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
+              
+              <div className="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-base font-bold">
+                    {editingStaff ? '✏️' : '👥'}
+                  </span>
+                  <div>
+                    <h3 className="font-black text-sm text-gray-900">
+                      {editingStaff ? 'កែប្រែគណនីបុគ្គលិក' : 'បន្ថែមគណនីបុគ្គលិកថ្មី'}
+                    </h3>
+                    <p className="text-[10px] text-gray-400">កំណត់ឈ្មោះ តួនាទី និងលេខសម្ងាត់ PIN</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStaffModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveStaff} className="space-y-3.5 text-xs">
+                
+                {/* Staff Name */}
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">
+                    ឈ្មោះពេញរបស់បុគ្គលិក <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={staffFormName}
+                    onChange={(e) => setStaffFormName(e.target.value)}
+                    placeholder="ឧ. សុខា, វិចិត្រ, ធីតា..."
+                    className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3 py-2.5 font-bold outline-none transition"
+                  />
+                </div>
+
+                {/* Username & PIN */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">
+                      Username <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={staffFormUsername}
+                      onChange={(e) => setStaffFormUsername(e.target.value)}
+                      placeholder="ឧ. cashier1"
+                      className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3 py-2.5 font-mono font-bold outline-none transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">
+                      លេខសម្ងាត់ PIN (៤ ខ្ទង់) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={6}
+                      required
+                      value={staffFormPin}
+                      onChange={(e) => setStaffFormPin(e.target.value.replace(/\D/g, ''))}
+                      placeholder="1234"
+                      className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3 py-2.5 font-mono font-black text-center tracking-widest text-base outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                {/* Role Select */}
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">
+                    តួនាទី និងសិទ្ធិកាន់កាប់ (Role) <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={staffFormRole}
+                    onChange={(e) => setStaffFormRole(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 outline-none cursor-pointer"
+                  >
+                    <option value="CASHIER">💻 អ្នកគិតលុយ (Cashier) — ប្រើបានតែ POS មុខហាង</option>
+                    <option value="STOCK">🗄️ អ្នកកាន់ស្តុក (Stock Keeper) — គ្រប់គ្រងស្តុក & នាំចូល</option>
+                    <option value="ADMIN">👑 ម្ចាស់ហាង (Super Admin) — គ្រប់គ្រងបានទាំងអស់ពេញលេញ</option>
+                  </select>
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">
+                    លេខទូរស័ព្ទបុគ្គលិក
+                  </label>
+                  <input
+                    type="text"
+                    value={staffFormPhone}
+                    onChange={(e) => setStaffFormPhone(e.target.value)}
+                    placeholder="ឧ. 012 345 678"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium outline-none"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setStaffModalOpen(false)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold transition"
+                  >
+                    បោះបង់
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-black transition shadow-md shadow-blue-600/20"
+                  >
+                    {editingStaff ? 'រក្សាទុកការកែប្រែ' : 'បង្កើតគណនី'}
+                  </button>
+                </div>
+
+              </form>
+
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
   const ordersData = [
     { id: 'ORD-9012', customer: 'សុខ សាន្ត', date: '2026-09-23', total: 85.00, status: 'Preparing', payment: 'ABA Pay' },
     { id: 'ORD-9013', customer: 'ចាន់ ធីតា', date: '2026-09-23', total: 150.00, status: 'Shipped', payment: 'COD' },
@@ -11953,102 +12532,110 @@ export default function UnifiedAdminDashboard() {
               <span className="text-[9px] text-slate-600 font-mono">01</span>
             </p>
 
-            {/* POS TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('pos')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'pos' 
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'pos' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'pos' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-blue-400 group-hover:bg-slate-700'
+            {/* POS TAB (ADMIN & CASHIER) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'CASHIER') && (
+              <button 
+                type="button"
+                onClick={() => setActiveTab('pos')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'pos' 
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'pos' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'pos' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-blue-400 group-hover:bg-slate-700'
+                  }`}>
+                    💻
+                  </span>
+                  <span className="text-xs truncate">ប្រព័ន្ធលក់ (POS)</span>
+                </div>
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                  activeTab === 'pos' ? 'bg-white/20 text-white' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                 }`}>
-                  💻
+                  ⚡ SALE
                 </span>
-                <span className="text-xs truncate">ប្រព័ន្ធលក់ (POS)</span>
-              </div>
-              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
-                activeTab === 'pos' ? 'bg-white/20 text-white' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-              }`}>
-                ⚡ SALE
-              </span>
-            </button>
+              </button>
+            )}
 
-            {/* ANALYTICS TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('analytics')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'analytics' 
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'analytics' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'analytics' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-emerald-400 group-hover:bg-slate-700'
-                }`}>
-                  📊
-                </span>
-                <span className="text-xs truncate">វិភាគទិន្នន័យ (P&L)</span>
-              </div>
-            </button>
+            {/* ANALYTICS TAB (SUPER ADMIN ONLY) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN') && (
+              <button 
+                type="button"
+                onClick={() => setActiveTab('analytics')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'analytics' 
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'analytics' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'analytics' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-emerald-400 group-hover:bg-slate-700'
+                  }`}>
+                    📊
+                  </span>
+                  <span className="text-xs truncate">វិភាគទិន្នន័យ (P&L)</span>
+                </div>
+              </button>
+            )}
 
-            {/* INVENTORY TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('inventory')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'inventory' 
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'inventory' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'inventory' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-purple-400 group-hover:bg-slate-700'
-                }`}>
-                  🗄️
-                </span>
-                <span className="text-xs truncate">គ្រប់គ្រងស្តុក</span>
-              </div>
-            </button>
+            {/* INVENTORY TAB (ADMIN & STOCK KEEPER) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'STOCK') && (
+              <button 
+                type="button"
+                onClick={() => setActiveTab('inventory')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'inventory' 
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'inventory' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'inventory' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-purple-400 group-hover:bg-slate-700'
+                  }`}>
+                    🗄️
+                  </span>
+                  <span className="text-xs truncate">គ្រប់គ្រងស្តុក</span>
+                </div>
+              </button>
+            )}
 
-            {/* UPLOAD PRODUCT TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('upload')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'upload' 
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'upload' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'upload' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-sky-400 group-hover:bg-slate-700'
-                }`}>
-                  📤
-                </span>
-                <span className="text-xs truncate">បញ្ចូលទំនិញថ្មី</span>
-              </div>
-            </button>
+            {/* UPLOAD PRODUCT TAB (ADMIN & STOCK KEEPER) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'STOCK') && (
+              <button 
+                type="button"
+                onClick={() => setActiveTab('upload')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'upload' 
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'upload' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'upload' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-sky-400 group-hover:bg-slate-700'
+                  }`}>
+                    📤
+                  </span>
+                  <span className="text-xs truncate">បញ្ចូលទំនិញថ្មី</span>
+                </div>
+              </button>
+            )}
           </div>
 
           {/* SECTION 2: STOREFRONT & CUSTOMERS (ផ្នែកមុខហាង & អតិថិជន) */}
@@ -12058,250 +12645,320 @@ export default function UnifiedAdminDashboard() {
               <span className="text-[9px] text-slate-600 font-mono">02</span>
             </p>
 
-            {/* STOREFRONT DROPDOWN */}
-            <div className="space-y-1">
+            {/* STOREFRONT DROPDOWN (ADMIN & STOCK KEEPER) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'STOCK') && (
+              <div className="space-y-1">
+                <button 
+                  type="button"
+                  onClick={() => setIsStoreOpen(!isStoreOpen)} 
+                  className={`w-full group flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                    isStoreOpen || activeTab === 'categories' || activeTab === 'cover'
+                      ? 'bg-slate-800/90 text-white border border-slate-700/60 shadow-xs' 
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 bg-slate-800 text-amber-400 group-hover:scale-110 transition-transform">
+                      🏬
+                    </span>
+                    <span className="text-xs font-bold truncate">គ្រប់គ្រងមុខហាង</span>
+                  </div>
+                  <span className={`text-[10px] transition-transform duration-300 mr-1 ${isStoreOpen ? 'rotate-180 text-blue-400' : 'text-slate-500'}`}>
+                    ▼
+                  </span>
+                </button>
+
+                {/* Sub-menus */}
+                {isStoreOpen && (
+                  <div className="pl-3 space-y-1 border-l-2 border-blue-500/60 ml-4 my-1.5 animate-in slide-in-from-top-2 duration-200">
+                    <button 
+                      type="button"
+                      onClick={() => setActiveTab('categories')} 
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold cursor-pointer active:scale-[0.98] ${
+                        activeTab === 'categories' 
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' 
+                          : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
+                      }`}
+                    >
+                      <span>🏷️</span>
+                      <span>ប្រភេទផលិតផល</span>
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setActiveTab('cover')} 
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold cursor-pointer active:scale-[0.98] ${
+                        activeTab === 'cover' 
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' 
+                          : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
+                      }`}
+                    >
+                      <span>🖼️</span>
+                      <span>គ្រប់គ្រង Cover ហាង</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ORDERS TAB (ADMIN & CASHIER) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'CASHIER') && (
               <button 
                 type="button"
-                onClick={() => setIsStoreOpen(!isStoreOpen)} 
-                className={`w-full group flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  isStoreOpen || activeTab === 'categories' || activeTab === 'cover'
-                    ? 'bg-slate-800/90 text-white border border-slate-700/60 shadow-xs' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                onClick={() => setActiveTab('orders')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'orders' 
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
                 }`}
               >
+                {activeTab === 'orders' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 bg-slate-800 text-amber-400 group-hover:scale-110 transition-transform">
-                    🏬
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'orders' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-orange-400 group-hover:bg-slate-700'
+                  }`}>
+                    🛒
                   </span>
-                  <span className="text-xs font-bold truncate">គ្រប់គ្រងមុខហាង</span>
+                  <span className="text-xs truncate">ការបញ្ជាទិញ</span>
                 </div>
-                <span className={`text-[10px] transition-transform duration-300 mr-1 ${isStoreOpen ? 'rotate-180 text-blue-400' : 'text-slate-500'}`}>
-                  ▼
+                {realOrders.filter(o => o.status === 'Pending').length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black animate-pulse ${
+                    activeTab === 'orders' ? 'bg-white text-slate-900' : 'bg-orange-500 text-white'
+                  }`}>
+                    {realOrders.filter(o => o.status === 'Pending').length}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* EXPENSES & NET PROFIT TAB (SUPER ADMIN ONLY) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN') && (
+              <button 
+                type="button"
+                onClick={() => setActiveTab('expenses')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'expenses' 
+                    ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'expenses' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'expenses' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-emerald-400 group-hover:bg-slate-700'
+                  }`}>
+                    💸
+                  </span>
+                  <span className="text-xs truncate">ចំណាយ & ចំណេញសុទ្ធ</span>
+                </div>
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                  activeTab === 'expenses' ? 'bg-white/20 text-white' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                }`}>
+                  P&L
                 </span>
               </button>
+            )}
 
-              {/* Sub-menus */}
-              {isStoreOpen && (
-                <div className="pl-3 space-y-1 border-l-2 border-blue-500/60 ml-4 my-1.5 animate-in slide-in-from-top-2 duration-200">
-                  <button 
-                    type="button"
-                    onClick={() => setActiveTab('categories')} 
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold cursor-pointer active:scale-[0.98] ${
-                      activeTab === 'categories' 
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' 
-                        : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
-                    }`}
-                  >
-                    <span>🏷️</span>
-                    <span>ប្រភេទផលិតផល</span>
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setActiveTab('cover')} 
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold cursor-pointer active:scale-[0.98] ${
-                      activeTab === 'cover' 
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' 
-                        : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
-                    }`}
-                  >
-                    <span>🖼️</span>
-                    <span>គ្រប់គ្រង Cover ហាង</span>
-                  </button>
+            {/* CUSTOMERS CRM TAB (SUPER ADMIN ONLY) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN') && (
+              <button 
+                type="button"
+                onClick={() => setActiveTab('customers')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'customers' 
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'customers' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'customers' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-teal-400 group-hover:bg-slate-700'
+                  }`}>
+                    👥
+                  </span>
+                  <span className="text-xs truncate">អតិថិជន (CRM)</span>
                 </div>
-              )}
-            </div>
+              </button>
+            )}
 
-            {/* ORDERS TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('orders')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'orders' 
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'orders' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'orders' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-orange-400 group-hover:bg-slate-700'
-                }`}>
-                  🛒
-                </span>
-                <span className="text-xs truncate">ការបញ្ជាទិញ</span>
-              </div>
-              {realOrders.filter(o => o.status === 'Pending').length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black animate-pulse ${
-                  activeTab === 'orders' ? 'bg-white text-slate-900' : 'bg-orange-500 text-white'
-                }`}>
-                  {realOrders.filter(o => o.status === 'Pending').length}
-                </span>
-              )}
-            </button>
-
-            {/* EXPENSES & NET PROFIT TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('expenses')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'expenses' 
-                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'expenses' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'expenses' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-emerald-400 group-hover:bg-slate-700'
-                }`}>
-                  💸
-                </span>
-                <span className="text-xs truncate">ចំណាយ & ចំណេញសុទ្ធ</span>
-              </div>
-              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
-                activeTab === 'expenses' ? 'bg-white/20 text-white' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-              }`}>
-                P&L
-              </span>
-            </button>
-
-            {/* CUSTOMERS CRM TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('customers')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'customers' 
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'customers' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'customers' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-teal-400 group-hover:bg-slate-700'
-                }`}>
-                  👥
-                </span>
-                <span className="text-xs truncate">អតិថិជន (CRM)</span>
-              </div>
-            </button>
-
-            {/* FEEDBACKS TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('feedbacks')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'feedbacks' 
-                  ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-lg shadow-amber-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'feedbacks' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'feedbacks' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-amber-400 group-hover:bg-slate-700'
-                }`}>
-                  💬
-                </span>
-                <span className="text-xs truncate">មតិយោបល់ (Feedbacks)</span>
-              </div>
-              {adminFeedbacks.length > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                  activeTab === 'feedbacks' ? 'bg-white/25 text-white' : 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
-                }`}>
-                  {adminFeedbacks.length}
-                </span>
-              )}
-            </button>
+            {/* FEEDBACKS TAB (SUPER ADMIN ONLY) */}
+            {(!currentStaff || currentStaff.role === 'ADMIN') && (
+              <button 
+                type="button"
+                onClick={() => setActiveTab('feedbacks')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'feedbacks' 
+                    ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-lg shadow-amber-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'feedbacks' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'feedbacks' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-amber-400 group-hover:bg-slate-700'
+                  }`}>
+                    💬
+                  </span>
+                  <span className="text-xs truncate">មតិយោបល់ (Feedbacks)</span>
+                </div>
+                {adminFeedbacks.length > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                    activeTab === 'feedbacks' ? 'bg-white/25 text-white' : 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                  }`}>
+                    {adminFeedbacks.length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
 
-          {/* SECTION 3: SYSTEM & CONFIGURATION (ការកំណត់ & ប្រព័ន្ធ) */}
-          <div className="space-y-1 pt-1 border-t border-slate-800/60">
-            <p className="px-3 pt-2 text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
-              <span>ប្រព័ន្ធ & ការកំណត់</span>
-              <span className="text-[9px] text-slate-600 font-mono">03</span>
-            </p>
+          {/* SECTION 3: SYSTEM & CONFIGURATION (SUPER ADMIN ONLY) */}
+          {(!currentStaff || currentStaff.role === 'ADMIN') && (
+            <div className="space-y-1 pt-1 border-t border-slate-800/60">
+              <p className="px-3 pt-2 text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                <span>ប្រព័ន្ធ & ការកំណត់</span>
+                <span className="text-[9px] text-slate-600 font-mono">03</span>
+              </p>
 
-            {/* API & TELEGRAM TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('api')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'api' 
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'api' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'api' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-violet-400 group-hover:bg-slate-700'
-                }`}>
-                  🔌
-                </span>
-                <span className="text-xs truncate">ការតភ្ជាប់ (API & Bot)</span>
-              </div>
-            </button>
+              {/* API & TELEGRAM TAB */}
+              <button 
+                type="button"
+                onClick={() => setActiveTab('api')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'api' 
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'api' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'api' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-violet-400 group-hover:bg-slate-700'
+                  }`}>
+                    🔌
+                  </span>
+                  <span className="text-xs truncate">ការតភ្ជាប់ (API & Bot)</span>
+                </div>
+              </button>
 
-            {/* STORE SETTINGS TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('settings')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'settings' 
-                  ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg shadow-orange-600/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'settings' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'settings' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-orange-400 group-hover:bg-slate-700'
-                }`}>
-                  🏪
-                </span>
-                <span className="text-xs truncate">កំណត់ហាង & Logo</span>
-              </div>
-            </button>
+              {/* STORE SETTINGS TAB */}
+              <button 
+                type="button"
+                onClick={() => setActiveTab('settings')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'settings' 
+                    ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg shadow-orange-600/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'settings' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'settings' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-orange-400 group-hover:bg-slate-700'
+                  }`}>
+                    🏪
+                  </span>
+                  <span className="text-xs truncate">កំណត់ហាង & Logo</span>
+                </div>
+              </button>
 
-            {/* INVOICE SETTINGS TAB */}
-            <button 
-              type="button"
-              onClick={() => setActiveTab('invoice')} 
-              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                activeTab === 'invoice' 
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-              }`}
-            >
-              {activeTab === 'invoice' && (
-                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-              )}
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                  activeTab === 'invoice' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-rose-400 group-hover:bg-slate-700'
-                }`}>
-                  🧾
+              {/* INVOICE SETTINGS TAB */}
+              <button 
+                type="button"
+                onClick={() => setActiveTab('invoice')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'invoice' 
+                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'invoice' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'invoice' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-rose-400 group-hover:bg-slate-700'
+                  }`}>
+                    🧾
+                  </span>
+                  <span className="text-xs truncate">កំណត់វិក្កយបត្រ</span>
+                </div>
+              </button>
+
+              {/* MULTI-STAFF MANAGEMENT TAB */}
+              <button 
+                type="button"
+                onClick={() => setActiveTab('staff')} 
+                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                  activeTab === 'staff' 
+                    ? 'bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/25 font-black' 
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                }`}
+              >
+                {activeTab === 'staff' && (
+                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                )}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                    activeTab === 'staff' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-indigo-400 group-hover:bg-slate-700'
+                  }`}>
+                    👥
+                  </span>
+                  <span className="text-xs truncate">គ្រប់គ្រងបុគ្គលិក</span>
+                </div>
+                <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded-full font-bold">
+                  {staffList.length} នាក់
                 </span>
-                <span className="text-xs truncate">កំណត់វិក្កយបត្រ</span>
+              </button>
+            </div>
+          )}
+
+          {/* ACTIVE STAFF PROFILE CARD AT BOTTOM */}
+          <div className="pt-2 pb-1 border-t border-slate-800/80 mt-2">
+            <div className="bg-slate-950/90 p-3 rounded-2xl border border-slate-800 flex items-center justify-between gap-2 shadow-xs">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <span className={`w-9 h-9 rounded-xl bg-gradient-to-br ${currentStaff?.color || 'from-amber-500 to-orange-600'} text-white flex items-center justify-center text-base shrink-0 shadow-xs`}>
+                  {currentStaff?.avatar || '👑'}
+                </span>
+                <div className="min-w-0">
+                  <span className="font-black text-xs text-white block truncate leading-tight">
+                    {currentStaff?.name || 'Admin'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-bold block truncate">
+                    {currentStaff?.roleLabel || 'Super Admin'}
+                  </span>
+                </div>
               </div>
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStaffToLogin(null);
+                  setEnteredPin('');
+                  setPinError('');
+                  setSwitchStaffModalOpen(true);
+                }}
+                className="bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white px-2.5 py-1.5 rounded-xl text-[10px] font-black transition border border-slate-700/80 shrink-0 cursor-pointer"
+                title="ប្តូរបុគ្គលិក ឬចាក់សោ PIN"
+              >
+                🔒 ប្តូរ
+              </button>
+            </div>
           </div>
 
           {/* QUICK STOREFRONT LINK AT BOTTOM */}
-          <div className="pt-2 pb-1">
+          <div className="pt-1 pb-1">
             <a 
               href="/" 
               target="_blank" 
@@ -12333,7 +12990,50 @@ export default function UnifiedAdminDashboard() {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-10 bg-gray-50 h-full relative">
+      <main className="flex-1 overflow-y-auto p-6 md:p-10 bg-gray-50 h-full relative">
+        {/* ⭐️ TOP STAFF STATUS & SWITCH BAR ⭐️ */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-white/90 backdrop-blur-md px-4 sm:px-5 py-3 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${currentStaff?.color || 'from-amber-500 to-orange-600'} text-white flex items-center justify-center text-xl shadow-xs shrink-0`}>
+              {currentStaff?.avatar || '👑'}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-sm text-gray-900">{currentStaff?.name || 'វិចិត្រ (ម្ចាស់ហាង)'}</span>
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                  currentStaff?.role === 'ADMIN' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                  currentStaff?.role === 'CASHIER' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                  'bg-purple-100 text-purple-800 border border-purple-200'
+                }`}>
+                  {currentStaff?.roleLabel || 'ម្ចាស់ហាង (Super Admin)'}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 font-medium mt-0.5">
+                {currentStaff?.role === 'ADMIN' && '🔓 សិទ្ធិគ្រប់គ្រងពេញលេញ (Full Access) — គ្រប់គ្រងមុខងារទាំងអស់'}
+                {currentStaff?.role === 'CASHIER' && '💻 សិទ្ធិអ្នកគិតលុយ (Cashier) — ប្រើប្រាស់ POS & ការបញ្ជាទិញ (គ្មានសិទ្ធិមើលថ្លៃដើម/របាយការណ៍ចំណេញ)'}
+                {currentStaff?.role === 'STOCK' && '🗄️ សិទ្ធិអ្នកកាន់ស្តុក (Stock Keeper) — គ្រប់គ្រងស្តុក, បញ្ចូលទំនិញ & ប្រភេទមុខទំនិញ'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStaffToLogin(null);
+                setEnteredPin('');
+                setPinError('');
+                setSwitchStaffModalOpen(true);
+              }}
+              className="bg-slate-900 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+              title="ប្តូរបុគ្គលិកប្រើប្រាស់ (Switch Staff Account)"
+            >
+              <span>🔒</span>
+              <span>ប្តូរគណនី (Switch Profile)</span>
+            </button>
+          </div>
+        </div>
+
         {activeTab === 'pos' && PosView()}
         {activeTab === 'analytics' && AnalyticsView()}
         {activeTab === 'inventory' && InventoryView()}
@@ -12346,7 +13046,8 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'feedbacks' && FeedbacksView()}
         {activeTab === 'api' && ApiView()}
         {activeTab === 'settings' && StoreSettingsView()}
-        {activeTab === 'invoice' && InvoiceSettingsView()} {/* 👈 ត្រូវមានបន្ទាត់នេះ */}
+        {activeTab === 'invoice' && InvoiceSettingsView()}
+        {activeTab === 'staff' && StaffManagementView()}
       </main>
 
       {/* ⭐️ SLIP LIGHTBOX MODAL ⭐️ */}
@@ -12392,6 +13093,222 @@ export default function UnifiedAdminDashboard() {
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2.5 rounded-xl transition"
               >
                 បិទ (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐️ MODAL ប្តូរគណនីបុគ្គលិក / ចាក់សោ PIN (SWITCH STAFF PROFILE WITH PIN MODAL) ⭐️ */}
+      {switchStaffModalOpen && (
+        <div 
+          onClick={() => {
+            setSwitchStaffModalOpen(false);
+            setSelectedStaffToLogin(null);
+            setEnteredPin('');
+            setPinError('');
+          }}
+          className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 flex flex-col max-h-[90vh]"
+          >
+            {/* Header */}
+            <div className="p-5 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-xl font-bold">
+                  🔒
+                </div>
+                <div>
+                  <h3 className="text-base font-black">ប្តូរគណនីបុគ្គលិក (Switch Staff Profile)</h3>
+                  <p className="text-[11px] text-slate-400">ជ្រើសរើសគណនី និងវាយបញ្ចូលលេខសម្ងាត់ PIN ៤ ខ្ទង់</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setSwitchStaffModalOpen(false);
+                  setSelectedStaffToLogin(null);
+                  setEnteredPin('');
+                  setPinError('');
+                }}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center font-bold text-sm transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              {/* Staff Selection Cards */}
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2.5">
+                  ជ្រើសរើសគណនីបុគ្គលិក:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {staffList.filter(s => s.active !== false).map(staff => {
+                    const isSelected = (selectedStaffToLogin?.id || currentStaff?.id) === staff.id;
+                    const isCurrent = currentStaff?.id === staff.id;
+                    return (
+                      <button
+                        key={staff.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedStaffToLogin(staff);
+                          setEnteredPin('');
+                          setPinError('');
+                        }}
+                        className={`p-3 rounded-2xl text-left border-2 transition-all flex flex-col items-center text-center gap-2 cursor-pointer ${
+                          isSelected 
+                            ? 'border-indigo-600 bg-indigo-50/70 shadow-md ring-2 ring-indigo-200' 
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${staff.color || 'from-indigo-500 to-blue-600'} text-white flex items-center justify-center text-2xl shadow-xs`}>
+                          {staff.avatar || '👤'}
+                        </span>
+                        <div className="w-full">
+                          <span className="font-black text-xs text-gray-900 block truncate">
+                            {staff.name}
+                          </span>
+                          <span className="text-[10px] text-gray-500 font-bold block truncate">
+                            {staff.role === 'ADMIN' ? 'Super Admin' : staff.role === 'CASHIER' ? 'Cashier' : 'Stock'}
+                          </span>
+                          {isCurrent && (
+                            <span className="inline-block mt-1 text-[9px] font-black bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md">
+                              ● កំពុងប្រើ
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* PIN Input Section */}
+              {(() => {
+                const targetStaff = selectedStaffToLogin || currentStaff || staffList[0];
+                const handleVerifyPin = (pinToTest) => {
+                  const checkPin = pinToTest || enteredPin;
+                  if (!targetStaff) return;
+                  if (checkPin === targetStaff.pin) {
+                    setCurrentStaff(targetStaff);
+                    setSwitchStaffModalOpen(false);
+                    setSelectedStaffToLogin(null);
+                    setEnteredPin('');
+                    setPinError('');
+                    if (targetStaff.role === 'CASHIER') setActiveTab('pos');
+                    else if (targetStaff.role === 'STOCK') setActiveTab('inventory');
+                    setToastNotification(`🎉 សូមស្វាគមន៍ "${targetStaff.name}" (${targetStaff.roleLabel})!`);
+                    setTimeout(() => setToastNotification(null), 3500);
+                  } else {
+                    setPinError('❌ លេខកូដ PIN មិនត្រឹមត្រូវទេ! សូមសាកល្បងម្តងទៀត។');
+                    setEnteredPin('');
+                  }
+                };
+
+                const handleKeyClick = (val) => {
+                  if (enteredPin.length >= 4) return;
+                  const nextPin = enteredPin + val;
+                  setEnteredPin(nextPin);
+                  setPinError('');
+                  if (nextPin.length === 4) {
+                    handleVerifyPin(nextPin);
+                  }
+                };
+
+                const handleBackspace = () => {
+                  setEnteredPin(prev => prev.slice(0, -1));
+                  setPinError('');
+                };
+
+                return (
+                  <div className="bg-gray-50 p-4 sm:p-5 rounded-2xl border border-gray-200 text-center space-y-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-gray-700">
+                        វាយបញ្ចូលកូដ PIN (៤ ខ្ទង់) របស់ <b className="text-gray-900">{targetStaff?.name}</b>:
+                      </span>
+                    </div>
+
+                    {/* PIN Dots */}
+                    <div className="flex items-center justify-center gap-3 py-1">
+                      {[0, 1, 2, 3].map(idx => (
+                        <div
+                          key={idx}
+                          className={`w-4 h-4 rounded-full border-2 transition-all ${
+                            enteredPin.length > idx 
+                              ? 'bg-indigo-600 border-indigo-600 scale-110 shadow-xs' 
+                              : 'bg-white border-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    {pinError && (
+                      <p className="text-xs font-bold text-red-600 animate-bounce">
+                        {pinError}
+                      </p>
+                    )}
+
+                    {/* Numeric Keypad */}
+                    <div className="max-w-[240px] mx-auto grid grid-cols-3 gap-2 pt-1">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => handleKeyClick(num.toString())}
+                          className="h-11 bg-white hover:bg-indigo-50 border border-gray-200 rounded-xl font-black text-base text-gray-800 shadow-xs hover:border-indigo-300 active:scale-95 transition cursor-pointer"
+                        >
+                          {num}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => { setEnteredPin(''); setPinError(''); }}
+                        className="h-11 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-xl font-bold text-xs text-gray-600 active:scale-95 transition cursor-pointer"
+                      >
+                        C
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleKeyClick('0')}
+                        className="h-11 bg-white hover:bg-indigo-50 border border-gray-200 rounded-xl font-black text-base text-gray-800 shadow-xs hover:border-indigo-300 active:scale-95 transition cursor-pointer"
+                      >
+                        0
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBackspace}
+                        className="h-11 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-xl font-bold text-sm text-gray-600 active:scale-95 transition cursor-pointer"
+                      >
+                        ⌫
+                      </button>
+                    </div>
+
+                    {/* PIN Hint for Quick Testing */}
+                    <div className="pt-2 border-t border-gray-200/80 text-[11px] text-gray-500 font-medium">
+                      💡 កូដ PIN លំនាំដើម: <b>Admin:</b> 1234 • <b>Cashier:</b> 1111 • <b>Stock:</b> 2222
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setSwitchStaffModalOpen(false);
+                  setSelectedStaffToLogin(null);
+                  setEnteredPin('');
+                  setPinError('');
+                }}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-5 py-2.5 rounded-xl text-xs transition cursor-pointer"
+              >
+                បិទ
               </button>
             </div>
           </div>
