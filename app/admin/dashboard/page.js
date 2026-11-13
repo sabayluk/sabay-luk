@@ -975,6 +975,15 @@ export default function UnifiedAdminDashboard() {
   // States សម្រាប់ Search និង Filter ក្នុងផ្ទាំង Inventory
   const [invSearch, setInvSearch] = useState('');
   const [invCategory, setInvCategory] = useState('all');
+  const [invViewMode, setInvViewMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sabay_inv_view_mode') || 'table';
+    }
+    return 'table';
+  });
+  const [invSortBy, setInvSortBy] = useState('newest');
+  const [selectedInvProductIds, setSelectedInvProductIds] = useState([]);
+  const [quickStockUpdatingId, setQuickStockUpdatingId] = useState(null);
 
   useEffect(() => {
     fetchProducts();
@@ -8037,18 +8046,24 @@ export default function UnifiedAdminDashboard() {
     }
   };
 
-  // ⭐️ ផ្ទាំង InventoryView ដែលបានកែសម្រួលរួចរាល់ (គ្មាន Modal ចាស់ខុស) ⭐️
-    const InventoryView = () => {
+    // ⭐️ ផ្ទាំង InventoryView កម្រិតខ្ពស់ ទាន់សម័យ ឡូយ រស់រវើក និងងាយស្រួលប្រើប្រាស់បំផុត (ULTRA-MODERN INVENTORY SUITE) ⭐️
+  const InventoryView = () => {
+    const totalItems = products.length;
+    const totalUnits = products.reduce((sum, p) => sum + (Number(p.stock_qty) || 0), 0);
     const lowStockCount = products.filter(p => p.stock_qty > 0 && p.stock_qty <= (p.low_stock_alert || 5)).length;
     const outOfStockCount = products.filter(p => p.stock_qty <= 0).length;
-    const totalValue = products.reduce((sum, p) => sum + ((p.price || 0) * (p.stock_qty || 0)), 0);
+    const inStockCount = products.filter(p => p.stock_qty > (p.low_stock_alert || 5)).length;
+    const totalRetailValue = products.reduce((sum, p) => sum + ((Number(p.price) || 0) * (Number(p.stock_qty) || 0)), 0);
+    const totalCostValue = products.reduce((sum, p) => sum + ((Number(p.cost_price) || 0) * (Number(p.stock_qty) || 0)), 0);
+    const inStockRate = totalItems > 0 ? Math.round((inStockCount / totalItems) * 100) : 100;
 
+    // Filter Logic
     const filteredInventory = products.filter(p => {
       const pCat = (p.category || '').trim().toLowerCase();
       const filterCat = invCategory.trim().toLowerCase();
 
       const matchesCategory = invCategory === 'all' || pCat.includes(filterCat) || filterCat.includes(pCat);
-      const matchesSearch = p.name.toLowerCase().includes(invSearch.toLowerCase()) || p.sku.toLowerCase().includes(invSearch.toLowerCase());
+      const matchesSearch = p.name.toLowerCase().includes(invSearch.toLowerCase()) || (p.sku && p.sku.toLowerCase().includes(invSearch.toLowerCase()));
       
       let matchesStatus = true;
       if (filterStatus === 'low') matchesStatus = p.stock_qty > 0 && p.stock_qty <= (p.low_stock_alert || 5);
@@ -8058,16 +8073,126 @@ export default function UnifiedAdminDashboard() {
       return matchesCategory && matchesSearch && matchesStatus;
     });
 
+    // Sort Logic
+    const sortedInventory = [...filteredInventory].sort((a, b) => {
+      if (invSortBy === 'stock_asc') return (Number(a.stock_qty) || 0) - (Number(b.stock_qty) || 0);
+      if (invSortBy === 'stock_desc') return (Number(b.stock_qty) || 0) - (Number(a.stock_qty) || 0);
+      if (invSortBy === 'price_asc') return (Number(a.price) || 0) - (Number(b.price) || 0);
+      if (invSortBy === 'price_desc') return (Number(b.price) || 0) - (Number(a.price) || 0);
+      if (invSortBy === 'name') return (a.name || '').localeCompare(b.name || '');
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+
+    // ⭐️ មុខងារកែប្រែចំនួនស្តុកលឿនរហ័ស (+ / - Quick Adjust) ដោយមិនបាច់បើក Modal ⭐️
+    const handleQuickStockAdjust = async (product, delta) => {
+      const currentQty = Number(product.stock_qty) || 0;
+      const newQty = Math.max(0, currentQty + delta);
+      if (newQty === currentQty) return;
+
+      setQuickStockUpdatingId(product.id);
+
+      // Optimistic update
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, stock_qty: newQty } : p));
+
+      try {
+        const { error } = await supabase
+          .from('products')
+          .update({ stock_qty: newQty })
+          .eq('id', product.id);
+
+        if (error) throw error;
+
+        // Log movement
+        try {
+          await supabase.from('stock_movements').insert([{
+            product_id: product.id,
+            type: delta > 0 ? 'PURCHASE' : 'ADJUSTMENT',
+            qty_change: delta,
+            previous_qty: currentQty,
+            new_qty: newQty,
+            reason: delta > 0 ? 'កែតម្រូវបន្ថែមរហ័ស (+)' : 'កែតម្រូវបន្ថយរហ័ស (-)'
+          }]);
+        } catch (logErr) {}
+
+        setToastNotification(`✅ បានកែប្រែស្តុក "${product.name}": ${currentQty} ➔ ${newQty}`);
+        setTimeout(() => setToastNotification(null), 2500);
+      } catch (err) {
+        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, stock_qty: currentQty } : p));
+        alert('❌ មិនអាចកែប្រែស្តុកបានទេ: ' + err.message);
+      } finally {
+        setQuickStockUpdatingId(null);
+      }
+    };
+
+    // Bulk selection handlers
+    const handleToggleSelectAll = () => {
+      if (selectedInvProductIds.length === sortedInventory.length && sortedInventory.length > 0) {
+        setSelectedInvProductIds([]);
+      } else {
+        setSelectedInvProductIds(sortedInventory.map(p => p.id));
+      }
+    };
+
+    const handleToggleSelectProduct = (id) => {
+      setSelectedInvProductIds(prev => 
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
+    };
+
+    const handleBulkDelete = async () => {
+      if (selectedInvProductIds.length === 0) return;
+      if (!window.confirm(`តើបងពិតជាចង់លុបទំនិញទាំង ${selectedInvProductIds.length} មុខនេះចេញពីស្តុកមែនទេ?`)) return;
+
+      try {
+        const { error } = await supabase
+          .from('products')
+          .delete()
+          .in('id', selectedInvProductIds);
+
+        if (error) throw error;
+
+        setToastNotification(`🗑️ បានលុបទំនិញទាំង ${selectedInvProductIds.length} មុខជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 3000);
+        setSelectedInvProductIds([]);
+        fetchProducts();
+      } catch (err) {
+        alert('❌ បរាជ័យក្នុងការលុបទំនិញជាបណ្តុំ: ' + err.message);
+      }
+    };
+
+    const handleCopySku = (skuText) => {
+      if (!skuText) return;
+      navigator.clipboard.writeText(skuText);
+      setToastNotification(`📋 បានចម្លង SKU: ${skuText}`);
+      setTimeout(() => setToastNotification(null), 2000);
+    };
+
     return (
-      <div className="animate-in fade-in pb-12 max-w-[1400px] mx-auto relative">
-        {/* Header */}
-        <div className="flex justify-between items-end mb-8">
-          <div>
-            <h2 className="text-3xl font-black text-gray-900">🗄️ គ្រប់គ្រងស្តុកស្តង់ដារ (Inventory Management)</h2>
-            <p className="text-sm text-gray-500 mt-1">គ្រប់គ្រងចំនួនទំនិញ នាំចូលស្តុក និងតាមដានប្រវត្តិចលនាចេញចូល</p>
+      <div className="animate-in fade-in pb-16 max-w-[1440px] mx-auto relative select-none">
+        
+        {/* ⭐️ ULTRA-MODERN HEADER & ACTIONS TOOLBAR ⭐️ */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8 bg-white/90 backdrop-blur-md p-6 rounded-3xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 text-white flex items-center justify-center text-3xl shadow-lg shadow-blue-500/20 shrink-0">
+              🗄️
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+                  គ្រប់គ្រងស្តុកទំនិញ (Smart Stock Hub)
+                </h2>
+                <span className="hidden sm:inline-flex text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full border border-blue-200">
+                  Realtime Sync
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 font-medium mt-1">
+                តាមដានចំនួនស្តុកជាក់ស្តែង ចលនាទំនិញ នាំចូលរហ័ស និងតម្លៃទុនស្តុកសរុប
+              </p>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Hidden Input សម្រាប់រើស File Excel/CSV */}
+
+          {/* Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2">
             <input 
               type="file" 
               ref={bulkFileInputRef} 
@@ -8076,56 +8201,54 @@ export default function UnifiedAdminDashboard() {
               className="hidden" 
             />
 
-            {/* ប៊ូតុង នាំចូល Excel / CSV (Bulk Import) */}
+            {/* ប៊ូតុង បន្ថែមផលិតផលថ្មី */}
+            <button 
+              type="button"
+              onClick={() => setActiveTab('upload')} 
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-blue-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center gap-2 cursor-pointer"
+            >
+              <span>+ បន្ថែមទំនិញថ្មី</span>
+            </button>
+
+            {/* Import Excel */}
             <button 
               type="button" 
               onClick={() => bulkFileInputRef.current?.click()}
-              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-4 py-3 rounded-2xl text-xs font-black shadow-md hover:shadow-lg transition flex items-center gap-2 cursor-pointer active:scale-95"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
               title="ទាញទំនិញចូលប្រព័ន្ធរាប់រយមុខតាម Excel/CSV"
             >
               <span>📥</span>
-              <span>Import Excel / CSV</span>
+              <span>Import Excel</span>
             </button>
 
-            {/* ប៊ូតុង ទាញយកគំរូ Excel Template */}
-            <button 
-              type="button" 
-              onClick={downloadInventoryTemplate}
-              className="bg-white hover:bg-gray-50 text-gray-700 border-2 border-gray-200 px-3.5 py-3 rounded-2xl text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-              title="ទាញយកឯកសារគំរូ Excel សម្រាប់បំពេញទិន្នន័យ"
-            >
-              <span>📋</span>
-              <span>គំរូ Template</span>
-            </button>
-
-            {/* ប៊ូតុង Export Excel (.xlsx) */}
+            {/* Export .xlsx */}
             <button 
               type="button" 
               onClick={exportInventoryToExcel}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-2 border-emerald-200 px-3.5 py-3 rounded-2xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
               title="ទាញយកទិន្នន័យស្តុកជា Excel (.xlsx)"
             >
               <span>📊</span>
               <span>Export .xlsx</span>
             </button>
 
-            {/* ប៊ូតុង Export CSV */}
+            {/* គំរូ Template */}
             <button 
               type="button" 
-              onClick={exportInventoryToCSV}
-              className="bg-gray-50 hover:bg-gray-100 text-gray-700 border-2 border-gray-200 px-3 py-3 rounded-2xl text-xs font-bold shadow-xs transition flex items-center gap-1 cursor-pointer active:scale-95"
-              title="ទាញយកទិន្នន័យស្តុកជា CSV"
+              onClick={downloadInventoryTemplate}
+              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
+              title="ទាញយកឯកសារគំរូ Excel"
             >
-              <span>📄</span>
-              <span>CSV</span>
+              <span>📋</span>
+              <span>គំរូ Template</span>
             </button>
 
-            {/* ប៊ូតុង ពិនិត្យ & ផ្ញើ Alert ទៅ Telegram */}
+            {/* Telegram Alert */}
             <button 
               type="button" 
               onClick={handleManualStockAlertCheck}
               disabled={telegramTesting}
-              className={`border-2 px-3.5 py-3 rounded-2xl text-xs font-black shadow-xs transition flex items-center gap-2 cursor-pointer active:scale-95 ${
+              className={`border px-3 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
                 (lowStockCount + outOfStockCount) > 0 
                   ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300' 
                   : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
@@ -8133,340 +8256,955 @@ export default function UnifiedAdminDashboard() {
               title="ផ្ញើការជូនដំណឹងទំនិញជិតអស់ស្តុកទៅកាន់ Telegram"
             >
               <span>🔔</span>
-              <span>Telegram Alert</span>
+              <span>Telegram</span>
               {(lowStockCount + outOfStockCount) > 0 && (
                 <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
                   {lowStockCount + outOfStockCount}
                 </span>
               )}
             </button>
+          </div>
+        </div>
 
-            {/* ប៊ូតុង បន្ថែមផលិតផលថ្មី */}
+        {/* ⭐️ 4 VIBRANT EXECUTIVE KPI CARDS WITH PROGRESS GAUGES ⭐️ */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          
+          {/* Card 1: Total SKUs */}
+          <div className="bg-gradient-to-br from-blue-50/80 via-white to-white p-5 rounded-3xl border border-blue-100/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">សរុបមុខទំនិញ</span>
+              <span className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+                📦
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-gray-900">{totalItems}</span>
+                <span className="text-xs font-black text-blue-600">SKUs</span>
+              </div>
+              <p className="text-[11px] text-gray-500 font-bold mt-1">
+                សរុប <span className="text-gray-900 font-black">{totalUnits.toLocaleString()}</span> ឯកតា (Units) ក្នុងស្តុក
+              </p>
+            </div>
+          </div>
+
+          {/* Card 2: Total Valuation */}
+          <div className="bg-gradient-to-br from-emerald-50/80 via-white to-white p-5 rounded-3xl border border-emerald-100/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">តម្លៃស្តុកសរុប (លក់)</span>
+              <span className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+                💰
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-emerald-600">
+                  ${totalRetailValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 font-bold mt-1">
+                ដើមទុន: <span className="text-gray-800 font-black">${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Card 3: Stock Health Gauge */}
+          <div className="bg-gradient-to-br from-purple-50/80 via-white to-white p-5 rounded-3xl border border-purple-100/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">សុខភាពស្តុក (In-Stock)</span>
+              <span className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+                🟢
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-purple-600">{inStockRate}%</span>
+                <span className="text-xs font-bold text-gray-500">ពេញស្តុក</span>
+              </div>
+              {/* Mini Segmented Progress Bar */}
+              <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden flex mt-2">
+                <div style={{ width: `${(inStockCount / (totalItems || 1)) * 100}%` }} className="bg-emerald-500 h-full" title={`មានស្តុក: ${inStockCount}`}></div>
+                <div style={{ width: `${(lowStockCount / (totalItems || 1)) * 100}%` }} className="bg-amber-500 h-full" title={`ជិតអស់: ${lowStockCount}`}></div>
+                <div style={{ width: `${(outOfStockCount / (totalItems || 1)) * 100}%` }} className="bg-rose-500 h-full" title={`ដាច់ស្តុក: ${outOfStockCount}`}></div>
+              </div>
+              <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1">
+                <span className="text-emerald-600 font-black">{inStockCount} ស្តុកពេញ</span>
+                <span className="text-amber-600 font-black">{lowStockCount} ជិតអស់</span>
+                <span className="text-rose-600 font-black">{outOfStockCount} ដាច់ស្តុក</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Stock Alerts */}
+          <div className={`p-5 rounded-3xl border shadow-xs relative overflow-hidden transition ${
+            (lowStockCount + outOfStockCount) > 0 
+              ? 'bg-gradient-to-br from-rose-50/90 via-white to-white border-rose-200' 
+              : 'bg-gradient-to-br from-gray-50 via-white to-white border-gray-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">ទំនិញប្រកាសអាសន្ន</span>
+              <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-black ${
+                (lowStockCount + outOfStockCount) > 0 ? 'bg-rose-500/10 text-rose-600 animate-pulse' : 'bg-gray-100 text-gray-400'
+              }`}>
+                ⚠️
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-baseline gap-2">
+                <span className={`text-3xl font-black ${ (lowStockCount + outOfStockCount) > 0 ? 'text-rose-600' : 'text-gray-900' }`}>
+                  {lowStockCount + outOfStockCount}
+                </span>
+                <span className="text-xs font-black text-rose-600">មុខទំនិញ</span>
+              </div>
+              <div className="flex items-center justify-between mt-1.5">
+                <span className="text-[11px] text-gray-500 font-bold">
+                  {outOfStockCount > 0 ? `🔴 ${outOfStockCount} ដាច់ស្តុក` : '🟢 គ្មានដាច់ស្តុក'}
+                </span>
+                {(lowStockCount + outOfStockCount) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus(filterStatus === 'low' ? 'all' : 'low')}
+                    className="text-[10px] font-black text-rose-600 bg-rose-100 hover:bg-rose-200 px-2 py-0.5 rounded-lg transition cursor-pointer"
+                  >
+                    {filterStatus === 'low' ? 'បង្ហាញទាំងអស់' : '⚡ ច្រោះមើល'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ⭐️ SUB-NAVIGATION TABS & VIEW SWITCHER ⭐️ */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b border-gray-200 pb-3">
+          <div className="flex items-center gap-2">
             <button 
-              onClick={() => setActiveTab('upload')} 
-              className="bg-blue-600 text-white px-5 py-3 rounded-2xl text-xs font-black shadow-lg hover:bg-blue-700 transition flex items-center gap-2 cursor-pointer active:scale-95"
+              type="button"
+              onClick={() => setInventorySubTab('items')} 
+              className={`px-4 py-2 rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-2 ${
+                inventorySubTab === 'items' 
+                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20' 
+                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              }`}
             >
-              <span>+ បន្ថែមទំនិញថ្មី</span>
+              <span>📦</span>
+              <span>បញ្ជីទំនិញក្នុងស្តុក</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                inventorySubTab === 'items' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {products.length}
+              </span>
+            </button>
+
+            <button 
+              type="button"
+              onClick={() => {
+                setInventorySubTab('movements');
+                fetchStockMovements();
+              }} 
+              className={`px-4 py-2 rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-2 ${
+                inventorySubTab === 'movements' 
+                  ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20' 
+                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              }`}
+            >
+              <span>📋</span>
+              <span>កំណត់ត្រាចលនាស្តុក (Audit Log)</span>
             </button>
           </div>
-        </div>
 
-        {/* Metrics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col">
-            <span className="text-gray-400 text-xs font-black uppercase mb-1">សរុបមុខទំនិញ</span>
-            <span className="text-3xl font-black text-gray-900">{products.length} <span className="text-xs font-bold text-gray-400">Products</span></span>
-          </div>
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col border-l-4 border-l-orange-500">
-            <span className="text-gray-400 text-xs font-black uppercase mb-1">ស្តុកជិតអស់ / អស់ស្តុក</span>
-            <span className="text-3xl font-black text-orange-600">{lowStockCount} <span className="text-lg text-red-500 font-black">({outOfStockCount} Out)</span></span>
-          </div>
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col border-l-4 border-l-blue-500">
-            <span className="text-gray-400 text-xs font-black uppercase mb-1">ប្រភេទ Category</span>
-            <span className="text-3xl font-black text-blue-600">{categories.length} <span className="text-xs font-bold text-gray-400">Categories</span></span>
-          </div>
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col border-l-4 border-l-green-500">
-            <span className="text-gray-400 text-xs font-black uppercase mb-1">តម្លៃស្តុកសរុប</span>
-            <span className="text-3xl font-black text-green-600">${totalValue.toLocaleString()}</span>
-          </div>
-        </div>
-
-        {/* ⭐️ Navigation Sub-tabs រវាង "បញ្ជីទំនិញ" និង "ប្រវត្តិចលនាស្តុក" ⭐️ */}
-        <div className="flex gap-4 mb-6 border-b border-gray-200 pb-3">
-          <button 
-            onClick={() => setInventorySubTab('items')} 
-            className={`px-5 py-2.5 rounded-xl font-bold text-sm transition ${inventorySubTab === 'items' ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-          >
-            📦 បញ្ជីទំនិញក្នុងស្តុក ({products.length})
-          </button>
-          <button 
-            onClick={() => setInventorySubTab('movements')} 
-            className={`px-5 py-2.5 rounded-xl font-bold text-sm transition ${inventorySubTab === 'movements' ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
-          >
-            📋 ប្រវត្តិចលនាស្តុក (Audit Log)
-          </button>
+          {/* View Switcher: Table View vs Grid Cards */}
+          {inventorySubTab === 'items' && (
+            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-2xl border border-gray-200/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setInvViewMode('table');
+                  if (typeof window !== 'undefined') localStorage.setItem('sabay_inv_view_mode', 'table');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                  invViewMode === 'table' ? 'bg-white text-blue-600 shadow-xs ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-900'
+                }`}
+                title="មើលជាទម្រង់តារាងលម្អិត"
+              >
+                <span>📑</span>
+                <span>តារាង (Table)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInvViewMode('grid');
+                  if (typeof window !== 'undefined') localStorage.setItem('sabay_inv_view_mode', 'grid');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                  invViewMode === 'grid' ? 'bg-white text-blue-600 shadow-xs ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-900'
+                }`}
+                title="មើលជាទម្រង់កាតរូបភាពទំនើប"
+              >
+                <span>🎴</span>
+                <span>កាត (Cards)</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {inventorySubTab === 'items' ? (
           <>
-            {/* Filter & Search Bar */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                <div className="relative w-full md:w-80">
+            {/* ⭐️ FILTER, SEARCH & SORT BAR ⭐️ */}
+            <div className="bg-white p-5 rounded-3xl shadow-xs border border-gray-200 mb-6 space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+                
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
                   <input 
                     type="text" 
                     value={invSearch}
                     onChange={(e) => setInvSearch(e.target.value)}
-                    placeholder="ស្វែងរក SKU ឬឈ្មោះផលិតផល..." 
-                    className="w-full pl-10 pr-4 py-3 rounded-2xl border-2 border-gray-200 text-sm font-bold focus:border-blue-500 outline-none transition bg-white"
+                    placeholder="ស្វែងរក SKU, បាកូដ, ឈ្មោះផលិតផល..." 
+                    className="w-full pl-10 pr-9 py-2.5 rounded-2xl border border-gray-200 text-xs font-bold focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition bg-white"
                   />
-                  <span className="absolute left-3.5 top-3.5 text-gray-400 text-sm">🔍</span>
+                  <span className="absolute left-3.5 top-3 text-gray-400 text-xs">🔍</span>
+                  {invSearch && (
+                    <button 
+                      type="button"
+                      onClick={() => setInvSearch('')}
+                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 font-bold text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
 
-                <select value={invCategory} onChange={(e) => setInvCategory(e.target.value)} className="border-2 border-gray-200 rounded-2xl px-4 py-3 text-sm font-bold bg-white focus:border-blue-500 outline-none transition">
-                  <option value="all">📁 គ្រប់ប្រភេទ ({products.length})</option>
-                  {categories.map(c => (
-                    <option key={c.id || c.name} value={c.name}>📁 {c.name}</option>
-                  ))}
-                </select>
+                {/* Category Dropdown & Sort */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <select 
+                    value={invCategory} 
+                    onChange={(e) => setInvCategory(e.target.value)} 
+                    className="border border-gray-200 rounded-2xl px-3.5 py-2.5 text-xs font-bold bg-white focus:border-blue-500 outline-none transition cursor-pointer"
+                  >
+                    <option value="all">📁 គ្រប់ប្រភេទ ({products.length})</option>
+                    {categories.map(c => (
+                      <option key={c.id || c.name} value={c.name}>📁 {c.name}</option>
+                    ))}
+                  </select>
 
-                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="border-2 border-gray-200 rounded-2xl px-4 py-3 text-sm font-bold bg-white focus:border-blue-500 outline-none transition">
-                  <option value="all">📊 ស្ថានភាពទាំងអស់</option>
-                  <option value="normal">🟢 ស្តុកធម្មតា</option>
-                  <option value="low">🟠 ស្តុកជិតអស់</option>
-                  <option value="out">🔴 អស់ស្តុក</option>
-                </select>
+                  <select 
+                    value={invSortBy} 
+                    onChange={(e) => setInvSortBy(e.target.value)} 
+                    className="border border-gray-200 rounded-2xl px-3.5 py-2.5 text-xs font-bold bg-white focus:border-blue-500 outline-none transition cursor-pointer"
+                  >
+                    <option value="newest">⏱️ ទើបបញ្ចូលថ្មី</option>
+                    <option value="stock_asc">📉 ស្តុកតិចទៅច្រើន</option>
+                    <option value="stock_desc">📈 ស្តុកច្រើនទៅតិច</option>
+                    <option value="price_asc">💵 តម្លៃទាបទៅខ្ពស់</option>
+                    <option value="price_desc">💎 តម្លៃខ្ពស់ទៅទាប</option>
+                    <option value="name">🔤 ឈ្មោះ (A - Z)</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="text-xs font-bold text-gray-500 whitespace-nowrap">
-                លទ្ធផល: <span className="text-blue-600 font-black">{filteredInventory.length}</span> មុខ
+              {/* Quick Status Filter Pills */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-black text-gray-400 uppercase tracking-wider mr-1">ស្ថានភាព:</span>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('all')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                      filterStatus === 'all'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    🌟 ទាំងអស់ ({products.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('normal')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      filterStatus === 'normal'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                    }`}
+                  >
+                    <span>🟢 មានក្នុងស្តុក ({inStockCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('low')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      filterStatus === 'low'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                    }`}
+                  >
+                    <span>🟠 ជិតអស់ ({lowStockCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterStatus('out')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      filterStatus === 'out'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                    }`}
+                  >
+                    <span>🔴 អស់ពីស្តុក ({outOfStockCount})</span>
+                  </button>
+                </div>
+
+                <div className="text-xs font-bold text-gray-500">
+                  បង្ហាញ: <span className="text-blue-600 font-black">{sortedInventory.length}</span> មុខទំនិញ
+                </div>
               </div>
             </div>
 
-            {/* Products Table */}
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">SKU</th>
-                      <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">ឈ្មោះទំនិញ</th>
-                      <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">ប្រភេទ</th>
-                      <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">ទំហំ/ពណ៌</th>
-                      <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">តម្លៃលក់</th>
-                      <th className="px-5 py-4 uppercase text-xs font-black text-gray-500 text-center">ស្តុក</th>
-                      <th className="px-5 py-4 uppercase text-xs font-black text-gray-500 text-right pr-6">សកម្មភាព</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredInventory.map(product => {
-                      let statusBadge = <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded text-[10px] font-black">In Stock</span>;
-                      if (product.stock_qty <= 0) statusBadge = <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded text-[10px] font-black">Out</span>;
-                      else if (product.stock_qty <= (product.low_stock_alert || 5)) statusBadge = <span className="bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-[10px] font-black">Low</span>;
+            {/* ⭐️ FLOATING BULK ACTIONS BAR (WHEN ITEMS ARE SELECTED) ⭐️ */}
+            {selectedInvProductIds.length > 0 && (
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-950 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center gap-4 animate-in slide-in-from-bottom-5">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
+                  <span className="text-xs font-black">
+                    បានជ្រើសរើស: <span className="text-blue-400">{selectedInvProductIds.length}</span> មុខ
+                  </span>
+                </div>
 
-                                            return (
-                        <tr key={product.id} className="hover:bg-gray-50/80 transition">
-                          <td className="px-5 py-4 font-black text-blue-600 text-xs">{product.sku}</td>
-                          <td className="px-5 py-4">
-                            <div className="flex items-center gap-3">
-                              {product.image_url ? (
-                                <div className="relative group/preview shrink-0">
-                                  <img 
-                                    src={product.image_url} 
-                                    className="w-10 h-10 rounded-xl object-cover bg-gray-100 border border-gray-200 shadow-xs cursor-pointer hover:border-blue-500 hover:ring-2 hover:ring-blue-300 transition" 
-                                    alt={product.name || ''} 
-                                  />
-                                  {/* 🔍 Pop-up Preview រូបភាពធំពេល Hover Mouse លើរូបតូច */}
-                                  <div className="absolute left-14 top-1/2 -translate-y-1/2 z-50 w-64 p-3 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border-2 border-slate-800 opacity-0 invisible group-hover/preview:opacity-100 group-hover/preview:visible transition-all duration-200 pointer-events-none">
-                                    <div className="w-full h-56 bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center border border-gray-100">
-                                      <img src={product.image_url} className="w-full h-full object-contain" alt="" />
-                                    </div>
-                                    <div className="mt-2.5 px-0.5">
-                                      <p className="text-xs font-black text-gray-900 line-clamp-1">{product.name}</p>
-                                      <div className="flex items-center justify-between mt-1.5 text-[11px]">
-                                        <span className="font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">SKU: {product.sku}</span>
-                                        <span className="font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">ស្តុក: {product.stock_qty}</span>
+                <div className="h-4 w-px bg-slate-800"></div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const firstProd = products.find(p => p.id === selectedInvProductIds[0]);
+                      if (firstProd) {
+                        setBarcodeProduct(firstProd);
+                        setBarcodePrintQty(selectedInvProductIds.length);
+                        setBarcodeModalOpen(true);
+                      }
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  >
+                    <span>🏷️</span> ព្រីន Barcode
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  >
+                    <span>🗑️</span> លុបចោល
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedInvProductIds([])}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    ✕ បោះបង់
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ⭐️ VIEW MODE 1: ULTRA-MODERN INTERACTIVE TABLE VIEW ⭐️ */}
+            {invViewMode === 'table' ? (
+              <div className="bg-white rounded-3xl shadow-xs border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50/80 border-b border-gray-100 text-gray-500 uppercase text-[11px] font-black">
+                      <tr>
+                        <th className="px-4 py-4 w-10 text-center">
+                          <input 
+                            type="checkbox"
+                            checked={sortedInventory.length > 0 && selectedInvProductIds.length === sortedInventory.length}
+                            onChange={handleToggleSelectAll}
+                            className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600"
+                          />
+                        </th>
+                        <th className="px-4 py-4">SKU / កូដ</th>
+                        <th className="px-4 py-4">ឈ្មោះផលិតផល</th>
+                        <th className="px-4 py-4">ប្រភេទ</th>
+                        <th className="px-4 py-4">ទំហំ / ពណ៌</th>
+                        <th className="px-4 py-4">តម្លៃលក់ & ថ្លៃដើម</th>
+                        <th className="px-4 py-4 text-center">ចំនួនស្តុក & សុខភាព</th>
+                        <th className="px-5 py-4 text-right pr-6">សកម្មភាពគ្រប់គ្រង</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-medium">
+                      {sortedInventory.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-6 py-16 text-center text-gray-400">
+                            <span className="text-4xl block mb-2">🔍</span>
+                            <span className="font-bold text-sm">រកមិនឃើញទំនិញស្របតាមលក្ខខណ្ឌស្វែងរកនេះឡើយ។</span>
+                          </td>
+                        </tr>
+                      ) : (
+                        sortedInventory.map(product => {
+                          const isSelected = selectedInvProductIds.includes(product.id);
+                          const isLow = product.stock_qty > 0 && product.stock_qty <= (product.low_stock_alert || 5);
+                          const isOut = product.stock_qty <= 0;
+                          const isUpdating = quickStockUpdatingId === product.id;
+
+                          return (
+                            <tr 
+                              key={product.id} 
+                              className={`transition-colors duration-150 ${
+                                isSelected ? 'bg-blue-50/50' : 'hover:bg-gray-50/80'
+                              }`}
+                            >
+                              {/* Checkbox */}
+                              <td className="px-4 py-4 text-center">
+                                <input 
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleSelectProduct(product.id)}
+                                  className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600"
+                                />
+                              </td>
+
+                              {/* SKU with 1-click Copy */}
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopySku(product.sku)}
+                                  className="font-mono text-xs font-black text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg border border-blue-200 flex items-center gap-1 cursor-pointer transition active:scale-95"
+                                  title="ចុចដើម្បីចម្លង (Copy SKU)"
+                                >
+                                  <span>{product.sku || 'N/A'}</span>
+                                  <span className="text-[10px] opacity-60">📋</span>
+                                </button>
+                              </td>
+
+                              {/* Product Thumbnail & Name with Hover Zoom Preview */}
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-3">
+                                  {product.image_url ? (
+                                    <div className="relative group/preview shrink-0">
+                                      <img 
+                                        src={product.image_url} 
+                                        className="w-12 h-12 rounded-xl object-cover bg-gray-100 border border-gray-200 shadow-xs cursor-pointer group-hover/preview:scale-105 transition" 
+                                        alt={product.name || ''} 
+                                      />
+                                      {/* Pop-up Large Preview on Hover */}
+                                      <div className="absolute left-16 top-1/2 -translate-y-1/2 z-50 w-64 p-3 bg-white rounded-3xl shadow-2xl border-2 border-slate-900 opacity-0 invisible group-hover/preview:opacity-100 group-hover/preview:visible transition-all duration-200 pointer-events-none">
+                                        <div className="w-full h-56 bg-gray-50 rounded-2xl overflow-hidden flex items-center justify-center border border-gray-100">
+                                          <img src={product.image_url} className="w-full h-full object-contain" alt="" />
+                                        </div>
+                                        <div className="mt-2.5 px-1">
+                                          <p className="text-xs font-black text-gray-900 truncate">{product.name}</p>
+                                          <div className="flex items-center justify-between mt-1 text-[11px] font-bold">
+                                            <span className="text-blue-600">SKU: {product.sku}</span>
+                                            <span className="text-emerald-600">ស្តុក: {product.stock_qty}</span>
+                                          </div>
+                                        </div>
                                       </div>
+                                    </div>
+                                  ) : (
+                                    <div className="w-12 h-12 rounded-xl bg-gray-100 border border-dashed border-gray-300 flex items-center justify-center text-[10px] font-bold text-gray-400 shrink-0">
+                                      គ្មានរូប
+                                    </div>
+                                  )}
+
+                                  <div className="min-w-0">
+                                    <p className="font-black text-gray-900 text-xs truncate max-w-xs" title={product.name}>
+                                      {product.name}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {isOut ? (
+                                        <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-md animate-pulse">
+                                          🔴 ដាច់ស្តុក
+                                        </span>
+                                      ) : isLow ? (
+                                        <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-md animate-pulse">
+                                          🟠 ជិតអស់ ({product.stock_qty})
+                                        </span>
+                                      ) : (
+                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-md">
+                                          🟢 មានស្តុក
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] text-gray-400 font-bold">Alert: {product.low_stock_alert || 5}</span>
                                     </div>
                                   </div>
                                 </div>
-                              ) : (
-                                <div className="w-10 h-10 rounded-xl bg-gray-100 border flex items-center justify-center text-[9px] font-bold text-gray-400 shrink-0">No Pic</div>
+                              </td>
+
+                              {/* Category */}
+                              <td className="px-4 py-4 text-xs font-bold text-gray-600 whitespace-nowrap">
+                                <span className="bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg">
+                                  {product.category || 'ទូទៅ'}
+                                </span>
+                              </td>
+
+                              {/* Size & Color */}
+                              <td className="px-4 py-4 text-[11px] text-gray-500 whitespace-nowrap">
+                                <div>Size: <span className="font-bold text-gray-800">{product.size ? product.size.replace(/:\d+/g, '') : 'N/A'}</span></div>
+                                <div className="mt-0.5">Color: <span className="font-bold text-orange-600">{product.color || 'N/A'}</span></div>
+                              </td>
+
+                              {/* Prices */}
+                              <td className="px-4 py-4 text-xs whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-black text-emerald-600 text-sm">
+                                    ${(Math.max(0, (Number(product.price) || 0) - (Number(product.retail_discount) || 0))).toFixed(2)}
+                                  </span>
+                                  {product.retail_discount > 0 && (
+                                    <span className="text-[10px] text-gray-400 line-through font-bold">
+                                      ${parseFloat(product.price).toFixed(2)}
+                                    </span>
+                                  )}
+                                  <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded border border-emerald-100">រាយ</span>
+                                </div>
+
+                                {product.wholesale_price && parseFloat(product.wholesale_price) > 0 && (
+                                  <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 mt-0.5">
+                                    <span>${(Math.max(0, Number(product.wholesale_price) - (Number(product.wholesale_discount) || 0))).toFixed(2)}</span>
+                                    <span className="text-[9px] text-indigo-400">ដុំ</span>
+                                  </div>
+                                )}
+
+                                {product.cost_price && parseFloat(product.cost_price) > 0 && (
+                                  <div className="text-[10px] text-gray-400 font-medium mt-0.5">
+                                    ដើម: ${parseFloat(product.cost_price).toFixed(2)}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Stock Counter with Quick Inline Stepper */}
+                              <td className="px-4 py-4 text-center">
+                                <div className="inline-flex flex-col items-center">
+                                  <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200">
+                                    <button
+                                      type="button"
+                                      disabled={isUpdating || product.stock_qty <= 0}
+                                      onClick={() => handleQuickStockAdjust(product, -1)}
+                                      className="w-7 h-7 rounded-lg bg-white hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-black text-sm flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
+                                      title="បន្ថយស្តុក ១ ឯកតា (-1)"
+                                    >
+                                      -
+                                    </button>
+                                    
+                                    <span className={`w-10 text-center font-black text-sm ${
+                                      isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-gray-900'
+                                    }`}>
+                                      {isUpdating ? '⏳' : product.stock_qty}
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      disabled={isUpdating}
+                                      onClick={() => handleQuickStockAdjust(product, 1)}
+                                      className="w-7 h-7 rounded-lg bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-600 font-black text-sm flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
+                                      title="បន្ថែមស្តុក ១ ឯកតា (+1)"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+
+                                  {/* Mini Stock Progress Bar */}
+                                  <div className="w-20 bg-gray-200 h-1.5 rounded-full overflow-hidden mt-1.5">
+                                    <div 
+                                      style={{ width: `${Math.min(100, Math.max(5, (product.stock_qty / (product.low_stock_alert || 5) * 50)))}%` }} 
+                                      className={`h-full ${isOut ? 'bg-rose-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Action Buttons */}
+                              <td className="px-5 py-4 text-right pr-6 whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {/* នាំចូលស្តុក (Stock In Modal) */}
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleOpenStockIn(product, 'IN')}
+                                    className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white font-black text-xs px-2.5 py-1.5 rounded-xl border border-emerald-200 hover:border-emerald-600 transition cursor-pointer shadow-2xs"
+                                    title="នាំចូលស្តុកបន្ថែម (+ Stock In)"
+                                  >
+                                    + នាំចូល
+                                  </button>
+
+                                  {/* កាត់ស្តុកចេញ (Stock Out Modal) */}
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleOpenStockIn(product, 'OUT')}
+                                    className="bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white font-black text-xs px-2 py-1.5 rounded-xl border border-rose-200 hover:border-rose-600 transition cursor-pointer shadow-2xs"
+                                    title="កាត់ស្តុកចេញ (- Stock Out)"
+                                  >
+                                    - កាត់
+                                  </button>
+
+                                  {/* Barcode Sticker */}
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      setBarcodeProduct(product);
+                                      setBarcodePrintQty(1);
+                                      setBarcodeModalOpen(true);
+                                    }}
+                                    className="bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white font-black text-xs p-1.5 rounded-xl border border-purple-200 hover:border-purple-600 transition cursor-pointer"
+                                    title="បោះពុម្ព Barcode"
+                                  >
+                                    🏷️
+                                  </button>
+
+                                  {/* Edit Product */}
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTab('upload');
+                                      setEditingProductId(product.id);
+                                      setName(product.name || '');
+                                      setSku(product.sku || '');
+                                      setCategory(product.category || (categories[0] ? categories[0].name : ''));
+                                      setSellingPrice(product.price ? product.price.toString() : '');
+                                      setCostPrice(product.cost_price ? product.cost_price.toString() : '');
+                                      setWholesalePrice(product.wholesale_price ? product.wholesale_price.toString() : '');
+                                      setWholesaleDiscount(product.wholesale_discount ? product.wholesale_discount.toString() : '');
+                                      setRetailDiscount(product.retail_discount ? product.retail_discount.toString() : '');
+                                      setStockQty(product.stock_qty ? product.stock_qty.toString() : '10');
+                                      setLowStockAlert(product.low_stock_alert ? product.low_stock_alert.toString() : '5');
+                                      setColor(product.color || '');
+                                      
+                                      if (product.size && product.size !== 'N/A') {
+                                        if (product.size.includes(':')) {
+                                          const pairs = product.size.split(', ');
+                                          const loadedSizes = [];
+                                          const loadedStock = {};
+                                          pairs.forEach(pair => {
+                                            const [sz, qty] = pair.split(':');
+                                            loadedSizes.push(sz);
+                                            loadedStock[sz] = qty;
+                                          });
+                                          setSelectedSizes(loadedSizes);
+                                          setVariantStock(loadedStock);
+                                          setCustomTextSize('');
+                                        } else {
+                                          setSelectedSizes(product.size.split(', '));
+                                          setVariantStock({});
+                                          setCustomTextSize(product.size);
+                                        }
+                                      } else {
+                                        setSelectedSizes([]);
+                                        setVariantStock({});
+                                        setCustomTextSize('');
+                                      }
+
+                                      const parsedProd = parseProductMeta(product);
+                                      const loadedImgs = (parsedProd.images || []).map((u, i) => ({
+                                        id: `img_${i}_${Date.now()}`,
+                                        url: u,
+                                        isExisting: true
+                                      }));
+                                      setProductImages(loadedImgs);
+                                      setSelectedCoverIndex(0);
+                                      setPreviewUrl(product.image_url || null);
+                                      setFile(null);
+
+                                      (async () => {
+                                        try {
+                                          const { data: dbVars } = await supabase
+                                            .from('product_variants')
+                                            .select('*')
+                                            .eq('product_id', product.id);
+
+                                          if (dbVars && dbVars.length > 0) {
+                                            const extractedSizes = Array.from(new Set(dbVars.map(v => v.size).filter(s => s && s !== 'Free Size' && s !== 'N/A')));
+                                            const extractedColors = Array.from(new Set(dbVars.map(v => v.color).filter(c => c && c.trim() !== '')));
+                                            const loadedStock = {};
+
+                                            dbVars.forEach(v => {
+                                              if (v.size && v.color) {
+                                                loadedStock[`${v.size}__${v.color}`] = v.stock_qty;
+                                              } else if (v.size) {
+                                                loadedStock[v.size] = v.stock_qty;
+                                              } else if (v.color) {
+                                                loadedStock[v.color] = v.stock_qty;
+                                              }
+                                            });
+
+                                            if (extractedSizes.length > 0) setSelectedSizes(extractedSizes);
+                                            if (extractedColors.length > 0) {
+                                              setSelectedColors(extractedColors);
+                                              setColor(extractedColors.join(', '));
+                                            }
+                                            setVariantStock(loadedStock);
+                                          }
+                                        } catch (e) {}
+                                      })();
+
+                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white font-black text-xs p-1.5 rounded-xl border border-blue-200 hover:border-blue-600 transition cursor-pointer"
+                                    title="កែប្រែព័ត៌មានទំនិញ"
+                                  >
+                                    ✏️
+                                  </button>
+
+                                  {/* Delete Product */}
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      setProductToDelete(product);
+                                      setDeleteModalOpen(true);
+                                    }}
+                                    className="bg-red-50 hover:bg-red-600 text-red-600 hover:text-white font-black text-xs p-1.5 rounded-xl border border-red-200 hover:border-red-600 transition cursor-pointer"
+                                    title="លុបទំនិញនេះចេញពីស្តុក"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </td>
+
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              /* ⭐️ VIEW MODE 2: VISUAL GRID CARDS VIEW (រចនាបែបទំនើប ឡូយ និងរស់រវើក) ⭐️ */
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+                {sortedInventory.length === 0 ? (
+                  <div className="col-span-full bg-white p-16 text-center rounded-3xl border border-gray-200 text-gray-400">
+                    <span className="text-5xl block mb-3">🔍</span>
+                    <p className="font-bold text-base text-gray-700">រកមិនឃើញទំនិញស្របតាមលក្ខខណ្ឌស្វែងរកនេះឡើយ</p>
+                  </div>
+                ) : (
+                  sortedInventory.map(product => {
+                    const isSelected = selectedInvProductIds.includes(product.id);
+                    const isLow = product.stock_qty > 0 && product.stock_qty <= (product.low_stock_alert || 5);
+                    const isOut = product.stock_qty <= 0;
+                    const isUpdating = quickStockUpdatingId === product.id;
+
+                    return (
+                      <div 
+                        key={product.id}
+                        className={`bg-white rounded-3xl overflow-hidden border transition-all duration-200 flex flex-col group hover:shadow-xl hover:-translate-y-1 ${
+                          isSelected ? 'border-blue-500 ring-2 ring-blue-300 shadow-md' : 'border-gray-200 shadow-xs'
+                        }`}
+                      >
+                        {/* Card Image Area with Floating Badges */}
+                        <div className="relative aspect-square bg-gray-50 overflow-hidden border-b border-gray-100 flex items-center justify-center">
+                          {product.image_url ? (
+                            <img 
+                              src={product.image_url} 
+                              alt={product.name} 
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="text-gray-300 text-4xl">🛍️</div>
+                          )}
+
+                          {/* Floating Top Left: Checkbox & SKU */}
+                          <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
+                            <input 
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectProduct(product.id)}
+                              className="w-4 h-4 rounded text-blue-600 bg-white/90 cursor-pointer accent-blue-600 shadow-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleCopySku(product.sku)}
+                              className="font-mono text-[10px] font-black bg-slate-950/80 backdrop-blur-md text-white px-2 py-0.5 rounded-lg border border-white/20 shadow-xs cursor-pointer active:scale-95"
+                              title="ចុច Copy SKU"
+                            >
+                              {product.sku}
+                            </button>
+                          </div>
+
+                          {/* Floating Top Right: Status Badge */}
+                          <div className="absolute top-3 right-3 z-10">
+                            {isOut ? (
+                              <span className="bg-rose-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-md animate-pulse">
+                                🔴 ដាច់ស្តុក
+                              </span>
+                            ) : isLow ? (
+                              <span className="bg-amber-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-md animate-pulse">
+                                🟠 ជិតអស់ ({product.stock_qty})
+                              </span>
+                            ) : (
+                              <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-md">
+                                🟢 ស្តុក: {product.stock_qty}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Card Body */}
+                        <div className="p-4 flex-1 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] text-gray-500 font-bold mb-1">
+                              <span className="bg-gray-100 px-2 py-0.5 rounded-md truncate max-w-[120px]">{product.category || 'ទូទៅ'}</span>
+                              <span className="text-gray-400">Alert: {product.low_stock_alert || 5}</span>
+                            </div>
+
+                            <h4 className="font-black text-gray-900 text-sm line-clamp-2 leading-snug mt-1 group-hover:text-blue-600 transition-colors" title={product.name}>
+                              {product.name}
+                            </h4>
+
+                            {/* Price */}
+                            <div className="mt-2.5 flex items-baseline gap-2">
+                              <span className="text-lg font-black text-emerald-600">
+                                ${(Math.max(0, (Number(product.price) || 0) - (Number(product.retail_discount) || 0))).toFixed(2)}
+                              </span>
+                              {product.retail_discount > 0 && (
+                                <span className="text-xs text-gray-400 line-through font-bold">
+                                  ${parseFloat(product.price).toFixed(2)}
+                                </span>
                               )}
-                              <div>
-                                <p className="font-black text-gray-900 text-xs line-clamp-1">{product.name}</p>
-                                <div className="mt-0.5">{statusBadge}</div>
+                              {product.wholesale_price && parseFloat(product.wholesale_price) > 0 && (
+                                <span className="text-[11px] font-bold text-indigo-600 ml-auto bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                                  ដុំ: ${parseFloat(product.wholesale_price).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Stock Health Progress Bar */}
+                            <div className="mt-3">
+                              <div className="flex justify-between items-center text-[10px] font-black mb-1">
+                                <span className="text-gray-500">កម្រិតស្តុក:</span>
+                                <span className={isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-emerald-600'}>
+                                  {product.stock_qty} ឯកតា
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                                <div 
+                                  style={{ width: `${Math.min(100, Math.max(8, (product.stock_qty / (product.low_stock_alert || 5) * 50)))}%` }} 
+                                  className={`h-full transition-all duration-300 ${
+                                    isOut ? 'bg-rose-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'
+                                  }`}
+                                />
                               </div>
                             </div>
-                          </td>
-                          <td className="px-5 py-4 text-xs font-bold text-gray-600">{product.category || 'N/A'}</td>
-                          <td className="px-5 py-4 text-[11px] text-gray-500">
-                            <div>Size: <span className="font-bold text-gray-800">{product.size ? product.size.replace(/:\d+/g, '') : 'N/A'}</span></div>
-                            <div>Color: <span className="font-bold text-orange-600">{product.color || 'N/A'}</span></div>
-                          </td>
-                          <td className="px-5 py-4 text-xs whitespace-nowrap">
-  {/* តម្លៃលក់រាយ */}
-  <div className="flex items-center gap-1.5">
-    <span className="font-black text-green-600 text-sm">
-      ${(Math.max(0, (product.price || 0) - (product.retail_discount || 0))).toFixed(2)}
-    </span>
-    {product.retail_discount > 0 && (
-      <span className="text-[10px] text-gray-400 line-through font-bold">
-        ${parseFloat(product.price).toFixed(2)}
-      </span>
-    )}
-    <span className="text-[10px] text-gray-400 font-bold">រាយ</span>
-  </div>
+                          </div>
 
-  {/* តម្លៃបោះដុំ */}
-  {product.wholesale_price && parseFloat(product.wholesale_price) > 0 ? (
-    <div className="flex items-center gap-1.5 mt-0.5">
-      <span className="text-[11px] font-black text-blue-600">
-        ${(Math.max(0, product.wholesale_price - (product.wholesale_discount || 0))).toFixed(2)}
-      </span>
-      {product.wholesale_discount > 0 && (
-        <span className="text-[9px] text-gray-400 line-through font-bold">
-          ${parseFloat(product.wholesale_price).toFixed(2)}
-        </span>
-      )}
-      <span className="text-[9px] text-gray-400 font-bold">បោះដុំ</span>
-    </div>
-  ) : null}
+                          {/* Card Footer: Quick Stepper & Actions */}
+                          <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                            {/* Inline Stock Stepper */}
+                            <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-200">
+                              <button
+                                type="button"
+                                disabled={isUpdating || product.stock_qty <= 0}
+                                onClick={() => handleQuickStockAdjust(product, -1)}
+                                className="w-6 h-6 rounded-lg bg-white hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-black text-xs flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
+                                title="-1"
+                              >
+                                -
+                              </button>
+                              
+                              <span className="w-7 text-center font-black text-xs text-gray-900">
+                                {isUpdating ? '⏳' : product.stock_qty}
+                              </span>
 
-  {product.cost_price && parseFloat(product.cost_price) > 0 ? (
-    <div className="text-[10px] text-gray-400 font-medium mt-0.5">
-      ដើម: ${parseFloat(product.cost_price).toFixed(2)}
-    </div>
-  ) : null}
-</td>
-                          <td className="px-5 py-4 font-black text-gray-900 text-center text-sm">{product.stock_qty}</td>
-                          <td className="px-5 py-4 text-right pr-6 whitespace-nowrap space-x-1.5">
-                            {/* ⭐️ ប៊ូតុងនាំចូលស្តុកបន្ថែម (Stock In) ⭐️ */}
-                            <button 
-                              onClick={() => handleOpenStockIn(product, 'IN')}
-                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-emerald-200 transition cursor-pointer"
-                              title="នាំចូលស្តុកបន្ថែម (+ Stock In)"
-                            >
-                              📥 នាំចូល
-                            </button>
+                              <button
+                                type="button"
+                                disabled={isUpdating}
+                                onClick={() => handleQuickStockAdjust(product, 1)}
+                                className="w-6 h-6 rounded-lg bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-600 font-black text-xs flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
+                                title="+1"
+                              >
+                                +
+                              </button>
+                            </div>
 
-                            {/* ⭐️ ប៊ូតុងកាត់ស្តុកចេញវិញ (Stock Out / Adjust) ⭐️ */}
-                            <button 
-                              onClick={() => handleOpenStockIn(product, 'OUT')}
-                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-rose-200 transition cursor-pointer"
-                              title="កាត់ស្តុកចេញវិញ (- Stock Out / Adjust)"
-                            >
-                              📤 កាត់ស្តុក
-                            </button>
-                              {/* ⭐️ ប៊ូតុងបោះពុម្ពបាកូដ / ស្លាកតម្លៃ (Barcode Sticker) ⭐️ */}
-                            <button 
-                              onClick={() => {
-                                setBarcodeProduct(product);
-                                setBarcodePrintQty(1);
-                                setBarcodeModalOpen(true);
-                              }}
-                              className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-3 py-1.5 rounded-xl border border-purple-200 transition"
-                              title="បោះពុម្ព Barcode បិទលើប្រអប់"
-                            >
-                              🏷️ Barcode
-                            </button>
-
-                            {/* ប៊ូតុង Edit */}
-                            <button 
-                              onClick={() => {
-                                setActiveTab('upload');
-                                setEditingProductId(product.id);
-                                setName(product.name || '');
-                                setSku(product.sku || '');
-                                setCategory(product.category || (categories[0] ? categories[0].name : ''));
-                                setSellingPrice(product.price ? product.price.toString() : '');
-                                setCostPrice(product.cost_price ? product.cost_price.toString() : '');
-                                setWholesalePrice(product.wholesale_price ? product.wholesale_price.toString() : '');
-                                setWholesaleDiscount(product.wholesale_discount ? product.wholesale_discount.toString() : '');
-                                setRetailDiscount(product.retail_discount ? product.retail_discount.toString() : '');
-                                setStockQty(product.stock_qty ? product.stock_qty.toString() : '10');
-                                setLowStockAlert(product.low_stock_alert ? product.low_stock_alert.toString() : '5');
-                                setColor(product.color || '');
-                                
-                                if (product.size && product.size !== 'N/A') {
-                                  if (product.size.includes(':')) {
-                                    const pairs = product.size.split(', ');
-                                    const loadedSizes = [];
-                                    const loadedStock = {};
-                                    pairs.forEach(pair => {
-                                      const [sz, qty] = pair.split(':');
-                                      loadedSizes.push(sz);
-                                      loadedStock[sz] = qty;
-                                    });
-                                    setSelectedSizes(loadedSizes);
-                                    setVariantStock(loadedStock);
-                                    setCustomTextSize('');
-                                  } else {
-                                    setSelectedSizes(product.size.split(', '));
-                                    setVariantStock({});
-                                    setCustomTextSize(product.size);
-                                  }
-                                } else {
-                                  setSelectedSizes([]);
-                                  setVariantStock({});
-                                  setCustomTextSize('');
-                                }
-
-                                const parsedProd = parseProductMeta(product);
-                                const loadedImgs = (parsedProd.images || []).map((u, i) => ({
-                                  id: `img_${i}_${Date.now()}`,
-                                  url: u,
-                                  isExisting: true
-                                }));
-                                setProductImages(loadedImgs);
-                                setSelectedCoverIndex(0);
-                                setPreviewUrl(product.image_url || null);
-                                setFile(null);
-
-                                // ⭐️ ទាញយក Variants ពិតប្រាកដចេញពី Database ដើម្បីបំពេញចូល Matrix
-                                (async () => {
-                                  try {
-                                    const { data: dbVars } = await supabase
-                                      .from('product_variants')
-                                      .select('*')
-                                      .eq('product_id', product.id);
-
-                                    if (dbVars && dbVars.length > 0) {
-                                      const extractedSizes = Array.from(new Set(dbVars.map(v => v.size).filter(s => s && s !== 'Free Size' && s !== 'N/A')));
-                                      const extractedColors = Array.from(new Set(dbVars.map(v => v.color).filter(c => c && c.trim() !== '')));
+                            {/* Action Buttons */}
+                            <div className="flex items-center gap-1">
+                              <button 
+                                type="button"
+                                onClick={() => handleOpenStockIn(product, 'IN')}
+                                className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white p-2 rounded-xl text-xs font-black transition cursor-pointer shadow-2xs"
+                                title="នាំចូលស្តុក (+ Stock In)"
+                              >
+                                📥
+                              </button>
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  setBarcodeProduct(product);
+                                  setBarcodePrintQty(1);
+                                  setBarcodeModalOpen(true);
+                                }}
+                                className="bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white p-2 rounded-xl text-xs font-black transition cursor-pointer"
+                                title="Barcode"
+                              >
+                                🏷️
+                              </button>
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  setActiveTab('upload');
+                                  setEditingProductId(product.id);
+                                  setName(product.name || '');
+                                  setSku(product.sku || '');
+                                  setCategory(product.category || (categories[0] ? categories[0].name : ''));
+                                  setSellingPrice(product.price ? product.price.toString() : '');
+                                  setCostPrice(product.cost_price ? product.cost_price.toString() : '');
+                                  setWholesalePrice(product.wholesale_price ? product.wholesale_price.toString() : '');
+                                  setWholesaleDiscount(product.wholesale_discount ? product.wholesale_discount.toString() : '');
+                                  setRetailDiscount(product.retail_discount ? product.retail_discount.toString() : '');
+                                  setStockQty(product.stock_qty ? product.stock_qty.toString() : '10');
+                                  setLowStockAlert(product.low_stock_alert ? product.low_stock_alert.toString() : '5');
+                                  setColor(product.color || '');
+                                  
+                                  if (product.size && product.size !== 'N/A') {
+                                    if (product.size.includes(':')) {
+                                      const pairs = product.size.split(', ');
+                                      const loadedSizes = [];
                                       const loadedStock = {};
-
-                                      dbVars.forEach(v => {
-                                        if (v.size && v.color) {
-                                          loadedStock[`${v.size}__${v.color}`] = v.stock_qty;
-                                        } else if (v.size) {
-                                          loadedStock[v.size] = v.stock_qty;
-                                        } else if (v.color) {
-                                          loadedStock[v.color] = v.stock_qty;
-                                        }
+                                      pairs.forEach(pair => {
+                                        const [sz, qty] = pair.split(':');
+                                        loadedSizes.push(sz);
+                                        loadedStock[sz] = qty;
                                       });
-
-                                      if (extractedSizes.length > 0) setSelectedSizes(extractedSizes);
-                                      if (extractedColors.length > 0) {
-                                        setSelectedColors(extractedColors);
-                                        setColor(extractedColors.join(', '));
-                                      }
+                                      setSelectedSizes(loadedSizes);
                                       setVariantStock(loadedStock);
+                                    } else {
+                                      setSelectedSizes(product.size.split(', '));
+                                      setVariantStock({});
                                     }
-                                  } catch (e) {
-                                    console.error('Error loading variants for edit:', e);
                                   }
-                                })();
+                                  const parsedProd = parseProductMeta(product);
+                                  setPreviewUrl(product.image_url || null);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white p-2 rounded-xl text-xs font-black transition cursor-pointer"
+                                title="Edit"
+                              >
+                                ✏️
+                              </button>
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  setProductToDelete(product);
+                                  setDeleteModalOpen(true);
+                                }}
+                                className="bg-red-50 hover:bg-red-600 text-red-600 hover:text-white p-2 rounded-xl text-xs font-black transition cursor-pointer"
+                                title="Delete"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        </div>
 
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                              }}
-                              className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-xs px-3 py-1.5 rounded-xl border border-blue-200 transition"
-                            >
-                              ✏️ Edit
-                            </button>
-
-                            {/* ប៊ូតុង Delete */}
-                            <button 
-                              onClick={() => {
-                                setProductToDelete(product);
-                                setDeleteModalOpen(true);
-                              }}
-                              className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs px-3 py-1.5 rounded-xl border border-red-200 transition"
-                            >
-                              🗑️ Delete
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            </div>
+            )}
           </>
         ) : (
           /* ⭐️ ផ្ទាំងតារាងប្រវត្តិចលនាស្តុក (Stock Movements Log - Audit Trail) ⭐️ */
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-xs border border-gray-200 overflow-hidden">
             <div className="p-6 border-b border-gray-100 bg-gray-50/50">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
