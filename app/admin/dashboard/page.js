@@ -927,7 +927,7 @@ export default function UnifiedAdminDashboard() {
     };
   }, []);
 
-  // Function ប្តូរ Status នៃការកុម្ម៉ង់ (Pending ➔ Shipped ➔ Completed)
+  // Function ប្តូរ Status នៃការកុម្ម៉ង់ (Pending ➔ Preparing ➔ Shipped ➔ Completed)
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
       const { error } = await supabase
@@ -938,6 +938,16 @@ export default function UnifiedAdminDashboard() {
       if (error) throw error;
       // Update លើ UI ភ្លាមៗ
       setRealOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+
+      const statusLabels = {
+        'Pending': '🟡 រង់ចាំការបញ្ជាក់',
+        'Preparing': '🔵 កំពុងរៀបចំវេចខ្ចប់',
+        'Shipped': '🚚 កំពុងដឹកជញ្ជូន',
+        'Completed': '🟢 ដឹកជញ្ជូនជោគជ័យ',
+        'Cancelled': '❌ បានបោះបង់'
+      };
+      setToastNotification(`✅ បានប្តូរស្ថានភាពទៅជា "${statusLabels[newStatus] || newStatus}" រួចរាល់!`);
+      setTimeout(() => setToastNotification(null), 3000);
     } catch (err) {
       alert('❌ មិនអាចប្តូរស្ថានភាពបានទេ: ' + err.message);
     }
@@ -6023,21 +6033,58 @@ export default function UnifiedAdminDashboard() {
                         <td className="px-5 py-3.5 text-right font-black text-emerald-600">
                           +${profit.toFixed(2)}
                         </td>
-                        <td className="px-5 py-3.5 text-center">
-                          <select
-                            value={order.status || 'Completed'}
-                            onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                            className={`text-[11px] font-bold border rounded-lg px-2 py-1 outline-none ${
-                              order.status === 'Completed' ? 'bg-green-50 text-green-700 border-green-200' :
-                              order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
-                              'bg-amber-50 text-amber-700 border-amber-200'
-                            }`}
-                          >
-                            <option value="Completed">✓ ជោគជ័យ</option>
-                            <option value="Preparing">⏳ កំពុងរៀបចំ</option>
-                            <option value="Shipped">🚚 កំពុងដឹក</option>
-                            <option value="Cancelled">✕ បោះបង់</option>
-                          </select>
+                        <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <select
+                              value={order.status || 'Pending'}
+                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                              className={`text-[11px] font-bold border rounded-xl px-2.5 py-1.5 outline-none cursor-pointer shadow-2xs transition ${
+                                order.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                                order.status === 'Preparing' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
+                                order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-300' :
+                                'bg-amber-50 text-amber-700 border-amber-300'
+                              }`}
+                            >
+                              <option value="Pending">🟡 រង់ចាំបញ្ជាក់ (Pending)</option>
+                              <option value="Preparing">🔵 កំពុងវេចខ្ចប់ (Processing)</option>
+                              <option value="Shipped">🚚 កំពុងដឹក (Out for Delivery)</option>
+                              <option value="Completed">🟢 ជោគជ័យ (Delivered)</option>
+                              <option value="Cancelled">❌ បោះបង់ (Cancelled)</option>
+                            </select>
+
+                            {/* 1-Click Fast Progress Button */}
+                            {(!order.status || order.status === 'Pending') && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'Preparing')}
+                                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition"
+                                title="ចុចប្តូរទៅដំណាក់កាលទី ២៖ កំពុងរៀបចំវេចខ្ចប់"
+                              >
+                                🔵 វេចខ្ចប់
+                              </button>
+                            )}
+                            {order.status === 'Preparing' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'Shipped')}
+                                className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition animate-pulse"
+                                title="ចុចប្តូរទៅដំណាក់កាលទី ៣៖ កំពុងដឹកជញ្ជូន"
+                              >
+                                🚚 បញ្ជូនដឹក
+                              </button>
+                            )}
+                            {order.status === 'Shipped' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
+                                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition"
+                                title="ចុចប្តូរទៅដំណាក់កាលទី ៤៖ បានប្រគល់ជោគជ័យ"
+                              >
+                                🟢 ជោគជ័យ
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-5 py-3.5 text-right pr-6 whitespace-nowrap space-x-1.5">
                           <button
@@ -6218,17 +6265,58 @@ export default function UnifiedAdminDashboard() {
                           <p className="font-black text-sm text-green-600">${parseFloat(order.total || 0).toFixed(2)}</p>
                           <p className="text-[10px] text-gray-400 font-bold">{(parseFloat(order.total || 0) * exchangeRate).toLocaleString()} ៛</p>
                         </td>
-                        <td className="px-6 py-4">
-                          <select
-                            value={order.status || 'Completed'}
-                            onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                            className="text-xs font-bold border rounded-lg px-2 py-1 outline-none bg-white cursor-pointer"
-                          >
-                            <option value="Completed">✓ ជោគជ័យ</option>
-                            <option value="Preparing">⏳ កំពុងរៀបចំ</option>
-                            <option value="Shipped">🚚 កំពុងដឹក</option>
-                            <option value="Cancelled">✕ បោះបង់</option>
-                          </select>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={order.status || 'Pending'}
+                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                              className={`text-xs font-bold border rounded-xl px-2.5 py-1.5 outline-none cursor-pointer shadow-2xs transition ${
+                                order.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                                order.status === 'Preparing' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
+                                order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-300' :
+                                'bg-amber-50 text-amber-700 border-amber-300'
+                              }`}
+                            >
+                              <option value="Pending">🟡 រង់ចាំបញ្ជាក់ (Pending)</option>
+                              <option value="Preparing">🔵 កំពុងវេចខ្ចប់ (Processing)</option>
+                              <option value="Shipped">🚚 កំពុងដឹក (Out for Delivery)</option>
+                              <option value="Completed">🟢 ជោគជ័យ (Delivered)</option>
+                              <option value="Cancelled">❌ បោះបង់ (Cancelled)</option>
+                            </select>
+
+                            {/* 1-Click Fast Progress Button */}
+                            {(!order.status || order.status === 'Pending') && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'Preparing')}
+                                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition"
+                                title="ចុចប្តូរទៅដំណាក់កាលទី ២៖ កំពុងរៀបចំវេចខ្ចប់"
+                              >
+                                🔵 វេចខ្ចប់
+                              </button>
+                            )}
+                            {order.status === 'Preparing' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'Shipped')}
+                                className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition animate-pulse"
+                                title="ចុចប្តូរទៅដំណាក់កាលទី ៣៖ កំពុងដឹកជញ្ជូន"
+                              >
+                                🚚 បញ្ជូនដឹក
+                              </button>
+                            )}
+                            {order.status === 'Shipped' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
+                                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition"
+                                title="ចុចប្តូរទៅដំណាក់កាលទី ៤៖ បានប្រគល់ជោគជ័យ"
+                              >
+                                🟢 ជោគជ័យ
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-right pr-6 space-x-1.5 whitespace-nowrap">
                           {/* ⭐️ ប៊ូតុងមើលលម្អិតទំនិញ ⭐️ */}

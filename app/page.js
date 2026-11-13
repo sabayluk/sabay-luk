@@ -1045,10 +1045,10 @@ export default function CustomerStorefront() {
     setCurrentSlide(prev => (prev === 0 ? displaySlides.length - 1 : prev - 1));
   };
 
-  // ⭐️ មុខងារស្វែងរកតាមដានការកុម្ម៉ង់ (Search Order Tracking)
+  // ⭐️ មុខងារស្វែងរកតាមដានការកុម្ម៉ង់ (Smart Multi-Format Order & Phone Tracking)
   const handleSearchTrackOrder = async (queryToSearch) => {
-    const q = (typeof queryToSearch === 'string' ? queryToSearch : trackQuery).trim();
-    if (!q) {
+    const raw = (typeof queryToSearch === 'string' ? queryToSearch : trackQuery).trim();
+    if (!raw) {
       alert('សូមបញ្ចូលលេខទូរស័ព្ទ ឬលេខកូដ Order ID!');
       return;
     }
@@ -1057,12 +1057,24 @@ export default function CustomerStorefront() {
     setHasSearchedTrack(true);
 
     try {
+      // ស្វែងរកទាំងលេខសុទ្ធ គ្មានចន្លោះ ឬមានលេខកូដប្រទេស 855 / 0
+      const cleanDigits = raw.replace(/[^0-9]/g, '');
+      const cleanDigitsNoZero = cleanDigits.startsWith('0') ? cleanDigits.slice(1) : cleanDigits;
+      const cleanDigitsWithZero = cleanDigits.startsWith('0') ? cleanDigits : ('0' + cleanDigits);
+
+      let orClauses = [`order_id.ilike.%${raw}%`, `phone.ilike.%${raw}%`, `phone_number.ilike.%${raw}%`];
+      if (cleanDigits.length >= 6) {
+        orClauses.push(`phone.ilike.%${cleanDigits}%`, `phone_number.ilike.%${cleanDigits}%`);
+        orClauses.push(`phone.ilike.%${cleanDigitsNoZero}%`, `phone_number.ilike.%${cleanDigitsNoZero}%`);
+        orClauses.push(`phone.ilike.%${cleanDigitsWithZero}%`, `phone_number.ilike.%${cleanDigitsWithZero}%`);
+      }
+
       const { data, error } = await supabase
         .from('orders')
         .select('*')
-        .or(`order_id.ilike.%${q}%,phone.ilike.%${q}%,phone_number.ilike.%${q}%`)
+        .or(orClauses.join(','))
         .order('id', { ascending: false })
-        .limit(10);
+        .limit(20);
 
       if (error) throw error;
       setTrackResults(data || []);
@@ -1074,23 +1086,42 @@ export default function CustomerStorefront() {
     }
   };
 
+  // ⭐️ ៤ ដំណាក់កាលស្តង់ដារនៃការដឹកជញ្ជូន ⭐️
   const getStatusStep = (status) => {
     const s = (status || '').toLowerCase();
     if (s.includes('cancel') || s.includes('បោះបង់')) return -1;
     if (s.includes('complete') || s.includes('deliver') || s.includes('ជោគជ័យ')) return 3;
-    if (s.includes('ship') || s.includes('out') || s.includes('កំពុងដឹក')) return 2;
-    if (s.includes('prep') || s.includes('pack') || s.includes('កំពុងរៀបចំ') || s.includes('កំពុងវេច')) return 1;
-    return 0; // Pending / ទទួលបានការកុម្ម៉ង់
+    if (s.includes('ship') || s.includes('out') || s.includes('ដឹក')) return 2;
+    if (s.includes('prep') || s.includes('process') || s.includes('pack') || s.includes('រៀបចំ') || s.includes('វេច')) return 1;
+    return 0; // Pending (រង់ចាំការបញ្ជាក់)
   };
 
   const getStatusBadge = (status) => {
     const step = getStatusStep(status);
-    if (step === -1) return { text: 'បានបោះបង់ (Cancelled)', bg: 'bg-red-50 text-red-600 border-red-200' };
-    if (step === 3) return { text: 'ដឹកជញ្ជូនជោគជ័យ (Delivered)', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-    if (step === 2) return { text: 'កំពុងដឹកជញ្ជូន (Out for Delivery)', bg: 'bg-blue-50 text-blue-700 border-blue-200' };
-    if (step === 1) return { text: 'កំពុងរៀបចំទំនិញ (Preparing)', bg: 'bg-amber-50 text-amber-700 border-amber-200' };
-    return { text: 'ទទួលបានការកុម្ម៉ង់ (Pending)', bg: 'bg-purple-50 text-purple-700 border-purple-200' };
+    if (step === -1) return { text: '❌ បានបោះបង់ (Cancelled)', bg: 'bg-red-50 text-red-600 border-red-200' };
+    if (step === 3) return { text: '🟢 បានទទួលជោគជ័យ (Delivered)', bg: 'bg-emerald-50 text-emerald-700 border-emerald-300 ring-2 ring-emerald-100' };
+    if (step === 2) return { text: '🚚 កំពុងដឹកជញ្ជូន (Out for Delivery)', bg: 'bg-blue-50 text-blue-700 border-blue-300 ring-2 ring-blue-100 animate-pulse' };
+    if (step === 1) return { text: '🔵 កំពុងរៀបចំវេចខ្ចប់ (Processing)', bg: 'bg-indigo-50 text-indigo-700 border-indigo-300 ring-2 ring-indigo-100' };
+    return { text: '🟡 កំពុងរង់ចាំការបញ្ជាក់ (Pending)', bg: 'bg-amber-50 text-amber-700 border-amber-300 ring-2 ring-amber-100' };
   };
+
+  // ⭐️ Realtime Order Status Tracking (Live updates when customer watches modal) ⭐️
+  useEffect(() => {
+    if (!trackModalOpen || trackResults.length === 0) return;
+    const orderIds = trackResults.map(o => o.id);
+    const channel = supabase
+      .channel('live-customer-tracking')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, payload => {
+        if (payload.new && orderIds.includes(payload.new.id)) {
+          setTrackResults(prev => prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [trackModalOpen, trackResults]);
 
   // Helper សម្រាប់ទាញយក Size List បង្ហាញលើ Product Card
   const getProductSizeList = (sizeStr) => {
@@ -4169,12 +4200,15 @@ export default function CustomerStorefront() {
                   const currentStep = getStatusStep(order.status);
                   const badge = getStatusBadge(order.status);
                   const isCancelled = currentStep === -1;
+                  const mapUrl = order.google_map_url || (Array.isArray(order.items) && order.items[0]?.google_map_url);
+                  const locationPhoto = order.location_photo_url || (Array.isArray(order.items) && order.items[0]?.location_photo_url);
+                  const slipUrl = order.payment_slip_url || (Array.isArray(order.items) && order.items[0]?.payment_slip_url);
 
                   const steps = [
-                    { title: 'ទទួលបានការកុម្ម៉ង់', desc: 'Order Placed', icon: '📝' },
-                    { title: 'កំពុងរៀបចំទំនិញ', desc: 'Preparing', icon: '📦' },
-                    { title: 'កំពុងដឹកជញ្ជូន', desc: 'Out for Delivery', icon: '🚚' },
-                    { title: 'ដឹកជញ្ជូនជោគជ័យ', desc: 'Delivered', icon: '✅' },
+                    { title: 'រង់ចាំបញ្ជាក់', desc: 'Pending', icon: '🟡', detail: 'ហាងបានទទួលកុម្ម៉ង់' },
+                    { title: 'កំពុងវេចខ្ចប់', desc: 'Processing', icon: '🔵', detail: 'កំពុងរៀបចំដាក់ប្រអប់' },
+                    { title: 'កំពុងដឹកជញ្ជូន', desc: 'Out for Delivery', icon: '🚚', detail: 'អ្នកដឹកកំពុងធ្វើដំណើរ' },
+                    { title: 'បានទទួលជោគជ័យ', desc: 'Delivered', icon: '🟢', detail: 'ប្រគល់ជូនរួចរាល់' },
                   ];
 
                   return (
@@ -4184,6 +4218,18 @@ export default function CustomerStorefront() {
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-black text-sm text-[#ff6a00]">{order.order_id}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(order.order_id);
+                                alert(`📋 បានចម្លងលេខកូដកុម្ម៉ង់ ${order.order_id} រួចរាល់!`);
+                              }}
+                              className="text-[10px] font-bold text-gray-400 hover:text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md cursor-pointer transition active:scale-95"
+                              title="ចម្លងលេខកូដកុម្ម៉ង់"
+                            >
+                              📋 ចម្លង
+                            </button>
                             <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${badge.bg}`}>
                               {badge.text}
                             </span>
@@ -4203,13 +4249,13 @@ export default function CustomerStorefront() {
                       </div>
 
                       {!isCancelled ? (
-                        <div className="py-2 px-1">
+                        <div className="py-3 px-1 bg-gradient-to-b from-gray-50/70 to-white rounded-2xl border border-gray-100">
                           <div className="grid grid-cols-4 relative gap-1">
-                            <div className="absolute top-4 left-6 right-6 h-1 bg-gray-100 -z-0">
+                            <div className="absolute top-4 left-6 right-6 h-1.5 bg-gray-100 rounded-full -z-0">
                               <div 
-                                className="h-full bg-gradient-to-r from-orange-500 to-emerald-500 transition-all duration-500"
+                                className="h-full bg-gradient-to-r from-amber-400 via-blue-500 to-emerald-500 rounded-full transition-all duration-700 shadow-xs"
                                 style={{ 
-                                  width: currentStep === 0 ? '12%' : currentStep === 1 ? '40%' : currentStep === 2 ? '75%' : '100%' 
+                                  width: currentStep === 0 ? '12%' : currentStep === 1 ? '38%' : currentStep === 2 ? '72%' : '100%' 
                                 }}
                               />
                             </div>
@@ -4219,15 +4265,15 @@ export default function CustomerStorefront() {
                               const isCurrent = idx === currentStep;
 
                               return (
-                                <div key={idx} className="flex flex-col items-center text-center z-10">
+                                <div key={idx} className="flex flex-col items-center text-center z-10 px-0.5">
                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all duration-300 shadow-xs ${
                                     isCurrent 
-                                      ? 'bg-[#ff6a00] text-white ring-4 ring-orange-100 scale-110 animate-pulse'
+                                      ? 'bg-white ring-4 ring-orange-200 border-2 border-orange-500 scale-110 shadow-md animate-bounce'
                                       : isPassed
                                       ? 'bg-emerald-500 text-white'
                                       : 'bg-white border-2 border-gray-200 text-gray-400'
                                   }`}>
-                                    {isPassed && !isCurrent ? '✓' : st.icon}
+                                    {isCurrent ? st.icon : (isPassed ? '✓' : st.icon)}
                                   </div>
                                   <span className={`text-[11px] font-black mt-2 leading-tight ${
                                     isCurrent ? 'text-[#ff6a00]' : isPassed ? 'text-gray-800' : 'text-gray-400'
@@ -4236,6 +4282,9 @@ export default function CustomerStorefront() {
                                   </span>
                                   <span className="text-[9px] text-gray-400 font-medium hidden sm:block">
                                     {st.desc}
+                                  </span>
+                                  <span className={`text-[8.5px] mt-0.5 hidden md:block ${isCurrent ? 'text-orange-600 font-bold' : 'text-gray-400'}`}>
+                                    {st.detail}
                                   </span>
                                 </div>
                               );
@@ -4257,12 +4306,12 @@ export default function CustomerStorefront() {
                         <div>
                           <span className="text-gray-400 block text-[10px] font-bold">វិធីសាស្ត្រទូទាត់:</span>
                           <span className="font-bold text-gray-900">{order.payment_method || 'COD'}</span>
-                          {(order.payment_slip_url || (Array.isArray(order.items) && order.items[0]?.payment_slip_url)) && (
+                          {slipUrl && (
                             <a 
-                              href={order.payment_slip_url || order.items[0]?.payment_slip_url}
+                              href={slipUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline font-bold text-[10px] block mt-0.5"
+                              className="text-blue-600 hover:underline font-bold text-[10px] inline-flex items-center gap-1 mt-0.5 ml-2"
                             >
                               🧾 មើលវិក្កយបត្រ Slip ↗
                             </a>
@@ -4271,7 +4320,53 @@ export default function CustomerStorefront() {
                         <div className="sm:col-span-2">
                           <span className="text-gray-400 block text-[10px] font-bold">អាសយដ្ឋានដឹកជញ្ជូន:</span>
                           <span className="font-bold text-gray-800">{order.delivery_address || order.address}</span>
+                          
+                          {/* Location Links */}
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {mapUrl && (
+                              <a
+                                href={mapUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200 transition"
+                              >
+                                <span>📍</span>
+                                <span>មើលទីតាំងលើ Google Maps ↗</span>
+                              </a>
+                            )}
+                            {locationPhoto && (
+                              <a
+                                href={locationPhoto}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition"
+                              >
+                                <span>📸</span>
+                                <span>មើលរូបថតផ្ទះ/កន្លែងធ្វើការ ↗</span>
+                              </a>
+                            )}
+                          </div>
                         </div>
+                      </div>
+
+                      {/* ⭐️ Quick Contact & Support Buttons ⭐️ */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-100">
+                        <a 
+                          href={`https://t.me/share/url?url=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : 'https://sabayluk.com')}&text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរនាំពីការកុម្ម៉ង់លេខ #${order.order_id} របស់ខ្ញុំ`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-3 py-1.5 rounded-xl transition"
+                        >
+                          <span>💬</span>
+                          <span>ឆាតសួរនាំតាម Telegram</span>
+                        </a>
+                        <a 
+                          href="tel:0967205522" 
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl transition"
+                        >
+                          <span>📞</span>
+                          <span>ទូរស័ព្ទហាង: 096 720 5522</span>
+                        </a>
                       </div>
 
                       {Array.isArray(order.items) && order.items.length > 0 && (
