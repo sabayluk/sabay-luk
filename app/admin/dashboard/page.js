@@ -525,6 +525,103 @@ export default function UnifiedAdminDashboard() {
     }
   }, [customers]);
 
+  // ================= 💸 ផ្នែកគ្រប់គ្រងចំណាយ & គណនាប្រាក់ចំណេញសុទ្ធ (EXPENSES & NET PROFIT) =================
+  const EXPENSE_CATEGORIES = [
+    { id: 'rent', label: 'ថ្លៃជួលតូប / ទីតាំង (Rent)', icon: '🏢', badge: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { id: 'utilities', label: 'ទឹក ភ្លើង & អ៊ីនធឺណិត (Utilities)', icon: '💡', badge: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+    { id: 'salaries', label: 'ប្រាក់ខែបុគ្គលិក & កម្រៃ (Salaries)', icon: '👥', badge: 'bg-blue-50 text-blue-700 border-blue-200' },
+    { id: 'delivery', label: 'សេវាដឹកជញ្ជូន & វេចខ្ចប់ (Delivery & Packaging)', icon: '🛵', badge: 'bg-sky-50 text-sky-700 border-sky-200' },
+    { id: 'marketing', label: 'ការផ្សព្វផ្សាយ & Ads (Marketing)', icon: '📢', badge: 'bg-pink-50 text-pink-700 border-pink-200' },
+    { id: 'refreshments', label: 'ម្ហូបអាហារ & ភេសជ្ជៈបុគ្គលិក (Meals)', icon: '☕', badge: 'bg-teal-50 text-teal-700 border-teal-200' },
+    { id: 'supplies', label: 'សម្ភារៈប្រើប្រាស់ & ជួសជុល (Supplies)', icon: '🛠️', badge: 'bg-slate-50 text-slate-700 border-slate-200' },
+    { id: 'other', label: 'ចំណាយផ្សេងៗ (Other Miscellaneous)', icon: '📦', badge: 'bg-purple-50 text-purple-700 border-purple-200' },
+  ];
+
+  const [expenses, setExpenses] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_luk_expenses');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {}
+      }
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    return [
+      {
+        id: 'EXP-1001',
+        title: 'ថ្លៃជួលតូបប្រចាំខែ',
+        category: 'rent',
+        amount: 250.00,
+        date: today,
+        paymentMethod: 'ABA',
+        recipient: 'ម្ចាស់ទីតាំង',
+        note: 'បង់ថ្លៃជួលទីតាំងតូបកណ្តាលក្រុង',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'EXP-1002',
+        title: 'ថ្លៃទឹក ភ្លើង & Wi-Fi អ៊ីនធឺណិត',
+        category: 'utilities',
+        amount: 35.50,
+        date: today,
+        paymentMethod: 'ABA',
+        recipient: 'EDC / ISP',
+        note: 'បង់ថ្លៃភ្លើងហាង និងថ្លៃ Wi-Fi ប្រចាំខែ',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'EXP-1003',
+        title: 'ទិញថង់ និងប្រអប់កាតុងវេចខ្ចប់',
+        category: 'delivery',
+        amount: 25.00,
+        date: today,
+        paymentMethod: 'Cash',
+        recipient: 'រោងពុម្ពវេចខ្ចប់',
+        note: 'ទិញថង់ និងប្រអប់កាតុង ២០០ ប្រអប់',
+        created_at: new Date().toISOString()
+      }
+    ];
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sabay_luk_expenses', JSON.stringify(expenses));
+    }
+  }, [expenses]);
+
+  // Try loading from Supabase expenses table if present
+  useEffect(() => {
+    const fetchExpensesDB = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('expenses')
+          .select('*')
+          .order('date', { ascending: false });
+        if (!error && Array.isArray(data) && data.length > 0) {
+          setExpenses(data);
+        }
+      } catch (e) {}
+    };
+    fetchExpensesDB();
+  }, []);
+
+  const [expenseSearch, setExpenseSearch] = useState('');
+  const [expenseFilterCategory, setExpenseFilterCategory] = useState('all');
+  const [expenseFilterPeriod, setExpenseFilterPeriod] = useState('month'); // 'all' | 'today' | 'week' | 'month'
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+
+  // Form states for Add/Edit Expense
+  const [expTitle, setExpTitle] = useState('');
+  const [expCategory, setExpCategory] = useState('rent');
+  const [expAmount, setExpAmount] = useState('');
+  const [expDate, setExpDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expPaymentMethod, setExpPaymentMethod] = useState('Cash');
+  const [expRecipient, setExpRecipient] = useState('');
+  const [expNote, setExpNote] = useState('');
+
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerFilterTier, setCustomerFilterTier] = useState('all');
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
@@ -6532,6 +6629,804 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
+  // ================= 💸 ផ្ទាំងគ្រប់គ្រងចំណាយ & គណនាប្រាក់ចំណេញសុទ្ធ (EXPENSES & TRUE NET PROFIT VIEW) =================
+  const ExpensesView = () => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const yesterdayDate = new Date(Date.now() - 86400000);
+    const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
+    const sevenDaysAgoTime = Date.now() - (7 * 86400000);
+    const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+    // ១. ចម្រាញ់ Order តាមកាលបរិច្ឆេទ
+    const periodOrders = realOrders.filter(o => {
+      if (o.status === 'Cancelled') return false;
+      if (!o.created_at) return true;
+      const orderDateStr = o.created_at.slice(0, 10);
+      const orderTime = new Date(o.created_at).getTime();
+
+      if (expenseFilterPeriod === 'today') return orderDateStr === todayStr;
+      if (expenseFilterPeriod === 'yesterday') return orderDateStr === yesterdayStr;
+      if (expenseFilterPeriod === 'week') return orderTime >= sevenDaysAgoTime;
+      if (expenseFilterPeriod === 'month') return orderDateStr >= monthStartStr;
+      return true; // 'all'
+    });
+
+    // Helper គណនាថ្លៃដើមទំនិញ
+    const getOrderCost = (order) => {
+      const items = Array.isArray(order.items) ? order.items : [];
+      return items.reduce((sum, it) => {
+        const prod = products.find(p => p.id === it.id);
+        const costPerUnit = prod && prod.cost_price ? parseFloat(prod.cost_price) : 0;
+        return sum + (costPerUnit * (it.qty || 1));
+      }, 0);
+    };
+
+    const periodRevenue = periodOrders.reduce((sum, o) => sum + (parseFloat(o.total_amount != null ? o.total_amount : o.total) || 0), 0);
+    const periodCOGS = periodOrders.reduce((sum, o) => sum + getOrderCost(o), 0);
+    const periodGrossProfit = Math.max(0, periodRevenue - periodCOGS);
+    const grossMarginPercent = periodRevenue > 0 ? ((periodGrossProfit / periodRevenue) * 100) : 0;
+
+    // ២. ចម្រាញ់ចំណាយតាមកាលបរិច្ឆេទ
+    const filteredByPeriodExpenses = expenses.filter(exp => {
+      if (!exp.date) return true;
+      const expDateStr = exp.date.slice(0, 10);
+      const expTime = new Date(exp.date).getTime();
+
+      if (expenseFilterPeriod === 'today') return expDateStr === todayStr;
+      if (expenseFilterPeriod === 'yesterday') return expDateStr === yesterdayStr;
+      if (expenseFilterPeriod === 'week') return expTime >= sevenDaysAgoTime;
+      if (expenseFilterPeriod === 'month') return expDateStr >= monthStartStr;
+      return true; // 'all'
+    });
+
+    // ៣. ចម្រាញ់ចំណាយតាម Category និង Search
+    const finalFilteredExpenses = filteredByPeriodExpenses.filter(exp => {
+      const matchCat = expenseFilterCategory === 'all' || exp.category === expenseFilterCategory;
+      const q = expenseSearch.toLowerCase();
+      const matchSearch = !expenseSearch ||
+        (exp.title || '').toLowerCase().includes(q) ||
+        (exp.recipient || '').toLowerCase().includes(q) ||
+        (exp.note || '').toLowerCase().includes(q) ||
+        (exp.id || '').toLowerCase().includes(q);
+      return matchCat && matchSearch;
+    });
+
+    const periodTotalExpenses = filteredByPeriodExpenses.reduce((sum, exp) => sum + (parseFloat(exp.amount) || 0), 0);
+    const periodNetProfit = periodGrossProfit - periodTotalExpenses;
+    const netMarginPercent = periodRevenue > 0 ? ((periodNetProfit / periodRevenue) * 100) : 0;
+    const isProfitable = periodNetProfit >= 0;
+
+    // ៤. វិភាគភាគរយចំណាយតាមប្រភេទនីមួយៗ
+    const categoryTotals = EXPENSE_CATEGORIES.map(cat => {
+      const catExpenses = filteredByPeriodExpenses.filter(e => e.category === cat.id);
+      const total = catExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+      const percent = periodTotalExpenses > 0 ? ((total / periodTotalExpenses) * 100) : 0;
+      return { ...cat, total, percent, count: catExpenses.length };
+    }).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
+
+    // Save or Edit Expense
+    const handleSaveExpense = async (e) => {
+      e.preventDefault();
+      if (!expTitle.trim()) {
+        alert('សូមបញ្ចូលឈ្មោះ ឬបរិយាយចំណាយ!');
+        return;
+      }
+      const numAmount = parseFloat(expAmount);
+      if (isNaN(numAmount) || numAmount <= 0) {
+        alert('សូមបញ្ចូលចំនួនទឹកប្រាក់ឱ្យបានត្រឹមត្រូវ (ធំជាង 0)!');
+        return;
+      }
+
+      if (editingExpense) {
+        const updated = expenses.map(item => item.id === editingExpense.id ? {
+          ...item,
+          title: expTitle.trim(),
+          category: expCategory,
+          amount: numAmount,
+          date: expDate,
+          paymentMethod: expPaymentMethod,
+          recipient: expRecipient.trim(),
+          note: expNote.trim()
+        } : item);
+        setExpenses(updated);
+        try {
+          await supabase.from('expenses').update({
+            title: expTitle.trim(),
+            category: expCategory,
+            amount: numAmount,
+            date: expDate,
+            payment_method: expPaymentMethod,
+            recipient: expRecipient.trim(),
+            note: expNote.trim()
+          }).eq('id', editingExpense.id);
+        } catch (err) {}
+        setToastNotification(`✅ បានកែប្រែចំណាយ "${expTitle}" ជោគជ័យ!`);
+      } else {
+        const newId = `EXP-${Date.now().toString().slice(-6)}`;
+        const newRecord = {
+          id: newId,
+          title: expTitle.trim(),
+          category: expCategory,
+          amount: numAmount,
+          date: expDate,
+          paymentMethod: expPaymentMethod,
+          recipient: expRecipient.trim(),
+          note: expNote.trim(),
+          created_at: new Date().toISOString()
+        };
+        setExpenses([newRecord, ...expenses]);
+        try {
+          await supabase.from('expenses').insert([{
+            id: newId,
+            title: expTitle.trim(),
+            category: expCategory,
+            amount: numAmount,
+            date: expDate,
+            payment_method: expPaymentMethod,
+            recipient: expRecipient.trim(),
+            note: expNote.trim()
+          }]);
+        } catch (err) {}
+        setToastNotification(`✅ បានកត់ត្រាចំណាយថ្មី $${numAmount.toFixed(2)} ជោគជ័យ!`);
+      }
+      setTimeout(() => setToastNotification(null), 3500);
+      setExpenseModalOpen(false);
+      setEditingExpense(null);
+      setExpTitle('');
+      setExpAmount('');
+      setExpRecipient('');
+      setExpNote('');
+    };
+
+    const handleOpenEdit = (exp) => {
+      setEditingExpense(exp);
+      setExpTitle(exp.title || '');
+      setExpCategory(exp.category || 'rent');
+      setExpAmount(String(exp.amount || ''));
+      setExpDate(exp.date ? exp.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
+      setExpPaymentMethod(exp.paymentMethod || 'Cash');
+      setExpRecipient(exp.recipient || '');
+      setExpNote(exp.note || '');
+      setExpenseModalOpen(true);
+    };
+
+    const handleDeleteExpense = async (id, title) => {
+      if (!window.confirm(`តើបងពិតជាចង់លុបចំណាយ "${title}" នេះមែនទេ?`)) return;
+      setExpenses(prev => prev.filter(e => e.id !== id));
+      try {
+        await supabase.from('expenses').delete().eq('id', id);
+      } catch (err) {}
+      setToastNotification(`🗑️ បានលុបចំណាយ "${title}" រួចរាល់!`);
+      setTimeout(() => setToastNotification(null), 3000);
+    };
+
+    // Export to Excel
+    const handleExportExcel = () => {
+      if (finalFilteredExpenses.length === 0) {
+        alert('មិនមានទិន្នន័យចំណាយសម្រាប់ទាញចេញទេ!');
+        return;
+      }
+      const dataToExport = finalFilteredExpenses.map((exp, idx) => {
+        const catObj = EXPENSE_CATEGORIES.find(c => c.id === exp.category);
+        return {
+          'ល.រ': idx + 1,
+          'លេខសម្គាល់ (ID)': exp.id,
+          'កាលបរិច្ឆេទ': exp.date || '',
+          'បរិយាយចំណាយ': exp.title || '',
+          'ប្រភេទចំណាយ': catObj ? catObj.label : exp.category,
+          'ទឹកប្រាក់ ($)': (parseFloat(exp.amount) || 0).toFixed(2),
+          'ទឹកប្រាក់ (រៀល)': Math.round((parseFloat(exp.amount) || 0) * exchangeRate).toLocaleString() + ' ៛',
+          'វិធីទូទាត់': exp.paymentMethod || 'Cash',
+          'អ្នកទទួលប្រាក់': exp.recipient || '',
+          'កំណត់ចំណាំ': exp.note || ''
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Store_Expenses');
+      XLSX.writeFile(workbook, `Sabay_Luk_Expenses_${expenseFilterPeriod}_${todayStr}.xlsx`);
+    };
+
+    const periodLabels = {
+      'today': 'ថ្ងៃនេះ (Today)',
+      'yesterday': 'ម្សិលមិញ (Yesterday)',
+      'week': '៧ ថ្ងៃចុងក្រោយ (7 Days)',
+      'month': 'ខែនេះ (This Month)',
+      'all': 'ពេលវេលាទាំងអស់ (All Time)'
+    };
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-200">
+        
+        {/* Header Bar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-gray-100 shadow-xs">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold">
+                💸
+              </span>
+              <div>
+                <h2 className="text-lg sm:text-xl font-black text-gray-900 leading-tight">
+                  គ្រប់គ្រងចំណាយ & គណនាប្រាក់ចំណេញសុទ្ធ (Store Expenses & Net Profit)
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  ដឹងច្បាស់ពីចំណូល ថ្លៃដើមទំនិញ ចំណាយប្រតិបត្តិការទូទៅ និងប្រាក់ចំណេញសុទ្ធពិតប្រាកដ (P&L Analysis)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 font-bold text-xs px-4 py-2.5 rounded-2xl border border-emerald-200 transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <span>📥</span>
+              <span>ទាញចេញ Excel (.xlsx)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingExpense(null);
+                setExpTitle('');
+                setExpCategory('rent');
+                setExpAmount('');
+                setExpDate(todayStr);
+                setExpPaymentMethod('Cash');
+                setExpRecipient('');
+                setExpNote('');
+                setExpenseModalOpen(true);
+              }}
+              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-black text-xs px-4 py-2.5 rounded-2xl transition shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>➕</span>
+              <span>កត់ត្រាចំណាយថ្មី</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Period Selector Tabs */}
+        <div className="flex flex-wrap items-center gap-2 bg-gray-100/80 p-1.5 rounded-2xl border border-gray-200 w-fit">
+          {[
+            { id: 'today', label: '📅 ថ្ងៃនេះ' },
+            { id: 'yesterday', label: '📅 ម្សិលមិញ' },
+            { id: 'week', label: '📅 ៧ ថ្ងៃចុងក្រោយ' },
+            { id: 'month', label: '📅 ខែនេះ' },
+            { id: 'all', label: '📅 ទាំងអស់' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setExpenseFilterPeriod(tab.id)}
+              className={`text-xs font-black px-4 py-2 rounded-xl transition cursor-pointer ${
+                expenseFilterPeriod === tab.id
+                  ? 'bg-white text-emerald-700 shadow-sm font-black'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ⭐️ 5 EXECUTIVE FINANCIAL KPI CARDS ⭐️ */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+          
+          {/* 1. REVENUE */}
+          <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-gray-400 text-xs font-bold mb-1">
+                <span>ចំណូលសរុប (Revenue)</span>
+                <span className="text-base">💰</span>
+              </div>
+              <div className="text-xl font-black text-gray-900 mt-1">
+                ${periodRevenue.toFixed(2)}
+              </div>
+              <div className="text-[10px] font-bold text-gray-400 mt-0.5">
+                {(periodRevenue * exchangeRate).toLocaleString()} ៛
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-500 font-bold flex justify-between">
+              <span>វិក្កយបត្រលក់:</span>
+              <span className="text-gray-800">{periodOrders.length} Orders</span>
+            </div>
+          </div>
+
+          {/* 2. COGS (COST OF GOODS SOLD) */}
+          <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-gray-400 text-xs font-bold mb-1">
+                <span>ថ្លៃដើមទំនិញ (COGS)</span>
+                <span className="text-base">📦</span>
+              </div>
+              <div className="text-xl font-black text-rose-600 mt-1">
+                ${periodCOGS.toFixed(2)}
+              </div>
+              <div className="text-[10px] font-bold text-gray-400 mt-0.5">
+                {(periodCOGS * exchangeRate).toLocaleString()} ៛
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-500 font-bold flex justify-between">
+              <span>សមាមាត្រថ្លៃដើម:</span>
+              <span className="text-rose-600">{periodRevenue > 0 ? ((periodCOGS / periodRevenue) * 100).toFixed(1) : 0}%</span>
+            </div>
+          </div>
+
+          {/* 3. GROSS PROFIT */}
+          <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-gray-400 text-xs font-bold mb-1">
+                <span>ចំណេញដុល (Gross Profit)</span>
+                <span className="text-base">📈</span>
+              </div>
+              <div className="text-xl font-black text-blue-600 mt-1">
+                +${periodGrossProfit.toFixed(2)}
+              </div>
+              <div className="text-[10px] font-bold text-gray-400 mt-0.5">
+                {(periodGrossProfit * exchangeRate).toLocaleString()} ៛
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-500 font-bold flex justify-between">
+              <span>Gross Margin:</span>
+              <span className="text-blue-600 font-black">{grossMarginPercent.toFixed(1)}%</span>
+            </div>
+          </div>
+
+          {/* 4. TOTAL OPERATIONAL EXPENSES */}
+          <div className="bg-white rounded-3xl p-4 border border-gray-100 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-gray-400 text-xs font-bold mb-1">
+                <span>ចំណាយប្រតិបត្តិការ (Expenses)</span>
+                <span className="text-base">💸</span>
+              </div>
+              <div className="text-xl font-black text-amber-600 mt-1">
+                -${periodTotalExpenses.toFixed(2)}
+              </div>
+              <div className="text-[10px] font-bold text-gray-400 mt-0.5">
+                {(periodTotalExpenses * exchangeRate).toLocaleString()} ៛
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-gray-100 text-[10px] text-gray-500 font-bold flex justify-between">
+              <span>ចំនួនប្រតិបត្តិការ:</span>
+              <span className="text-amber-700">{filteredByPeriodExpenses.length} កំណត់ត្រា</span>
+            </div>
+          </div>
+
+          {/* 5. TRUE NET PROFIT (THE CROWN METRIC) */}
+          <div className={`rounded-3xl p-4 shadow-md flex flex-col justify-between text-white ${
+            isProfitable 
+              ? 'bg-gradient-to-br from-emerald-600 via-teal-600 to-emerald-700 shadow-emerald-500/20' 
+              : 'bg-gradient-to-br from-rose-600 via-red-600 to-rose-700 shadow-rose-500/20'
+          }`}>
+            <div>
+              <div className="flex items-center justify-between text-white/80 text-xs font-bold mb-1">
+                <span>ចំណេញសុទ្ធ (Net Profit)</span>
+                <span className="text-base">{isProfitable ? '💎' : '⚠️'}</span>
+              </div>
+              <div className="text-2xl font-black tracking-tight mt-1">
+                {isProfitable ? `+$${periodNetProfit.toFixed(2)}` : `-$${Math.abs(periodNetProfit).toFixed(2)}`}
+              </div>
+              <div className="text-[10px] font-bold text-white/80 mt-0.5">
+                {(periodNetProfit * exchangeRate).toLocaleString()} ៛
+              </div>
+            </div>
+            <div className="mt-3 pt-2 border-t border-white/20 text-[10px] text-white/90 font-black flex justify-between">
+              <span>{isProfitable ? 'ចំណេញសុទ្ធពិត:' : 'ខាតបង់ប្រតិបត្តិការ:'}</span>
+              <span className="bg-white/20 px-2 py-0.5 rounded-full">{netMarginPercent.toFixed(1)}% Margin</span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ⭐️ FINANCIAL STATEMENT FLOW WATERFALL ⭐️ */}
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-5 sm:p-6 shadow-lg border border-slate-700/60">
+          <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-700/60">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📊</span>
+              <h3 className="text-xs sm:text-sm font-black tracking-wide uppercase text-slate-200">
+                លំហូរគណនាប្រាក់ចំណេញសុទ្ធពិតប្រាកដ (P&L Formula Breakdown) — {periodLabels[expenseFilterPeriod]}
+              </h3>
+            </div>
+            <span className="text-[10px] font-mono bg-white/10 text-emerald-400 px-2.5 py-0.5 rounded-full border border-white/10 font-bold">
+              GAAP Standard P&L
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+            
+            <div className="bg-white/5 rounded-2xl p-3 border border-white/10">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">ចំណូលពីការលក់</span>
+              <div className="text-base sm:text-lg font-black text-emerald-400">${periodRevenue.toFixed(2)}</div>
+              <span className="text-[9px] text-slate-400">(+) Gross Sales</span>
+            </div>
+
+            <div className="bg-white/5 rounded-2xl p-3 border border-white/10 relative">
+              <span className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-rose-400 z-10 hidden md:flex">
+                -
+              </span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">ថ្លៃដើមទំនិញ</span>
+              <div className="text-base sm:text-lg font-black text-rose-400">${periodCOGS.toFixed(2)}</div>
+              <span className="text-[9px] text-slate-400">(-) COGS</span>
+            </div>
+
+            <div className="bg-white/5 rounded-2xl p-3 border border-white/10 relative">
+              <span className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-blue-400 z-10 hidden md:flex">
+                =
+              </span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">ចំណេញដុល</span>
+              <div className="text-base sm:text-lg font-black text-blue-400">${periodGrossProfit.toFixed(2)}</div>
+              <span className="text-[9px] text-slate-400">(=) Gross Profit</span>
+            </div>
+
+            <div className="bg-white/5 rounded-2xl p-3 border border-white/10 relative">
+              <span className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center text-xs font-black text-amber-400 z-10 hidden md:flex">
+                -
+              </span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">ចំណាយប្រតិបត្តិការ</span>
+              <div className="text-base sm:text-lg font-black text-amber-400">${periodTotalExpenses.toFixed(2)}</div>
+              <span className="text-[9px] text-slate-400">(-) OPEX</span>
+            </div>
+
+            <div className="col-span-2 md:col-span-1 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 rounded-2xl p-3 border border-emerald-500/40 relative">
+              <span className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-emerald-500 border border-white flex items-center justify-center text-xs font-black text-slate-900 z-10 hidden md:flex">
+                =
+              </span>
+              <span className="text-[10px] uppercase font-bold text-emerald-300 block mb-1">ចំណេញសុទ្ធពិតប្រាកដ</span>
+              <div className={`text-base sm:text-lg font-black ${isProfitable ? 'text-emerald-300' : 'text-rose-400'}`}>
+                ${periodNetProfit.toFixed(2)}
+              </div>
+              <span className="text-[9px] text-emerald-400/80 font-bold">(=) True Net Profit</span>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ⭐️ EXPENSE BREAKDOWN BY CATEGORY ⭐️ */}
+        {categoryTotals.length > 0 && (
+          <div className="bg-white rounded-3xl p-5 sm:p-6 border border-gray-100 shadow-xs">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🏷️</span>
+                <h4 className="text-xs sm:text-sm font-black text-gray-900 uppercase tracking-wide">
+                  ការបែងចែកចំណាយតាមប្រភេទ (Expense Distribution)
+                </h4>
+              </div>
+              <span className="text-xs text-gray-400 font-bold">
+                សរុប {categoryTotals.length} ប្រភេទចំណាយ
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {categoryTotals.map(cat => (
+                <div key={cat.id} className="p-3.5 rounded-2xl bg-gray-50 border border-gray-100 hover:border-emerald-200 transition space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
+                      <span>{cat.icon}</span>
+                      <span className="truncate max-w-[130px]">{cat.label.split('(')[0]}</span>
+                    </span>
+                    <span className="text-xs font-black text-gray-900">${cat.total.toFixed(2)}</span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-emerald-500 to-teal-600 h-full rounded-full transition-all duration-500" 
+                      style={{ width: `${Math.min(100, Math.max(5, cat.percent))}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-gray-400 font-bold">
+                    <span>{cat.count} កំណត់ត្រា</span>
+                    <span className="text-emerald-600 font-black">{cat.percent.toFixed(1)}% នៃចំណាយ</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ⭐️ EXPENSES TABLE & FILTER BAR ⭐️ */}
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-xs overflow-hidden">
+          
+          {/* Table Header Filter Toolbar */}
+          <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="relative w-full md:w-80">
+              <input
+                type="text"
+                value={expenseSearch}
+                onChange={(e) => setExpenseSearch(e.target.value)}
+                placeholder="ស្វែងរកចំណាយ, អ្នកទទួល, កំណត់ចំណាំ..."
+                className="w-full bg-gray-50 border border-gray-200 focus:border-emerald-500 focus:bg-white rounded-2xl pl-10 pr-4 py-2.5 text-xs font-medium focus:outline-none transition"
+              />
+              <span className="absolute left-3.5 top-3 text-gray-400 text-xs">🔍</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <select
+                value={expenseFilterCategory}
+                onChange={(e) => setExpenseFilterCategory(e.target.value)}
+                className="bg-gray-50 border border-gray-200 rounded-2xl px-3 py-2 text-xs font-bold text-gray-700 outline-none cursor-pointer"
+              >
+                <option value="all">📂 គ្រប់ប្រភេទចំណាយទាំងអស់</option>
+                {EXPENSE_CATEGORIES.map(c => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+                ))}
+              </select>
+
+              <span className="text-xs text-gray-400 font-bold px-2">
+                សរុប: {finalFilteredExpenses.length} ចំណាយ
+              </span>
+            </div>
+          </div>
+
+          {/* Table Body */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-50/80 text-[10px] text-gray-400 font-black uppercase tracking-wider border-b border-gray-100">
+                <tr>
+                  <th className="px-5 py-3">កាលបរិច្ឆេទ</th>
+                  <th className="px-5 py-3">បរិយាយចំណាយ</th>
+                  <th className="px-5 py-3">ប្រភេទចំណាយ</th>
+                  <th className="px-5 py-3 text-right">ទឹកប្រាក់ ($)</th>
+                  <th className="px-5 py-3 text-center">វិធីទូទាត់</th>
+                  <th className="px-5 py-3">អ្នកទទួល / សម្គាល់</th>
+                  <th className="px-5 py-3 text-right pr-6">សកម្មភាព</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {finalFilteredExpenses.length > 0 ? (
+                  finalFilteredExpenses.map((exp) => {
+                    const catObj = EXPENSE_CATEGORIES.find(c => c.id === exp.category) || {
+                      icon: '📦',
+                      label: exp.category,
+                      badge: 'bg-gray-50 text-gray-700 border-gray-200'
+                    };
+
+                    return (
+                      <tr key={exp.id} className="hover:bg-gray-50/60 transition group">
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <span className="font-bold text-gray-900 block">{exp.date}</span>
+                          <span className="text-[10px] font-mono text-gray-400">{exp.id}</span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="font-black text-gray-900 block">{exp.title}</span>
+                          {exp.note && (
+                            <span className="text-[10px] text-gray-400 line-clamp-1 italic">{exp.note}</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-xl border ${catObj.badge}`}>
+                            <span>{catObj.icon}</span>
+                            <span>{catObj.label.split('(')[0]}</span>
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          <span className="font-black text-sm text-amber-600 block">
+                            -${parseFloat(exp.amount || 0).toFixed(2)}
+                          </span>
+                          <span className="text-[10px] font-bold text-gray-400">
+                            {(parseFloat(exp.amount || 0) * exchangeRate).toLocaleString()} ៛
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-gray-100 text-gray-700 border border-gray-200">
+                            {exp.paymentMethod || 'Cash'}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-gray-600 font-medium">
+                          {exp.recipient || '-'}
+                        </td>
+                        <td className="px-5 py-3.5 text-right pr-6 whitespace-nowrap space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(exp)}
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-[11px] px-2.5 py-1.5 rounded-xl border border-blue-200 transition cursor-pointer"
+                            title="កែប្រែចំណាយ"
+                          >
+                            ✏️ កែ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExpense(exp.id, exp.title)}
+                            className="bg-red-50 hover:bg-red-100 text-red-600 font-bold text-[11px] px-2.5 py-1.5 rounded-xl border border-red-200 transition cursor-pointer"
+                            title="លុបចំណាយ"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-gray-400">
+                      <div className="text-3xl mb-2">💸</div>
+                      <p className="font-bold text-gray-600 text-xs">មិនទាន់មានទិន្នន័យចំណាយក្នុងកាលបរិច្ឆេទនេះឡើយ!</p>
+                      <p className="text-[11px] text-gray-400 mt-1">សូមចុចប៊ូតុង "កត់ត្រាចំណាយថ្មី" ខាងលើដើម្បីចាប់ផ្តើម។</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+
+        {/* ⭐️ ADD / EDIT EXPENSE MODAL ⭐️ */}
+        {expenseModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
+              
+              <div className="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-base font-bold">
+                    {editingExpense ? '✏️' : '➕'}
+                  </span>
+                  <div>
+                    <h3 className="font-black text-sm text-gray-900">
+                      {editingExpense ? 'កែប្រែទិន្នន័យចំណាយ' : 'កត់ត្រាចំណាយប្រតិបត្តិការថ្មី'}
+                    </h3>
+                    <p className="text-[10px] text-gray-400">បញ្ចូលទឹកប្រាក់ និងព័ត៌មានលម្អិតនៃចំណាយ</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExpenseModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveExpense} className="space-y-3.5 text-xs">
+                
+                {/* Title */}
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">
+                    ឈ្មោះ ឬបរិយាយចំណាយ <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={expTitle}
+                    onChange={(e) => setExpTitle(e.target.value)}
+                    placeholder="ឧ. ថ្លៃជួលតូបខែនេះ, ថ្លៃភ្លើង, ទិញថង់វេចខ្ចប់..."
+                    className="w-full bg-gray-50 border border-gray-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3 py-2.5 font-medium outline-none transition"
+                  />
+                </div>
+
+                {/* Amount in USD & KHR live preview */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">
+                      ចំនួនទឹកប្រាក់ ($ USD) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      min="0.01"
+                      value={expAmount}
+                      onChange={(e) => setExpAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-gray-50 border border-gray-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3 py-2.5 font-black text-base text-amber-600 outline-none transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-400 block mb-1">
+                      សមមូលជារៀល (៛ KHR)
+                    </label>
+                    <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5 font-black text-sm text-gray-600 flex items-center">
+                      {expAmount && !isNaN(parseFloat(expAmount)) 
+                        ? `${Math.round(parseFloat(expAmount) * exchangeRate).toLocaleString()} ៛` 
+                        : '0 ៛'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category & Payment Method */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">
+                      ប្រភេទចំណាយ
+                    </label>
+                    <select
+                      value={expCategory}
+                      onChange={(e) => setExpCategory(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 outline-none cursor-pointer"
+                    >
+                      {EXPENSE_CATEGORIES.map(c => (
+                        <option key={c.id} value={c.id}>{c.icon} {c.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">
+                      វិធីសាស្ត្រទូទាត់
+                    </label>
+                    <select
+                      value={expPaymentMethod}
+                      onChange={(e) => setExpPaymentMethod(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 outline-none cursor-pointer"
+                    >
+                      <option value="Cash">💵 សាច់ប្រាក់ផ្ទាល់ (Cash)</option>
+                      <option value="ABA">📱 ផ្ទេរតាម ABA Pay</option>
+                      <option value="Wing">📱 ផ្ទេរតាម Wing / Bakong</option>
+                      <option value="Bank">🏦 ផ្ទេរតាមធនាគារផ្សេងៗ</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Date & Recipient */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">
+                      កាលបរិច្ឆេទចំណាយ
+                    </label>
+                    <input
+                      type="date"
+                      value={expDate}
+                      onChange={(e) => setExpDate(e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold text-gray-800 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">
+                      អ្នកទទួលប្រាក់ / ក្រុមហ៊ុន
+                    </label>
+                    <input
+                      type="text"
+                      value={expRecipient}
+                      onChange={(e) => setExpRecipient(e.target.value)}
+                      placeholder="ឧ. ម្ចាស់ទីតាំង, EDC, ដឹកជញ្ជូន..."
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Note */}
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">
+                    កំណត់ចំណាំបន្ថែម (Note)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={expNote}
+                    onChange={(e) => setExpNote(e.target.value)}
+                    placeholder="បញ្ជាក់ព័ត៌មានបន្ថែមអំពីការចំណាយនេះ..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium outline-none resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setExpenseModalOpen(false)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold transition"
+                  >
+                    បោះបង់
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-black transition shadow-md shadow-emerald-600/20"
+                  >
+                    {editingExpense ? 'រក្សាទុកការកែប្រែ' : 'កត់ត្រាចំណាយ'}
+                  </button>
+                </div>
+
+              </form>
+
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
   const ordersData = [
     { id: 'ORD-9012', customer: 'សុខ សាន្ត', date: '2026-09-23', total: 85.00, status: 'Preparing', payment: 'ABA Pay' },
     { id: 'ORD-9013', customer: 'ចាន់ ធីតា', date: '2026-09-23', total: 150.00, status: 'Shipped', payment: 'COD' },
@@ -11246,6 +12141,34 @@ export default function UnifiedAdminDashboard() {
               )}
             </button>
 
+            {/* EXPENSES & NET PROFIT TAB */}
+            <button 
+              type="button"
+              onClick={() => setActiveTab('expenses')} 
+              className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                activeTab === 'expenses' 
+                  ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25 font-black' 
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+              }`}
+            >
+              {activeTab === 'expenses' && (
+                <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+              )}
+              <div className="flex items-center gap-3 min-w-0">
+                <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                  activeTab === 'expenses' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-emerald-400 group-hover:bg-slate-700'
+                }`}>
+                  💸
+                </span>
+                <span className="text-xs truncate">ចំណាយ & ចំណេញសុទ្ធ</span>
+              </div>
+              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                activeTab === 'expenses' ? 'bg-white/20 text-white' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              }`}>
+                P&L
+              </span>
+            </button>
+
             {/* CUSTOMERS CRM TAB */}
             <button 
               type="button"
@@ -11418,6 +12341,7 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'categories' && CategoryView()}
         {activeTab === 'cover' && CoverManagementView()}
         {activeTab === 'orders' && OrdersView()}
+        {activeTab === 'expenses' && ExpensesView()}
         {activeTab === 'customers' && CustomersView()}
         {activeTab === 'feedbacks' && FeedbacksView()}
         {activeTab === 'api' && ApiView()}
