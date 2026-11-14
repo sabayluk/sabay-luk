@@ -2415,21 +2415,11 @@ export default function CustomerStorefront() {
                       <span className={`${badgeBg} text-white text-[9px] font-black px-2 py-0.5 rounded-lg shadow-sm uppercase tracking-wider`}>
                         {badgeText}
                       </span>
-                      <div className="flex items-center gap-1.5 pointer-events-auto">
-                        {Array.isArray(product.images) && product.images.length > 1 && (
-                          <span className="bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
-                            <span>📸</span> {product.images.length}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => handleShareProduct(e, product)}
-                          className="w-6 h-6 rounded-full bg-white/95 hover:bg-white text-gray-700 hover:text-[#ff6a00] shadow-sm flex items-center justify-center text-[11px] transition cursor-pointer active:scale-95"
-                          title="ចែករំលែកទំនិញនេះ (Share to Telegram / Facebook)"
-                        >
-                          ↗️
-                        </button>
-                      </div>
+                      {Array.isArray(product.images) && product.images.length > 1 && (
+                        <span className="bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm pointer-events-auto">
+                          <span>📸</span> {product.images.length}
+                        </span>
+                      )}
                     </div>
 
                     {/* Stock Tag Bottom */}
