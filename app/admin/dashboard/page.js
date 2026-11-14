@@ -2806,6 +2806,18 @@ export default function UnifiedAdminDashboard() {
       fetchProducts();
       fetchRealOrders();
 
+      // 🚨 ៤.១ ស្វ័យប្រវត្តិកម្មផ្ញើវិក្កយបត្រ PDF ចូល Telegram ពេលគិតលុយរួច (POS AUTO PDF INVOICE) ⭐️
+      if (storeSettings.telegramBotToken && storeSettings.telegramChatId) {
+        sendTelegramNotification({
+          action: 'send_invoice',
+          order: {
+            ...orderPayload,
+            order_id: generatedOrderId,
+            items: posCart
+          }
+        }).catch(err => console.warn('Auto send POS invoice to Telegram error:', err));
+      }
+
       // 🚨 ជូនដំណឹងស្វ័យប្រវត្តិតាម Telegram បើស្តុកធ្លាក់ដល់កម្រិតទាប (Low Stock Alert)
       if (affectedLowStockItems.length > 0 && storeSettings.enableLowStockAlert && storeSettings.telegramBotToken && storeSettings.telegramChatId) {
         sendTelegramNotification({ action: 'low_stock', items: affectedLowStockItems });
@@ -7829,6 +7841,38 @@ export default function UnifiedAdminDashboard() {
                           >
                             🖨️
                           </button>
+                          <a
+                            href={`/invoice?id=${order.order_id || order.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-purple-200 transition inline-flex items-center"
+                            title="មើល និងទាញយកវិក្កយបត្រ PDF ផ្លូវការ"
+                          >
+                            📄
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              sendTelegramNotification({
+                                action: 'send_invoice',
+                                order: {
+                                  order_id: order.order_id || order.id,
+                                  customer_name: order.customer || 'អតិថិជន',
+                                  phone: order.phone || 'N/A',
+                                  total_amount: order.total || 0,
+                                  items: order.items || [],
+                                  payment_method: order.payment || 'Cash'
+                                }
+                              }).then(res => {
+                                if (res && res.success) alert('✅ បានផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ជោគជ័យ!');
+                                else alert('❌ ' + (res?.message || 'សូមពិនិត្យមើល Telegram Bot Token ក្នុង Settings'));
+                              });
+                            }}
+                            className="bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-sky-200 transition"
+                            title="ផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ភ្ញៀវ/ហាង"
+                          >
+                            ✈️
+                          </button>
                         </td>
                       </tr>
                     );
@@ -8071,6 +8115,38 @@ export default function UnifiedAdminDashboard() {
                             title="បោះពុម្ពវិក្កយបត្រឡើងវិញ"
                           >
                             🖨️ Re-Print
+                          </button>
+                          <a
+                            href={`/invoice?id=${order.order_id || order.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-purple-200 transition inline-flex items-center"
+                            title="មើល និងទាញយកវិក្កយបត្រ PDF ផ្លូវការ"
+                          >
+                            📄 PDF
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              sendTelegramNotification({
+                                action: 'send_invoice',
+                                order: {
+                                  order_id: order.order_id || order.id,
+                                  customer_name: order.customer || 'អតិថិជន',
+                                  phone: order.phone || 'N/A',
+                                  total_amount: order.total || 0,
+                                  items: order.items || [],
+                                  payment_method: order.payment || 'Cash'
+                                }
+                              }).then(res => {
+                                if (res && res.success) alert('✅ បានផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ជោគជ័យ!');
+                                else alert('❌ ' + (res?.message || 'សូមពិនិត្យមើល Telegram Bot Token ក្នុង Settings'));
+                              });
+                            }}
+                            className="bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-sky-200 transition"
+                            title="ផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ភ្ញៀវ/ហាង"
+                          >
+                            ✈️ Telegram
                           </button>
                         </td>
                       </tr>
@@ -12966,14 +13042,58 @@ export default function UnifiedAdminDashboard() {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-3 flex gap-2 border-t border-gray-200 mt-2">
-                <button 
-                  type="button"
-                  onClick={() => setReceiptData(null)} 
-                  className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-2xl font-bold text-xs hover:bg-gray-200 transition cursor-pointer"
-                >
-                  បិទ (Close)
-                </button>
+              <div className="pt-3 flex flex-col gap-2 border-t border-gray-200 mt-2">
+                
+                {/* Official PDF & Telegram Dispatch Row */}
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={`/invoice?id=${receiptData.orderId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-xl font-black text-xs transition shadow-md shadow-purple-600/20 flex items-center justify-center gap-1.5 cursor-pointer text-center"
+                    title="បើកមើល និងទាញយកវិក្កយបត្រ PDF ផ្លូវការ"
+                  >
+                    <span>📄</span>
+                    <span>វិក្កយបត្រ PDF</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await sendTelegramNotification({
+                          action: 'send_invoice',
+                          order: {
+                            order_id: receiptData.orderId,
+                            customer_name: receiptData.customer || 'អតិថិជន',
+                            phone: receiptData.phone || 'N/A',
+                            total_amount: receiptData.total,
+                            items: receiptData.items || [],
+                            payment_method: receiptData.method
+                          }
+                        });
+                        if (res && res.success) alert('✅ បានផ្ញើវិក្កយបត្រ PDF ទៅកាន់ Telegram ជោគជ័យ!');
+                        else alert('❌ ' + (res?.message || 'សូមពិនិត្យមើល Telegram Bot Token ក្នុង Settings'));
+                      } catch (e) {
+                        alert('❌ ' + e.message);
+                      }
+                    }}
+                    className="bg-sky-500 hover:bg-sky-600 text-white py-2 rounded-xl font-black text-xs transition shadow-md shadow-sky-500/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                    title="ផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ភ្លាមៗ"
+                  >
+                    <span>✈️</span>
+                    <span>ផ្ញើ Telegram</span>
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => setReceiptData(null)} 
+                    className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-2xl font-bold text-xs hover:bg-gray-200 transition cursor-pointer"
+                  >
+                    បិទ (Close)
+                  </button>
                 <button 
                   type="button"
                   onClick={() => {
@@ -13056,6 +13176,7 @@ export default function UnifiedAdminDashboard() {
                   <span>ព្រីន (${thermalPaperSize}) [F9]</span>
                 </button>
               </div>
+            </div>
             </div>
           </div>
         )}

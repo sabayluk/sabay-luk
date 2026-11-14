@@ -299,6 +299,7 @@ export default function CustomerStorefront() {
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerTelegram, setCustomerTelegram] = useState('');
   const [customerProvince, setCustomerProvince] = useState('ភ្នំពេញ');
   const [customerAddress, setCustomerAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD'); // 'COD' | 'ABA KHQR'
@@ -1576,6 +1577,7 @@ export default function CustomerStorefront() {
         customer_name: customerName.trim(),
         phone: customerContact,
         phone_number: customerContact,
+        telegram: customerTelegram.trim().replace(/^@/, '') || null,
         address: fullAddress,
         delivery_address: fullAddress,
         total_amount: totalPrice,
@@ -3583,6 +3585,20 @@ export default function CustomerStorefront() {
                       className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-orange-500"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1"><span>✈️</span> Telegram (ទទួលវិក្កយបត្រ PDF)</span>
+                      <span className="text-[10px] text-gray-400 font-normal">មិនបាច់ដាក់ក៏បាន</span>
+                    </label>
+                    <input 
+                      type="text"
+                      placeholder="ឧ. @username ឬលេខទូរស័ព្ទ Telegram"
+                      value={customerTelegram}
+                      onChange={(e) => setCustomerTelegram(e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4145,9 +4161,39 @@ export default function CustomerStorefront() {
               </div>
             </div>
 
-            <p className="text-[11px] text-gray-400 mb-4">
+            <p className="text-[11px] text-gray-400 mb-3">
               📞 ក្រុមការងារយើងខ្ញុំនឹងទាក់ទងទៅកាន់លេខ {completedOrder.phone} របស់អ្នក ដើម្បីបញ្ជាក់ការដឹកជញ្ជូនក្នុងពេលឆាប់ៗនេះ។
             </p>
+
+            {/* ⭐️ Telegram & Official PDF Invoice Delivery Banner ⭐️ */}
+            <div className="mb-4 p-3.5 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200/80 rounded-2xl text-left flex items-start gap-3">
+              <span className="text-2xl mt-0.5">✈️</span>
+              <div className="flex-1 text-xs">
+                <span className="font-black text-sky-900 block">
+                  វិក្កយបត្រ PDF ផ្លូវការត្រូវបានផ្ញើជូនតាម Telegram!
+                </span>
+                <p className="text-[11px] text-sky-700 mt-0.5 leading-relaxed">
+                  ប្រព័ន្ធបានបញ្ជូនវិក្កយបត្រផ្លូវការមាន Logo ហាងទៅកាន់ Telegram រួចរាល់។ លោកអ្នកក៏អាចទាញយក ឬបើកមើលភ្លាមៗនៅទីនេះបានផងដែរ។
+                </p>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <a
+                    href={`/invoice?id=${encodeURIComponent(completedOrder.order_id)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 bg-sky-600 hover:bg-sky-700 text-white font-black text-[11px] px-3 py-1.5 rounded-xl transition shadow-xs"
+                  >
+                    <span>📄</span> បើកមើលវិក្កយបត្រ PDF ↗
+                  </a>
+                  <a
+                    href={`/api/invoice/download?orderId=${encodeURIComponent(completedOrder.order_id)}`}
+                    download={`Invoice_${completedOrder.order_id}.pdf`}
+                    className="inline-flex items-center gap-1 bg-white hover:bg-gray-100 text-gray-800 border border-gray-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition shadow-2xs"
+                  >
+                    <span>📥</span> ទាញយក PDF
+                  </a>
+                </div>
+              </div>
+            </div>
 
             {/* ⭐️ Direct Feedback Buttons for Completed Order ⭐️ */}
             {completedOrder.items && completedOrder.items.length > 0 && (
