@@ -18,6 +18,7 @@ export default function RegisterStorePage() {
   const [address, setAddress] = useState('');
   
   const [ownerName, setOwnerName] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerUsername, setOwnerUsername] = useState('');
   const [pin, setPin] = useState('');
   const [selectedPlan, setSelectedPlan] = useState('FREE');
@@ -46,6 +47,10 @@ export default function RegisterStorePage() {
       setErrorMsg('សូមបញ្ចូលឈ្មោះរបស់ម្ចាស់ហាង!');
       return;
     }
+    if (!ownerEmail.trim() || !ownerEmail.includes('@')) {
+      setErrorMsg('សូមបញ្ចូលអាសយដ្ឋាន Gmail / Email របស់ម្ចាស់ហាងឱ្យបានត្រឹមត្រូវ!');
+      return;
+    }
     if (!phone.trim()) {
       setErrorMsg('សូមបញ្ចូលលេខទូរស័ព្ទសម្រាប់ទាក់ទង!');
       return;
@@ -70,6 +75,7 @@ export default function RegisterStorePage() {
         telegram: telegram.trim(),
         address: address.trim() || 'រាជធានីភ្នំពេញ',
         owner_name: ownerName.trim(),
+        owner_email: ownerEmail.trim().toLowerCase(),
         owner_username: ownerUsername.trim().toLowerCase(),
         pin: pin.trim(),
         plan: selectedPlan
@@ -84,6 +90,7 @@ export default function RegisterStorePage() {
         const ownerStaff = {
           id: `STAFF-OWNER-${newStore.id.slice(-4)}`,
           name: newStore.owner_name,
+          email: newStore.owner_email,
           username: newStore.owner_username,
           pin: newStore.pin,
           role: 'ADMIN',
@@ -271,7 +278,7 @@ export default function RegisterStorePage() {
                 <h3 className="font-black text-sm text-white uppercase tracking-wider">គណនីម្ចាស់ហាង (Owner Account)</h3>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1.5">
                     ឈ្មោះពេញរបស់ម្ចាស់ហាង <span className="text-rose-500">*</span>
@@ -281,7 +288,21 @@ export default function RegisterStorePage() {
                     required
                     value={ownerName}
                     onChange={(e) => setOwnerName(e.target.value)}
-                    placeholder="ឧ. វិចិត្រ, សុខា..."
+                    placeholder="ឧ. សេង សុវាសនា..."
+                    className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-blue-500 rounded-2xl px-4 py-3 text-sm font-bold text-white outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    អាសយដ្ឋាន Gmail / Email <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={ownerEmail}
+                    onChange={(e) => setOwnerEmail(e.target.value)}
+                    placeholder="ឧ. yourname@gmail.com"
                     className="w-full bg-slate-950/80 border border-slate-700/80 focus:border-blue-500 rounded-2xl px-4 py-3 text-sm font-bold text-white outline-none transition"
                   />
                 </div>
