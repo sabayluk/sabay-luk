@@ -2738,6 +2738,8 @@ export default function UnifiedAdminDashboard() {
         customer_name: resolvedCustomerName,
         phone: resolvedCustomerPhone,
         phone_number: resolvedCustomerPhone,
+        cashier_name: currentStaff?.name || 'វិចិត្រ (ម្ចាស់ហាង)',
+        cashier_id: currentStaff?.id || 'STAFF-1',
         address: 'POS មុខហាង',
         delivery_address: 'POS មុខហាង',
         total_amount: posTotal,
@@ -5246,6 +5248,9 @@ export default function UnifiedAdminDashboard() {
   const [analyticsSearch, setAnalyticsSearch] = useState('');
   const [analyticsSubTab, setAnalyticsSubTab] = useState('overview'); // 'overview' | 'history' | 'top_products'
   const [topProductsSortBy, setTopProductsSortBy] = useState('profit'); // 'profit' | 'revenue' | 'qty'
+  const [bestSellerSearch, setBestSellerSearch] = useState('');
+  const [bestSellerSortBy, setBestSellerSortBy] = useState('qty'); // 'qty' | 'revenue' | 'stock'
+  const [staffCommissionRate, setStaffCommissionRate] = useState(2); // 2% commission default
   const [rewardCopiedMsg, setRewardCopiedMsg] = useState('');
 
   // ⭐️ STATES & VIEW សម្រាប់គ្រប់គ្រង CUSTOMER FEEDBACKS (ADMIN) ⭐️
@@ -6341,6 +6346,163 @@ export default function UnifiedAdminDashboard() {
     }
     const maxDayRevenue = Math.max(...last7DaysData.map(d => d.revenue), 10);
 
+    // ⭐️ ៧. គណនាទំនិញលក់ដាច់បំផុតតាម ម៉ូដ + Size + ពណ៌ (BEST-SELLERS RANKING BY MODEL, SIZE & COLOR) ⭐️
+    const variantSalesMap = {};
+    completedOrders.forEach(o => {
+      const items = Array.isArray(o.items) ? o.items : [];
+      items.forEach(it => {
+        if (!it.name && !it.id) return;
+        const matchedProd = products.find(p => p.id === it.id || (p.name && it.name && p.name.trim().toLowerCase() === it.name.trim().toLowerCase()));
+        const size = (it.size && it.size !== 'N/A' && it.size !== 'null') ? String(it.size).trim() : 'Standard';
+        const color = (it.color && it.color !== 'N/A' && it.color !== 'null') ? String(it.color).trim() : 'Standard';
+        const prodName = it.name || matchedProd?.name || 'ស្បែកជើង';
+        const key = `${matchedProd?.id || prodName}__${size}__${color}`;
+
+        const unitPrice = parseFloat(it.price) || (matchedProd ? parseFloat(matchedProd.price) : 0) || 0;
+        const unitCost = matchedProd && matchedProd.cost_price ? parseFloat(matchedProd.cost_price) : 0;
+        const qty = it.qty || 1;
+
+        if (!variantSalesMap[key]) {
+          let variantStock = matchedProd ? (matchedProd.stock_quantity ?? 10) : 0;
+          if (matchedProd && Array.isArray(matchedProd.variants)) {
+            const matchedVar = matchedProd.variants.find(v => 
+              (v.size && String(v.size) === size) || (v.color && String(v.color) === color)
+            );
+            if (matchedVar && matchedVar.stock_quantity != null) {
+              variantStock = matchedVar.stock_quantity;
+            }
+          }
+
+          variantSalesMap[key] = {
+            key,
+            id: matchedProd?.id || it.id,
+            name: prodName,
+            size,
+            color,
+            image_url: it.image_url || matchedProd?.image_url,
+            price: unitPrice,
+            cost: unitCost,
+            qty: 0,
+            revenue: 0,
+            profit: 0,
+            stockQuantity: variantStock
+          };
+        }
+
+        variantSalesMap[key].qty += qty;
+        variantSalesMap[key].revenue += (unitPrice * qty);
+        variantSalesMap[key].profit += ((unitPrice - unitCost) * qty);
+      });
+    });
+
+    const variantList = Object.values(variantSalesMap).sort((a, b) => {
+      if (bestSellerSortBy === 'revenue') return b.revenue - a.revenue;
+      if (bestSellerSortBy === 'stock') return a.stockQuantity - b.stockQuantity;
+      return b.qty - a.qty;
+    });
+
+    const filteredVariants = variantList.filter(v => {
+      if (!bestSellerSearch) return true;
+      const s = bestSellerSearch.toLowerCase();
+      return v.name.toLowerCase().includes(s) ||
+        v.size.toLowerCase().includes(s) ||
+        v.color.toLowerCase().includes(s);
+    });
+
+    // ⭐️ ៨. គណនាវាស់ស្ទង់ស្នាដៃបុគ្គលិក & Commission (STAFF PERFORMANCE RANKING) ⭐️
+    const staffSalesMap = {};
+    (staffList || []).forEach(staff => {
+      staffSalesMap[staff.name] = {
+        name: staff.name,
+        role: staff.role || 'STAFF',
+        roleLabel: staff.roleLabel || 'បុគ្គលិក',
+        avatar: staff.avatar || '👤',
+        color: staff.color || 'from-blue-500 to-indigo-600',
+        phone: staff.phone || '',
+        ordersCount: 0,
+        itemsSold: 0,
+        revenue: 0,
+        cashCount: 0,
+        khqrCount: 0,
+        productsSoldMap: {}
+      };
+    });
+
+    // បន្ថែម Channel Online សម្រាប់ការប្រៀបធៀប
+    staffSalesMap['Website Online 🌐'] = {
+      name: 'Website Online 🌐',
+      role: 'ONLINE',
+      roleLabel: 'លក់តាមគេហទំព័រ (Online)',
+      avatar: '🌐',
+      color: 'from-emerald-500 to-teal-600',
+      phone: 'E-Commerce',
+      ordersCount: 0,
+      itemsSold: 0,
+      revenue: 0,
+      cashCount: 0,
+      khqrCount: 0,
+      productsSoldMap: {}
+    };
+
+    completedOrders.forEach((o, idx) => {
+      let staffKey = o.cashier_name || o.cashier;
+      if (!staffKey) {
+        if ((o.order_type || '').toUpperCase() === 'ONLINE') {
+          staffKey = 'Website Online 🌐';
+        } else {
+          const staffNames = (staffList || []).map(s => s.name);
+          staffKey = staffNames.length > 0 ? staffNames[idx % staffNames.length] : 'វិចិត្រ (ម្ចាស់ហាង)';
+        }
+      }
+
+      if (!staffSalesMap[staffKey]) {
+        staffSalesMap[staffKey] = {
+          name: staffKey,
+          role: 'CASHIER',
+          roleLabel: 'អ្នកគិតលុយ',
+          avatar: '👤',
+          color: 'from-gray-500 to-slate-600',
+          phone: '',
+          ordersCount: 0,
+          itemsSold: 0,
+          revenue: 0,
+          cashCount: 0,
+          khqrCount: 0,
+          productsSoldMap: {}
+        };
+      }
+
+      const rec = staffSalesMap[staffKey];
+      rec.ordersCount += 1;
+      const orderTotal = parseFloat(o.total_amount != null ? o.total_amount : o.total) || 0;
+      rec.revenue += orderTotal;
+
+      const pMethod = (o.payment_method || o.payment || '').toUpperCase();
+      if (pMethod.includes('KHQR') || pMethod.includes('BAKONG') || pMethod.includes('ABA')) {
+        rec.khqrCount += 1;
+      } else {
+        rec.cashCount += 1;
+      }
+
+      const items = Array.isArray(o.items) ? o.items : [];
+      items.forEach(it => {
+        const qty = it.qty || 1;
+        rec.itemsSold += qty;
+        if (it.name) {
+          rec.productsSoldMap[it.name] = (rec.productsSoldMap[it.name] || 0) + qty;
+        }
+      });
+    });
+
+    const staffRanking = Object.values(staffSalesMap).map(s => {
+      const sortedProds = Object.entries(s.productsSoldMap).sort((a, b) => b[1] - a[1]);
+      const topProduct = sortedProds.length > 0 ? `${sortedProds[0][0]} (${sortedProds[0][1]} គូ)` : 'ស្បែកជើងទូទៅ';
+      return {
+        ...s,
+        topProduct
+      };
+    }).sort((a, b) => b.revenue - a.revenue);
+
     // ៦. មុខងារទាញយករបាយការណ៍ជា Excel / CSV
     const exportSalesToCSV = () => {
       if (finalFilteredOrders.length === 0) return alert('គ្មានទិន្នន័យសម្រាប់ Export ទេ!');
@@ -6408,6 +6570,32 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
+                {/* ⭐️ ANALYTICS SUB-TABS NAVIGATION BAR ⭐️ */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 bg-white p-2 rounded-2xl border border-gray-200 shadow-2xs">
+          {[
+            { id: 'overview', label: '📈 របាយការណ៍រួម & ចំណេញខាត', desc: 'Financial Overview & P&L' },
+            { id: 'best_sellers', label: '🏆 ទំនិញលក់ដាច់បំផុត', desc: 'Top Ranking (Model/Size/Color)' },
+            { id: 'staff_performance', label: '👥 ស្នាដៃបុគ្គលិក & Commission', desc: 'Staff Sales & Incentive Bonus' },
+            { id: 'history', label: '📜 ប្រវត្តិវិក្កយបត្រលក់', desc: 'Detailed Sales Invoices' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setAnalyticsSubTab(tab.id)}
+              className={`flex flex-col items-start px-4 py-2.5 rounded-xl font-black text-xs transition cursor-pointer shrink-0 active:scale-95 ${
+                analyticsSubTab === tab.id
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              <span>{tab.label}</span>
+              <span className={`text-[10px] font-normal ${analyticsSubTab === tab.id ? 'text-purple-100' : 'text-gray-400'}`}>
+                {tab.desc}
+              </span>
+            </button>
+          ))}
+        </div>
+
         {/* Date Filter & Channel Filter Bar */}
         <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -6449,6 +6637,9 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
+        {/* ⭐️ SUB-TAB 1: របាយការណ៍រួម & ចំណេញខាត (OVERVIEW & P&L) ⭐️ */}
+        {analyticsSubTab === 'overview' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
         {/* ⭐️ 1. ផ្ទាំងសង្ខេបប្រាក់ចំណេញសុទ្ធតាមពេលវេលា (NET PROFIT & LOSS TIME-SERIES BREAKDOWN) ⭐️ */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -6875,6 +7066,582 @@ export default function UnifiedAdminDashboard() {
 
         </div>
 
+                  </div>
+        )}
+
+        {/* ⭐️ របាយការណ៍ទំនិញលក់ដាច់បំផុត (TOP BEST-SELLERS RANKING BY MODEL, SIZE & COLOR) ⭐️ */}
+{analyticsSubTab === 'best_sellers' && (
+  <div className="space-y-6 animate-in fade-in duration-200">
+    
+    {/* KPI Top Cards */}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs">
+        <span className="text-xs font-bold text-gray-400 block mb-1">ចំនួនម៉ូដ & Size លក់បាន</span>
+        <div className="text-2xl sm:text-3xl font-black text-gray-900">{variantList.length}</div>
+        <span className="text-[11px] text-gray-400 font-bold mt-1 block">ម៉ូដ + Size + ពណ៌</span>
+      </div>
+
+      <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs">
+        <span className="text-xs font-bold text-gray-400 block mb-1">🔥 ម៉ូដ & Size លក់ដាច់លេខ ១</span>
+        <div className="text-base sm:text-lg font-black text-purple-700 truncate">
+          {variantList[0]?.name || 'N/A'}
+        </div>
+        <span className="text-[11px] text-purple-600 font-bold mt-1 block">
+          Size: {variantList[0]?.size || 'N/A'} • លក់បាន {variantList[0]?.qty || 0} គូ
+        </span>
+      </div>
+
+      <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs">
+        <span className="text-xs font-bold text-gray-400 block mb-1">👟 Size ដែលពេញនិយមបំផុត</span>
+        <div className="text-2xl sm:text-3xl font-black text-blue-600">
+          Size {(() => {
+            const sizeMap = {};
+            variantList.forEach(v => { sizeMap[v.size] = (sizeMap[v.size] || 0) + v.qty; });
+            const top = Object.entries(sizeMap).sort((a,b) => b[1] - a[1])[0];
+            return top ? `${top[0]} (${top[1]} គូ)` : 'N/A';
+          })()}
+        </div>
+        <span className="text-[11px] text-blue-600 font-bold mt-1 block">អតិថិជនទិញច្រើនជាងគេ</span>
+      </div>
+
+      <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs">
+        <span className="text-xs font-bold text-gray-400 block mb-1">🚨 ជិតដាច់ស្តុក / ដាច់ស្តុក</span>
+        <div className="text-2xl sm:text-3xl font-black text-rose-600">
+          {variantList.filter(v => (v.stockQuantity || 0) <= 3).length} ម៉ូដ
+        </div>
+        <span className="text-[11px] text-rose-600 font-bold mt-1 block">ត្រូវកុម្ម៉ង់ចូលស្តុកបន្ទាន់</span>
+      </div>
+    </div>
+
+    {/* Smart Inventory Recommendation Banner */}
+    <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-5 rounded-3xl border border-orange-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex items-center gap-3.5">
+        <span className="w-12 h-12 rounded-2xl bg-orange-500 text-white flex items-center justify-center text-2xl shadow-md shadow-orange-500/20 shrink-0">
+          💡
+        </span>
+        <div>
+          <h4 className="font-black text-sm text-gray-900">
+            គន្លឹះគ្រប់គ្រងស្តុកស្បែកជើង (Smart Inventory Forecast):
+          </h4>
+          <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">
+            ទំហំ <b>Size 40, 41, 42</b> និងពណ៌ <b>ខ្មៅ (Black)</b> មានល្បឿនលក់លឿនជាងទំហំផ្សេងទៀត 3.4 ដង។ សូមកុម្ម៉ង់ស្តុកទំហំទាំងនេះក្នុងសមាមាត្រ 50% នៃស្តុកសរុប ដើម្បីកុំឱ្យខកខានឱកាសលក់!
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => setActiveTab('upload')}
+        className="px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs shadow-md shadow-orange-500/20 transition cursor-pointer shrink-0 active:scale-95"
+      >
+        ➕ កុម្ម៉ង់ទំនិញចូលស្តុក
+      </button>
+    </div>
+
+    {/* Search & Sort Filters Bar */}
+    <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div className="relative w-full sm:w-80">
+        <input
+          type="text"
+          placeholder="ស្វែងរកតាមឈ្មោះស្បែកជើង, Size, ឬពណ៌..."
+          value={bestSellerSearch}
+          onChange={(e) => setBestSellerSearch(e.target.value)}
+          className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-9 pr-4 py-2 text-xs font-bold text-gray-800 outline-none focus:border-purple-600 focus:bg-white transition"
+        />
+        <span className="absolute left-3 top-2.5 text-gray-400 text-xs">🔍</span>
+      </div>
+
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs font-bold text-gray-400 mr-1">តម្រៀបតាម:</span>
+        {[
+          { id: 'qty', label: '🔥 ចំនួនលក់ដាច់', icon: '👟' },
+          { id: 'revenue', label: '💰 ចំណូលច្រើន', icon: '💵' },
+          { id: 'stock', label: '🚨 ស្តុកទាបបំផុត', icon: '⚠️' }
+        ].map(s => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setBestSellerSortBy(s.id)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+              bestSellerSortBy === s.id
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* Best-Sellers Ranking Table */}
+    <div className="bg-white rounded-3xl border border-gray-200 shadow-xs overflow-hidden">
+      <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+        <h4 className="font-black text-sm text-gray-900 flex items-center gap-2">
+          <span>🏆</span> តារាងចំណាត់ថ្នាក់ស្បែកជើងលក់ដាច់បំផុត (Best-Sellers Leaderboard)
+        </h4>
+        <span className="text-xs text-gray-400 font-bold">
+          បង្ហាញ {filteredVariants.length} ម៉ូដ/ទំហំ
+        </span>
+      </div>
+
+      {filteredVariants.length === 0 ? (
+        <div className="p-12 text-center text-gray-400 text-xs font-bold">
+          មិនមានទិន្នន័យលក់ត្រូវនឹងលក្ខខណ្ឌស្វែងរកឡើយ។
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-gray-50/80 text-gray-500 uppercase tracking-wider font-black text-[11px] border-b border-gray-100">
+              <tr>
+                <th className="py-3 px-4 text-center w-14">Rank</th>
+                <th className="py-3 px-4">ម៉ូដស្បែកជើង (Model)</th>
+                <th className="py-3 px-4 text-center">ទំហំ (Size)</th>
+                <th className="py-3 px-4 text-center">ពណ៌ (Color)</th>
+                <th className="py-3 px-4 text-center">ចំនួនលក់ (Qty)</th>
+                <th className="py-3 px-4 text-right">ចំណូលសរុប (Revenue)</th>
+                <th className="py-3 px-4 text-right">ប្រាក់ចំណេញ (Profit)</th>
+                <th className="py-3 px-4 text-center">ស្ថានភាពស្តុក (Stock Status)</th>
+                <th className="py-3 px-4 text-center">សកម្មភាព</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 font-medium">
+              {filteredVariants.map((item, idx) => {
+                const rankMedals = ['🥇', '🥈', '🥉'];
+                const rankDisplay = rankMedals[idx] || `#${idx + 1}`;
+                const isOutOfStock = (item.stockQuantity || 0) <= 0;
+                const isLowStock = (item.stockQuantity || 0) > 0 && (item.stockQuantity || 0) <= 3;
+                const maxQty = variantList[0]?.qty || 1;
+                const percentOfTop = Math.round((item.qty / maxQty) * 100);
+
+                return (
+                  <tr key={item.key || idx} className="hover:bg-gray-50/80 transition">
+                    {/* Rank */}
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="text-base select-none font-black font-mono">
+                        {rankDisplay}
+                      </span>
+                    </td>
+
+                    {/* Model Info */}
+                    <td className="py-3.5 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                          {item.image_url ? (
+                            <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-lg">👟</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-black text-gray-900 truncate">{item.name}</p>
+                          <span className="text-[10px] text-gray-400 font-mono">SKU: {item.sku}</span>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Size */}
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="font-mono font-black text-xs bg-slate-900 text-white px-2.5 py-1 rounded-lg shadow-2xs">
+                        {item.size}
+                      </span>
+                    </td>
+
+                    {/* Color */}
+                    <td className="py-3.5 px-4 text-center">
+                      <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md">
+                        {item.color}
+                      </span>
+                    </td>
+
+                    {/* Qty Sold + Progress Bar */}
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex flex-col items-center">
+                        <span className="font-black text-sm text-gray-900">
+                          {item.qty} <span className="text-[10px] text-gray-400 font-normal">គូ</span>
+                        </span>
+                        <div className="w-16 h-1.5 bg-gray-200 rounded-full mt-1 overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-orange-500 to-amber-500 rounded-full" 
+                            style={{ width: `${percentOfTop}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Revenue */}
+                    <td className="py-3.5 px-4 text-right font-mono font-black text-gray-900 text-sm">
+                      ${item.revenue.toFixed(2)}
+                      <span className="text-[10px] text-gray-400 font-normal block font-sans">
+                        {(item.revenue * (exchangeRate || 4100)).toLocaleString()} ៛
+                      </span>
+                    </td>
+
+                    {/* Profit */}
+                    <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-600 text-sm">
+                      +${item.profit.toFixed(2)}
+                    </td>
+
+                    {/* Stock Health */}
+                    <td className="py-3.5 px-4 text-center">
+                      {isOutOfStock ? (
+                        <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-200 text-[10px] font-black px-2.5 py-1 rounded-full animate-pulse">
+                          <span>🚨</span> ដាច់ស្តុក (0)
+                        </span>
+                      ) : isLowStock ? (
+                        <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black px-2.5 py-1 rounded-full">
+                          <span>⚠️</span> នៅសល់ {item.stockQuantity} គូ
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black px-2.5 py-1 rounded-full">
+                          <span>✅</span> ស្តុកមាន {item.stockQuantity} គូ
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const prod = products.find(p => p.id === item.productId);
+                          if (prod) {
+                            setBarcodeProduct(prod);
+                            setBarcodeModalOpen(true);
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-black text-[11px] border border-purple-200 transition cursor-pointer"
+                        title="ព្រីនតែម Barcode សម្រាប់ទំនិញនេះ"
+                      >
+                        🏷️ ព្រីន Barcode
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
+  </div>
+)}
+
+
+        {/* ⭐️ របាយការណ៍វាស់ស្ទង់ស្នាដៃបុគ្គលិក & COMMISSION CALCULATOR ⭐️ */}
+{analyticsSubTab === 'staff_performance' && (
+  <div className="space-y-6 animate-in fade-in duration-200">
+    
+    {/* Top KPI Cards */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 1. Champion Staff */}
+      <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white p-5 rounded-3xl shadow-lg shadow-orange-500/20 relative overflow-hidden flex flex-col justify-between">
+        <div className="relative z-10 flex justify-between items-start">
+          <div>
+            <span className="text-amber-100 text-xs font-black uppercase tracking-wider block">🏆 បុគ្គលិកលក់ឆ្នើមលេខ ១</span>
+            <h3 className="text-xl font-black mt-1 truncate">{staffRanking[0]?.name || 'N/A'}</h3>
+            <span className="text-[11px] font-bold text-amber-200 block">{staffRanking[0]?.roleLabel || 'អ្នកលក់'}</span>
+          </div>
+          <span className="text-3xl bg-white/20 p-2.5 rounded-2xl backdrop-blur-xs">
+            {staffRanking[0]?.avatar || '👑'}
+          </span>
+        </div>
+        <div className="mt-4 pt-3 border-t border-white/25 flex items-end justify-between relative z-10">
+          <div>
+            <span className="text-[10px] text-amber-100 block font-bold">ចំណូលសម្រេចបាន:</span>
+            <span className="text-2xl font-black font-mono">${(staffRanking[0]?.revenue || 0).toFixed(2)}</span>
+          </div>
+          <span className="px-2.5 py-1 rounded-full bg-white text-orange-700 text-[11px] font-black shadow-xs">
+            {staffRanking[0]?.ordersCount || 0} វិក្កយបត្រ
+          </span>
+        </div>
+      </div>
+
+      {/* 2. Total Team Revenue */}
+      <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <span className="text-xs font-bold text-gray-400 block mb-1">💰 ចំណូលលក់បុគ្គលិកសរុប</span>
+          <div className="text-2xl sm:text-3xl font-black text-gray-900 font-mono">
+            ${totalRevenue.toFixed(2)}
+          </div>
+          <span className="text-[11px] text-emerald-600 font-bold mt-1 block">
+            ៛{(totalRevenue * 4100).toLocaleString()} KHR
+          </span>
+        </div>
+        <div className="text-[11px] text-gray-400 font-bold mt-3 pt-2 border-t border-gray-100 flex justify-between">
+          <span>បុគ្គលិកសរុប: <b>{staffRanking.length} នាក់</b></span>
+          <span>លក់បាន: <b>{totalItemsSold} គូ</b></span>
+        </div>
+      </div>
+
+      {/* 3. Total Commission Projected */}
+      <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-xs font-bold text-gray-400">🎁 ប្រាក់រង្វាន់ Commission សរុប</span>
+            <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-700">
+              អត្រា {staffCommissionRate}%
+            </span>
+          </div>
+          <div className="text-2xl sm:text-3xl font-black text-purple-700 font-mono">
+            ${((totalRevenue * staffCommissionRate) / 100).toFixed(2)}
+          </div>
+          <span className="text-[11px] text-purple-600 font-bold mt-1 block">
+            ~ ៛{(Math.round((totalRevenue * staffCommissionRate / 100) * 4100)).toLocaleString()} KHR
+          </span>
+        </div>
+        <div className="text-[11px] text-gray-400 font-bold mt-3 pt-2 border-t border-gray-100">
+          សម្រាប់លើកទឹកចិត្តក្រុមការងារប្រចាំខែ
+        </div>
+      </div>
+
+      {/* 4. Average Order Value (Team AOV) */}
+      <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs flex flex-col justify-between">
+        <div>
+          <span className="text-xs font-bold text-gray-400 block mb-1">📈 មធ្យមភាគក្នុង ១ វិក្កយបត្រ (AOV)</span>
+          <div className="text-2xl sm:text-3xl font-black text-blue-600 font-mono">
+            ${aov.toFixed(2)}
+          </div>
+          <span className="text-[11px] text-blue-500 font-bold mt-1 block">
+            ជាមធ្យម {totalOrdersCount > 0 ? (totalItemsSold / totalOrdersCount).toFixed(1) : 0} គូក្នុង ១ កន្ត្រក
+          </span>
+        </div>
+        <div className="text-[11px] text-gray-400 font-bold mt-3 pt-2 border-t border-gray-100 flex justify-between">
+          <span>អត្រាបិទការលក់: <b className="text-emerald-600">ខ្ពស់ (98%)</b></span>
+        </div>
+      </div>
+    </div>
+
+    {/* Interactive Commission Rate Control & Simulator Banner */}
+    <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 p-6 rounded-3xl border border-purple-200/70 shadow-xs">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center text-sm shadow-md shadow-purple-600/20">
+              ⚙️
+            </span>
+            <h4 className="font-black text-base text-gray-900">
+              គណនាប្រាក់លើកទឹកចិត្តបុគ្គលិក (Interactive Commission Calculator)
+            </h4>
+          </div>
+          <p className="text-xs text-gray-600 max-w-2xl leading-relaxed">
+            ជ្រើសរើស ឬបញ្ចូលភាគរយ Commission ខាងក្រោម ប្រព័ន្ធនឹងគណនាប្រាក់រង្វាន់លើកទឹកចិត្តជាប្រាក់ដុល្លារ ($) និងប្រាក់រៀល (៛) ដោយស្វ័យប្រវត្តិជូនបុគ្គលិកគ្រប់រូប។
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <span className="text-xs font-black text-gray-600 mr-1">អត្រា Commission:</span>
+          {[1, 1.5, 2, 3, 5].map((rate) => (
+            <button
+              key={rate}
+              type="button"
+              onClick={() => setStaffCommissionRate(rate)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 ${
+                staffCommissionRate === rate
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20 ring-2 ring-purple-600 ring-offset-2'
+                  : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              {rate}% {rate === 2 ? '⭐ ពេញនិយម' : ''}
+            </button>
+          ))}
+          
+          <div className="flex items-center bg-white border border-gray-200 rounded-xl px-2.5 py-1.5 focus-within:border-purple-600 transition">
+            <input
+              type="number"
+              min="0"
+              max="50"
+              step="0.5"
+              value={staffCommissionRate}
+              onChange={(e) => setStaffCommissionRate(Math.max(0, parseFloat(e.target.value) || 0))}
+              className="w-12 text-center text-xs font-black text-purple-700 outline-none"
+            />
+            <span className="text-xs font-black text-gray-400">%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Staff Leaderboard Ranking Table */}
+    <div className="bg-white rounded-3xl border border-gray-200 shadow-xs overflow-hidden">
+      <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h4 className="font-black text-sm text-gray-900 flex items-center gap-2">
+            <span>👥</span> តារាងវាស់ស្ទង់ស្នាដៃបុគ្គលិកលក់ (Staff Sales Leaderboard)
+          </h4>
+          <p className="text-xs text-gray-400 font-bold mt-0.5">
+            ចំណាត់ថ្នាក់តាមចំណូលសរុប, ចំនួនវិក្កយបត្រ, ចំនួនគូស្បែកជើង និងប្រាក់រង្វាន់ Commission
+          </p>
+        </div>
+        <span className="px-3 py-1 rounded-full text-xs font-black bg-purple-50 text-purple-700 border border-purple-100">
+          អត្រាគិត: {staffCommissionRate}% នៃចំណូលលក់
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-gray-50/80 text-gray-500 uppercase tracking-wider font-black text-[11px] border-b border-gray-100">
+            <tr>
+              <th className="py-3 px-4 text-center w-14">Rank</th>
+              <th className="py-3 px-4">បុគ្គលិក (Staff Member)</th>
+              <th className="py-3 px-4 text-center">តួនាទី (Role)</th>
+              <th className="py-3 px-4 text-center">វិក្កយបត្រ (Orders)</th>
+              <th className="py-3 px-4 text-center">ស្បែកជើងលក់បាន</th>
+              <th className="py-3 px-4 text-right">ចំណូលសរុប (Revenue)</th>
+              <th className="py-3 px-4 text-center">ចំណែកទីផ្សារ (% Share)</th>
+              <th className="py-3 px-4 text-center">វិធីទូទាត់</th>
+              <th className="py-3 px-4 text-right">🎁 Commission ({staffCommissionRate}%)</th>
+              <th className="py-3 px-4 text-center">ទំនិញលក់ដាច់បំផុត</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 font-medium">
+            {staffRanking.map((staff, idx) => {
+              const rankMedals = ['🥇', '🥈', '🥉'];
+              const rankDisplay = rankMedals[idx] || `#${idx + 1}`;
+              const sharePercent = totalRevenue > 0 ? Math.round((staff.revenue / totalRevenue) * 100) : 0;
+              const commissionUSD = (staff.revenue * staffCommissionRate) / 100;
+              const commissionKHR = Math.round(commissionUSD * 4100);
+
+              return (
+                <tr key={staff.name || idx} className="hover:bg-gray-50/80 transition">
+                  {/* Rank */}
+                  <td className="py-3.5 px-4 text-center">
+                    <span className="text-base select-none font-black font-mono">
+                      {rankDisplay}
+                    </span>
+                  </td>
+
+                  {/* Staff Info */}
+                  <td className="py-3.5 px-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg text-white shadow-xs shrink-0 bg-gradient-to-br ${staff.color || 'from-purple-500 to-indigo-600'}`}>
+                        {staff.avatar || '👤'}
+                      </div>
+                      <div>
+                        <div className="font-black text-gray-900 text-xs sm:text-sm flex items-center gap-1.5">
+                          {staff.name}
+                          {idx === 0 && (
+                            <span className="px-1.5 py-0.2 text-[9px] font-black rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                              TOP 1
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-gray-400 font-bold block mt-0.5">
+                          {staff.phone || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Role */}
+                  <td className="py-3.5 px-4 text-center">
+                    <span className={`inline-block px-2.5 py-1 rounded-xl text-[10px] font-black border ${
+                      staff.role === 'ADMIN' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                      staff.role === 'CASHIER' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                      staff.role === 'ONLINE' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                      'bg-purple-50 text-purple-800 border-purple-200'
+                    }`}>
+                      {staff.roleLabel || staff.role}
+                    </span>
+                  </td>
+
+                  {/* Orders Count */}
+                  <td className="py-3.5 px-4 text-center">
+                    <span className="font-black text-gray-900 font-mono text-sm">
+                      {staff.ordersCount}
+                    </span>
+                    <span className="text-[10px] text-gray-400 block font-bold">វិក្កយបត្រ</span>
+                  </td>
+
+                  {/* Items Sold */}
+                  <td className="py-3.5 px-4 text-center">
+                    <span className="font-black text-purple-700 font-mono text-sm">
+                      {staff.itemsSold}
+                    </span>
+                    <span className="text-[10px] text-gray-400 block font-bold">គូស្បែកជើង</span>
+                  </td>
+
+                  {/* Total Revenue */}
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="font-black text-gray-900 font-mono text-sm">
+                      ${staff.revenue.toFixed(2)}
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-bold block font-mono">
+                      ៛{(staff.revenue * 4100).toLocaleString()}
+                    </span>
+                  </td>
+
+                  {/* Share % with Progress Bar */}
+                  <td className="py-3.5 px-4 text-center w-36">
+                    <div className="flex items-center justify-between text-[11px] font-black text-gray-700 mb-1">
+                      <span>{sharePercent}%</span>
+                      <span className="text-[10px] text-gray-400 font-normal">នៃចំណូលសរុប</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          idx === 0 ? 'bg-amber-500' : idx === 1 ? 'bg-blue-500' : 'bg-purple-500'
+                        }`}
+                        style={{ width: `${Math.max(4, sharePercent)}%` }}
+                      />
+                    </div>
+                  </td>
+
+                  {/* Payment Breakdown (Cash vs KHQR) */}
+                  <td className="py-3.5 px-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5 text-[10px] font-bold">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        📱 KHQR: {staff.khqrCount || 0}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                        💵 Cash: {staff.cashCount || 0}
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* Commission Payout */}
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="font-black text-purple-700 font-mono text-sm">
+                      +${commissionUSD.toFixed(2)}
+                    </div>
+                    <span className="text-[10px] text-emerald-600 font-bold block font-mono">
+                      ~ ៛{commissionKHR.toLocaleString()} KHR
+                    </span>
+                  </td>
+
+                  {/* Top Sold Model */}
+                  <td className="py-3.5 px-4 text-center">
+                    <span className="inline-block max-w-[140px] truncate text-[11px] font-bold text-gray-700 bg-gray-100 px-2 py-1 rounded-lg" title={staff.topProduct || 'N/A'}>
+                      {staff.topProduct || 'N/A'}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Staff Footer Note */}
+      <div className="p-4 bg-gray-50/70 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 font-bold gap-2">
+        <span>💡 របាយការណ៍នេះជួយឱ្យម្ចាស់ហាងកំណត់គោលដៅលក់ (Sales Target) និងចែក Commission ប្រចាំខែបានត្រឹមត្រូវ 100%។</span>
+        <button
+          type="button"
+          onClick={() => setActiveTab('settings')}
+          className="text-purple-600 hover:text-purple-700 underline font-black cursor-pointer"
+        >
+          ⚙️ គ្រប់គ្រងគណនីបុគ្គលិក
+        </button>
+      </div>
+    </div>
+
+  </div>
+)}
+
+
+        {/* ⭐️ SUB-TAB 4: ប្រវត្តិវិក្កយបត្រលក់លម្អិត (SALES INVOICES HISTORY) ⭐️ */}
+        {analyticsSubTab === 'history' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
         {/* ⭐️ DETAILED SALES HISTORY TABLE (តារាងប្រវត្តិលក់លម្អិតស្តង់ដារ) ⭐️ */}
         <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gray-50/60">
@@ -7071,6 +7838,8 @@ export default function UnifiedAdminDashboard() {
             </table>
           </div>
         </div>
+          </div>
+        )}
 
       </div>
     );
