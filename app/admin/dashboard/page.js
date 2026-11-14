@@ -2159,11 +2159,21 @@ export default function UnifiedAdminDashboard() {
         <body>
           ${testContent}
           <script>
-            window.onload = function() {
-              window.focus();
-              window.print();
-              window.onafterprint = function() { window.close(); };
-            };
+            function triggerPrint() {
+              try {
+                window.focus();
+                window.print();
+              } catch (e) {
+                console.error('Print error', e);
+              }
+            }
+            if (document.readyState === 'complete') {
+              setTimeout(triggerPrint, 250);
+            } else {
+              window.addEventListener('load', function() { setTimeout(triggerPrint, 250); });
+              setTimeout(triggerPrint, 1200);
+            }
+            window.onafterprint = function() { window.close(); };
           </script>
         </body>
       </html>
@@ -13772,10 +13782,20 @@ export default function UnifiedAdminDashboard() {
                         <body>
                           ${content}
                           <script>
-                            window.onload = function() {
-                              window.focus();
-                              window.print();
-                            };
+                            function triggerReceiptPrint() {
+                              try {
+                                window.focus();
+                                window.print();
+                              } catch (e) {
+                                console.error('Print error', e);
+                              }
+                            }
+                            if (document.readyState === 'complete') {
+                              setTimeout(triggerReceiptPrint, 250);
+                            } else {
+                              window.addEventListener('load', function() { setTimeout(triggerReceiptPrint, 250); });
+                              setTimeout(triggerReceiptPrint, 1200);
+                            }
                             window.onafterprint = function() {
                               window.close();
                             };
@@ -14135,29 +14155,69 @@ export default function UnifiedAdminDashboard() {
             </div>
 
             {/* 📱 ការកំណត់ QR Code លើក្រដាសព្រីន (Receipt QR Toggle) */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
-              <div>
-                <label className="text-xs font-black text-slate-800 block">
-                  📱 បង្ហាញ QR Code លើក្រដាសវិក្កយបត្រព្រីន (Show QR on Receipt)
-                </label>
-                <p className="text-[11px] text-slate-500">
-                  អាចជ្រើសរើស «បើក» ដើម្បីឱ្យមាន QR លើវិក្កយបត្រ ឬ «បិទ» ដើម្បីកុំឱ្យវែងខាតក្រដាស
-                </p>
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-black text-slate-800 block">
+                    📱 បង្ហាញ QR Code លើក្រដាសវិក្កយបត្រព្រីន (Show QR on Receipt)
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    អាចជ្រើសរើស «បើក» ដើម្បីឱ្យមាន QR លើវិក្កយបត្រ ឬ «បិទ» ដើម្បីកុំឱ្យវែងខាតក្រដាសព្រីន
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = storeSettings.showReceiptQr === false;
+                    setStoreSettings(prev => ({ 
+                      ...prev, 
+                      showReceiptQr: nextVal,
+                      khqrImageUrl: (!prev.khqrImageUrl && nextVal) ? '/khqr-aba.jpg' : prev.khqrImageUrl 
+                    }));
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition border cursor-pointer ${
+                    storeSettings.showReceiptQr !== false
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                      : 'bg-gray-200 text-gray-700 border-gray-300'
+                  }`}
+                >
+                  {storeSettings.showReceiptQr !== false ? '✅ បើក (Show QR)' : '❌ បិទ (No QR)'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const nextVal = storeSettings.showReceiptQr === false;
-                  setStoreSettings(prev => ({ ...prev, showReceiptQr: nextVal }));
-                }}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition border cursor-pointer ${
-                  storeSettings.showReceiptQr !== false
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                    : 'bg-gray-200 text-gray-700 border-gray-300'
-                }`}
-              >
-                {storeSettings.showReceiptQr !== false ? '✅ បើក (Show QR)' : '❌ បិទ (No QR)'}
-              </button>
+
+              {storeSettings.showReceiptQr !== false && (
+                <div className="flex items-center gap-3 pt-2.5 border-t border-slate-200">
+                  <div className="w-14 h-14 rounded-xl border border-slate-200 bg-white p-1 flex items-center justify-center shrink-0">
+                    <img 
+                      src={storeSettings.khqrImageUrl || '/khqr-aba.jpg'} 
+                      alt="KHQR Code" 
+                      className="w-full h-full object-contain" 
+                      onError={(e) => { e.currentTarget.src = '/khqr-aba.jpg'; }}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold cursor-pointer transition shadow-2xs">
+                      <span>📁 ជ្រើសរើសរូបភាព QR ថ្មី</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setStoreSettings(prev => ({ ...prev, khqrImageUrl: event.target.result }));
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }} 
+                      />
+                    </label>
+                    <p className="text-[10px] text-slate-500 font-medium">គណនី: {storeSettings.bankAccountName || 'SABAY LUK'} ({storeSettings.bankAccountUsd || '010 723 080'})</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
