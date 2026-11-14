@@ -5243,6 +5243,129 @@ export default function UnifiedAdminDashboard() {
   const [rewardCopiedMsg, setRewardCopiedMsg] = useState('');
 
   // ⭐️ STATES & VIEW សម្រាប់គ្រប់គ្រង CUSTOMER FEEDBACKS (ADMIN) ⭐️
+  // ⭐️ STATES & VIEW សម្រាប់គ្រប់គ្រង PROMO CODES & COUPONS (ADMIN) ⭐️
+  const DEFAULT_ADMIN_COUPONS = [
+    { code: 'SABAY10', type: 'percent', value: 10, minOrder: 0, label: 'បញ្ចុះតម្លៃ ១០% លើកន្ត្រក', active: true, createdAt: '2026-11-01' },
+    { code: 'KHMERNEWYEAR', type: 'percent', value: 15, minOrder: 20, label: 'អបអរចូលឆ្នាំថ្មី ចុះ ១៥%', active: true, createdAt: '2026-11-05' },
+    { code: 'WELCOME2', type: 'fixed', value: 2, minOrder: 15, label: 'កាដូស្វាគមន៍ ចុះ $2.00', active: true, createdAt: '2026-11-08' },
+    { code: 'VIP5', type: 'fixed', value: 5, minOrder: 35, label: 'VIP Member ចុះ $5.00', active: true, createdAt: '2026-11-10' },
+    { code: 'FREESHIP', type: 'shipping', value: 2, minOrder: 0, label: 'ដឹកជញ្ជូនឥតគិតថ្លៃ ១០០%', active: true, createdAt: '2026-11-12' }
+  ];
+
+  const [adminCoupons, setAdminCoupons] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sabay_coupons');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+    return DEFAULT_ADMIN_COUPONS;
+  });
+
+  const [couponSearch, setCouponSearch] = useState('');
+  const [couponFilterStatus, setCouponFilterStatus] = useState('all'); // 'all' | 'active' | 'inactive'
+  const [couponCopiedCode, setCouponCopiedCode] = useState('');
+  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
+  const [newCouponCode, setNewCouponCode] = useState('');
+  const [newCouponType, setNewCouponType] = useState('percent'); // 'percent' | 'fixed' | 'shipping'
+  const [newCouponValue, setNewCouponValue] = useState(10);
+  const [newCouponMinOrder, setNewCouponMinOrder] = useState(0);
+  const [newCouponLabel, setNewCouponLabel] = useState('');
+  const [couponToast, setCouponToast] = useState('');
+  const [zoomFeedbackPhoto, setZoomFeedbackPhoto] = useState(null);
+
+  // Sync coupons with localStorage and custom event
+  useEffect(() => {
+    const handleStorageChangeCpn = (e) => {
+      if (!e || !e.key || e.key === 'sabay_coupons') {
+        try {
+          const saved = localStorage.getItem('sabay_coupons');
+          if (saved) setAdminCoupons(JSON.parse(saved));
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChangeCpn);
+    return () => window.removeEventListener('storage', handleStorageChangeCpn);
+  }, []);
+
+  const saveCouponsToStorage = (updatedList) => {
+    setAdminCoupons(updatedList);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sabay_coupons', JSON.stringify(updatedList));
+      window.dispatchEvent(new Event('storage'));
+    }
+  };
+
+  const showCouponToast = (msg) => {
+    setCouponToast(msg);
+    setTimeout(() => setCouponToast(''), 3000);
+  };
+
+  const handleToggleCouponActive = (code) => {
+    const updated = adminCoupons.map(c => c.code === code ? { ...c, active: !c.active } : c);
+    saveCouponsToStorage(updated);
+    showCouponToast(`ប្តូរស្ថានភាពកូដ [${code}] ជោគជ័យ!`);
+  };
+
+  const handleDeleteCoupon = (code) => {
+    if (window.confirm(`តើអ្នកពិតជាចង់លុបប័ណ្ណបញ្ចុះតម្លៃ [${code}] នេះមែនទេ?`)) {
+      const updated = adminCoupons.filter(c => c.code !== code);
+      saveCouponsToStorage(updated);
+      showCouponToast(`បានលុបកូដ [${code}] រួចរាល់!`);
+    }
+  };
+
+  const handleCreateCoupon = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const cleanCode = newCouponCode.trim().toUpperCase();
+    if (!cleanCode) {
+      alert('សូមបញ្ចូលលេខកូដ Coupon (ឧ. SABAY5, TIKTOK10)!');
+      return;
+    }
+    if (adminCoupons.some(c => c.code.toUpperCase() === cleanCode)) {
+      alert(`កូដ "${cleanCode}" មានរួចហើយ! សូមបង្កើតកូដថ្មីផ្សេងទៀត។`);
+      return;
+    }
+    const val = Number(newCouponValue) || 0;
+    if (val <= 0 && newCouponType !== 'shipping') {
+      alert('សូមបញ្ចូលចំនួនទឹកប្រាក់ ឬភាគរយបញ្ចុះតម្លៃឱ្យបានត្រឹមត្រូវ!');
+      return;
+    }
+
+    const newCoupon = {
+      code: cleanCode,
+      type: newCouponType,
+      value: newCouponType === 'shipping' ? 2 : val,
+      minOrder: Number(newCouponMinOrder) || 0,
+      label: newCouponLabel.trim() || (newCouponType === 'percent' ? `បញ្ចុះតម្លៃ ${val}%` : newCouponType === 'shipping' ? 'ដឹកជញ្ជូនឥតគិតថ្លៃ' : `បញ្ចុះតម្លៃ $${val}`),
+      active: true,
+      createdAt: new Date().toISOString().slice(0, 10)
+    };
+
+    const updated = [newCoupon, ...adminCoupons];
+    saveCouponsToStorage(updated);
+    setIsCouponModalOpen(false);
+    setNewCouponCode('');
+    setNewCouponType('percent');
+    setNewCouponValue(10);
+    setNewCouponMinOrder(0);
+    setNewCouponLabel('');
+    showCouponToast(`🎉 បានបង្កើតប័ណ្ណបញ្ចុះតម្លៃ [${cleanCode}] ជោគជ័យ!`);
+  };
+
+  const copyCouponCode = (code) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(code);
+      setCouponCopiedCode(code);
+      setTimeout(() => setCouponCopiedCode(''), 2000);
+      showCouponToast(`📋 បានចម្លងកូដ [${code}] រួចរាល់!`);
+    }
+  };
+
+
   const [adminFeedbacks, setAdminFeedbacks] = useState(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -5496,6 +5619,464 @@ export default function UnifiedAdminDashboard() {
       </div>
     );
   };
+
+  // ================= ផ្ទាំងគ្រប់គ្រងប័ណ្ណបញ្ចុះតម្លៃ & PROMO CODES (COUPONS VIEW) =================
+  const CouponsManagementView = () => {
+    const filteredCoupons = adminCoupons.filter(c => {
+      const matchSearch = !couponSearch || 
+        c.code.toLowerCase().includes(couponSearch.toLowerCase()) ||
+        (c.label && c.label.toLowerCase().includes(couponSearch.toLowerCase()));
+      const matchStatus = couponFilterStatus === 'all' ||
+        (couponFilterStatus === 'active' && c.active !== false) ||
+        (couponFilterStatus === 'inactive' && c.active === false);
+      return matchSearch && matchStatus;
+    });
+
+    const totalCount = adminCoupons.length;
+    const activeCount = adminCoupons.filter(c => c.active !== false).length;
+    const percentCount = adminCoupons.filter(c => c.type === 'percent').length;
+    const fixedAndShipCount = adminCoupons.filter(c => c.type === 'fixed' || c.type === 'shipping').length;
+
+    return (
+      <div className="animate-in fade-in max-w-7xl mx-auto space-y-6 pb-20">
+        
+        {/* Toast Alert */}
+        {couponToast && (
+          <div className="fixed top-6 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 text-xs font-black flex items-center gap-2 animate-in slide-in-from-top-4">
+            <span>🎟️</span>
+            <span>{couponToast}</span>
+          </div>
+        )}
+
+        {/* Top Header Card */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 sm:p-8 rounded-3xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center gap-4">
+            <span className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-pink-500 via-rose-500 to-orange-500 text-white flex items-center justify-center text-2xl shadow-lg shadow-rose-500/20 flex-shrink-0">
+              🎟️
+            </span>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight">
+                  ប្រព័ន្ធបង្កើតប័ណ្ណបញ្ចុះតម្លៃ (Promo Codes)
+                </h2>
+                <span className="text-[11px] font-black bg-rose-100 text-rose-800 px-3 py-1 rounded-full uppercase tracking-wider">
+                  Live Marketing
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                បង្កើតកូដបញ្ចុះតម្លៃ (ឧ. SABAY5, TIKTOK10, FREESHIP) សម្រាប់ផ្សព្វផ្សាយលើ TikTok, Facebook, ឬ Live Stream
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsCouponModalOpen(true)}
+              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-black text-xs transition shadow-md shadow-rose-500/20 flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <span className="text-sm">➕</span>
+              <span>បង្កើត Coupon ថ្មី</span>
+            </button>
+          </div>
+        </div>
+
+        {/* KPI Stats Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs">
+            <span className="text-xs font-bold text-gray-400 block mb-1">Coupon សរុប</span>
+            <div className="text-2xl sm:text-3xl font-black text-gray-900">{totalCount}</div>
+            <span className="text-[11px] text-gray-400 font-bold mt-1 block">ក្នុងប្រព័ន្ធទាំងអស់</span>
+          </div>
+
+          <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs">
+            <span className="text-xs font-bold text-gray-400 block mb-1">កំពុងដំណើរការ (Active)</span>
+            <div className="text-2xl sm:text-3xl font-black text-emerald-600">{activeCount}</div>
+            <span className="text-[11px] text-emerald-600 font-bold mt-1 block">✅ ភ្ញៀវអាចប្រើលើវិបសាយបាន</span>
+          </div>
+
+          <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs">
+            <span className="text-xs font-bold text-gray-400 block mb-1">កូដបញ្ចុះជា %</span>
+            <div className="text-2xl sm:text-3xl font-black text-purple-600">{percentCount}</div>
+            <span className="text-[11px] text-purple-600 font-bold mt-1 block">Percentage Discounts</span>
+          </div>
+
+          <div className="bg-white p-5 rounded-3xl border border-gray-200/80 shadow-xs">
+            <span className="text-xs font-bold text-gray-400 block mb-1">កូដដុល្លារ $ / Free Ship</span>
+            <div className="text-2xl sm:text-3xl font-black text-rose-500">{fixedAndShipCount}</div>
+            <span className="text-[11px] text-rose-500 font-bold mt-1 block">Fixed $ or Free Delivery</span>
+          </div>
+        </div>
+
+        {/* Quick Promo Presets Banner */}
+        <div className="bg-gradient-to-r from-orange-50 to-rose-50 p-5 rounded-3xl border border-orange-200/80 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-gray-800 flex items-center gap-1.5 uppercase tracking-wider">
+              <span>⚡</span> គំរូកូដរហ័ស (Quick Templates) - ចុចដើម្បីបង្កើតភ្លាមៗ៖
+            </span>
+            <span className="text-[10px] text-orange-600 font-bold bg-white px-2.5 py-0.5 rounded-full border border-orange-200">
+              1-Click Setup
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {[
+              { code: 'TIKTOK5', type: 'fixed', value: 5, minOrder: 25, label: 'បញ្ចុះ $5 សម្រាប់អ្នកទស្សនា TikTok Live' },
+              { code: 'FLASH20', type: 'percent', value: 20, minOrder: 0, label: 'Flash Sale បញ្ចុះតម្លៃពិសេស ២០%' },
+              { code: 'FREESHIPNOW', type: 'shipping', value: 2, minOrder: 0, label: 'ដឹកជញ្ជូនឥតគិតថ្លៃទូទាំងប្រទេស' },
+              { code: 'VIP10OFF', type: 'fixed', value: 10, minOrder: 50, label: 'VIP Member បញ្ចុះ $10 (កុម្ម៉ង់ចាប់ពី $50)' }
+            ].map(tmpl => {
+              const exists = adminCoupons.some(c => c.code.toUpperCase() === tmpl.code.toUpperCase());
+              return (
+                <div key={tmpl.code} className="bg-white p-3 rounded-2xl border border-orange-100 shadow-2xs flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="font-mono font-black text-xs text-rose-600 block truncate">#{tmpl.code}</span>
+                    <span className="text-[10px] text-gray-500 truncate block">{tmpl.label}</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={exists}
+                    onClick={() => {
+                      const newC = { ...tmpl, active: true, createdAt: new Date().toISOString().slice(0, 10) };
+                      saveCouponsToStorage([newC, ...adminCoupons]);
+                      showCouponToast(`បានបន្ថែមគំរូកូដ [${tmpl.code}] រួចរាល់!`);
+                    }}
+                    className={`text-[10px] font-black px-2.5 py-1.5 rounded-xl transition cursor-pointer whitespace-nowrap ${
+                      exists 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-orange-500 hover:bg-orange-600 text-white shadow-2xs active:scale-95'
+                    }`}
+                  >
+                    {exists ? '✓ មានហើយ' : '+ បន្ថែម'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Filter & Search Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs">
+          <div className="relative w-full sm:w-80">
+            <input
+              type="text"
+              placeholder="ស្វែងរកតាមកូដ ឬឈ្មោះ..."
+              value={couponSearch}
+              onChange={(e) => setCouponSearch(e.target.value)}
+              className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-9 pr-4 py-2.5 text-xs font-bold text-gray-800 outline-none focus:border-rose-500 focus:bg-white transition"
+            />
+            <span className="absolute left-3 top-3 text-gray-400 text-xs">🔍</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+            {[
+              { id: 'all', label: 'ទាំងអស់' },
+              { id: 'active', label: '✅ កំពុងដំណើរការ' },
+              { id: 'inactive', label: '⏸️ អសកម្ម' }
+            ].map(f => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setCouponFilterStatus(f.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer whitespace-nowrap ${
+                  couponFilterStatus === f.id
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Coupon Cards Grid */}
+        {filteredCoupons.length === 0 ? (
+          <div className="bg-white p-12 rounded-3xl border border-dashed border-gray-200 text-center space-y-3">
+            <span className="text-4xl block">🎟️</span>
+            <h4 className="text-sm font-black text-gray-800">រកមិនឃើញប័ណ្ណបញ្ចុះតម្លៃឡើយ</h4>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto">
+              លោកអ្នកអាចបង្កើត Coupon ថ្មី ឬជ្រើសរើសពីគំរូកូដរហ័សខាងលើដើម្បីចាប់ផ្តើម។
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredCoupons.map((c) => {
+              const isPercent = c.type === 'percent';
+              const isShipping = c.type === 'shipping';
+              const isActive = c.active !== false;
+
+              return (
+                <div 
+                  key={c.code}
+                  className={`bg-white rounded-3xl border p-5 transition-all duration-200 flex flex-col justify-between gap-4 relative overflow-hidden shadow-xs hover:shadow-md ${
+                    isActive ? 'border-gray-200/80 hover:border-rose-300' : 'border-gray-200/50 opacity-60 bg-gray-50/50'
+                  }`}
+                >
+                  {/* Decorative background circle */}
+                  <div className="absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-rose-500/5 pointer-events-none"></div>
+
+                  {/* Card Top */}
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl uppercase tracking-wider shadow-2xs ${
+                        isPercent
+                          ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                          : isShipping
+                          ? 'bg-sky-100 text-sky-700 border border-sky-200'
+                          : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                      }`}>
+                        {isPercent ? `ចុះ ${c.value}%` : isShipping ? '🚚 FREE ដឹក' : `ចុះ $${Number(c.value).toFixed(2)}`}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCouponActive(c.code)}
+                        className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border transition cursor-pointer ${
+                          isActive
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                            : 'bg-gray-100 text-gray-500 border-gray-300 hover:bg-gray-200'
+                        }`}
+                      >
+                        {isActive ? '● កំពុងបើក' : '○ បិទ'}
+                      </button>
+                    </div>
+
+                    {/* Code Display with One-click Copy */}
+                    <div className="flex items-center justify-between gap-2 bg-slate-900 text-white p-3 rounded-2xl mb-2.5">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">PROMO CODE</span>
+                        <span className="font-mono text-base font-black tracking-wider text-amber-300 truncate block">
+                          {c.code}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyCouponCode(c.code)}
+                        className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 flex items-center gap-1 shrink-0"
+                        title="ចម្លងលេខកូដ"
+                      >
+                        {couponCopiedCode === c.code ? (
+                          <span className="text-emerald-300">✓ បានចម្លង</span>
+                        ) : (
+                          <><span>📋</span> ចម្លង</>
+                        )}
+                      </button>
+                    </div>
+
+                    <p className="text-xs font-black text-gray-800 mb-1">
+                      {c.label || 'ប័ណ្ណបញ្ចុះតម្លៃ'}
+                    </p>
+
+                    <div className="space-y-1 text-[11px] text-gray-500">
+                      <div className="flex items-center gap-1.5">
+                        <span>🛒</span>
+                        <span>
+                          {c.minOrder && Number(c.minOrder) > 0 
+                            ? `កុម្ម៉ង់ចាប់ពី $${Number(c.minOrder).toFixed(2)} ឡើងទៅ`
+                            : 'គ្មានកំណត់កុម្ម៉ង់អប្បបរមា (ប្រើបានគ្រប់កន្ត្រក)'
+                          }
+                        </span>
+                      </div>
+                      {c.createdAt && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                          <span>📅</span>
+                          <span>បង្កើតនៅ: {c.createdAt}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Bottom Actions */}
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-gray-400">
+                      {isActive ? '⚡ ប្រើបានលើ Website ភ្លាមៗ' : '⏸️ ផ្អាកប្រើបណ្តោះអាសន្ន'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCoupon(c.code)}
+                      className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-xl transition cursor-pointer font-bold flex items-center gap-1"
+                      title="លុប Coupon នេះ"
+                    >
+                      <span>🗑️</span> លុប
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Modal: Create New Coupon */}
+        {isCouponModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-4 border-b border-gray-100 mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center text-xl font-bold shadow-xs">
+                    🎟️
+                  </div>
+                  <div>
+                    <h3 className="font-black text-lg text-gray-900 leading-tight">បង្កើតប័ណ្ណបញ្ចុះតម្លៃថ្មី</h3>
+                    <p className="text-xs text-gray-400">Add New Promo Code / Coupon</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCouponModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-sm cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateCoupon} className="space-y-4">
+                
+                {/* 1. Promo Code */}
+                <div>
+                  <label className="text-xs font-black text-gray-800 uppercase tracking-wider block mb-1">
+                    🏷️ ១. លេខកូដ Coupon (Promo Code) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newCouponCode}
+                    onChange={(e) => setNewCouponCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+                    placeholder="ឧ. SABAY5, TIKTOK10, FREESHIP..."
+                    className="w-full bg-gray-50 border-2 border-gray-200 focus:border-rose-500 focus:bg-white rounded-2xl p-3 font-mono font-black text-sm uppercase text-gray-900 outline-none transition"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">កូដនឹងប្តូរទៅជាអក្សរធំ (Uppercase) ដោយស្វ័យប្រវត្តិ។</p>
+                </div>
+
+                {/* 2. Discount Type */}
+                <div>
+                  <label className="text-xs font-black text-gray-800 uppercase tracking-wider block mb-1.5">
+                    ⚙️ ២. ប្រភេទបញ្ចុះតម្លៃ (Discount Type) *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'percent', label: '% ភាគរយ', icon: '📉' },
+                      { id: 'fixed', label: '$ ដុល្លារ', icon: '💵' },
+                      { id: 'shipping', label: '🚚 ហ្វ្រីដឹក', icon: '🎁' }
+                    ].map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setNewCouponType(t.id)}
+                        className={`p-3 rounded-2xl border text-xs font-black transition flex flex-col items-center gap-1 cursor-pointer ${
+                          newCouponType === t.id
+                            ? 'bg-rose-50 border-rose-500 text-rose-700 shadow-2xs'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="text-base">{t.icon}</span>
+                        <span>{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Discount Value */}
+                {newCouponType !== 'shipping' && (
+                  <div>
+                    <label className="text-xs font-black text-gray-800 uppercase tracking-wider block mb-1">
+                      💰 ៣. ចំនួនទឹកប្រាក់ ឬភាគរយបញ្ចុះ ({newCouponType === 'percent' ? '%' : '$'}) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        max={newCouponType === 'percent' ? 100 : 1000}
+                        step="any"
+                        required
+                        value={newCouponValue}
+                        onChange={(e) => setNewCouponValue(e.target.value)}
+                        placeholder="ឧ. 10"
+                        className="w-full bg-gray-50 border-2 border-gray-200 focus:border-rose-500 focus:bg-white rounded-2xl p-3 font-black text-sm text-gray-900 outline-none transition pr-10"
+                      />
+                      <span className="absolute right-4 top-3 text-sm font-black text-gray-400">
+                        {newCouponType === 'percent' ? '%' : '$'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Minimum Order Requirement */}
+                <div>
+                  <label className="text-xs font-black text-gray-800 uppercase tracking-wider block mb-1">
+                    🛒 ៤. កុម្ម៉ង់អប្បបរមា ($ Min Order)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={newCouponMinOrder}
+                      onChange={(e) => setNewCouponMinOrder(e.target.value)}
+                      placeholder="0 = គ្មានកំណត់"
+                      className="w-full bg-gray-50 border-2 border-gray-200 focus:border-rose-500 focus:bg-white rounded-2xl p-3 font-bold text-sm text-gray-900 outline-none transition pr-10"
+                    />
+                    <span className="absolute right-4 top-3 text-sm font-black text-gray-400">$</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">ដាក់ 0 ប្រសិនបើមិនកំណត់លក្ខខណ្ឌអប្បបរមា។</p>
+                </div>
+
+                {/* 5. Promotion Label */}
+                <div>
+                  <label className="text-xs font-black text-gray-800 uppercase tracking-wider block mb-1">
+                    📝 ៥. ឈ្មោះកម្មវិធី ឬចំណងជើង Promotion
+                  </label>
+                  <input
+                    type="text"
+                    value={newCouponLabel}
+                    onChange={(e) => setNewCouponLabel(e.target.value)}
+                    placeholder="ឧ. បញ្ចុះតម្លៃ $5.00 សម្រាប់ Live TikTok"
+                    className="w-full bg-gray-50 border-2 border-gray-200 focus:border-rose-500 focus:bg-white rounded-2xl p-3 font-bold text-xs sm:text-sm text-gray-900 outline-none transition"
+                  />
+                </div>
+
+                {/* Live Preview Card */}
+                <div className="p-3.5 bg-gradient-to-r from-orange-50 to-rose-50 rounded-2xl border border-rose-200 space-y-1">
+                  <span className="text-[10px] font-black text-rose-600 block uppercase tracking-wider">👀 ការបង្ហាញលើ Website (Live Preview):</span>
+                  <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-rose-100">
+                    <div>
+                      <span className="font-mono font-black text-xs text-rose-600 block">
+                        #{newCouponCode.trim() || 'COUPON_CODE'}
+                      </span>
+                      <span className="text-[11px] text-gray-600 font-bold block">
+                        {newCouponLabel.trim() || (newCouponType === 'percent' ? `បញ្ចុះតម្លៃ ${newCouponValue}%` : newCouponType === 'shipping' ? 'ដឹកជញ្ជូនឥតគិតថ្លៃ' : `បញ្ចុះតម្លៃ $${newCouponValue}`)}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-black bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md">
+                      {newCouponType === 'percent' ? `-${newCouponValue}%` : newCouponType === 'shipping' ? 'FREE SHIP' : `-$${newCouponValue}`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Form Buttons */}
+                <div className="pt-2 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsCouponModalOpen(false)}
+                    className="px-5 py-3 rounded-2xl border border-gray-200 text-gray-600 font-black text-xs hover:bg-gray-100 transition cursor-pointer"
+                  >
+                    បោះបង់
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white font-black text-xs shadow-md shadow-rose-500/20 transition cursor-pointer active:scale-95"
+                  >
+                    ✅ រក្សាទុក & បើកដំណើរការ
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
 
   // ================= ស្ថិតិគំរូ & ផ្ទាំងវិភាគទិន្នន័យ (ANALYTICS) =================
   const stats = { totalRevenue: 12540.00, dailySales: 450.00, monthlySales: 4500.00, totalOrders: 156 };
@@ -14977,6 +15558,7 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'expenses' && ExpensesView()}
         {activeTab === 'customers' && CustomersView()}
         {activeTab === 'feedbacks' && FeedbacksView()}
+            {activeTab === 'coupons' && CouponsManagementView()}
         {activeTab === 'api' && ApiView()}
         {activeTab === 'settings' && StoreSettingsView()}
         {activeTab === 'invoice' && InvoiceSettingsView()}

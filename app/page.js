@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { supabase } from '../supabase';
 
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក & បញ្ចុះតម្លៃ ធានាមិនបាត់ ១០០%
@@ -427,6 +428,7 @@ export default function CustomerStorefront() {
       customer_name: 'veasna',
       rating: 5,
       comment: 'ស្បែកជើងពាក់ស្រួលណាស់ បាតទន់ គុណភាពល្អឥតខ្ចោះ ស្អាតដូចក្នុងរូបថត ១០០%!',
+      photo_url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700&auto=format&fit=crop&q=80',
       tags: ['✨ ស្អាតដូចក្នុងរូប', '👍 គុណភាពល្អឥតខ្ចោះ', '🚚 ដឹកលឿនទាន់ចិត្ត'],
       created_at: '2026-11-10T14:20:00Z',
       is_verified: true
@@ -439,6 +441,7 @@ export default function CustomerStorefront() {
       customer_name: 'សុខ ធីតា',
       rating: 5,
       comment: 'ទំនិញល្អណាស់ ទំហំពាក់ត្រូវល្មម អ្នកលក់រួសរាយ វេចខ្ចប់បានស្អាត និងដឹកជញ្ជូនរហ័ស។',
+      photo_url: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=700&auto=format&fit=crop&q=80',
       tags: ['👌 ទំហំពាក់ត្រូវល្អ', '💯 ណែនាំឱ្យទិញ', '✨ ស្អាតដូចក្នុងរូប'],
       created_at: '2026-11-11T09:15:00Z',
       is_verified: true
@@ -474,6 +477,65 @@ export default function CustomerStorefront() {
   const [feedbackReviewerName, setFeedbackReviewerName] = useState('');
   const [feedbackSelectedTags, setFeedbackSelectedTags] = useState([]);
   const [feedbackSubmitSuccess, setFeedbackSubmitSuccess] = useState('');
+  const [feedbackPhoto, setFeedbackPhoto] = useState(null);
+  const [feedbackPhotoName, setFeedbackPhotoName] = useState('');
+  const [feedbackPhotoLoading, setFeedbackPhotoLoading] = useState(false);
+  const [reviewZoomPhoto, setReviewZoomPhoto] = useState(null);
+
+  // Helper compress & select customer review photo
+  const handleFeedbackPhotoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('សូមជ្រើសរើសឯកសារជារូបភាព!');
+      return;
+    }
+    setFeedbackPhotoLoading(true);
+    setFeedbackPhotoName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1200;
+        const scale = Math.min(1, MAX_WIDTH / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        setFeedbackPhoto(dataUrl);
+        setFeedbackPhotoLoading(false);
+      };
+      img.onerror = () => {
+        setFeedbackPhoto(event.target.result);
+        setFeedbackPhotoLoading(false);
+      };
+      img.src = event.target.result;
+    };
+    reader.onerror = () => {
+      setFeedbackPhotoLoading(false);
+      alert('មានបញ្ហាក្នុងការអានរូបភាព!');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Helper retrieve all active coupons (Default + Admin Custom)
+  const getDisplayCoupons = () => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('sabay_coupons') : null;
+      const custom = saved ? JSON.parse(saved) : [];
+      const activeCustom = Array.isArray(custom) ? custom.filter(c => c.active !== false) : [];
+      const map = new Map();
+      activeCustom.forEach(c => map.set(c.code.toUpperCase(), c));
+      AVAILABLE_COUPONS.forEach(c => {
+        if (!map.has(c.code.toUpperCase())) map.set(c.code.toUpperCase(), c);
+      });
+      return Array.from(map.values());
+    } catch (e) {
+      return AVAILABLE_COUPONS;
+    }
+  };
 
   // ⭐️ 1. States សម្រាប់ប្រព័ន្ធ Promo Code & Coupon ⭐️
   const AVAILABLE_COUPONS = [
@@ -663,6 +725,9 @@ export default function CustomerStorefront() {
     setFeedbackComment('');
     setFeedbackSelectedTags([]);
     setFeedbackRating(5);
+    setFeedbackPhoto(null);
+    setFeedbackPhotoName('');
+    setFeedbackPhotoLoading(false);
 
     if (prefillOrderId) {
       setVerifyOrderQuery(prefillOrderId);
@@ -827,6 +892,7 @@ export default function CustomerStorefront() {
       rating: feedbackRating || 5,
       comment: feedbackComment.trim(),
       tags: feedbackSelectedTags,
+      photo_url: feedbackPhoto || null,
       created_at: new Date().toISOString(),
       is_verified: true
     };
@@ -841,6 +907,8 @@ export default function CustomerStorefront() {
     setFeedbackSubmitSuccess('🎉 អរគុណច្រើន! មតិយោបល់របស់អ្នកត្រូវបានបញ្ជូន និងបង្ហាញជាសាធារណៈដោយជោគជ័យ!');
     setFeedbackComment('');
     setFeedbackSelectedTags([]);
+    setFeedbackPhoto(null);
+    setFeedbackPhotoName('');
     setVerifiedOrder(null);
     setVerifyOrderQuery('');
     setVerifySuccess('');
@@ -3391,7 +3459,7 @@ export default function CustomerStorefront() {
 
                       {/* Quick Suggestion Pills */}
                       <div className="flex flex-wrap gap-1">
-                        {AVAILABLE_COUPONS.slice(0, 3).map((cpn) => (
+                        {getDisplayCoupons().slice(0, 4).map((cpn) => (
                           <button
                             key={cpn.code}
                             type="button"
@@ -3947,7 +4015,7 @@ export default function CustomerStorefront() {
                     </div>
 
                     <div className="flex flex-wrap gap-1">
-                      {AVAILABLE_COUPONS.slice(0, 3).map((cpn) => (
+                      {getDisplayCoupons().slice(0, 4).map((cpn) => (
                         <button
                           key={cpn.code}
                           type="button"
@@ -4117,20 +4185,13 @@ export default function CustomerStorefront() {
               </div>
             )}
 
-            <button
-              onClick={() => {
-                const oid = completedOrder.order_id;
-                setOrderSuccessModalOpen(false);
-                setCompletedOrder(null);
-                setTrackQuery(oid);
-                setTrackModalOpen(true);
-                handleSearchTrackOrder(oid);
-              }}
-              className="w-full bg-orange-50 hover:bg-orange-100 text-[#ff6a00] border border-orange-200 py-3 rounded-2xl font-black text-xs transition mb-2.5 flex items-center justify-center gap-1.5"
+            <Link
+              href={`/track?order=${encodeURIComponent(completedOrder.order_id)}`}
+              className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white py-3.5 rounded-2xl font-black text-xs transition mb-2.5 flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 active:scale-98"
             >
-              <span>🔍</span>
-              <span>តាមដានស្ថានភាពការកុម្ម៉ង់នេះ</span>
-            </button>
+              <span>🚚</span>
+              <span>តាមដានការដឹកជញ្ជូនបន្តផ្ទាល់ (Live Tracking /track) ➔</span>
+            </Link>
 
             <button
               onClick={() => {
@@ -4168,6 +4229,16 @@ export default function CustomerStorefront() {
               </button>
             </div>
 
+            <div className="flex items-center justify-between pb-3 text-xs border-b border-gray-100 mb-3">
+              <span className="text-gray-400">ចង់ពិនិត្យមើលផ្ទាំងតាមដានធំទូលាយ?</span>
+              <Link 
+                href="/track"
+                className="text-[#ff6a00] font-black hover:underline flex items-center gap-1 bg-orange-50 px-2.5 py-1 rounded-xl"
+              >
+                <span>បើកទំព័រ /track ពេញលេញ</span>
+                <span>↗️</span>
+              </Link>
+            </div>
             <form onSubmit={(e) => { e.preventDefault(); handleSearchTrackOrder(); }} className="mb-5">
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -4792,6 +4863,27 @@ export default function CustomerStorefront() {
                               {fb.comment}
                             </p>
 
+                            {fb.photo_url && (
+                              <div className="pt-1.5">
+                                <div 
+                                  onClick={() => setReviewZoomPhoto(fb.photo_url)}
+                                  className="inline-block relative group cursor-pointer overflow-hidden rounded-2xl border-2 border-orange-200/80 hover:border-orange-500 shadow-xs transition"
+                                >
+                                  <img 
+                                    src={fb.photo_url} 
+                                    alt="Customer Review Photo" 
+                                    className="w-24 h-24 sm:w-28 sm:h-28 object-cover group-hover:scale-105 transition duration-300"
+                                  />
+                                  <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[11px] font-bold transition">
+                                    <span>🔍 ពង្រីក</span>
+                                  </div>
+                                  <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs flex items-center gap-0.5">
+                                    📸 រូបពិត
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
                             {Array.isArray(fb.tags) && fb.tags.length > 0 && (
                               <div className="flex flex-wrap gap-1.5 pt-1">
                                 {fb.tags.map((tg, tIdx) => (
@@ -5007,6 +5099,65 @@ export default function CustomerStorefront() {
                         />
                       </div>
 
+                      {/* ៥. ភ្ជាប់រូបភាពជាក់ស្តែង (Customer Photo Upload) */}
+                      <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-200/80 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-black text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span>📸</span> ៥. ភ្ជាប់រូបថតជាក់ស្តែងពេលពាក់ស្បែកជើង (Customer Photo)
+                          </label>
+                          <span className="text-[10px] text-orange-600 font-bold bg-orange-100/70 px-2 py-0.5 rounded-full">
+                            ផ្កាយ ៥ + រូបថត
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-500">
+                          ការបង្ហោះរូបភាពជាក់ស្តែងជួយឱ្យអតិថិជនផ្សេងទៀតកាន់តែមានទំនុកចិត្តខ្ពស់ក្នុងការកុម្ម៉ង់ទិញ!
+                        </p>
+
+                        {feedbackPhoto ? (
+                          <div className="relative inline-block mt-2">
+                            <img 
+                              src={feedbackPhoto} 
+                              alt="Review Preview" 
+                              className="w-28 h-28 sm:w-32 sm:h-32 object-cover rounded-2xl border-2 border-orange-400 shadow-md"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => { setFeedbackPhoto(null); setFeedbackPhotoName(''); }}
+                              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-600 text-white font-black text-xs flex items-center justify-center shadow-lg hover:bg-red-700 transition cursor-pointer"
+                              title="លុបរូបថតនេះចេញ"
+                            >
+                              ✕
+                            </button>
+                            <div className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
+                              <span>✅</span> បានភ្ជាប់រូបភាព ({feedbackPhotoName || 'រូបថត'})
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="mt-1 flex flex-col items-center justify-center p-4 border-2 border-dashed border-orange-300 hover:border-orange-500 rounded-2xl bg-white hover:bg-orange-50/60 cursor-pointer transition text-center group">
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              capture="environment"
+                              onChange={handleFeedbackPhotoSelect} 
+                              className="hidden" 
+                            />
+                            <div className="w-11 h-11 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center text-xl group-hover:scale-110 transition mb-1.5 shadow-xs">
+                              {feedbackPhotoLoading ? (
+                                <div className="w-4 h-4 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
+                              ) : (
+                                '📷'
+                              )}
+                            </div>
+                            <span className="text-xs font-black text-gray-800">
+                              {feedbackPhotoLoading ? 'កំពុងដំណើរការរូបភាព...' : 'ចុចទីនេះដើម្បីថត ឬជ្រើសរើសរូបថតស្បែកជើង'}
+                            </span>
+                            <span className="text-[10px] text-gray-400 mt-0.5">
+                              ប្រព័ន្ធនឹងបង្រួមទំហំរូបភាពដោយស្វ័យប្រវត្តិកុំឱ្យធ្ងន់
+                            </span>
+                          </label>
+                        )}
+                      </div>
+
                       {/* Submit Button */}
                       <div className="pt-2 flex items-center justify-end gap-3">
                         <button
@@ -5035,6 +5186,34 @@ export default function CustomerStorefront() {
           </div>
         </div>
       )}
+      {/* ⭐️ Full-screen Zoom Lightbox for Customer Review Photo ⭐️ */}
+      {reviewZoomPhoto && (
+        <div 
+          onClick={() => setReviewZoomPhoto(null)}
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200 cursor-zoom-out"
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={reviewZoomPhoto} 
+              alt="Customer Review Full" 
+              className="max-h-[80vh] max-w-full rounded-2xl object-contain shadow-2xl border border-white/20"
+            />
+            <div className="mt-3 flex items-center justify-between w-full px-2">
+              <span className="text-white/90 text-xs font-bold flex items-center gap-1.5">
+                <span>📸</span> រូបថតជាក់ស្តែងពីអតិថិជន (Customer Review Photo)
+              </span>
+              <button
+                type="button"
+                onClick={() => setReviewZoomPhoto(null)}
+                className="bg-white/20 hover:bg-white/30 text-white text-xs font-black px-4 py-1.5 rounded-full transition cursor-pointer"
+              >
+                ✕ បិទ (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ⭐️ Share Toast Notification ⭐️ */}
       {shareToast && (
         <div className="fixed top-6 right-6 z-[100] bg-slate-950 text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-800 text-xs font-black flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300">
