@@ -623,17 +623,70 @@ export default function UnifiedAdminDashboard() {
   const [expNote, setExpNote] = useState('');
 
   // ================= 👥 ផ្នែកគ្រប់គ្រងបុគ្គលិក & បែងចែកសិទ្ធិ (MULTI-STAFF & ROLES) =================
+  const ALL_STAFF_PERMISSIONS = [
+    // 🛍️ ផ្នែកលក់ & អតិថិជន
+    { key: 'pos', label: '💻 ប្រព័ន្ធលក់ (POS)', desc: 'អាចគិតលុយ លក់ទំនិញ និងចេញវិក្កយបត្រមុខហាង', category: 'sales', icon: '💻' },
+    { key: 'orders', label: '🛒 ការបញ្ជាទិញ (Orders)', desc: 'អាចមើល ប្តូរដំណាក់កាល និងព្រីនវិក្កយបត្រឡើងវិញ', category: 'sales', icon: '🛒' },
+    { key: 'customers', label: '👥 អតិថិជន (CRM)', desc: 'អាចមើលបញ្ជីភ្ញៀវ ប្រវត្តិទិញ និងគ្រប់គ្រង Tier អតិថិជន', category: 'sales', icon: '👥' },
+    { key: 'feedbacks', label: '💬 មតិយោបល់ (Feedbacks)', desc: 'អាចមើល និងគ្រប់គ្រងមតិយោបល់របស់អតិថិជន', category: 'sales', icon: '💬' },
+
+    // 📦 ផ្នែកស្តុក & មុខទំនិញ
+    { key: 'inventory', label: '🗄️ គ្រប់គ្រងស្តុក (Inventory)', desc: 'អាចមើលចំនួនស្តុក នាំចូលទំនិញ និង Import Excel', category: 'stock', icon: '🗄️' },
+    { key: 'upload', label: '📤 បញ្ចូលទំនិញថ្មី (Product Studio)', desc: 'អាចបង្កើតទំនិញថ្មី កំណត់ Variant Size/Color', category: 'stock', icon: '📤' },
+    { key: 'barcode', label: '🏷️ ព្រីនតែមបាកូដ (Barcode Studio)', desc: 'អាចបង្កើត និងព្រីនស្លាក Barcode 50x30mm លើម៉ាស៊ីន Thermal', category: 'stock', icon: '🏷️' },
+    { key: 'storefront', label: '🏬 គ្រប់គ្រងមុខហាង (Storefront)', desc: 'អាចកែប្រែប្រភេទទំនិញ (Categories) និង Cover Banner', category: 'stock', icon: '🏬' },
+
+    // 📊 ផ្នែកហិរញ្ញវត្ថុ & ចំណូល
+    { key: 'analytics', label: '📊 វិភាគទិន្នន័យ (P&L Analytics)', desc: 'អាចមើលរបាយការណ៍ហិរញ្ញវត្ថុ ប្រាក់ចំណេញសុទ្ធ និងស្ថិតិលក់', category: 'finance', icon: '📊' },
+    { key: 'expenses', label: '💸 ចំណាយ & ចំណេញសុទ្ធ (Expenses)', desc: 'អាចកត់ត្រា និងតាមដានការចំណាយប្រតិបត្តិការហាង', category: 'finance', icon: '💸' },
+    { key: 'canViewCost', label: '🔒 មើលថ្លៃដើមទំនិញ (Cost Price)', desc: 'អនុញ្ញាតឱ្យមើលឃើញថ្លៃដើមទុន និងអត្រាចំណេញទំនិញ', category: 'finance', icon: '🔒' },
+
+    // ⚙️ ផ្នែកប្រព័ន្ធ & ការកំណត់
+    { key: 'settings', label: '⚙️ កំណត់ហាង (Store Settings)', desc: 'អាចកែប្រែព័ត៌មានហាង គណនីធនាគារ និង Theme', category: 'admin', icon: '⚙️' },
+    { key: 'invoice', label: '🧾 ទម្រង់វិក្កយបត្រ (Invoice Customizer)', desc: 'អាចកែប្រែទម្រង់ព្រីន ឡូហ្គោ QR Code និងពន្ធ VAT 10%', category: 'admin', icon: '🧾' },
+    { key: 'api', label: '📱 ស្វ័យប្រវត្តិកម្ម & Telegram', desc: 'អាចកំណត់ Telegram Bot និងប្រព័ន្ធជូនដំណឹងស្វ័យប្រវត្តិ', category: 'admin', icon: '📱' },
+    { key: 'staff', label: '👥 គ្រប់គ្រងបុគ្គលិក (Staff Roles)', desc: 'អាចបង្កើត កែប្រែ ឬកំណត់សិទ្ធិបុគ្គលិកដទៃទៀត', category: 'admin', icon: '👥' },
+  ];
+
+  const ROLE_PRESET_PERMISSIONS = {
+    ADMIN: {
+      pos: true, orders: true, customers: true, feedbacks: true,
+      inventory: true, upload: true, barcode: true, storefront: true,
+      analytics: true, expenses: true, canViewCost: true,
+      settings: true, invoice: true, api: true, staff: true
+    },
+    CASHIER: {
+      pos: true, orders: true, customers: true, feedbacks: false,
+      inventory: false, upload: false, barcode: false, storefront: false,
+      analytics: false, expenses: false, canViewCost: false,
+      settings: false, invoice: false, api: false, staff: false
+    },
+    STOCK: {
+      pos: false, orders: false, customers: false, feedbacks: false,
+      inventory: true, upload: true, barcode: true, storefront: true,
+      analytics: false, expenses: false, canViewCost: false,
+      settings: false, invoice: false, api: false, staff: false
+    },
+    MANAGER: {
+      pos: true, orders: true, customers: true, feedbacks: true,
+      inventory: true, upload: true, barcode: true, storefront: true,
+      analytics: false, expenses: true, canViewCost: false,
+      settings: false, invoice: false, api: false, staff: false
+    }
+  };
+
   const DEFAULT_STAFF_ACCOUNTS = [
     {
       id: 'STAFF-1',
       name: 'វិចិត្រ (ម្ចាស់ហាង)',
       username: 'admin',
       pin: '1234',
-      role: 'ADMIN', // 'ADMIN' | 'CASHIER' | 'STOCK'
+      role: 'ADMIN', // 'ADMIN' | 'CASHIER' | 'STOCK' | 'MANAGER' | 'CUSTOM'
       roleLabel: 'ម្ចាស់ហាង (Super Admin)',
       phone: '0967205522',
       avatar: '👑',
       color: 'from-amber-500 to-orange-600',
+      permissions: ROLE_PRESET_PERMISSIONS.ADMIN,
       active: true,
       created_at: new Date().toISOString()
     },
@@ -647,6 +700,7 @@ export default function UnifiedAdminDashboard() {
       phone: '012345678',
       avatar: '💻',
       color: 'from-blue-500 to-indigo-600',
+      permissions: ROLE_PRESET_PERMISSIONS.CASHIER,
       active: true,
       created_at: new Date().toISOString()
     },
@@ -660,6 +714,7 @@ export default function UnifiedAdminDashboard() {
       phone: '0978877665',
       avatar: '🗄️',
       color: 'from-purple-500 to-violet-600',
+      permissions: ROLE_PRESET_PERMISSIONS.STOCK,
       active: true,
       created_at: new Date().toISOString()
     }
@@ -745,17 +800,45 @@ export default function UnifiedAdminDashboard() {
     }
   }, [currentStaff]);
 
+  // ⭐️ Helper ពិនិត្យមើលសិទ្ធិរបស់បុគ្គលិកបច្ចុប្បន្ន (hasStaffPermission) ⭐️
+  const hasStaffPermission = (permissionKey) => {
+    if (!currentStaff) return true; // fallback
+    if (currentStaff.role === 'ADMIN') return true; // Super admin has full control
+    if (currentStaff.permissions && typeof currentStaff.permissions[permissionKey] === 'boolean') {
+      return currentStaff.permissions[permissionKey];
+    }
+    const preset = ROLE_PRESET_PERMISSIONS[currentStaff.role] || ROLE_PRESET_PERMISSIONS.CASHIER;
+    return !!preset[permissionKey];
+  };
+
   // Auto redirect if current staff lacks permission for active tab
   useEffect(() => {
     if (!currentStaff) return;
-    if (currentStaff.role === 'CASHIER') {
-      if (activeTab !== 'pos' && activeTab !== 'orders') {
-        setActiveTab('pos');
-      }
-    } else if (currentStaff.role === 'STOCK') {
-      if (activeTab !== 'inventory' && activeTab !== 'upload' && activeTab !== 'categories') {
-        setActiveTab('inventory');
-      }
+    if (currentStaff.role === 'ADMIN') return;
+
+    const tabPermMap = {
+      pos: 'pos',
+      orders: 'orders',
+      inventory: 'inventory',
+      upload: 'upload',
+      categories: 'storefront',
+      cover: 'storefront',
+      analytics: 'analytics',
+      expenses: 'expenses',
+      customers: 'customers',
+      feedbacks: 'feedbacks',
+      barcode: 'barcode',
+      settings: 'settings',
+      invoice: 'invoice',
+      staff: 'staff',
+      api: 'api'
+    };
+
+    const requiredPerm = tabPermMap[activeTab];
+    if (requiredPerm && !hasStaffPermission(requiredPerm)) {
+      const allowedOrder = ['pos', 'orders', 'inventory', 'upload', 'customers', 'expenses', 'barcode', 'categories', 'feedbacks'];
+      const allowed = allowedOrder.find(t => hasStaffPermission(tabPermMap[t] || t));
+      if (allowed) setActiveTab(allowed);
     }
   }, [currentStaff, activeTab]);
 
@@ -770,6 +853,7 @@ export default function UnifiedAdminDashboard() {
   const [staffFormPin, setStaffFormPin] = useState('');
   const [staffFormRole, setStaffFormRole] = useState('CASHIER');
   const [staffFormPhone, setStaffFormPhone] = useState('');
+  const [staffFormPermissions, setStaffFormPermissions] = useState(ROLE_PRESET_PERMISSIONS.CASHIER);
 
   // Switch Staff PIN prompt states
   const [selectedStaffToLogin, setSelectedStaffToLogin] = useState(null);
@@ -4522,7 +4606,7 @@ export default function UnifiedAdminDashboard() {
           {/* ======================================================== */}
           {/* 👉 ផ្នែកខាងស្តាំ: LIVE PREVIEW & SAVE BUTTON (STICKY SIDEBAR) */}
           {/* ======================================================== */}
-          <div className="lg:col-span-4 space-y-5 sticky top-4 self-start z-30">
+          <div className="lg:col-span-4 space-y-5 sticky top-4 self-start z-30 max-h-[calc(100vh-2rem)] overflow-y-auto pr-1">
 
             {/* ៣. ទិដ្ឋភាពផ្ទាល់លើ Storefront (Live Customer Preview) */}
             <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-lg space-y-3">
@@ -9786,7 +9870,9 @@ export default function UnifiedAdminDashboard() {
       const roleObj = {
         'ADMIN': { label: 'ម្ចាស់ហាង (Super Admin)', avatar: '👑', color: 'from-amber-500 to-orange-600' },
         'CASHIER': { label: 'អ្នកគិតលុយ (Cashier)', avatar: '💻', color: 'from-blue-500 to-indigo-600' },
-        'STOCK': { label: 'អ្នកកាន់ស្តុក (Stock Keeper)', avatar: '🗄️', color: 'from-purple-500 to-violet-600' }
+        'STOCK': { label: 'អ្នកកាន់ស្តុក (Stock Keeper)', avatar: '🗄️', color: 'from-purple-500 to-violet-600' },
+        'MANAGER': { label: 'អ្នកគ្រប់គ្រង (Store Manager)', avatar: '💼', color: 'from-emerald-500 to-teal-600' },
+        'CUSTOM': { label: 'កំណត់ដោយខ្លួនឯង (Custom)', avatar: '⚙️', color: 'from-slate-600 to-gray-700' }
       }[staffFormRole] || { label: staffFormRole, avatar: '👤', color: 'from-gray-500 to-slate-600' };
 
       if (editingStaff) {
@@ -9799,9 +9885,27 @@ export default function UnifiedAdminDashboard() {
           roleLabel: roleObj.label,
           avatar: roleObj.avatar,
           color: roleObj.color,
-          phone: staffFormPhone.trim()
+          phone: staffFormPhone.trim(),
+          permissions: { ...staffFormPermissions }
         } : s));
-        setToastNotification(`✅ បានកែប្រែគណនីបុគ្គលិក "${staffFormName}" ជោគជ័យ!`);
+
+        // If editing currently active staff, sync state
+        if (currentStaff?.id === editingStaff.id) {
+          setCurrentStaff(prev => ({
+            ...prev,
+            name: staffFormName.trim(),
+            username: staffFormUsername.trim().toLowerCase(),
+            pin: staffFormPin.trim(),
+            role: staffFormRole,
+            roleLabel: roleObj.label,
+            avatar: roleObj.avatar,
+            color: roleObj.color,
+            phone: staffFormPhone.trim(),
+            permissions: { ...staffFormPermissions }
+          }));
+        }
+
+        setToastNotification(`✅ បានកែប្រែគណនី និងសិទ្ធិបុគ្គលិក "${staffFormName}" ជោគជ័យ!`);
       } else {
         const newStaff = {
           id: `STAFF-${Date.now().toString().slice(-4)}`,
@@ -9813,11 +9917,12 @@ export default function UnifiedAdminDashboard() {
           avatar: roleObj.avatar,
           color: roleObj.color,
           phone: staffFormPhone.trim(),
+          permissions: { ...staffFormPermissions },
           active: true,
           created_at: new Date().toISOString()
         };
         setStaffList(prev => [...prev, newStaff]);
-        setToastNotification(`🎉 បានបង្កើតគណនីបុគ្គលិកថ្មី "${staffFormName}" ជោគជ័យ!`);
+        setToastNotification(`🎉 បានបង្កើតគណនីបុគ្គលិកថ្មី "${staffFormName}" និងកំណត់លក្ខខណ្ឌសិទ្ធិរួចរាល់!`);
       }
 
       setTimeout(() => setToastNotification(null), 3500);
@@ -9836,6 +9941,7 @@ export default function UnifiedAdminDashboard() {
       setStaffFormPin(staff.pin || '');
       setStaffFormRole(staff.role || 'CASHIER');
       setStaffFormPhone(staff.phone || '');
+      setStaffFormPermissions(staff.permissions || ROLE_PRESET_PERMISSIONS[staff.role] || ROLE_PRESET_PERMISSIONS.CASHIER);
       setStaffModalOpen(true);
     };
 
@@ -9862,6 +9968,42 @@ export default function UnifiedAdminDashboard() {
       setStaffList(prev => prev.map(s => s.id === staff.id ? { ...s, active: !s.active } : s));
     };
 
+    // Helper apply role preset
+    const handleApplyRolePreset = (roleKey) => {
+      setStaffFormRole(roleKey);
+      if (ROLE_PRESET_PERMISSIONS[roleKey]) {
+        setStaffFormPermissions({ ...ROLE_PRESET_PERMISSIONS[roleKey] });
+      }
+    };
+
+    // Helper toggle single permission
+    const handleTogglePermission = (permKey) => {
+      setStaffFormPermissions(prev => {
+        const nextVal = !prev[permKey];
+        return { ...prev, [permKey]: nextVal };
+      });
+      // Set to custom if fine-tuning
+      if (staffFormRole !== 'CUSTOM') {
+        setStaffFormRole('CUSTOM');
+      }
+    };
+
+    // Helper select all or deselect all
+    const handleSetAllPermissions = (enableAll) => {
+      const updated = {};
+      ALL_STAFF_PERMISSIONS.forEach(p => {
+        updated[p.key] = enableAll;
+      });
+      setStaffFormPermissions(updated);
+      setStaffFormRole(enableAll ? 'ADMIN' : 'CUSTOM');
+    };
+
+    // Count active permissions for staff
+    const countStaffPerms = (staff) => {
+      const perms = staff.permissions || ROLE_PRESET_PERMISSIONS[staff.role] || {};
+      return ALL_STAFF_PERMISSIONS.filter(p => !!perms[p.key]).length;
+    };
+
     return (
       <div className="space-y-6 animate-in fade-in duration-200">
         
@@ -9874,10 +10016,10 @@ export default function UnifiedAdminDashboard() {
               </span>
               <div>
                 <h2 className="text-lg sm:text-xl font-black text-gray-900 leading-tight">
-                  គ្រប់គ្រងបុគ្គលិក & បែងចែកសិទ្ធិ (Multi-Staff & Roles Permission)
+                  គ្រប់គ្រងបុគ្គលិក & បែងចែកលក្ខខណ្ឌសិទ្ធិ (Multi-Staff & Roles Permission)
                 </h2>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  បែងចែកសិទ្ធិបុគ្គលិកដាច់ដោយឡែក (ម្ចាស់ហាង, អ្នកគិតលុយ POS, អ្នកកាន់ស្តុក) ធានាសុវត្ថិភាពទិន្នន័យចំណេញ និងថ្លៃដើម
+                  បែងចែកសិទ្ធិប្រើប្រាស់តាមតួនាទីជាក់ស្តែង (លក់ POS, មើលស្តុក, បញ្ចូលទំនិញ, ចំណាយ, ឬលាក់ថ្លៃដើមទុន) ធានាសុវត្ថិភាពហាង ១០០%
                 </p>
               </div>
             </div>
@@ -9906,6 +10048,7 @@ export default function UnifiedAdminDashboard() {
                 setStaffFormPin('');
                 setStaffFormRole('CASHIER');
                 setStaffFormPhone('');
+                setStaffFormPermissions({ ...ROLE_PRESET_PERMISSIONS.CASHIER });
                 setStaffModalOpen(true);
               }}
               className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95 text-white font-black text-xs px-4 py-2.5 rounded-2xl transition shadow-md shadow-blue-600/20 flex items-center gap-1.5 cursor-pointer"
@@ -9917,12 +10060,12 @@ export default function UnifiedAdminDashboard() {
         </div>
 
         {/* ⭐️ ROLE EXPLANATION CARDS ⭐️ */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           
           {/* 1. Super Admin Card */}
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50/60 p-5 rounded-3xl border border-amber-200 shadow-xs space-y-2.5">
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50/60 p-5 rounded-3xl border border-amber-200 shadow-xs space-y-2">
             <div className="flex items-center justify-between">
-              <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-xl shadow-sm">
+              <span className="w-9 h-9 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-lg shadow-sm">
                 👑
               </span>
               <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
@@ -9930,55 +10073,76 @@ export default function UnifiedAdminDashboard() {
               </span>
             </div>
             <div>
-              <h4 className="font-black text-sm text-gray-900">ម្ចាស់ហាង (Super Admin)</h4>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                មានសិទ្ធិមើលឃើញ និងគ្រប់គ្រងបានទាំងអស់៖ របាយការណ៍ចំណេញសុទ្ធ ថ្លៃដើមទំនិញ ស្តុក លក់ POS ចំណាយ និងគ្រប់គ្រងបុគ្គលិក។
+              <h4 className="font-black text-xs text-gray-900">ម្ចាស់ហាង (Super Admin)</h4>
+              <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                មានសិទ្ធិមើលឃើញ និងគ្រប់គ្រងបានទាំងអស់៖ របាយការណ៍ចំណេញសុទ្ធ ថ្លៃដើមទំនិញ ស្តុក លក់ POS ចំណាយ និងបុគ្គលិក។
               </p>
             </div>
             <div className="pt-2 border-t border-amber-200/60 text-[10px] font-bold text-amber-800 flex items-center gap-1">
-              <span>✅</span> ឃើញថ្លៃដើម & ប្រាក់ចំណេញ ១០០%
+              <span>✅</span> សិទ្ធិគ្រប់គ្រង ១៥/១៥ ពេញលេញ
             </div>
           </div>
 
           {/* 2. Cashier Card */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50/60 p-5 rounded-3xl border border-blue-200 shadow-xs space-y-2.5">
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50/60 p-5 rounded-3xl border border-blue-200 shadow-xs space-y-2">
             <div className="flex items-center justify-between">
-              <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xl shadow-sm">
+              <span className="w-9 h-9 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-lg shadow-sm">
                 💻
               </span>
               <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-200/80 text-blue-900">
-                POS Only
+                POS & Orders
               </span>
             </div>
             <div>
-              <h4 className="font-black text-sm text-gray-900">អ្នកគិតលុយ (Cashier)</h4>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                ឃើញ និងប្រើប្រាស់បានតែផ្ទាំងលក់ POS មុខហាង និងវិក្កយបត្រប៉ុណ្ណោះ។ មិនអាចចូលមើលរបាយការណ៍ហិរញ្ញវត្ថុ ឬថ្លៃដើមឡើយ។
+              <h4 className="font-black text-xs text-gray-900">អ្នកគិតលុយ (Cashier)</h4>
+              <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                ប្រើប្រាស់ផ្ទាំងលក់ POS មុខហាង ចេញវិក្កយបត្រ និងគ្រប់គ្រងការកុម្ម៉ង់។ មិនអាចមើលថ្លៃដើមទុន ឬរបាយការណ៍ចំណេញឡើយ។
               </p>
             </div>
             <div className="pt-2 border-t border-blue-200/60 text-[10px] font-bold text-blue-800 flex items-center gap-1">
-              <span>🔒</span> លាក់ថ្លៃដើម និងប្រាក់ចំណេញសុទ្ធ
+              <span>🔒</span> លាក់ថ្លៃដើម និងប្រាក់ចំណេញ
             </div>
           </div>
 
           {/* 3. Stock Keeper Card */}
-          <div className="bg-gradient-to-br from-purple-50 to-violet-50/60 p-5 rounded-3xl border border-purple-200 shadow-xs space-y-2.5">
+          <div className="bg-gradient-to-br from-purple-50 to-violet-50/60 p-5 rounded-3xl border border-purple-200 shadow-xs space-y-2">
             <div className="flex items-center justify-between">
-              <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 text-white flex items-center justify-center text-xl shadow-sm">
+              <span className="w-9 h-9 rounded-2xl bg-gradient-to-br from-purple-500 to-violet-600 text-white flex items-center justify-center text-lg shadow-sm">
                 🗄️
               </span>
               <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-200/80 text-purple-900">
-                Inventory Only
+                Inventory & Stock
               </span>
             </div>
             <div>
-              <h4 className="font-black text-sm text-gray-900">អ្នកកាន់ស្តុក (Stock Keeper)</h4>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                មានសិទ្ធិតែលើការកែប្រែចំនួនស្តុក នាំទំនិញចូល (Stock In) និង Import Excel។ មិនអាចចូលមើលប្រព័ន្ធលក់ ឬលុយកាក់បានឡើយ។
+              <h4 className="font-black text-xs text-gray-900">អ្នកកាន់ស្តុក (Stock Keeper)</h4>
+              <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                មានសិទ្ធិកែប្រែស្តុក នាំទំនិញចូល បង្កើតទំនិញថ្មី និងព្រីនបាកូដ។ មិនអាចចូលមើលប្រព័ន្ធលក់ ឬលុយកាក់បានឡើយ។
               </p>
             </div>
             <div className="pt-2 border-t border-purple-200/60 text-[10px] font-bold text-purple-800 flex items-center gap-1">
-              <span>🔒</span> មិនមានសិទ្ធិលើប្រព័ន្ធលុយកាក់
+              <span>📦</span> ស្តុក, បញ្ចូលទំនិញ & ព្រីន Barcode
+            </div>
+          </div>
+
+          {/* 4. Manager / Custom Card */}
+          <div className="bg-gradient-to-br from-emerald-50 to-teal-50/60 p-5 rounded-3xl border border-emerald-200 shadow-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="w-9 h-9 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-lg shadow-sm">
+                💼
+              </span>
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900">
+                Customizable
+              </span>
+            </div>
+            <div>
+              <h4 className="font-black text-xs text-gray-900">អ្នកគ្រប់គ្រង / កំណត់ផ្ទាល់ខ្លួន</h4>
+              <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                ម្ចាស់ហាងអាចបើក ឬបិទលក្ខខណ្ឌសិទ្ធិប្រើប្រាស់ដោយសេរី តាមការងារជាក់ស្តែងរបស់បុគ្គលិកម្នាក់ៗ។
+              </p>
+            </div>
+            <div className="pt-2 border-t border-emerald-200/60 text-[10px] font-bold text-emerald-800 flex items-center gap-1">
+              <span>⚡</span> កំណត់សិទ្ធិបានតាមចិត្ត (Granular)
             </div>
           </div>
 
@@ -10007,8 +10171,9 @@ export default function UnifiedAdminDashboard() {
                   <th className="px-5 py-3">បុគ្គលិក</th>
                   <th className="px-5 py-3">Username</th>
                   <th className="px-5 py-3">តួនាទី (Role)</th>
+                  <th className="px-5 py-3">សិទ្ធិអនុញ្ញាត (Permissions)</th>
                   <th className="px-5 py-3">លេខទូរស័ព្ទ</th>
-                  <th className="px-5 py-3 text-center">លេខសម្ងាត់ PIN</th>
+                  <th className="px-5 py-3 text-center">លេខ PIN</th>
                   <th className="px-5 py-3 text-center">ស្ថានភាព</th>
                   <th className="px-5 py-3 text-right pr-6">សកម្មភាព</th>
                 </tr>
@@ -10016,6 +10181,7 @@ export default function UnifiedAdminDashboard() {
               <tbody className="divide-y divide-gray-100">
                 {staffList.map((staff) => {
                   const isCurrent = staff.id === currentStaff?.id;
+                  const activePermCount = countStaffPerms(staff);
 
                   return (
                     <tr key={staff.id} className={`hover:bg-gray-50/60 transition ${isCurrent ? 'bg-blue-50/30' : ''}`}>
@@ -10044,55 +10210,69 @@ export default function UnifiedAdminDashboard() {
                         <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-xl border ${
                           staff.role === 'ADMIN' ? 'bg-amber-50 text-amber-800 border-amber-300' :
                           staff.role === 'CASHIER' ? 'bg-blue-50 text-blue-800 border-blue-300' :
-                          'bg-purple-50 text-purple-800 border-purple-300'
+                          staff.role === 'STOCK' ? 'bg-purple-50 text-purple-800 border-purple-300' :
+                          staff.role === 'MANAGER' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
+                          'bg-slate-100 text-slate-800 border-slate-300'
                         }`}>
                           <span>{staff.avatar}</span>
                           <span>{staff.roleLabel}</span>
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-gray-600 font-medium">
-                        {staff.phone || '-'}
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg border ${
+                            activePermCount >= 12 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                            activePermCount >= 5 ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                            'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}>
+                            {activePermCount} / {ALL_STAFF_PERMISSIONS.length} សិទ្ធិ
+                          </span>
+                          <div className="flex items-center gap-1 text-[11px] text-slate-500">
+                            {(staff.permissions?.pos || staff.role === 'ADMIN' || staff.role === 'CASHIER') && <span title="POS">💻</span>}
+                            {(staff.permissions?.orders || staff.role === 'ADMIN' || staff.role === 'CASHIER') && <span title="Orders">🛒</span>}
+                            {(staff.permissions?.inventory || staff.role === 'ADMIN' || staff.role === 'STOCK') && <span title="Inventory">🗄️</span>}
+                            {(staff.permissions?.upload || staff.role === 'ADMIN' || staff.role === 'STOCK') && <span title="Upload">📤</span>}
+                            {(staff.permissions?.canViewCost || staff.role === 'ADMIN') && <span title="View Cost">🔒</span>}
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-center">
-                        <span className="font-mono font-bold text-xs bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200 text-gray-800">
-                          {showPinInTable ? staff.pin : '••••'}
-                        </span>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-gray-600 font-mono">
+                        {staff.phone || '—'}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-center font-mono font-black text-gray-800">
+                        {showPinInTable ? staff.pin : '••••'}
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap text-center">
                         <button
                           type="button"
-                          onClick={() => handleToggleActive(staff)}
                           disabled={isCurrent}
-                          className={`text-[10px] font-black px-2.5 py-1 rounded-xl transition ${
+                          onClick={() => handleToggleActive(staff)}
+                          className={`px-2.5 py-1 rounded-xl text-[10px] font-black transition cursor-pointer ${
                             staff.active 
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                              : 'bg-gray-100 text-gray-500 border border-gray-200'
-                          }`}
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100' 
+                              : 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'
+                          } ${isCurrent ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                          {staff.active ? '🟢 សកម្ម' : '⚪ ផ្អាក'}
+                          {staff.active ? '● សកម្ម' : '○ ផ្អាក'}
                         </button>
                       </td>
-                      <td className="px-5 py-3.5 text-right pr-6 whitespace-nowrap space-x-1.5">
+                      <td className="px-5 py-3.5 whitespace-nowrap text-right pr-6 space-x-1.5">
                         <button
                           type="button"
                           onClick={() => handleOpenEditStaff(staff)}
-                          className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-[11px] px-2.5 py-1.5 rounded-xl border border-blue-200 transition cursor-pointer"
-                          title="កែប្រែគណនី"
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-2.5 py-1.5 rounded-xl transition text-[11px] cursor-pointer"
                         >
-                          ✏️ កែ
+                          ✏️ កែប្រែសិទ្ធិ
                         </button>
                         <button
                           type="button"
+                          disabled={isCurrent || staffList.length <= 1}
                           onClick={() => handleDeleteStaff(staff)}
-                          disabled={isCurrent}
-                          className={`font-bold text-[11px] px-2.5 py-1.5 rounded-xl border transition ${
-                            isCurrent 
-                              ? 'opacity-30 cursor-not-allowed bg-gray-50 text-gray-400 border-gray-200' 
-                              : 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200 cursor-pointer'
+                          className={`bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold px-2.5 py-1.5 rounded-xl transition text-[11px] border border-rose-200 cursor-pointer ${
+                            isCurrent || staffList.length <= 1 ? 'opacity-40 cursor-not-allowed' : ''
                           }`}
-                          title="លុបគណនី"
                         >
-                          🗑️
+                          🗑️ លុប
                         </button>
                       </td>
                     </tr>
@@ -10104,123 +10284,229 @@ export default function UnifiedAdminDashboard() {
 
         </div>
 
-        {/* ⭐️ ADD / EDIT STAFF MODAL ⭐️ */}
+        {/* ⭐️ ADD / EDIT STAFF MODAL (WITH GRANULAR PERMISSIONS) ⭐️ */}
         {staffModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-200 overflow-hidden">
               
-              <div className="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-base font-bold">
+              {/* Modal Header */}
+              <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 shrink-0 bg-slate-50/50">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-bold">
                     {editingStaff ? '✏️' : '👥'}
                   </span>
                   <div>
                     <h3 className="font-black text-sm text-gray-900">
-                      {editingStaff ? 'កែប្រែគណនីបុគ្គលិក' : 'បន្ថែមគណនីបុគ្គលិកថ្មី'}
+                      {editingStaff ? `កែប្រែព័ត៌មាន & សិទ្ធិបុគ្គលិក "${editingStaff.name}"` : 'បន្ថែមគណនីបុគ្គលិកថ្មី & កំណត់លក្ខខណ្ឌសិទ្ធិ'}
                     </h3>
-                    <p className="text-[10px] text-gray-400">កំណត់ឈ្មោះ តួនាទី និងលេខសម្ងាត់ PIN</p>
+                    <p className="text-[11px] text-gray-400">កំណត់ឈ្មោះ គណនី PIN និងជ្រើសរើសមុខងារដែលបុគ្គលិកអាចប្រើប្រាស់បាន</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setStaffModalOpen(false)}
-                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xs"
+                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xs transition cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              <form onSubmit={handleSaveStaff} className="space-y-3.5 text-xs">
+              {/* Modal Body (Scrollable) */}
+              <form onSubmit={handleSaveStaff} className="flex-1 overflow-y-auto p-6 space-y-5 text-xs">
                 
-                {/* Staff Name */}
+                {/* 1. Basic Information */}
                 <div>
-                  <label className="font-bold text-gray-700 block mb-1">
-                    ឈ្មោះពេញរបស់បុគ្គលិក <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={staffFormName}
-                    onChange={(e) => setStaffFormName(e.target.value)}
-                    placeholder="ឧ. សុខា, វិចិត្រ, ធីតា..."
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3 py-2.5 font-bold outline-none transition"
-                  />
-                </div>
-
-                {/* Username & PIN */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">
-                      Username <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={staffFormUsername}
-                      onChange={(e) => setStaffFormUsername(e.target.value)}
-                      placeholder="ឧ. cashier1"
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3 py-2.5 font-mono font-bold outline-none transition"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">
-                      លេខសម្ងាត់ PIN (៤ ខ្ទង់) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="password"
-                      maxLength={6}
-                      required
-                      value={staffFormPin}
-                      onChange={(e) => setStaffFormPin(e.target.value.replace(/\D/g, ''))}
-                      placeholder="1234"
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3 py-2.5 font-mono font-black text-center tracking-widest text-base outline-none transition"
-                    />
+                  <h4 className="font-black text-slate-800 text-xs uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <span>👤</span> ១. ព័ត៌មានផ្ទាល់ខ្លួនបុគ្គលិក (Basic Information)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">
+                        ឈ្មោះពេញរបស់បុគ្គលិក <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={staffFormName}
+                        onChange={(e) => setStaffFormName(e.target.value)}
+                        placeholder="ឧ. សុខា, វិចិត្រ, ធីតា..."
+                        className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3.5 py-2.5 font-bold outline-none transition"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">
+                        លេខទូរស័ព្ទបុគ្គលិក
+                      </label>
+                      <input
+                        type="text"
+                        value={staffFormPhone}
+                        onChange={(e) => setStaffFormPhone(e.target.value)}
+                        placeholder="ឧ. 012 345 678"
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 font-medium outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                {/* Role Select */}
+                {/* 2. Login Credentials */}
                 <div>
-                  <label className="font-bold text-gray-700 block mb-1">
-                    តួនាទី និងសិទ្ធិកាន់កាប់ (Role) <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={staffFormRole}
-                    onChange={(e) => setStaffFormRole(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 outline-none cursor-pointer"
-                  >
-                    <option value="CASHIER">💻 អ្នកគិតលុយ (Cashier) — ប្រើបានតែ POS មុខហាង</option>
-                    <option value="STOCK">🗄️ អ្នកកាន់ស្តុក (Stock Keeper) — គ្រប់គ្រងស្តុក & នាំចូល</option>
-                    <option value="ADMIN">👑 ម្ចាស់ហាង (Super Admin) — គ្រប់គ្រងបានទាំងអស់ពេញលេញ</option>
-                  </select>
+                  <h4 className="font-black text-slate-800 text-xs uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <span>🔐</span> ២. គណនីចូលប្រព័ន្ធ (Login Credentials)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">
+                        Username <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={staffFormUsername}
+                        onChange={(e) => setStaffFormUsername(e.target.value)}
+                        placeholder="ឧ. cashier1"
+                        className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3.5 py-2.5 font-mono font-bold outline-none transition"
+                      />
+                    </div>
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-1">
+                        លេខសម្ងាត់ PIN (៤-៦ ខ្ទង់) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        maxLength={6}
+                        required
+                        value={staffFormPin}
+                        onChange={(e) => setStaffFormPin(e.target.value.replace(/\D/g, ''))}
+                        placeholder="1234"
+                        className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3.5 py-2.5 font-mono font-black text-center tracking-widest text-base outline-none transition"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                {/* Phone */}
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">
-                    លេខទូរស័ព្ទបុគ្គលិក
-                  </label>
-                  <input
-                    type="text"
-                    value={staffFormPhone}
-                    onChange={(e) => setStaffFormPhone(e.target.value)}
-                    placeholder="ឧ. 012 345 678"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium outline-none"
-                  />
+                {/* 3. Role Preset Selector */}
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-black text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                      <span>🎯</span> ៣. ជ្រើសរើសទម្រង់សិទ្ធិគំរូ (Role Preset)
+                    </h4>
+                    <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">
+                      តួនាទី: {staffFormRole}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { key: 'ADMIN', label: '👑 ម្ចាស់ហាង', desc: 'សិទ្ធិគ្រប់គ្រងពេញលេញ' },
+                      { key: 'CASHIER', label: '💻 អ្នកគិតលុយ', desc: 'លក់ POS & កុម្ម៉ង់' },
+                      { key: 'STOCK', label: '🗄️ អ្នកកាន់ស្តុក', desc: 'ស្តុក & បញ្ចូលទំនិញ' },
+                      { key: 'MANAGER', label: '💼 អ្នកគ្រប់គ្រង', desc: 'គ្រប់គ្រងហាងទូទៅ' },
+                    ].map(preset => {
+                      const isActive = staffFormRole === preset.key;
+                      return (
+                        <button
+                          key={preset.key}
+                          type="button"
+                          onClick={() => handleApplyRolePreset(preset.key)}
+                          className={`p-2.5 rounded-2xl border text-left transition cursor-pointer ${
+                            isActive 
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm font-black' 
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          <p className="font-black text-xs leading-tight">{preset.label}</p>
+                          <p className={`text-[10px] mt-0.5 ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                            {preset.desc}
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="flex gap-2 pt-2 border-t border-gray-100">
+                {/* 4. Granular Permissions (លក្ខខណ្ឌដែលបុគ្គលិកអាចប្រើប្រាស់បាន) */}
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                    <div>
+                      <h4 className="font-black text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                        <span>📋</span> ៤. លក្ខខណ្ឌសិទ្ធិដែលបុគ្គលិកអាចប្រើប្រាស់បាន (Active Permissions)
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        ជ្រើសរើសបើក (✅) ឬបិទ (❌) មុខងារជាក់លាក់នីមួយៗសម្រាប់គណនីបុគ្គលិកនេះ
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleSetAllPermissions(true)}
+                        className="px-2.5 py-1 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-black transition cursor-pointer"
+                      >
+                        ⚡ ជ្រើសទាំងអស់
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetAllPermissions(false)}
+                        className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 text-[10px] font-black transition cursor-pointer"
+                      >
+                        ✕ ដោះចេញទាំងអស់
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Permissions Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {ALL_STAFF_PERMISSIONS.map(perm => {
+                      const isChecked = !!staffFormPermissions[perm.key];
+
+                      return (
+                        <div
+                          key={perm.key}
+                          onClick={() => handleTogglePermission(perm.key)}
+                          className={`p-3 rounded-2xl border-2 transition cursor-pointer flex items-start justify-between gap-3 select-none ${
+                            isChecked 
+                              ? 'bg-blue-50/70 border-blue-300 shadow-2xs' 
+                              : 'bg-slate-50/60 border-slate-200 opacity-70 hover:opacity-100'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <span className="text-base shrink-0 mt-0.5">{perm.icon}</span>
+                            <div>
+                              <p className={`text-xs font-black ${isChecked ? 'text-blue-950' : 'text-slate-700'}`}>
+                                {perm.label}
+                              </p>
+                              <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                                {perm.desc}
+                              </p>
+                            </div>
+                          </div>
+
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}} // Handled by card click
+                            className="w-4 h-4 rounded text-blue-600 accent-blue-600 shrink-0 mt-0.5 pointer-events-none cursor-pointer"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div className="flex gap-2 pt-4 border-t border-gray-100 shrink-0">
                   <button
                     type="button"
                     onClick={() => setStaffModalOpen(false)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold transition"
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold transition cursor-pointer"
                   >
                     បោះបង់
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-black transition shadow-md shadow-blue-600/20"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3 rounded-2xl font-black transition shadow-md shadow-blue-600/20 cursor-pointer active:scale-98"
                   >
-                    {editingStaff ? 'រក្សាទុកការកែប្រែ' : 'បង្កើតគណនី'}
+                    {editingStaff ? '💾 រក្សាទុកការកែប្រែសិទ្ធិ' : '🎉 បង្កើតគណនីបុគ្គលិក'}
                   </button>
                 </div>
 
@@ -10233,7 +10519,6 @@ export default function UnifiedAdminDashboard() {
       </div>
     );
   };
-
   const ordersData = [
     { id: 'ORD-9012', customer: 'សុខ សាន្ត', date: '2026-09-23', total: 85.00, status: 'Preparing', payment: 'ABA Pay' },
     { id: 'ORD-9013', customer: 'ចាន់ ធីតា', date: '2026-09-23', total: 150.00, status: 'Shipped', payment: 'COD' },
@@ -16906,7 +17191,7 @@ export default function UnifiedAdminDashboard() {
             </p>
 
             {/* POS TAB (ADMIN & CASHIER) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'CASHIER') && (
+            {hasStaffPermission('pos') && (
               <button 
                 type="button"
                 onClick={() => setActiveTab('pos')} 
@@ -16936,7 +17221,7 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* ANALYTICS TAB (SUPER ADMIN ONLY) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN') && (
+            {hasStaffPermission('analytics') && (
               <button 
                 type="button"
                 onClick={() => setActiveTab('analytics')} 
@@ -16961,7 +17246,7 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* INVENTORY TAB (ADMIN & STOCK KEEPER) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'STOCK') && (
+            {hasStaffPermission('inventory') && (
               <button 
                 type="button"
                 onClick={() => setActiveTab('inventory')} 
@@ -16986,7 +17271,7 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* UPLOAD PRODUCT TAB (ADMIN & STOCK KEEPER) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'STOCK') && (
+            {hasStaffPermission('upload') && (
               <button 
                 type="button"
                 onClick={() => setActiveTab('upload')} 
@@ -17019,7 +17304,7 @@ export default function UnifiedAdminDashboard() {
             </p>
 
             {/* STOREFRONT DROPDOWN (ADMIN & STOCK KEEPER) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'STOCK') && (
+            {hasStaffPermission('storefront') && (
               <div className="space-y-1">
                 <button 
                   type="button"
@@ -17074,7 +17359,7 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* ORDERS TAB (ADMIN & CASHIER) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN' || currentStaff.role === 'CASHIER') && (
+            {hasStaffPermission('orders') && (
               <button 
                 type="button"
                 onClick={() => setActiveTab('orders')} 
@@ -17106,7 +17391,7 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* EXPENSES & NET PROFIT TAB (SUPER ADMIN ONLY) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN') && (
+            {hasStaffPermission('expenses') && (
               <button 
                 type="button"
                 onClick={() => setActiveTab('expenses')} 
@@ -17136,7 +17421,7 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* CUSTOMERS CRM TAB (SUPER ADMIN ONLY) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN') && (
+            {hasStaffPermission('customers') && (
               <button 
                 type="button"
                 onClick={() => setActiveTab('customers')} 
@@ -17161,7 +17446,7 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* FEEDBACKS TAB (SUPER ADMIN ONLY) */}
-            {(!currentStaff || currentStaff.role === 'ADMIN') && (
+            {hasStaffPermission('feedbacks') && (
               <button 
                 type="button"
                 onClick={() => setActiveTab('feedbacks')} 
@@ -17193,8 +17478,8 @@ export default function UnifiedAdminDashboard() {
             )}
           </div>
 
-          {/* SECTION 3: SYSTEM & CONFIGURATION (SUPER ADMIN ONLY) */}
-          {(!currentStaff || currentStaff.role === 'ADMIN') && (
+          {/* SECTION 3: SYSTEM & CONFIGURATION */}
+          {(hasStaffPermission('api') || hasStaffPermission('settings') || hasStaffPermission('invoice') || hasStaffPermission('staff')) && (
             <div className="space-y-1 pt-1 border-t border-slate-800/60">
               <p className="px-3 pt-2 text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
                 <span>ប្រព័ន្ធ & ការកំណត់</span>
@@ -17202,99 +17487,107 @@ export default function UnifiedAdminDashboard() {
               </p>
 
               {/* API & TELEGRAM TAB */}
-              <button 
-                type="button"
-                onClick={() => setActiveTab('api')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'api' 
-                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'api' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'api' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-violet-400 group-hover:bg-slate-700'
-                  }`}>
-                    🔌
-                  </span>
-                  <span className="text-xs truncate">ការតភ្ជាប់ (API & Bot)</span>
-                </div>
-              </button>
+              {hasStaffPermission('api') && (
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab('api')} 
+                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                    activeTab === 'api' 
+                      ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                  }`}
+                >
+                  {activeTab === 'api' && (
+                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                  )}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                      activeTab === 'api' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-violet-400 group-hover:bg-slate-700'
+                    }`}>
+                      🔌
+                    </span>
+                    <span className="text-xs truncate">ការតភ្ជាប់ (API & Bot)</span>
+                  </div>
+                </button>
+              )}
 
               {/* STORE SETTINGS TAB */}
-              <button 
-                type="button"
-                onClick={() => setActiveTab('settings')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'settings' 
-                    ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg shadow-orange-600/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'settings' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'settings' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-orange-400 group-hover:bg-slate-700'
-                  }`}>
-                    🏪
-                  </span>
-                  <span className="text-xs truncate">កំណត់ហាង & Logo</span>
-                </div>
-              </button>
+              {hasStaffPermission('settings') && (
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab('settings')} 
+                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                    activeTab === 'settings' 
+                      ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg shadow-orange-600/25 font-black' 
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                  }`}
+                >
+                  {activeTab === 'settings' && (
+                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                  )}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                      activeTab === 'settings' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-orange-400 group-hover:bg-slate-700'
+                    }`}>
+                      🏪
+                    </span>
+                    <span className="text-xs truncate">កំណត់ហាង & Logo</span>
+                  </div>
+                </button>
+              )}
 
               {/* INVOICE SETTINGS TAB */}
-              <button 
-                type="button"
-                onClick={() => setActiveTab('invoice')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'invoice' 
-                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'invoice' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'invoice' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-rose-400 group-hover:bg-slate-700'
-                  }`}>
-                    🧾
-                  </span>
-                  <span className="text-xs truncate">កំណត់វិក្កយបត្រ</span>
-                </div>
-              </button>
+              {hasStaffPermission('invoice') && (
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab('invoice')} 
+                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                    activeTab === 'invoice' 
+                      ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                  }`}
+                >
+                  {activeTab === 'invoice' && (
+                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                  )}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                      activeTab === 'invoice' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-rose-400 group-hover:bg-slate-700'
+                    }`}>
+                      🧾
+                    </span>
+                    <span className="text-xs truncate">កំណត់វិក្កយបត្រ</span>
+                  </div>
+                </button>
+              )}
 
               {/* MULTI-STAFF MANAGEMENT TAB */}
-              <button 
-                type="button"
-                onClick={() => setActiveTab('staff')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'staff' 
-                    ? 'bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'staff' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'staff' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-indigo-400 group-hover:bg-slate-700'
-                  }`}>
-                    👥
+              {hasStaffPermission('staff') && (
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab('staff')} 
+                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                    activeTab === 'staff' 
+                      ? 'bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/25 font-black' 
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
+                  }`}
+                >
+                  {activeTab === 'staff' && (
+                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                  )}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                      activeTab === 'staff' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-indigo-400 group-hover:bg-slate-700'
+                    }`}>
+                      👥
+                    </span>
+                    <span className="text-xs truncate">គ្រប់គ្រងបុគ្គលិក</span>
+                  </div>
+                  <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded-full font-bold">
+                    {staffList.length} នាក់
                   </span>
-                  <span className="text-xs truncate">គ្រប់គ្រងបុគ្គលិក</span>
-                </div>
-                <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded-full font-bold">
-                  {staffList.length} នាក់
-                </span>
-              </button>
+                </button>
+              )}
             </div>
           )}
 
