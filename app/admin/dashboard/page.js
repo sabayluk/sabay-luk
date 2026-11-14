@@ -6185,6 +6185,16 @@ export default function UnifiedAdminDashboard() {
     const totalOrdersCount = completedOrders.length;
     const aov = totalOrdersCount > 0 ? (totalRevenue / totalOrdersCount) : 0;
 
+    // ⭐️ គណនាពន្ធអាករ VAT (10%) និងចំណូលដកពន្ធ ⭐️
+    const totalTaxCollected = completedOrders.reduce((sum, o) => {
+      if (o.tax_amount != null) return sum + (parseFloat(o.tax_amount) || 0);
+      const items = Array.isArray(o.items) ? o.items : [];
+      const taxMeta = items.find(it => it.is_tax_meta);
+      if (taxMeta && taxMeta.tax_amount != null) return sum + (parseFloat(taxMeta.tax_amount) || 0);
+      return sum;
+    }, 0);
+    const netRevenueExclTax = Math.max(0, totalRevenue - totalTaxCollected);
+
     // ចំនួនទំនិញលក់បានសរុប (Total Items Sold)
     const totalItemsSold = completedOrders.reduce((sum, o) => {
       const items = Array.isArray(o.items) ? o.items : [];
