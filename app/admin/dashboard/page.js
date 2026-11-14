@@ -2559,7 +2559,7 @@ export default function UnifiedAdminDashboard() {
                 <body>
                   ${printContent}
                   <script>
-                    window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); };
+                    window.onload = function() { window.focus(); window.print(); }; window.onafterprint = function() { window.close(); };
                   </script>
                 </body>
               </html>
@@ -13160,8 +13160,11 @@ export default function UnifiedAdminDashboard() {
                           ${content}
                           <script>
                             window.onload = function() {
+                              window.focus();
                               window.print();
-                              setTimeout(function() { window.close(); }, 500);
+                            };
+                            window.onafterprint = function() {
+                              window.close();
                             };
                           </script>
                         </body>
@@ -13393,7 +13396,7 @@ export default function UnifiedAdminDashboard() {
                         </div>
                       `;
                       const printWin = window.open('', '_blank', 'height=650,width=450');
-                      printWin.document.write(`<html><body onload="window.print(); setTimeout(function(){window.close();}, 500);">${printContent}</body></html>`);
+                      printWin.document.write(`<html><body onload="window.focus(); window.print();" onafterprint="window.close();">${printContent}</body></html>`);
                       printWin.document.close();
                     }}
                     className="px-5 py-3 rounded-2xl border border-gray-300 hover:bg-gray-100 text-gray-700 font-black text-xs flex items-center gap-1.5 transition cursor-pointer"
@@ -13755,24 +13758,21 @@ export default function UnifiedAdminDashboard() {
           <button 
             type="button" 
             onClick={() => {
-              const stickerHtml = document.getElementById('barcode-sticker-print-target').innerHTML;
+              const targetEl = document.getElementById('barcode-sticker-print-target');
+              if (!targetEl) return;
+              const stickerHtml = targetEl.innerHTML;
               const isA4 = barcodeLabelFormat === 'a4_grid';
+              const copies = Math.min(200, Math.max(1, parseInt(barcodePrintQty) || 1));
               const sizeStyle = barcodeLabelFormat === '60x40' 
                 ? '@page { size: 60mm 40mm; margin: 0; }' 
                 : barcodeLabelFormat === '40x30' 
                 ? '@page { size: 40mm 30mm; margin: 0; }' 
                 : isA4
-                ? '@page { size: A4 portrait; margin: 8mm; }'
+                ? '@page { size: A4 portrait; margin: 6mm; }'
                 : '@page { size: 50mm 30mm; margin: 0; }';
 
-              const printWin = window.open('', 'PrintBarcodeStickers', 'height=600,width=800');
-              if (!printWin) {
-                alert('សូមអនុញ្ញាត Popup Permission លើ Browser ដើម្បីបោះពុម្ពស្លាក!');
-                return;
-              }
-
               let stickersList = '';
-              for (let i = 0; i < barcodePrintQty; i++) {
+              for (let i = 0; i < copies; i++) {
                 stickersList += `
                   <div class="sticker-container">
                     ${stickerHtml}
@@ -13780,12 +13780,12 @@ export default function UnifiedAdminDashboard() {
                 `;
               }
 
-              printWin.document.write(`
+              const fullPrintDoc = `
                 <!DOCTYPE html>
                 <html>
                   <head>
                     <meta charset="utf-8" />
-                    <title>Print Barcodes - ${barcodeProduct.name}</title>
+                    <title>Print Barcodes - ${(barcodeProduct.name || '').replace(/</g, '&lt;')}</title>
                     <style>
                       ${sizeStyle}
                       * { box-sizing: border-box; }
@@ -13794,24 +13794,28 @@ export default function UnifiedAdminDashboard() {
                         padding: 0;
                         background: #fff;
                         color: #000;
-                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hanuman", sans-serif;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
                       }
                       ${isA4 ? `
                         .a4-grid {
                           display: grid;
                           grid-template-columns: repeat(3, 1fr);
-                          gap: 4mm;
+                          gap: 3mm;
+                          padding: 2mm;
                         }
                         .sticker-container {
-                          border: 1px dashed #bbb;
+                          border: 1px dashed #aaa;
                           border-radius: 4px;
-                          padding: 2.5mm;
+                          padding: 2mm;
                           height: 32mm;
                           display: flex;
                           flex-direction: column;
                           justify-content: space-between;
                           text-align: center;
                           page-break-inside: avoid;
+                          background: #fff;
                         }
                       ` : `
                         .sticker-container {
@@ -13824,26 +13828,63 @@ export default function UnifiedAdminDashboard() {
                           text-align: center;
                           page-break-after: always;
                           overflow: hidden;
+                          background: #fff;
                         }
                       `}
-                      svg { max-width: 100%; height: auto; }
+                      svg { width: 100% !important; max-height: 42px !important; display: block; margin: 0 auto; }
+                      img { max-height: 40px; object-fit: contain; margin: 0 auto; }
                     </style>
                   </head>
                   <body>
                     ${isA4 ? `<div class="a4-grid">${stickersList}</div>` : stickersList}
-                    <script>
-                      window.onload = function() {
-                        window.focus();
-                        window.print();
-                        setTimeout(function() { window.close(); }, 500);
-                      };
-                    <\/script>
                   </body>
                 </html>
-              `);
-              printWin.document.close();
+              `;
+
+              // ⭐️ FREEZE-PROOF PRINTING: Use hidden iframe first (no popup blocker, 0s delay, no blank windows) ⭐️
+              let printFrame = document.getElementById('sabay-barcode-print-frame');
+              if (!printFrame) {
+                printFrame = document.createElement('iframe');
+                printFrame.id = 'sabay-barcode-print-frame';
+                printFrame.style.position = 'fixed';
+                printFrame.style.right = '0';
+                printFrame.style.bottom = '0';
+                printFrame.style.width = '0px';
+                printFrame.style.height = '0px';
+                printFrame.style.border = 'none';
+                printFrame.style.zIndex = '-999';
+                document.body.appendChild(printFrame);
+              }
+
+              try {
+                const fDoc = printFrame.contentWindow.document;
+                fDoc.open();
+                fDoc.write(fullPrintDoc);
+                fDoc.close();
+
+                setTimeout(() => {
+                  try {
+                    printFrame.contentWindow.focus();
+                    printFrame.contentWindow.print();
+                  } catch (frameErr) {
+                    console.warn('Iframe print error, falling back to window.open:', frameErr);
+                    const fallbackWin = window.open('', '_blank', 'width=800,height=600');
+                    if (fallbackWin) {
+                      fallbackWin.document.open();
+                      fallbackWin.document.write(fullPrintDoc);
+                      fallbackWin.document.close();
+                      fallbackWin.focus();
+                      setTimeout(() => fallbackWin.print(), 300);
+                      fallbackWin.onafterprint = () => { try { fallbackWin.close(); } catch(e){} };
+                    }
+                  }
+                }, 200);
+              } catch (e) {
+                console.error('Print initialization error:', e);
+              }
             }}
             className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+            title="បោះពុម្ពស្លាក Barcode ភ្លាមៗ (មិនគាំង មិនបាច់បើកផ្ទាំងច្រើន)"
           >
             <span>🖨️</span>
             <span>បោះពុម្ពស្លាកឥឡូវនេះ ({barcodePrintQty})</span>
