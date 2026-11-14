@@ -2856,6 +2856,8 @@ export default function UnifiedAdminDashboard() {
   const [sellingPrice, setSellingPrice] = useState('');
   const [retailDiscount, setRetailDiscount] = useState('');
   const [lowStockAlert, setLowStockAlert] = useState('5');
+  const [bulkVariantStockInput, setBulkVariantStockInput] = useState('');
+  const [showWholesaleSection, setShowWholesaleSection] = useState(false);
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [productImages, setProductImages] = useState([]);
@@ -3295,243 +3297,668 @@ export default function UnifiedAdminDashboard() {
   const handleColorDragEnd = () => { setDraggedColorIndex(null); };
   
 
-  // ⭐ ផ្ទាំង UploadView (រចនាស្ដង់ដារដូចគ្នា 100% សម្រាប់ទាំង Upload និង Edit) ⭐️
-  const UploadView = () => (
-    <div className="animate-in fade-in max-w-4xl mx-auto bg-white p-10 rounded-3xl shadow-xl border border-gray-100 mb-10">
-      <div className="mb-8 border-b border-gray-100 pb-4 flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-black text-gray-900">
-            {editingProductId ? '✏️ កែប្រែព័ត៌មានទំនិញក្នុងស្តុក (Edit Product)' : '📤 បញ្ចូលទំនិញថ្មីចូលស្តុក (Customizable Setup)'}
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            {editingProductId ? 'កំពុងកែប្រែទំនិញដែលមានស្រាប់ក្នុងប្រព័ន្ធ' : 'អាចបន្ថែម និងលុប Size ឬ Color បានដោយសេរី រក្សាទុកស្វ័យប្រវត្តិមិនបាត់ពេល Refresh'}
-          </p>
-        </div>
-        {editingProductId && (
-          <span className="bg-orange-100 text-orange-700 font-black text-xs px-4 py-2 rounded-xl border border-orange-200">
-             đang Mode Edit
-          </span>
-        )}
-      </div>
+  // ⭐ ផ្ទាំង UploadView កម្រិតស្តង់ដារអន្តរជាតិ (MODERN E-COMMERCE PRODUCT STUDIO) ⭐️
+  const UploadView = () => {
+    // ⭐️ គណនាតម្លៃ និងប្រាក់ចំណេញផ្ទាល់ (Instant Profit & Margin Analyzer) ⭐️
+    const numCost = parseFloat(costPrice) || 0;
+    const numRetail = parseFloat(sellingPrice) || 0;
+    const numDiscount = parseFloat(retailDiscount) || 0;
+    const finalRetail = Math.max(0, numRetail - numDiscount);
+    const unitProfit = finalRetail - numCost;
+    const profitMarginPct = finalRetail > 0 ? (unitProfit / finalRetail) * 100 : 0;
+    const markupPct = numCost > 0 ? (unitProfit / numCost) * 100 : 0;
 
-      {/* ⭐️ FLOATING TOAST ALERT (ជាប់អេក្រង់ជានិច្ច មិនបាច់រមូរឡើងលើ) ⭐️ */}
-      {message && (
-        <div className="fixed top-8 right-8 z-[9999] max-w-md animate-in slide-in-from-top-4 fade-in duration-300">
-          <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-2xl backdrop-blur-md border-2 ${
-            message.includes('ជោគជ័យ') || message.includes('✅') || message.includes('🎉')
-              ? 'bg-emerald-950/90 text-white border-emerald-500/80 shadow-emerald-500/20'
-              : 'bg-rose-950/90 text-white border-rose-500/80 shadow-rose-500/20'
-          }`}>
-            <span className="text-2xl shrink-0">
-              {message.includes('ជោគជ័យ') || message.includes('✅') || message.includes('🎉') ? '🎉' : '⚠️'}
-            </span>
-            <div className="flex-1">
-              <p className="text-sm font-black tracking-wide leading-snug">{message}</p>
-              <p className="text-[10px] text-white/70 mt-0.5">ព័ត៌មានត្រូវបានកត់ត្រាចូលប្រព័ន្ធដោយជោគជ័យ</p>
+    // ⭐️ គណនា Variant Matrix (Size x Color Combinations) ⭐️
+    const activeColors = selectedColors.length > 0 
+      ? selectedColors 
+      : (color ? color.split(',').map(c => c.trim()).filter(Boolean) : []);
+
+    let variantMatrix = [];
+    if (selectedSizes.length > 0 && activeColors.length > 0) {
+      selectedSizes.forEach(sz => {
+        activeColors.forEach(col => {
+          variantMatrix.push({
+            key: `${sz}__${col}`,
+            label: `Size ${sz} + ${col}`,
+            sublabel: col,
+            badge: `Size ${sz}`,
+            size: sz,
+            color: col
+          });
+        });
+      });
+    } else if (selectedSizes.length > 0) {
+      selectedSizes.forEach(sz => {
+        variantMatrix.push({
+          key: sz,
+          label: `Size ${sz}`,
+          badge: `Size ${sz}`,
+          size: sz,
+          color: ''
+        });
+      });
+    } else if (activeColors.length > 0) {
+      activeColors.forEach(col => {
+        variantMatrix.push({
+          key: col,
+          label: `ពណ៌ ${col}`,
+          badge: col,
+          size: 'Free Size',
+          color: col
+        });
+      });
+    }
+
+    const visibleMatrix = variantMatrix.filter(item => !disabledVariants.includes(item.key));
+    const matrixTotal = visibleMatrix.reduce((sum, item) => sum + (parseInt(variantStock[item.key]) || 0), 0);
+    const hasMatrixActive = variantMatrix.length > 0;
+
+    // ⚡ មុខងារកំណត់ស្តុកស្មើគ្នាទាំងអស់ (Bulk Stock Fill)
+    const handleApplyBulkVariantStock = () => {
+      const numVal = parseInt(bulkVariantStockInput, 10);
+      if (isNaN(numVal) || numVal < 0) {
+        alert('សូមបញ្ចូលចំនួនស្តុកជាលេខវិជ្ជមាន (ឧ. 10)!');
+        return;
+      }
+      const updated = {};
+      visibleMatrix.forEach(item => {
+        updated[item.key] = numVal.toString();
+      });
+      setVariantStock(prev => ({ ...prev, ...updated }));
+      const newTotal = visibleMatrix.length * numVal;
+      setStockQty(newTotal.toString());
+      setBulkVariantStockInput('');
+    };
+
+    // ⚡ មុខងាររើស Size តាម Preset
+    const applySizePreset = (type) => {
+      if (type === 'men') {
+        const menSizes = ['39', '40', '41', '42', '43', '44', '45'];
+        setSelectedSizes(menSizes);
+      } else if (type === 'women') {
+        const womenSizes = ['35', '36', '37', '38', '39', '40'];
+        setSelectedSizes(womenSizes);
+      } else if (type === 'all') {
+        setSelectedSizes([...availableSizes]);
+      } else if (type === 'none') {
+        setSelectedSizes([]);
+      }
+    };
+
+    // ⚡ មុខងារ Auto-Generate SKU
+    const handleAutoGenerateSku = () => {
+      const nextSku = computeNextSku(products);
+      setSku(nextSku);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sabay_current_sku', nextSku);
+        localStorage.setItem('sabay_last_saved_sku', nextSku);
+      }
+    };
+
+    // ⚡ មុខងារ Reset Form
+    const handleResetProductForm = () => {
+      if (window.confirm('តើអ្នកពិតជាចង់សម្អាតទិន្នន័យ Form នេះមែនទេ?')) {
+        setEditingProductId(null);
+        setName('');
+        const nextSkuVal = computeNextSku(products);
+        setSku(nextSkuVal);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('sabay_current_sku', nextSkuVal);
+          localStorage.setItem('sabay_last_saved_sku', nextSkuVal);
+          localStorage.removeItem('sabay_product_draft');
+        }
+        setSellingPrice('');
+        setCostPrice('');
+        setWholesalePrice('');
+        setWholesaleDiscount('');
+        setRetailDiscount('');
+        setStockQty('10');
+        setLowStockAlert('5');
+        setColor('');
+        setSelectedSizes([]);
+        setSelectedColors([]);
+        setVariantStock({});
+        setDisabledVariants([]);
+        setPreviewUrl(null);
+        setFile(null);
+        setProductImages([]);
+        setSelectedCoverIndex(0);
+      }
+    };
+
+    // Color Swatch Helper
+    const getColorDotClass = (colName) => {
+      const lower = (colName || '').toLowerCase();
+      if (lower.includes('ខ្មៅ') || lower.includes('black')) return 'bg-slate-950 border-slate-700';
+      if (lower.includes('សូកូឡា') || lower.includes('chocolate')) return 'bg-amber-950 border-amber-800';
+      if (lower.includes('ស') || lower.includes('white')) return 'bg-white border-gray-300';
+      if (lower.includes('ប្រផេះ') || lower.includes('grey') || lower.includes('gray')) return 'bg-slate-400 border-slate-500';
+      if (lower.includes('ត្នោត') || lower.includes('brown')) return 'bg-amber-800 border-amber-900';
+      if (lower.includes('ខៀវ') || lower.includes('blue')) return 'bg-blue-600 border-blue-700';
+      if (lower.includes('ក្រហម') || lower.includes('red')) return 'bg-rose-600 border-rose-700';
+      if (lower.includes('បៃតង') || lower.includes('green')) return 'bg-emerald-600 border-emerald-700';
+      if (lower.includes('លឿង') || lower.includes('yellow')) return 'bg-amber-400 border-amber-500';
+      if (lower.includes('ទឹកក្រូច') || lower.includes('orange')) return 'bg-orange-500 border-orange-600';
+      if (lower.includes('ស្វាយ') || lower.includes('purple')) return 'bg-purple-600 border-purple-700';
+      if (lower.includes('ផ្កាឈូក') || lower.includes('pink')) return 'bg-pink-500 border-pink-600';
+      return 'bg-gradient-to-tr from-slate-400 to-slate-600 border-slate-500';
+    };
+
+    return (
+      <div className="animate-in fade-in max-w-7xl mx-auto space-y-6 pb-20">
+        
+        {/* ⭐️ ផ្នែក Breadcrumb & Header ខាងលើ ⭐️ */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+              <span className="hover:text-slate-600 cursor-pointer" onClick={() => setActiveTab('inventory')}>📦 ស្តុកទំនិញ (Inventory)</span>
+              <span>/</span>
+              <span className="text-slate-700">{editingProductId ? '✏️ កែប្រែទំនិញ' : '✨ បញ្ចូលទំនិញថ្មី'}</span>
             </div>
-            <button 
-              type="button" 
-              onClick={() => setMessage('')} 
-              className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-xs font-bold transition shrink-0"
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span>{editingProductId ? '✏️ កែប្រែព័ត៌មានទំនិញ' : '📤 បញ្ចូលទំនិញថ្មីចូលស្តុក'}</span>
+              </h2>
+              {editingProductId ? (
+                <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-800 font-black text-xs px-3 py-1.5 rounded-xl border border-amber-200 shadow-2xs">
+                  <span>✏️</span> កំពុងកែប្រែកូដ: <b className="font-mono text-amber-950 font-black">{sku || 'N/A'}</b>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 font-black text-xs px-3 py-1.5 rounded-xl border border-blue-200">
+                  <span>✨</span> ទម្រង់បញ្ចូលទំនិញស្តង់ដារ
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">
+              {editingProductId 
+                ? 'កែប្រែព័ត៌មានទំនិញ តម្លៃ ស្តុកតាមទំហំ/ពណ៌ និងរូបភាព រួចចុច «រក្សាទុកការកែប្រែ»' 
+                : 'បញ្ចូលព័ត៌មានទំនិញថ្មី កំណត់ទំហំ ពណ៌ រូបភាព និងបែងចែកស្តុកស្វ័យប្រវត្តិ'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('inventory')}
+              className="px-4 py-2.5 rounded-2xl border-2 border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-black transition flex items-center gap-2 cursor-pointer shadow-2xs"
             >
-              ✕
+              <span>←</span>
+              <span>ត្រឡប់ទៅស្តុក</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleResetProductForm}
+              className="px-4 py-2.5 rounded-2xl border-2 border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="សម្អាតទិន្នន័យ Form ទាំងមូល"
+            >
+              <span>🔄</span>
+              <span>{editingProductId ? 'បោះបង់ការកែប្រែ' : 'សម្អាត Form'}</span>
             </button>
           </div>
         </div>
-      )}
 
-      <form onSubmit={handleSaveProduct} className="space-y-8">
-        
-        {/* ១. ព័ត៌មានមូលដ្ឋាន */}
-        <div>
-          <h3 className="text-base font-black text-gray-800 mb-4 flex items-center gap-2">📦 ១. ព័ត៌មានមូលដ្ឋាន (Basic Information)</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-gray-600 uppercase mb-2">ឈ្មោះទំនិញ (Product Name) *</label>
-              <input 
-                type="text" 
-                value={name} 
-                onChange={(e) => setName(e.target.value)} 
-                placeholder="ឧ. ស្បែកជើង ឬកាបូបប្រេនស្អាត" 
-                required 
-                className="w-full border-2 border-gray-200 p-3.5 rounded-2xl text-sm font-medium focus:border-blue-500 outline-none transition bg-white" 
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase mb-2">លេខកូដ SKU / បាកូដ</label>
-              <input 
-                type="text" 
-                value={sku} 
-                onChange={(e) => {
-                  setSku(e.target.value);
-                  if (typeof window !== 'undefined') {
-                    localStorage.setItem('sabay_current_sku', e.target.value);
-                    localStorage.setItem('sabay_last_saved_sku', e.target.value);
-                  }
-                }} 
-                placeholder="SL-XXXX" 
-                className="w-full border-2 border-gray-200 p-3.5 rounded-2xl text-sm font-bold bg-gray-50 focus:border-blue-500 outline-none transition" 
-              />
-            </div>
-            <div className="md:col-span-3">
-              <label className="block text-xs font-bold text-gray-600 uppercase mb-2">ប្រភេទផលិតផល (Category)</label>
-              <select 
-                value={category} 
-                onChange={(e) => setCategory(e.target.value)} 
-                className="w-full border-2 border-gray-200 p-3.5 rounded-2xl text-sm font-bold bg-white focus:border-blue-500 outline-none transition"
+        {/* ⭐️ FLOATING TOAST ALERT ⭐️ */}
+        {message && (
+          <div className="fixed top-8 right-8 z-[9999] max-w-md animate-in slide-in-from-top-4 fade-in duration-300">
+            <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-2xl backdrop-blur-md border-2 ${
+              message.includes('ជោគជ័យ') || message.includes('✅') || message.includes('🎉')
+                ? 'bg-emerald-950/90 text-white border-emerald-500/80 shadow-emerald-500/20'
+                : 'bg-rose-950/90 text-white border-rose-500/80 shadow-rose-500/20'
+            }`}>
+              <span className="text-2xl shrink-0">
+                {message.includes('ជោគជ័យ') || message.includes('✅') || message.includes('🎉') ? '🎉' : '⚠️'}
+              </span>
+              <div className="flex-1">
+                <p className="text-sm font-black tracking-wide leading-snug">{message}</p>
+                <p className="text-[10px] text-white/70 mt-0.5">ព័ត៌មានត្រូវបានកត់ត្រាចូលប្រព័ន្ធដោយជោគជ័យ</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setMessage('')} 
+                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-xs font-bold transition shrink-0"
               >
-                {categories.length === 0 ? (
-                  <option value="ស្បែកជើង">ស្បែកជើង (Shoes)</option>
-                ) : (
-                  categories.map(c => <option key={c.id || c.name} value={c.name}>{c.name}</option>)
-                )}
-              </select>
+                ✕
+              </button>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* ២. ទំហំ និងពណ៌ */}
-        <div>
-          <h3 className="text-base font-black text-gray-800 mb-4 flex items-center gap-2">🎨 ២. ទំហំ និងពណ៌ (Size & Color Attributes)</h3>
+        <form onSubmit={handleSaveProduct} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          <div className="space-y-6 bg-gray-50 p-6 rounded-3xl border border-gray-200">
-            
-            {category.includes('ស្បែកជើង') ? (
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-2">ទំហំស្បែកជើង (អូសដើម្បីប្ដូរទីតាំង / យក Mouse ထားលើដើម្បីលុប)</label>
-                <div className="flex flex-wrap gap-2.5 mb-3">
-                  {availableSizes.map((sz, idx) => (
-                    <div 
-                      key={sz} 
-                      draggable
-                      onDragStart={() => handleSizeDragStart(idx)}
-                      onDragOver={(e) => handleSizeDragOver(e, idx)}
-                      onDragEnd={handleSizeDragEnd}
-                      className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleSize(sz)}
-                        className={`px-3.5 py-2.5 rounded-xl font-bold text-xs transition-all border-2 flex items-center gap-1.5 ${
-                          selectedSizes.includes(sz)
-                            ? 'bg-[#ff6a00] text-white border-[#ff6a00] shadow-md scale-105'
-                            : 'bg-white text-gray-700 border-gray-200 hover:border-gray-400'
-                        }`}
-                      >
-                        <span>{sz}</span>
-                      </button>
-                      
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`តើអ្នកពិតជាចង់លុបទំហំ [${sz}] នេះមែនទេ?`)) {
-                            setAvailableSizes(availableSizes.filter(s => s !== sz));
-                            setSelectedSizes(selectedSizes.filter(s => s !== sz));
-                          }
-                        }}
-                        className="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
-                        title="លុប Size នេះ"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
+          {/* ======================================================== */}
+          {/* 👈 ផ្នែកខាងឆ្វេង: ព័ត៌មានផលិតផលចម្បង (8 COLUMNS)           */}
+          {/* ======================================================== */}
+          <div className="lg:col-span-8 space-y-6">
 
-                <div className="flex gap-2 max-w-xs mt-3">
+            {/* ១. ព័ត៌មានទូទៅ (Basic Info) */}
+            <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-slate-100 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-orange-50 text-[#ff6a00] flex items-center justify-center text-base font-black">📦</span>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">១. ព័ត៌មានទូទៅ (General Information)</h3>
+                    <p className="text-[11px] text-slate-400">ឈ្មោះទំនិញ ប្រភេទ និងលេខកូដសម្គាល់ SKU</p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-bold text-rose-500 bg-rose-50 px-2.5 py-1 rounded-xl border border-rose-100">
+                  * ចាំបាច់ (Required)
+                </span>
+              </div>
+
+              <div className="space-y-4">
+                {/* ឈ្មោះទំនិញ */}
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                      ឈ្មោះទំនិញ (Product Name) <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[11px] text-slate-400 font-bold">
+                      {name.length > 0 ? `${name.length} អក្សរ` : 'សូមបំពេញឈ្មោះឱ្យបានច្បាស់'}
+                    </span>
+                  </div>
                   <input 
                     type="text" 
-                    value={newSizeInput}
-                    onChange={(e) => setNewSizeInput(e.target.value)}
-                    placeholder="បន្ថែមទំហំថ្មី (ឧ. 49)" 
-                    className="flex-1 border border-gray-300 px-3 py-2 rounded-xl text-xs bg-white outline-none focus:border-orange-500"
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    placeholder="ឧ. ស្បែកជើងប៉ាតា Sneaker Air Pro Max 2026" 
+                    required 
+                    className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-4 rounded-2xl text-sm font-bold text-slate-800 placeholder-slate-400 outline-none transition bg-slate-50/50 focus:bg-white focus:shadow-md focus:shadow-orange-500/10" 
                   />
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      if (newSizeInput.trim() && !availableSizes.includes(newSizeInput.trim())) {
-                        setAvailableSizes([...availableSizes, newSizeInput.trim()]);
-                        setSelectedSizes([...selectedSizes, newSizeInput.trim()]);
-                        setNewSizeInput('');
-                      }
-                    }}
-                    className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition"
-                  >
-                    + បន្ថែម Size
-                  </button>
                 </div>
-                <p className="text-[11px] text-gray-400 mt-2">ទំហំដែលបានរើសរួច: <span className="font-bold text-[#ff6a00]">{selectedSizes.join(', ') || 'មិនទាន់រើស'}</span></p>
-              </div>
-            ) : category.includes('សម្លៀកបំពាក់') || category.includes('ខោអាវ') ? (
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-2">ទំហំសម្លៀកបំពាក់ (Clothing Size)</label>
-                <input 
-                  type="text" 
-                  value={customTextSize}
-                  onChange={(e) => setCustomTextSize(e.target.value)}
-                  placeholder="ឧ. S, M, L, XL, XXL ឬ Free Size" 
-                  className="w-full border-2 border-gray-200 p-3.5 rounded-2xl text-sm font-medium bg-white focus:border-blue-500 outline-none transition" 
-                />
-              </div>
-            ) : (
-              <div className="p-4 bg-blue-50 rounded-2xl text-blue-700 text-xs font-bold">
-                ℹ️ មុខទំនិញប្រភេទ "{category}" នេះ មិនចាំបាច់កំណត់ទំហំ (Size) ទេ។
-              </div>
-            )}
 
-            {/* រើសពណ៌ */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-2">ពណ៌ផលិតផល (អូសដើម្បីប្ដូរទីតាំង / យក Mouse ထားលើដើម្បីលុប)</label>
-              <div className="flex flex-wrap gap-2.5 mb-3">
-                {availableColors.map((col, idx) => (
-                  <div 
-                    key={col} 
-                    draggable
-                    onDragStart={() => handleColorDragStart(idx)}
-                    onDragOver={(e) => handleColorDragOver(e, idx)}
-                    onDragEnd={handleColorDragEnd}
-                    className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
-                  >
+                {/* ប្រភេទ & SKU Barcode */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                      ប្រភេទផលិតផល (Category) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <select 
+                        value={category} 
+                        onChange={(e) => setCategory(e.target.value)} 
+                        className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-3.5 rounded-2xl text-sm font-bold bg-slate-50/50 focus:bg-white outline-none transition text-slate-800 appearance-none pr-10"
+                      >
+                        {categories.length === 0 ? (
+                          <option value="ស្បែកជើង">ស្បែកជើង (Shoes)</option>
+                        ) : (
+                          categories.map(c => <option key={c.id || c.name} value={c.name}>{c.name}</option>)
+                        )}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400 font-black">
+                        ▼
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                        លេខកូដ SKU / បាកូដ
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAutoGenerateSku}
+                        className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer hover:underline"
+                        title="បង្កើតលេខកូដបន្តស្វ័យប្រវត្តិ"
+                      >
+                        <span>⚡</span>
+                        <span>បង្កើតកូដបន្ទាប់</span>
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={sku} 
+                        onChange={(e) => {
+                          setSku(e.target.value);
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem('sabay_current_sku', e.target.value);
+                            localStorage.setItem('sabay_last_saved_sku', e.target.value);
+                          }
+                        }} 
+                        placeholder="SL-XXXX" 
+                        className="w-full border-2 border-slate-200 focus:border-blue-500 p-3.5 rounded-2xl text-sm font-mono font-black text-slate-800 bg-slate-50/50 focus:bg-white outline-none transition" 
+                      />
+                      <span className="absolute right-3.5 top-3.5 text-xs text-slate-400 font-mono">
+                        🏷️ Barcode
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Category Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-slate-400 mr-1">រើសប្រភេទរហ័ស:</span>
+                  {['ស្បែកជើង', 'សម្លៀកបំពាក់', 'កាបូប', 'នាឡិកា', 'ខ្សែក្រវ៉ាត់', 'វ៉ែនតា', 'មួក'].map(catPreset => (
                     <button
+                      key={catPreset}
                       type="button"
-                      onClick={() => toggleColor(col)}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold border-2 transition-all flex items-center gap-1.5 ${
-                        selectedColors.includes(col) || color === col
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-md ring-2 ring-blue-400/40 scale-102'
-                          : 'bg-white text-gray-700 border-gray-200 hover:border-gray-400'
+                      onClick={() => setCategory(catPreset)}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
+                        category === catPreset 
+                          ? 'bg-slate-900 text-white shadow-2xs' 
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      {(selectedColors.includes(col) || color === col) && <span className="text-emerald-400 font-black">✓</span>}
-                      <span>{col}</span>
+                      {catPreset}
                     </button>
-                    
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm(`តើអ្នកពិតជាចង់លុបពណ៌ [${col}] នេះមែនទេ?`)) {
-                          setAvailableColors(availableColors.filter(c => c !== col));
-                          if (color === col) setColor('');
-                        }
-                      }}
-                      className="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
-                      title="លុប Color នេះ"
-                    >
-                      ✕
-                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ២. រូបភាពផលិតផលច្រើនសន្លឹក (Multi-Image Gallery) */}
+            <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-slate-100 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-base font-black">📸</span>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">២. វិចិត្រសាលរូបភាព (Media Gallery)</h3>
+                    <p className="text-[11px] text-slate-400">រូបភាពទំនិញច្បាស់ៗជួយទាក់ទាញភ្ញៀវឱ្យទិញកាន់តែច្រើន</p>
                   </div>
-                ))}
+                </div>
+                <span className="text-xs font-black text-slate-700 bg-slate-100 px-3 py-1 rounded-xl">
+                  {productImages.length} សន្លឹក
+                </span>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3">
-                <div className="flex gap-2 max-w-sm">
+              {/* Upload Dropzone */}
+              <label className="border-2 border-dashed border-blue-200 hover:border-[#ff6a00] bg-blue-50/30 hover:bg-orange-50/20 rounded-3xl p-7 flex flex-col items-center justify-center cursor-pointer transition text-center group space-y-2">
+                <input 
+                  type="file" 
+                  multiple 
+                  accept="image/*" 
+                  onChange={handleImageChange} 
+                  className="hidden" 
+                />
+                <div className="w-14 h-14 bg-white group-hover:bg-[#ff6a00] text-blue-600 group-hover:text-white rounded-2xl flex items-center justify-center text-2xl shadow-sm transition transform group-hover:scale-110">
+                  📸
+                </div>
+                <div>
+                  <p className="font-black text-sm text-slate-800 group-hover:text-[#ff6a00] transition">
+                    ចុច ឬទម្លាក់រូបភាពនៅទីនេះ (ជ្រើសរើសបានច្រើនសន្លឹកក្នុងពេលតែមួយ)
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    គាំទ្រទម្រង់ JPG, PNG, WEBP (រូបខាងមុខ ចំហៀង បាត ឬពេលពាក់ជាក់ស្តែង)
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1 rounded-xl text-[11px] font-black border border-emerald-200 mt-1">
+                  <span>⚡ Smart Image Optimizer:</span>
+                  <span className="font-normal text-emerald-800">បង្រួមទំហំរូបស្វ័យប្រវត្តិតាម Canvas ឱ្យ Upload លឿន & ច្បាស់ HD</span>
+                </div>
+              </label>
+
+              {/* Gallery Grid */}
+              {productImages.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                    <span className="flex items-center gap-1.5">
+                      <span>✨</span>
+                      <span>ចុច <b className="text-[#ff6a00]">«ដាក់ជារូបចម្បង»</b> ដើម្បីបង្ហាញជារូបគម្របខាងមុខគេលើ Storefront & POS</span>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
+                    {productImages.map((img, idx) => {
+                      const isCover = idx === selectedCoverIndex;
+                      return (
+                        <div 
+                          key={img.id || idx}
+                          className={`relative group bg-slate-50 rounded-2xl border-2 overflow-hidden shadow-2xs transition-all ${
+                            isCover 
+                              ? 'border-[#ff6a00] ring-4 ring-orange-400/20 scale-[1.02]' 
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="aspect-square bg-slate-100 flex items-center justify-center overflow-hidden">
+                            <img src={img.url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
+                          </div>
+
+                          {/* Top Controls */}
+                          <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-auto">
+                            {isCover ? (
+                              <span className="bg-[#ff6a00] text-white text-[10px] font-black px-2 py-0.5 rounded-lg shadow-sm flex items-center gap-1">
+                                <span>⭐</span> ចម្បង
+                              </span>
+                            ) : (
+                              <span className="bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-lg backdrop-blur-xs">
+                                #{idx + 1}
+                              </span>
+                            )}
+
+                            <button 
+                              type="button"
+                              onClick={() => handleRemoveProductImage(idx)}
+                              className="w-6 h-6 bg-rose-600 hover:bg-rose-700 text-white rounded-full flex items-center justify-center text-xs font-black shadow-sm transition active:scale-90"
+                              title="លុបរូបនេះចេញ"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          {/* Bottom Action: Set as Cover */}
+                          {!isCover && (
+                            <button
+                              type="button"
+                              onClick={() => handleSetCoverImage(idx)}
+                              className="w-full bg-slate-900/90 hover:bg-[#ff6a00] text-white text-[11px] font-bold py-1.5 text-center transition flex items-center justify-center gap-1"
+                            >
+                              <span>⭐</span> ដាក់ជារូបចម្បង
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ៣. ជម្រើសទំហំ និងពណ៌ (Size & Color Attributes) */}
+            <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-slate-100 space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-base font-black">🎨</span>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">៣. ជម្រើសទំហំ និងពណ៌ (Size & Color Attributes)</h3>
+                    <p className="text-[11px] text-slate-400">ជ្រើសរើសទំហំ និងពណ៌ដើម្បីបង្កើតតារាងស្តុកស្វ័យប្រវត្តិ</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* ផ្នែកទំហំ (Size) */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                    ទំហំផលិតផល (Product Sizes)
+                  </label>
+                  {/* Preset Buttons */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400">ជ្រើសរើសរហ័ស:</span>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset('men')}
+                      className="px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-bold transition border border-blue-100"
+                    >
+                      👟 39-45 (ប្រុស)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset('women')}
+                      className="px-2.5 py-1 rounded-xl bg-pink-50 text-pink-700 hover:bg-pink-100 text-[11px] font-bold transition border border-pink-100"
+                    >
+                      👠 35-40 (ស្រី)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset('all')}
+                      className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition"
+                    >
+                      ✓ ទាំងអស់
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset('none')}
+                      className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-rose-600 text-[11px] font-bold transition"
+                    >
+                      ✕ ដោះចេញ
+                    </button>
+                  </div>
+                </div>
+
+                {category.includes('ស្បែកជើង') ? (
+                  <div>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {availableSizes.map((sz, idx) => {
+                        const isSelected = selectedSizes.includes(sz);
+                        return (
+                          <div 
+                            key={sz} 
+                            draggable
+                            onDragStart={() => handleSizeDragStart(idx)}
+                            onDragOver={(e) => handleSizeDragOver(e, idx)}
+                            onDragEnd={handleSizeDragEnd}
+                            className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => toggleSize(sz)}
+                              className={`px-3.5 py-2.5 rounded-2xl font-black text-xs transition-all border-2 flex items-center gap-1.5 shadow-2xs ${
+                                isSelected
+                                  ? 'bg-[#ff6a00] text-white border-[#ff6a00] shadow-md shadow-orange-500/20 scale-105'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              {isSelected && <span>✓</span>}
+                              <span>{sz}</span>
+                            </button>
+                            
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`តើអ្នកពិតជាចង់លុបទំហំ [${sz}] នេះមែនទេ?`)) {
+                                  setAvailableSizes(availableSizes.filter(s => s !== sz));
+                                  setSelectedSizes(selectedSizes.filter(s => s !== sz));
+                                }
+                              }}
+                              className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-xs opacity-0 group-hover:opacity-100 transition duration-200 z-10"
+                              title="លុបទំហំនេះ"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Inline Add Size */}
+                    <div className="flex items-center gap-2 max-w-sm">
+                      <input 
+                        type="text" 
+                        value={newSizeInput}
+                        onChange={(e) => setNewSizeInput(e.target.value)}
+                        placeholder="បន្ថែម Size ថ្មី (ឧ. 49)" 
+                        className="flex-1 border-2 border-slate-200 focus:border-[#ff6a00] px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-50 focus:bg-white outline-none"
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          if (newSizeInput.trim() && !availableSizes.includes(newSizeInput.trim())) {
+                            setAvailableSizes([...availableSizes, newSizeInput.trim()]);
+                            setSelectedSizes([...selectedSizes, newSizeInput.trim()]);
+                            setNewSizeInput('');
+                          }
+                        }}
+                        className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black transition shrink-0"
+                      >
+                        + បន្ថែម Size
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-2 text-xs">
+                      <span className="text-slate-400 font-bold">ទំហំបានជ្រើសរើស ({selectedSizes.length}):</span>
+                      <span className="font-black text-[#ff6a00] bg-orange-50 px-2.5 py-0.5 rounded-lg border border-orange-100">
+                        {selectedSizes.join(', ') || 'មិនទាន់ជ្រើសរើស'}
+                      </span>
+                    </div>
+                  </div>
+                ) : category.includes('សម្លៀកបំពាក់') || category.includes('ខោអាវ') ? (
+                  <div>
+                    <input 
+                      type="text" 
+                      value={customTextSize}
+                      onChange={(e) => setCustomTextSize(e.target.value)}
+                      placeholder="ឧ. S, M, L, XL, XXL ឬ Free Size" 
+                      className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-3.5 rounded-2xl text-sm font-bold bg-slate-50 focus:bg-white outline-none transition" 
+                    />
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-blue-50 rounded-2xl text-blue-700 text-xs font-bold border border-blue-100 flex items-center gap-2">
+                    <span>ℹ️</span>
+                    <span>មុខទំនិញប្រភេទ «{category}» នេះ មិនចាំបាច់កំណត់ទំហំ (Size) ទេ ឬអាចប្រើទំហំទូទៅ។</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-slate-100 pt-5 space-y-3">
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                  ពណ៌ផលិតផល (Colors) - រើសបានច្រើន
+                </label>
+
+                <div className="flex flex-wrap gap-2.5 mb-3">
+                  {availableColors.map((col, idx) => {
+                    const isSelected = selectedColors.includes(col) || color === col;
+                    return (
+                      <div 
+                        key={col} 
+                        draggable
+                        onDragStart={() => handleColorDragStart(idx)}
+                        onDragOver={(e) => handleColorDragOver(e, idx)}
+                        onDragEnd={handleColorDragEnd}
+                        className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleColor(col)}
+                          className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold border-2 transition-all flex items-center gap-2 shadow-2xs ${
+                            isSelected
+                              ? 'bg-slate-900 text-white border-slate-900 shadow-md scale-105'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className={`w-3.5 h-3.5 rounded-full border ${getColorDotClass(col)}`}></span>
+                          <span>{col}</span>
+                          {isSelected && <span className="text-emerald-400 font-black ml-0.5">✓</span>}
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`តើអ្នកពិតជាចង់លុបពណ៌ [${col}] នេះមែនទេ?`)) {
+                              setAvailableColors(availableColors.filter(c => c !== col));
+                              if (color === col) setColor('');
+                            }
+                          }}
+                          className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-xs opacity-0 group-hover:opacity-100 transition duration-200 z-10"
+                          title="លុប Color នេះ"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Inline Add Color */}
+                <div className="flex items-center gap-2 max-w-sm">
                   <input 
                     type="text" 
                     value={newColorInput}
                     onChange={(e) => setNewColorInput(e.target.value)}
                     placeholder="បន្ថែមពណ៌ថ្មី (ឧ. ទឹកក្រូច)" 
-                    className="flex-1 border border-gray-300 px-3 py-2 rounded-xl text-xs bg-white outline-none focus:border-slate-900"
+                    className="flex-1 border-2 border-slate-200 focus:border-slate-900 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-50 focus:bg-white outline-none"
                   />
                   <button 
                     type="button"
@@ -3543,115 +3970,90 @@ export default function UnifiedAdminDashboard() {
                         setNewColorInput('');
                       }
                     }}
-                    className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition"
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black transition shrink-0"
                   >
                     + បន្ថែម Color
                   </button>
                 </div>
 
                 {selectedColors.length > 0 && (
-                  <div className="text-xs font-bold text-slate-700 bg-white px-3 py-1.5 rounded-xl border border-gray-200">
-                    ពណ៌បានជ្រើសរើស ({selectedColors.length}): <span className="text-[#ff6a00] font-black">{selectedColors.join(', ')}</span>
+                  <div className="flex items-center gap-2 mt-2 text-xs">
+                    <span className="text-slate-400 font-bold">ពណ៌បានជ្រើសរើស ({selectedColors.length}):</span>
+                    <span className="font-black text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+                      {selectedColors.join(', ')}
+                    </span>
                   </div>
                 )}
               </div>
             </div>
 
-          </div>
-        </div>
-
-        {/* ៣. ស្តុក និងតម្លៃ */}
-        <div>
-          <h3 className="text-base font-black text-gray-800 mb-4 flex items-center gap-2">💰 ៣. ស្តុក និងតម្លៃ (Stock & Pricing)</h3>
-          
-          {/* ⭐️ កំណត់ចំនួនស្តុកដាច់ដោយឡែកតាម SIZE & COLOR (VARIANT MATRIX) ⭐️ */}
-          {(() => {
-            // បង្កើតបញ្ជីជម្រើសបន្សំ (Combinations of Size x Color)
-            let variantMatrix = [];
-            const activeColors = selectedColors.length > 0 ? selectedColors : (color ? [color] : []);
-
-            if (selectedSizes.length > 0 && activeColors.length > 0) {
-              selectedSizes.forEach(sz => {
-                activeColors.forEach(col => {
-                  variantMatrix.push({
-                    key: `${sz}__${col}`,
-                    label: `Size ${sz} + ${col}`,
-                    sublabel: col,
-                    badge: `Size ${sz}`,
-                    size: sz,
-                    color: col
-                  });
-                });
-              });
-            } else if (selectedSizes.length > 0) {
-              selectedSizes.forEach(sz => {
-                variantMatrix.push({
-                  key: sz,
-                  label: `Size ${sz}`,
-                  badge: `Size ${sz}`,
-                  size: sz,
-                  color: ''
-                });
-              });
-            } else if (activeColors.length > 0) {
-              activeColors.forEach(col => {
-                variantMatrix.push({
-                  key: col,
-                  label: `ពណ៌ ${col}`,
-                  badge: col,
-                  size: 'Free Size',
-                  color: col
-                });
-              });
-            }
-
-            if (variantMatrix.length === 0) return null;
-
-            // ត្រងយកតែបន្សំដែលមិនទាន់ត្រូវបានលុបចេញ (Active Combinations)
-            const visibleMatrix = variantMatrix.filter(item => !disabledVariants.includes(item.key));
-
-            // គណនាសរុបស្តុកស្វ័យប្រវត្តិតែលើបន្សំដែលនៅសល់
-            const matrixTotal = visibleMatrix.reduce((sum, item) => sum + (parseInt(variantStock[item.key]) || 0), 0);
-
-            return (
-              <div className="mb-6 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white p-5 rounded-3xl border-2 border-blue-200/90 shadow-sm animate-in fade-in">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-blue-200/70">
+            {/* ៤. តារាងបែងចែកស្តុកតាមជម្រើស (Variant Stock Matrix) */}
+            {hasMatrixActive && (
+              <div className="bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white p-6 sm:p-7 rounded-3xl border-2 border-blue-200/90 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-200/70">
                   <div>
-                    <h4 className="text-xs font-black text-blue-900 uppercase flex items-center gap-2">
-                      <span>📦</span> កំណត់ចំនួនស្តុកតាមទំហំ & ពណ៌ដាច់ដោយឡែក (Stock per Size & Color)
+                    <h4 className="text-sm font-black text-blue-950 uppercase flex items-center gap-2">
+                      <span>📊</span> ៤. តារាងបែងចែកស្តុកតាមទំហំ & ពណ៌ (Variant Stock Matrix)
                     </h4>
-                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                      <p className="text-[11px] text-gray-500 font-bold">
-                        {selectedSizes.length > 0 && activeColors.length > 0 
-                          ? `នៅសល់ ${visibleMatrix.length} នៃ ${variantMatrix.length} ជម្រើសបន្សំ (${selectedSizes.length} Sizes × ${activeColors.length} Colors)`
-                          : `នៅសល់ ${visibleMatrix.length} នៃ ${variantMatrix.length} ជម្រើស`}
-                      </p>
-                      {disabledVariants.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDisabledVariants([]);
-                            const restoredTotal = variantMatrix.reduce((sum, itm) => sum + (parseInt(variantStock[itm.key]) || 0), 0);
-                            setStockQty(restoredTotal.toString());
-                          }}
-                          className="text-[11px] font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2 py-0.5 rounded-lg transition flex items-center gap-1 border border-red-200 cursor-pointer shadow-2xs"
-                        >
-                          <span>↺</span> ស្ដារជម្រើសដែលបានលុប (${disabledVariants.length})
-                        </button>
-                      )}
-                    </div>
+                    <p className="text-xs text-slate-500 font-bold mt-0.5">
+                      {selectedSizes.length > 0 && activeColors.length > 0 
+                        ? `សរុប ${visibleMatrix.length} នៃ ${variantMatrix.length} ជម្រើសបន្សំ (${selectedSizes.length} Sizes × ${activeColors.length} Colors)`
+                        : `សរុប ${visibleMatrix.length} នៃ ${variantMatrix.length} ជម្រើស`}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-600">ស្តុកសរុបស្វ័យប្រវត្តិ៖</span>
-                    <span className="text-xl font-black text-blue-700 bg-white px-3 py-1 rounded-xl border border-blue-200 shadow-2xs">
-                      {matrixTotal} <span className="text-xs text-gray-500">គូ/មុខ</span>
+                  <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-2xl border border-blue-200 shadow-2xs">
+                    <span className="text-xs font-bold text-slate-500">ស្តុកសរុបស្វ័យប្រវត្តិ:</span>
+                    <span className="text-lg font-black text-blue-700">
+                      {matrixTotal} <span className="text-xs font-bold text-slate-400">គូ/មុខ</span>
                     </span>
                   </div>
                 </div>
 
+                {/* ⚡ SMART BULK FILLER BAR ⚡ */}
+                <div className="bg-white/90 p-4 rounded-2xl border border-blue-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">⚡</span>
+                    <div>
+                      <p className="text-xs font-black text-slate-800">កំណត់ស្តុកស្មើគ្នាទាំងអស់ (Quick Bulk Stock)</p>
+                      <p className="text-[11px] text-slate-400">វាយចំនួនស្តុកម្តង ដាក់ស្មើគ្នាគ្រប់ Size & Color ទាំងអស់តែ១ចុច</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="number"
+                      min="0"
+                      value={bulkVariantStockInput}
+                      onChange={(e) => setBulkVariantStockInput(e.target.value)}
+                      placeholder="ឧ. 10"
+                      className="w-24 border-2 border-blue-200 focus:border-blue-500 p-2 rounded-xl text-center text-sm font-black text-blue-700 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyBulkVariantStock}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-black transition shadow-sm active:scale-95 cursor-pointer"
+                    >
+                      ⚡ ដាក់គ្រប់ទំហំ
+                    </button>
+                    {disabledVariants.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDisabledVariants([]);
+                          const restoredTotal = variantMatrix.reduce((sum, itm) => sum + (parseInt(variantStock[itm.key]) || 0), 0);
+                          setStockQty(restoredTotal.toString());
+                        }}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 px-3 py-2 rounded-xl border border-rose-200 transition"
+                      >
+                        ↺ ស្តារជម្រើស (${disabledVariants.length})
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Variant Cards Grid */}
                 {visibleMatrix.length === 0 ? (
-                  <div className="text-center py-6 bg-white/70 rounded-2xl border border-dashed border-gray-300">
-                    <p className="text-xs font-bold text-gray-400">អ្នកបានលុបជម្រើសបន្សំទាំងអស់ចេញហើយ</p>
+                  <div className="text-center py-8 bg-white/70 rounded-2xl border border-dashed border-slate-300">
+                    <p className="text-xs font-bold text-slate-400">អ្នកបានលុបជម្រើសបន្សំទាំងអស់ចេញហើយ</p>
                     <button
                       type="button"
                       onClick={() => setDisabledVariants([])}
@@ -3665,12 +4067,11 @@ export default function UnifiedAdminDashboard() {
                     {visibleMatrix.map(item => (
                       <div 
                         key={item.key} 
-                        className="relative group bg-white border-2 border-blue-100 hover:border-blue-400 rounded-2xl p-2.5 pt-3 flex flex-col items-center shadow-xs transition"
+                        className="relative group bg-white border-2 border-blue-100 hover:border-blue-400 rounded-2xl p-3 flex flex-col items-center shadow-2xs transition"
                       >
-                        {/* ប៊ូតុងលុបជម្រើសបន្សំនេះចោល */}
                         <button
                           type="button"
-                          title="លុបជម្រើសបន្សំនេះចោល (Delete combination)"
+                          title="លុបបន្សំនេះចោល (ប្រសិនគ្មានស្តុក)"
                           onClick={() => {
                             setDisabledVariants(prev => [...prev, item.key]);
                             setVariantStock(prev => {
@@ -3683,18 +4084,19 @@ export default function UnifiedAdminDashboard() {
                               return updated;
                             });
                           }}
-                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-100 hover:bg-red-600 text-red-600 hover:text-white flex items-center justify-center text-xs font-black shadow-xs transition cursor-pointer z-10 border border-red-200"
+                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white flex items-center justify-center text-xs font-black shadow-xs transition cursor-pointer z-10 border border-rose-200"
                         >
                           ✕
                         </button>
 
-                        <span className="text-[11px] font-black text-blue-950 text-center line-clamp-1 mb-0.5" title={item.label}>
+                        <span className="text-xs font-black text-slate-800 text-center line-clamp-1 mb-0.5">
                           {item.badge}
                         </span>
                         {item.sublabel && (
-                          <span className="text-[10px] text-gray-500 font-bold mb-1.5 truncate max-w-full">
-                            {item.sublabel}
-                          </span>
+                          <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold mb-2">
+                            <span className={`w-2 h-2 rounded-full ${getColorDotClass(item.sublabel)}`}></span>
+                            <span className="truncate max-w-[70px]">{item.sublabel}</span>
+                          </div>
                         )}
                         <input 
                           type="number" 
@@ -3710,115 +4112,61 @@ export default function UnifiedAdminDashboard() {
                             });
                           }}
                           placeholder="0"
-                          className="w-full text-center border-2 border-gray-100 rounded-xl p-2 text-sm font-black focus:border-[#ff6a00] outline-none text-blue-700 bg-gray-50 focus:bg-white transition"
+                          className="w-full text-center border-2 border-slate-100 focus:border-[#ff6a00] rounded-xl p-2 text-sm font-black text-blue-700 bg-slate-50 focus:bg-white outline-none transition"
                         />
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-            );
-          })()}
-          <div className="space-y-4">
-            {/* ជួរទី ១: ស្តុក & តម្លៃដើម */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {(() => {
-                const activeCols = selectedColors.length > 0 ? selectedColors : (color ? color.split(',').map(c => c.trim()).filter(Boolean) : []);
-                const hasMatrixActive = selectedSizes.length > 0 || activeCols.length > 0;
-                
-                let autoMatrixTotal = 0;
-                if (selectedSizes.length > 0 && activeCols.length > 0) {
-                  selectedSizes.forEach(sz => {
-                    activeCols.forEach(col => {
-                      const k = `${sz}__${col}`;
-                      if (!disabledVariants.includes(k)) {
-                        autoMatrixTotal += (parseInt(variantStock[k]) || 0);
-                      }
-                    });
-                  });
-                } else if (selectedSizes.length > 0) {
-                  selectedSizes.forEach(sz => {
-                    if (!disabledVariants.includes(sz)) {
-                      autoMatrixTotal += (parseInt(variantStock[sz]) || 0);
-                    }
-                  });
-                } else if (activeCols.length > 0) {
-                  activeCols.forEach(col => {
-                    if (!disabledVariants.includes(col)) {
-                      autoMatrixTotal += (parseInt(variantStock[col]) || 0);
-                    }
-                  });
-                }
+            )}
 
-                return (
+          </div>
+
+
+          {/* ======================================================== */}
+          {/* 👉 ផ្នែកខាងស្តាំ: តម្លៃ ស្តុក និង LIVE PREVIEW (4 COLUMNS)  */}
+          {/* ======================================================== */}
+          <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-24">
+
+            {/* ១. តម្លៃ និងការគណនាប្រាក់ចំណេញ (Pricing & Profit Calculator) */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-base font-black">💰</span>
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-gray-600 uppercase">
-                        ចំនួនស្តុកសរុប (Total Stock)
-                      </label>
-                      {hasMatrixActive && (
-                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                          ⚡ គណនាស្វ័យប្រវត្តិ (${autoMatrixTotal})
-                        </span>
-                      )}
-                    </div>
+                    <h3 className="text-base font-black text-slate-900">តម្លៃ និងប្រាក់ចំណេញ</h3>
+                    <p className="text-[11px] text-slate-400">Pricing & Profit Analyzer</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* Cost Price */}
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                    តម្លៃដើមទុន / ថ្លៃទិញចូល ($)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-slate-400 font-bold">$</span>
                     <input 
                       type="number" 
-                      value={hasMatrixActive ? autoMatrixTotal : stockQty} 
-                      onChange={(e) => {
-                        if (!hasMatrixActive) setStockQty(e.target.value);
-                      }} 
-                      readOnly={hasMatrixActive}
-                      min="0" 
-                      required 
-                      className={`w-full border-2 p-3.5 rounded-2xl text-sm font-bold outline-none transition shadow-2xs ${
-                        hasMatrixActive 
-                          ? 'bg-blue-50/60 border-blue-200 text-blue-900 font-black cursor-not-allowed' 
-                          : 'bg-white border-gray-200 text-gray-900 focus:border-blue-500'
-                      }`} 
+                      step="0.01" 
+                      value={costPrice} 
+                      onChange={(e) => setCostPrice(e.target.value)} 
+                      placeholder="0.00" 
+                      className="w-full border-2 border-slate-200 focus:border-blue-500 pl-8 pr-3.5 py-3 rounded-2xl text-sm font-black text-slate-800 bg-slate-50 focus:bg-white outline-none transition" 
                     />
                   </div>
-                );
-              })()}
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-2">តម្លៃដើមទុន ($) (Cost Price)</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  value={costPrice} 
-                  onChange={(e) => setCostPrice(e.target.value)} 
-                  placeholder="0.00" 
-                  className="w-full border-2 border-gray-200 p-3.5 rounded-2xl text-sm font-bold focus:border-blue-500 outline-none transition bg-white shadow-2xs" 
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-2">កម្រិតស្តុកដាស់តឿន (Low Stock Alert)</label>
-                <input 
-                  type="number" 
-                  value={lowStockAlert} 
-                  onChange={(e) => setLowStockAlert(e.target.value)} 
-                  min="1" 
-                  className="w-full border-2 border-gray-200 p-3.5 rounded-2xl text-sm font-bold text-orange-600 focus:border-blue-500 outline-none transition bg-white shadow-2xs" 
-                />
-              </div>
-            </div>
-
-            {/* ជួរទី ២: បែងចែកផ្នែក «តម្លៃលក់រាយ» និង «តម្លៃបោះដុំ» ជាមួយកន្លែងបញ្ចុះតម្លៃ */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
-              {/* 🏷️ ផ្នែកលក់រាយ (Retail Pricing & Discount) */}
-              <div className="p-4 bg-emerald-50/60 rounded-3xl border-2 border-emerald-200/80 space-y-3">
-                <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
-                  <span className="text-xs font-black text-emerald-900 flex items-center gap-1.5 uppercase">
-                    <span>🏷️</span> តម្លៃលក់រាយ (Retail Pricing)
-                  </span>
-                  <span className="text-[11px] font-bold text-emerald-700">
-                    លក់ចេញពិត: ${(Math.max(0, (parseFloat(sellingPrice) || 0) - (parseFloat(retailDiscount) || 0))).toFixed(2)}
-                  </span>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-600 mb-1">តម្លៃលក់រាយពេញ ($) *</label>
+
+                {/* Selling Price */}
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                    តម្លៃលក់រាយពេញ ($) <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-emerald-600 font-black">$</span>
                     <input 
                       type="number" 
                       step="0.01" 
@@ -3826,206 +4174,285 @@ export default function UnifiedAdminDashboard() {
                       onChange={(e) => setSellingPrice(e.target.value)} 
                       placeholder="0.00" 
                       required 
-                      className="w-full border-2 border-emerald-200 bg-white p-3 rounded-2xl text-sm font-black text-emerald-700 focus:border-emerald-500 outline-none" 
+                      className="w-full border-2 border-emerald-300 focus:border-emerald-500 pl-8 pr-3.5 py-3 rounded-2xl text-base font-black text-emerald-700 bg-emerald-50/30 focus:bg-white outline-none transition" 
                     />
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-600 mb-1">បញ្ចុះតម្លៃលក់រាយ ($)</label>
+                </div>
+
+                {/* Retail Discount */}
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                    បញ្ចុះតម្លៃលក់រាយ ($)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-rose-500 font-bold">-$</span>
                     <input 
                       type="number" 
                       step="0.01" 
                       value={retailDiscount} 
                       onChange={(e) => setRetailDiscount(e.target.value)} 
-                      placeholder="ឧ. 2.00 (ចុះ $2)" 
-                      className="w-full border-2 border-emerald-200 bg-white p-3 rounded-2xl text-sm font-black text-red-600 focus:border-emerald-500 outline-none" 
+                      placeholder="0.00 (ឧ. 2.00)" 
+                      className="w-full border-2 border-slate-200 focus:border-rose-400 pl-9 pr-3.5 py-3 rounded-2xl text-sm font-black text-rose-600 bg-slate-50 focus:bg-white outline-none transition" 
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* 📦 ផ្នែកបោះដុំ (Wholesale Pricing & Discount) */}
-              <div className="p-4 bg-blue-50/60 rounded-3xl border-2 border-blue-200/80 space-y-3">
-                <div className="flex items-center justify-between border-b border-blue-200 pb-2">
-                  <span className="text-xs font-black text-blue-900 flex items-center gap-1.5 uppercase">
-                    <span>📦</span> តម្លៃបោះដុំ (Wholesale Pricing)
-                  </span>
-                  <span className="text-[11px] font-bold text-blue-700">
-                    បោះដុំពិត: ${(Math.max(0, (parseFloat(wholesalePrice) || 0) - (parseFloat(wholesaleDiscount) || 0))).toFixed(2)}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-600 mb-1">តម្លៃបោះដុំពេញ ($)</label>
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      value={wholesalePrice} 
-                      onChange={(e) => setWholesalePrice(e.target.value)} 
-                      placeholder="0.00" 
-                      className="w-full border-2 border-blue-200 bg-white p-3 rounded-2xl text-sm font-black text-blue-700 focus:border-blue-500 outline-none" 
-                    />
+                {/* ⭐️ LIVE PROFIT ANALYZER WIDGET ⭐️ */}
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50/50 to-white border-2 border-emerald-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase text-emerald-900 flex items-center gap-1">
+                      <span>✨</span> វិភាគប្រាក់ចំណេញ (Live Profit)
+                    </span>
+                    {numCost > 0 && numRetail > 0 ? (
+                      profitMarginPct >= 35 ? (
+                        <span className="text-[10px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-md">🟢 ចំណេញខ្ពស់</span>
+                      ) : profitMarginPct >= 15 ? (
+                        <span className="text-[10px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-md">🟡 ចំណេញមធ្យម</span>
+                      ) : unitProfit > 0 ? (
+                        <span className="text-[10px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-md">🟠 ចំណេញស្តើង</span>
+                      ) : (
+                        <span className="text-[10px] font-black bg-rose-600 text-white px-2 py-0.5 rounded-md">🔴 ខាតដើម</span>
+                      )
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-bold">បញ្ចូលតម្លៃដើម្បីគិត</span>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-600 mb-1">បញ្ចុះតម្លៃបោះដុំ ($)</label>
-                    <input 
-                      type="number" 
-                      step="0.01" 
-                      value={wholesaleDiscount} 
-                      onChange={(e) => setWholesaleDiscount(e.target.value)} 
-                      placeholder="ឧ. 1.50 (ចុះ $1.5)" 
-                      className="w-full border-2 border-blue-200 bg-white p-3 rounded-2xl text-sm font-black text-red-600 focus:border-blue-500 outline-none" 
-                    />
+
+                  <div className="text-xs space-y-1 pt-1 border-t border-emerald-100 text-slate-700">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">តម្លៃលក់ចេញពិត:</span>
+                      <b className="text-sm font-black text-emerald-700">${finalRetail.toFixed(2)}</b>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">ប្រាក់ចំណេញ/១គូ:</span>
+                      <b className={`font-black ${unitProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        {unitProfit >= 0 ? '+' : ''}${unitProfit.toFixed(2)}
+                      </b>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-400">អត្រាចំណេញ (Margin):</span>
+                      <b className="font-bold text-slate-700">{profitMarginPct.toFixed(1)}%</b>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className="text-slate-400">អត្រាកំណើន (Markup):</span>
+                      <b className="font-bold text-slate-700">{markupPct.toFixed(1)}%</b>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-            </div>
-          </div>
-        </div>
+                {/* WHOLESALE ACCORDION */}
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowWholesaleSection(!showWholesaleSection)}
+                    className="w-full p-3 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-black text-slate-700 transition"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span>📦</span> តម្លៃលក់បោះដុំ (Wholesale Option)
+                    </span>
+                    <span className="text-[10px] text-slate-400">{showWholesaleSection ? '▲ បិទ' : '▼ បើក'}</span>
+                  </button>
 
-        {/* ៤. រូបភាពច្រើនសន្លឹក (Multi-Image Gallery Upload) */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-black text-gray-800 flex items-center gap-2">
-              🖼️️ ៤. រូបភាពផលិតផលច្រើនសន្លឹក (Product Images Gallery)
-            </h3>
-            <span className="text-xs font-bold text-gray-400">
-              បានជ្រើសរើស ({productImages.length}) សន្លឹក
-            </span>
-          </div>
-
-          <div className="bg-gray-50 p-6 rounded-3xl border-2 border-dashed border-gray-200 space-y-4">
-            {/* Upload Area / Dropzone */}
-            <label className="border-2 border-dashed border-blue-300 hover:border-blue-500 bg-white hover:bg-blue-50/50 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition text-center group">
-              <input 
-                type="file" 
-                multiple 
-                accept="image/*" 
-                onChange={handleImageChange} 
-                className="hidden" 
-              />
-              <div className="w-12 h-12 bg-blue-50 group-hover:bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-2xl mb-2 transition">
-                📸
-              </div>
-              <p className="font-black text-sm text-gray-800">
-                ចុចទីនេះ ដើម្បីជ្រើសរើសរូបភាព (អាចរើសបានច្រើនក្នុងពេលតែមួយ)
-              </p>
-              <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
-                ⚡ ប្រព័ន្ធនឹងបង្រួមទំហំ (Compress) ស្វ័យប្រវត្តិដើម្បីឱ្យ Upload លឿន និងមិនស៊ីទំហំផ្ទុក
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                ជ្រើសរើសរូបភាពខាងមុខ ខាងចំហៀង បាតស្បែកជើង ឬពេលពាក់ (JPG, PNG, WEBP)
-              </p>
-            </label>
-
-            {/* Images Gallery Grid */}
-            {productImages.length > 0 && (
-              <div>
-                <p className="text-xs font-bold text-gray-600 mb-2.5 flex items-center gap-1.5">
-                  <span>✨</span>
-                  <span>ចុចលើប៊ូតុង <span className="text-[#ff6a00] font-black">«★ រូបចម្បង»</span> ដើម្បីកំណត់រូបណាដែលត្រូវបង្ហាញនៅខាងមុខគេ</span>
-                </p>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {productImages.map((img, idx) => {
-                    const isCover = idx === selectedCoverIndex;
-
-                    return (
-                      <div 
-                        key={img.id || idx}
-                        className={`relative group bg-white rounded-2xl border-2 overflow-hidden shadow-xs transition ${
-                          isCover ? 'border-[#ff6a00] ring-2 ring-orange-200' : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="aspect-square bg-gray-100">
-                          <img src={img.url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
-                        </div>
-
-                        {/* Top Badges */}
-                        <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between">
-                          {isCover ? (
-                            <span className="bg-[#ff6a00] text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-sm">
-                              ★ ចម្បង
-                            </span>
-                          ) : (
-                            <span className="bg-black/50 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
-                              #${idx + 1}
-                            </span>
-                          )}
-
-                          <button 
-                            type="button"
-                            onClick={() => handleRemoveProductImage(idx)}
-                            className="w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-sm"
-                            title="លុបរូបនេះចេញ"
-                          >
-                            ✕
-                          </button>
-                        </div>
-
-                        {/* Bottom action: Set as Cover */}
-                        {!isCover && (
-                          <button
-                            type="button"
-                            onClick={() => handleSetCoverImage(idx)}
-                            className="w-full bg-gray-900/80 hover:bg-[#ff6a00] text-white text-[10px] font-bold py-1 text-center transition"
-                          >
-                            ដាក់ជារូបចម្បង
-                          </button>
-                        )}
+                  {showWholesaleSection && (
+                    <div className="p-3.5 bg-blue-50/40 border-t border-slate-200 space-y-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">តម្លៃបោះដុំពេញ ($)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={wholesalePrice} 
+                          onChange={(e) => setWholesalePrice(e.target.value)} 
+                          placeholder="0.00" 
+                          className="w-full border border-blue-200 bg-white p-2.5 rounded-xl text-xs font-black text-blue-700 outline-none" 
+                        />
                       </div>
-                    );
-                  })}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">បញ្ចុះតម្លៃបោះដុំ ($)</label>
+                        <input 
+                          type="number" 
+                          step="0.01" 
+                          value={wholesaleDiscount} 
+                          onChange={(e) => setWholesaleDiscount(e.target.value)} 
+                          placeholder="0.00" 
+                          className="w-full border border-blue-200 bg-white p-2.5 rounded-xl text-xs font-black text-rose-600 outline-none" 
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+
+            {/* ២. ស្តុកសរុប & ការដាស់តឿន (Inventory Summary & Alert) */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-base font-black">📦</span>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">ស្តុកសរុប & ដាស់តឿន</h3>
+                    <p className="text-[11px] text-slate-400">Inventory Status & Alerts</p>
+                  </div>
                 </div>
               </div>
-            )}
+
+              <div className="space-y-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                      ចំនួនស្តុកសរុប
+                    </label>
+                    {hasMatrixActive && (
+                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                        ⚡ គណនាស្វ័យប្រវត្តិ
+                      </span>
+                    )}
+                  </div>
+                  <input 
+                    type="number" 
+                    value={hasMatrixActive ? matrixTotal : stockQty} 
+                    onChange={(e) => {
+                      if (!hasMatrixActive) setStockQty(e.target.value);
+                    }} 
+                    readOnly={hasMatrixActive}
+                    min="0" 
+                    required 
+                    className={`w-full border-2 p-3.5 rounded-2xl text-base font-black outline-none transition ${
+                      hasMatrixActive 
+                        ? 'bg-blue-50/60 border-blue-200 text-blue-900 cursor-not-allowed' 
+                        : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:border-blue-500'
+                    }`} 
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                    ដាស់តឿនពេលស្តុកសល់តិចជាង (Alert Threshold)
+                  </label>
+                  <input 
+                    type="number" 
+                    value={lowStockAlert} 
+                    onChange={(e) => setLowStockAlert(e.target.value)} 
+                    min="1" 
+                    className="w-full border-2 border-slate-200 focus:border-orange-500 p-3 rounded-2xl text-sm font-bold text-orange-600 bg-slate-50 focus:bg-white outline-none transition" 
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">ប្រព័ន្ធនឹងបញ្ជូនដំណឹង Telegram ពេលទំនិញសល់ទាបជាងចំនួននេះ</p>
+                </div>
+              </div>
+            </div>
+
+            {/* ៣. ទិដ្ឋភាពផ្ទាល់លើ Storefront (Live Customer Preview) */}
+            <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                  <span>📱</span> ទិដ្ឋភាពផ្ទាល់លើ Storefront
+                </span>
+                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800">
+                  Live View
+                </span>
+              </div>
+
+              {/* Mock Product Card */}
+              <div className="bg-white rounded-2xl p-3 text-slate-900 shadow-md">
+                <div className="relative aspect-square rounded-xl bg-slate-100 overflow-hidden mb-2.5">
+                  {productImages[selectedCoverIndex]?.url || previewUrl ? (
+                    <img 
+                      src={productImages[selectedCoverIndex]?.url || previewUrl} 
+                      alt="Preview" 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                      <span className="text-3xl">👟</span>
+                      <span className="text-[10px] font-bold mt-1">មិនទាន់មានរូបភាព</span>
+                    </div>
+                  )}
+
+                  {numDiscount > 0 && (
+                    <span className="absolute top-2 left-2 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-xs">
+                      SALE -${numDiscount.toFixed(2)}
+                    </span>
+                  )}
+
+                  <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
+                    {category}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs font-black text-slate-900 line-clamp-1">
+                    {name || 'ឈ្មោះទំនិញគំរូ (Product Title)'}
+                  </p>
+                  
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm font-black text-[#ff6a00]">
+                      ${finalRetail.toFixed(2)}
+                    </span>
+                    {numDiscount > 0 && (
+                      <span className="text-[11px] text-slate-400 line-through">
+                        ${numRetail.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedSizes.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {selectedSizes.slice(0, 5).map(sz => (
+                        <span key={sz} className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-bold">
+                          {sz}
+                        </span>
+                      ))}
+                      {selectedSizes.length > 5 && (
+                        <span className="text-[9px] text-slate-400">+{selectedSizes.length - 5}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ៤. ប៊ូតុងរក្សាទុក (Save Actions) */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-3">
+              <button 
+                type="submit" 
+                disabled={uploading} 
+                className="w-full bg-gradient-to-r from-[#ff6a00] to-orange-500 hover:from-[#e65c00] hover:to-orange-600 text-white py-4 rounded-2xl font-black text-base shadow-lg shadow-orange-500/25 transition-all transform active:scale-98 disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>{uploading ? '⏳' : '💾'}</span>
+                <span>
+                  {uploading 
+                    ? 'កំពុងរក្សាទុក...' 
+                    : (editingProductId ? 'រក្សាទុកការកែប្រែ (Update Product)' : 'រក្សាទុកទំនិញថ្មី (Save Product)')}
+                </span>
+              </button>
+
+              {editingProductId && (
+                <button 
+                  type="button" 
+                  onClick={handleResetProductForm}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-2xl font-black text-xs transition"
+                >
+                  ✕ បោះបង់ការកែប្រែ (Cancel Edit)
+                </button>
+              )}
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('inventory')}
+                  className="text-xs font-bold text-slate-400 hover:text-slate-600 hover:underline"
+                >
+                  ← ត្រឡប់ទៅមើលបញ្ជីស្តុកទំនិញ
+                </button>
+              </div>
+            </div>
+
           </div>
-        </div>
 
-        {/* ⭐️ Submit & Cancel Edit Buttons ⭐️ */}
-        <div className="flex gap-4">
-          {editingProductId && (
-            <button 
-              type="button" 
-              onClick={() => {
-                setEditingProductId(null);
-                setName('');
-                const nextSkuAfterReset = computeNextSku(products);
-                setSku(nextSkuAfterReset);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('sabay_current_sku', nextSkuAfterReset);
-                  localStorage.setItem('sabay_last_saved_sku', nextSkuAfterReset);
-                }
-                setSellingPrice('');
-                setCostPrice('');
-                setStockQty('10');
-                setColor('');
-                setSelectedSizes([]);
-                  setSelectedColors([]);
-                  setVariantStock({});
-                setPreviewUrl(null);
-                setFile(null);
-                setProductImages([]);
-                setSelectedCoverIndex(0);
-              }}
-              className="w-1/3 bg-gray-200 text-gray-700 py-4 rounded-2xl font-black text-lg hover:bg-gray-300 transition-all"
-            >
-              បោះបង់ការកែប្រែ
-            </button>
-          )}
-
-          <button 
-            type="submit" 
-            disabled={uploading} 
-            className={`${editingProductId ? 'w-2/3' : 'w-full'} bg-[#ff6a00] text-white py-4 rounded-2xl font-black text-lg shadow-[0_10px_20px_-10px_rgba(255,106,0,0.5)] hover:bg-[#e65c00] transition-all disabled:bg-gray-300`}
-          >
-            {uploading ? 'កំពុងរក្សាទុក...' : (editingProductId ? '💾 រក្សាទុកការកែប្រែ (Update Product)' : '💾 រក្សាទុកទំនិញថ្មី (Save Product)')}
-          </button>
-        </div>
-
-      </form>
-    </div>
-  );
+        </form>
+      </div>
+    );
+  };
 
   // ================= ផ្នែក Category Management (មានប៊ូតុង Edit & Delete) =================
   const [newCatName, setNewCatName] = useState('');
