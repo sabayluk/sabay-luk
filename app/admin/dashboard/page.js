@@ -4134,148 +4134,161 @@ export default function UnifiedAdminDashboard() {
               </div>
             </div>
 
-            {/* ៤. តារាងបែងចែកស្តុកតាមជម្រើស (Variant Stock Matrix) */}
-            {hasMatrixActive && (
-              <div className="bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white p-6 sm:p-7 rounded-3xl border-2 border-blue-200/90 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-200/70">
-                  <div>
-                    <h4 className="text-sm font-black text-blue-950 uppercase flex items-center gap-2">
-                      <span>📊</span> ៤. តារាងបែងចែកស្តុកតាមទំហំ & ពណ៌ (Variant Stock Matrix)
-                    </h4>
-                    <p className="text-xs text-slate-500 font-bold mt-0.5">
-                      {selectedSizes.length > 0 && activeColors.length > 0 
+            {/* ៤. តារាងបែងចែកស្តុកតាមទំហំ & ពណ៌ (Variant Stock Matrix) */}
+            <div className="bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white p-6 sm:p-7 rounded-3xl border-2 border-blue-200/90 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-200/70">
+                <div>
+                  <h4 className="text-sm font-black text-blue-950 uppercase flex items-center gap-2">
+                    <span>📊</span> ៤. តារាងបែងចែកស្តុកតាមទំហំ & ពណ៌ (Variant Stock Matrix)
+                  </h4>
+                  <p className="text-xs text-slate-500 font-bold mt-0.5">
+                    {hasMatrixActive 
+                      ? (selectedSizes.length > 0 && activeColors.length > 0 
                         ? `សរុប ${visibleMatrix.length} នៃ ${variantMatrix.length} ជម្រើសបន្សំ (${selectedSizes.length} Sizes × ${activeColors.length} Colors)`
-                        : `សរុប ${visibleMatrix.length} នៃ ${variantMatrix.length} ជម្រើស`}
-                    </p>
-                  </div>
+                        : `សរុប ${visibleMatrix.length} នៃ ${variantMatrix.length} ជម្រើស`)
+                      : 'មិនទាន់មានជម្រើសបន្សំ (សូមជ្រើសរើសទំហំ ឬពណ៌នៅចំណុចទី ៣ ខាងលើ)'}
+                  </p>
+                </div>
+                {hasMatrixActive && (
                   <div className="flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-2xl border border-blue-200 shadow-2xs">
                     <span className="text-xs font-bold text-slate-500">ស្តុកសរុបស្វ័យប្រវត្តិ:</span>
                     <span className="text-lg font-black text-blue-700">
                       {matrixTotal} <span className="text-xs font-bold text-slate-400">គូ/មុខ</span>
                     </span>
                   </div>
-                </div>
-
-                {/* ⚡ SMART BULK FILLER BAR ⚡ */}
-                <div className="bg-white/90 p-4 rounded-2xl border border-blue-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">⚡</span>
-                    <div>
-                      <p className="text-xs font-black text-slate-800">កំណត់ស្តុកស្មើគ្នាទាំងអស់ (Quick Bulk Stock)</p>
-                      <p className="text-[11px] text-slate-400">វាយចំនួនស្តុកម្តង ដាក់ស្មើគ្នាគ្រប់ Size & Color ទាំងអស់តែ១ចុច</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="number"
-                      min="0"
-                      value={bulkVariantStockInput}
-                      onChange={(e) => setBulkVariantStockInput(e.target.value)}
-                      placeholder="ឧ. 10"
-                      className="w-24 border-2 border-blue-200 focus:border-blue-500 p-2 rounded-xl text-center text-sm font-black text-blue-700 outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleApplyBulkVariantStock}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-black transition shadow-sm active:scale-95 cursor-pointer"
-                    >
-                      ⚡ ដាក់គ្រប់ទំហំ
-                    </button>
-                    {disabledVariants.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDisabledVariants([]);
-                          const restoredTotal = variantMatrix.reduce((sum, itm) => sum + (parseInt(variantStock[itm.key]) || 0), 0);
-                          setStockQty(restoredTotal.toString());
-                        }}
-                        className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 px-3 py-2 rounded-xl border border-rose-200 transition"
-                      >
-                        ↺ ស្តារជម្រើស (${disabledVariants.length})
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Variant Cards Grid */}
-                {visibleMatrix.length === 0 ? (
-                  <div className="text-center py-8 bg-white/70 rounded-2xl border border-dashed border-slate-300">
-                    <p className="text-xs font-bold text-slate-400">អ្នកបានលុបជម្រើសបន្សំទាំងអស់ចេញហើយ</p>
-                    <button
-                      type="button"
-                      onClick={() => setDisabledVariants([])}
-                      className="mt-2 text-xs font-black text-blue-600 hover:underline cursor-pointer"
-                    >
-                      + ស្ដារជម្រើសបន្សំឡើងវិញ
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                    {visibleMatrix.map(item => (
-                      <div 
-                        key={item.key} 
-                        className="relative group bg-white border-2 border-blue-100 hover:border-blue-400 rounded-2xl p-3 flex flex-col items-center shadow-2xs transition"
-                      >
-                        <button
-                          type="button"
-                          title="លុបបន្សំនេះចោល (ប្រសិនគ្មានស្តុក)"
-                          onClick={() => {
-                            setDisabledVariants(prev => [...prev, item.key]);
-                            setVariantStock(prev => {
-                              const updated = { ...prev };
-                              delete updated[item.key];
-                              const newTotal = visibleMatrix
-                                .filter(itm => itm.key !== item.key)
-                                .reduce((sum, itm) => sum + (parseInt(updated[itm.key]) || 0), 0);
-                              setStockQty(newTotal.toString());
-                              return updated;
-                            });
-                          }}
-                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white flex items-center justify-center text-xs font-black shadow-xs transition cursor-pointer z-10 border border-rose-200"
-                        >
-                          ✕
-                        </button>
-
-                        <span className="text-xs font-black text-slate-800 text-center line-clamp-1 mb-0.5">
-                          {item.badge}
-                        </span>
-                        {item.sublabel && (
-                          <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold mb-2">
-                            <span className={`w-2 h-2 rounded-full ${getColorDotClass(item.sublabel)}`}></span>
-                            <span className="truncate max-w-[70px]">{item.sublabel}</span>
-                          </div>
-                        )}
-                        <input 
-                          type="number" 
-                          min="0"
-                          value={variantStock[item.key] || ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setVariantStock(prev => {
-                              const updated = { ...prev, [item.key]: val };
-                              const newTotal = visibleMatrix.reduce((sum, itm) => sum + (parseInt(updated[itm.key]) || 0), 0);
-                              setStockQty(newTotal.toString());
-                              return updated;
-                            });
-                          }}
-                          placeholder="0"
-                          className="w-full text-center border-2 border-slate-100 focus:border-[#ff6a00] rounded-xl p-2 text-sm font-black text-blue-700 bg-slate-50 focus:bg-white outline-none transition"
-                        />
-                      </div>
-                    ))}
-                  </div>
                 )}
               </div>
-            )}
 
-            {/* ៥. 💰 តម្លៃ និងការគណនាប្រាក់ចំណេញ (Pricing & Profit Analyzer) */}
-            {/* ៥. 💰 តម្លៃ និងការគណនាប្រាក់ចំណេញ (Pricing & Profit Calculator) */}
+              {hasMatrixActive ? (
+                <>
+                  {/* ⚡ SMART BULK FILLER BAR ⚡ */}
+                  <div className="bg-white/90 p-4 rounded-2xl border border-blue-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">⚡</span>
+                      <div>
+                        <p className="text-xs font-black text-slate-800">កំណត់ស្តុកស្មើគ្នាទាំងអស់ (Quick Bulk Stock)</p>
+                        <p className="text-[11px] text-slate-400">វាយចំនួនស្តុកម្តង ដាក់ស្មើគ្នាគ្រប់ Size & Color ទាំងអស់តែ១ចុច</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="number"
+                        min="0"
+                        value={bulkVariantStockInput}
+                        onChange={(e) => setBulkVariantStockInput(e.target.value)}
+                        placeholder="ឧ. 10"
+                        className="w-24 border-2 border-blue-200 focus:border-blue-500 p-2 rounded-xl text-center text-sm font-black text-blue-700 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyBulkVariantStock}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-black transition shadow-sm active:scale-95 cursor-pointer"
+                      >
+                        ⚡ ដាក់គ្រប់ទំហំ
+                      </button>
+                      {disabledVariants.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDisabledVariants([]);
+                            const restoredTotal = variantMatrix.reduce((sum, itm) => sum + (parseInt(variantStock[itm.key]) || 0), 0);
+                            setStockQty(restoredTotal.toString());
+                          }}
+                          className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 px-3 py-2 rounded-xl border border-rose-200 transition"
+                        >
+                          ↺ ស្តារជម្រើស (${disabledVariants.length})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Variant Cards Grid */}
+                  {visibleMatrix.length === 0 ? (
+                    <div className="text-center py-8 bg-white/70 rounded-2xl border border-dashed border-slate-300">
+                      <p className="text-xs font-bold text-slate-400">អ្នកបានលុបជម្រើសបន្សំទាំងអស់ចេញហើយ</p>
+                      <button
+                        type="button"
+                        onClick={() => setDisabledVariants([])}
+                        className="mt-2 text-xs font-black text-blue-600 hover:underline cursor-pointer"
+                      >
+                        + ស្ដារជម្រើសបន្សំឡើងវិញ
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                      {visibleMatrix.map(item => (
+                        <div 
+                          key={item.key} 
+                          className="relative group bg-white border-2 border-blue-100 hover:border-blue-400 rounded-2xl p-3 flex flex-col items-center shadow-2xs transition"
+                        >
+                          <button
+                            type="button"
+                            title="លុបបន្សំនេះចោល (ប្រសិនគ្មានស្តុក)"
+                            onClick={() => {
+                              setDisabledVariants(prev => [...prev, item.key]);
+                              setVariantStock(prev => {
+                                const updated = { ...prev };
+                                delete updated[item.key];
+                                const newTotal = visibleMatrix
+                                  .filter(itm => itm.key !== item.key)
+                                  .reduce((sum, itm) => sum + (parseInt(updated[itm.key]) || 0), 0);
+                                setStockQty(newTotal.toString());
+                                return updated;
+                              });
+                            }}
+                            className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white flex items-center justify-center text-xs font-black shadow-xs transition cursor-pointer z-10 border border-rose-200"
+                          >
+                            ✕
+                          </button>
+
+                          <span className="text-xs font-black text-slate-800 text-center line-clamp-1 mb-0.5">
+                            {item.badge}
+                          </span>
+                          {item.sublabel && (
+                            <div className="flex items-center gap-1 text-[10px] text-slate-500 font-bold mb-2">
+                              <span className={`w-2 h-2 rounded-full ${getColorDotClass(item.sublabel)}`}></span>
+                              <span className="truncate max-w-[70px]">{item.sublabel}</span>
+                            </div>
+                          )}
+                          <input 
+                            type="number" 
+                            min="0"
+                            value={variantStock[item.key] || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setVariantStock(prev => {
+                                const updated = { ...prev, [item.key]: val };
+                                const newTotal = visibleMatrix.reduce((sum, itm) => sum + (parseInt(updated[itm.key]) || 0), 0);
+                                setStockQty(newTotal.toString());
+                                return updated;
+                              });
+                            }}
+                            placeholder="0"
+                            className="w-full text-center border-2 border-slate-100 focus:border-[#ff6a00] rounded-xl p-2 text-sm font-black text-blue-700 bg-slate-50 focus:bg-white outline-none transition"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-6 bg-white/70 rounded-2xl border border-dashed border-blue-200 p-4">
+                  <span className="text-3xl block mb-1">👟</span>
+                  <p className="text-xs font-black text-slate-700">មិនទាន់មានជម្រើសទំហំ ឬពណ៌នៅឡើយទេ</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    សូមចុចជ្រើសរើស «ទំហំ» ឬ «ពណ៌» នៅចំណុចទី ៣ ខាងលើ ដើម្បីឱ្យប្រព័ន្ធបង្កើតតារាងបែងចែកស្តុកស្វ័យប្រវត្តិតាមជម្រើស
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* ៥. 💰 តារាងតម្លៃ និងការគណនាប្រាក់ចំណេញ (Pricing & Profit Calculator) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                   <span className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-base font-black">💰</span>
                   <div>
-                    <h3 className="text-base font-black text-slate-900">តម្លៃ និងប្រាក់ចំណេញ</h3>
+                    <h3 className="text-base font-black text-slate-900">៥. តារាងតម្លៃ និងការគណនាប្រាក់ចំណេញ</h3>
                     <p className="text-[11px] text-slate-400">Pricing & Profit Analyzer</p>
                   </div>
                 </div>
@@ -4361,12 +4374,12 @@ export default function UnifiedAdminDashboard() {
                   <div className="text-xs space-y-1 pt-1 border-t border-emerald-100 text-slate-700">
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500">តម្លៃលក់ចេញពិត:</span>
-                      <b className="text-sm font-black text-emerald-700">${finalRetail.toFixed(2)}</b>
+                      <b className="text-sm font-black text-emerald-700">$${finalRetail.toFixed(2)}</b>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500">ប្រាក់ចំណេញ/១គូ:</span>
                       <b className={`font-black ${unitProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                        {unitProfit >= 0 ? '+' : ''}${unitProfit.toFixed(2)}
+                        {unitProfit >= 0 ? '+' : ''}$${unitProfit.toFixed(2)}
                       </b>
                     </div>
                     <div className="flex justify-between items-center text-[11px]">
@@ -4424,13 +4437,13 @@ export default function UnifiedAdminDashboard() {
               </div>
             </div>
 
-            {/* ៦. 📦 ស្តុកសរុប & ការដាស់តឿន (Inventory Summary & Alert) */}
+            {/* ៦. 📦 តារាងស្តុកសរុប & ការដាស់តឿន (Inventory Summary & Alert) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                   <span className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-base font-black">📦</span>
                   <div>
-                    <h3 className="text-base font-black text-slate-900">ស្តុកសរុប & ដាស់តឿន</h3>
+                    <h3 className="text-base font-black text-slate-900">៦. តារាងស្តុកសរុប & ការដាស់តឿន</h3>
                     <p className="text-[11px] text-slate-400">Inventory Status & Alerts</p>
                   </div>
                 </div>
@@ -4484,9 +4497,9 @@ export default function UnifiedAdminDashboard() {
 
 
           {/* ======================================================== */}
-          {/* 👉 ផ្នែកខាងស្តាំ: LIVE PREVIEW & SAVE BUTTON (4 COLUMNS STICKY) */}
+          {/* 👉 ផ្នែកខាងស្តាំ: LIVE PREVIEW & SAVE BUTTON (STICKY SIDEBAR) */}
           {/* ======================================================== */}
-          <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-24 self-start z-20">
+          <div className="lg:col-span-4 space-y-5 sticky top-4 self-start z-30">
 
             {/* ៣. ទិដ្ឋភាពផ្ទាល់លើ Storefront (Live Customer Preview) */}
             <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-lg space-y-3">
