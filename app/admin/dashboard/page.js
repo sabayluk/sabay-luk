@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../supabase';
-import { getActiveStore, setActiveStore, getLocalStores, STORE_PLANS, checkStorePlanLimit } from '../../../lib/stores';
+import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, STORE_PLANS, checkStorePlanLimit } from '../../../lib/stores';
 import * as XLSX from 'xlsx';
 
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក & បញ្ចុះតម្លៃ ធានាមិនបាត់ ១០០%
