@@ -6,20 +6,50 @@ export async function POST(request) {
     const body = await request.json();
     const { botToken, chatId, message, action, items, storeName, order } = body;
 
-    const token = (botToken || process.env.TELEGRAM_BOT_TOKEN || '').trim();
-    const chat = (chatId || process.env.TELEGRAM_CHAT_ID || '').trim();
-
-    if (!token || !chat) {
-      return NextResponse.json({
-        success: false,
-        message: 'សូមកំណត់ Telegram Bot Token និង Chat ID ឱ្យបានត្រឹមត្រូវជាមុនសិន!'
-      }, { status: 400 });
-    }
+    const token = (botToken || process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || '').trim();
+    const chat = (chatId || process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || '').trim();
 
     let finalMessage = message;
     let inlineKeyboard = null;
 
-    if (action === 'test') {
+    if (action === 'new_store_registered') {
+      const st = body.store || {};
+      finalMessage = `🎉 <b>មានហាងថ្មីបានចុះឈ្មោះប្រើប្រាស់ប្រព័ន្ធ (NEW STORE REGISTERED)!</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🏪 <b>ឈ្មោះហាង:</b> <b>${st.name || 'ហាងថ្មី'}</b>\n` +
+        `🔗 <b>Slug / Link:</b> <code>${st.slug || 'N/A'}</code>\n` +
+        `📦 <b>កញ្ចប់សេវា (Plan):</b> <b>${st.plan || 'FREE'}</b>\n` +
+        `👤 <b>ម្ចាស់ហាង:</b> <b>${st.owner_name || 'N/A'}</b>\n` +
+        `📧 <b>Gmail:</b> <code>${st.owner_email || 'N/A'}</code>\n` +
+        `📞 <b>លេខទូរស័ព្ទ:</b> <code>${st.phone || 'N/A'}</code>\n` +
+        (st.telegram ? `✈️ <b>Telegram:</b> @${st.telegram.replace(/^@/, '')}\n` : '') +
+        `📍 <b>ទីតាំង:</b> ${st.address || 'ភ្នំពេញ'}\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `⏰ <b>កាលបរិច្ឆេទ:</b> ${new Date().toLocaleString('km-KH')}\n` +
+        `⚡ <i>គណនីហាងត្រូវបានបង្កើត និងដំណើរការក្នុងប្រព័ន្ធរួចរាល់!</i>`;
+
+      const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      inlineKeyboard = [
+        [
+          { text: '🌐 មើលមុខហាង (Storefront)', url: `${origin}/store/${st.slug || ''}` },
+          { text: '📊 ផ្ទាំងគ្រប់គ្រងហាង', url: `${origin}/admin/dashboard` }
+        ]
+      ];
+    } else if (action === 'plan_upgraded') {
+      const st = body.store || {};
+      const newPlan = body.newPlan || 'PRO';
+      const planPrice = body.price || 0;
+      finalMessage = `💎 <b>ការដំឡើងកញ្ចប់សេវាថ្មី (STORE PLAN UPGRADE)!</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🏪 <b>ហាង:</b> <b>${st.name || 'ហាង'}</b> (<code>${st.slug || 'N/A'}</code>)\n` +
+        `🚀 <b>Plan ថ្មី:</b> <b>${newPlan}</b>\n` +
+        `💰 <b>តម្លៃសេវា:</b> <b>$${planPrice}/ខែ</b>\n` +
+        `👤 <b>ម្ចាស់ហាង:</b> ${st.owner_name || 'N/A'} (📞 <code>${st.phone || 'N/A'}</code>)\n` +
+        `📧 <b>Gmail:</b> <code>${st.owner_email || 'N/A'}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `⏰ <b>កាលបរិច្ឆេទ:</b> ${new Date().toLocaleString('km-KH')}\n` +
+        `✅ <i>ប្រព័ន្ធបានទទួលការស្នើសុំ Upgrade រួចរាល់!</i>`;
+    } else if (action === 'test') {
       finalMessage = `🔔 <b>សាកល្បងការតភ្ជាប់ Telegram Bot (Test Connection)</b>\n\n` +
         `🏪 <b>ហាង:</b> ${storeName || 'SABAY LUK'}\n` +
         `✅ <b>ស្ថានភាព:</b> បានភ្ជាប់ប្រព័ន្ធ Telegram ជោគជ័យ ១០០%!\n` +
@@ -145,6 +175,15 @@ export async function POST(request) {
 
     if (!finalMessage) {
       return NextResponse.json({ success: false, message: 'មិនមានអត្ថបទសារសម្រាប់ផ្ញើទេ' }, { status: 400 });
+    }
+
+    if (!token || !chat) {
+      return NextResponse.json({
+        success: true,
+        message: 'Telegram Bot Token / Chat ID មិនទាន់កំណត់ក្នុង Setting (Simulated)',
+        simulated: true,
+        previewText: finalMessage
+      });
     }
 
     const payload = {

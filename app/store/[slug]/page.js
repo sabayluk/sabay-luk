@@ -420,11 +420,40 @@ export default function StoreFrontBySlug() {
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (!custName || !custPhone) {
                       alert('សូមបំពេញឈ្មោះ និងលេខទូរស័ព្ទ!');
                       return;
                     }
+                    const orderId = `ORD-${Date.now().toString().slice(-6)}`;
+                    const newOrder = {
+                      order_id: orderId,
+                      store_id: currentStore.id,
+                      customer_name: custName,
+                      phone: custPhone,
+                      delivery_address: custAddress,
+                      total: cartTotal,
+                      items: cart,
+                      payment_method: 'Bakong KHQR',
+                      status: 'PENDING',
+                      created_at: new Date().toISOString()
+                    };
+
+                    try {
+                      fetch('/api/telegram', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          action: 'new_order',
+                          order: newOrder,
+                          storeName: currentStore.name,
+                          storePhone: currentStore.phone,
+                          storeAddress: currentStore.address,
+                          storeTelegram: currentStore.telegram
+                        })
+                      }).catch(e => console.warn('Telegram store order notice skipped:', e));
+                    } catch (e) {}
+
                     setOrderSuccess(true);
                   }}
                   className="w-full bg-[#ff6a00] hover:bg-[#e65c00] text-white py-3.5 rounded-2xl font-black text-xs shadow-md transition cursor-pointer"

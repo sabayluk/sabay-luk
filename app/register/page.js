@@ -83,6 +83,18 @@ export default function RegisterStorePage() {
 
       setSuccessMsg(`🎉 អបអរសាទរ! ហាង "${newStore.name}" ត្រូវបានបង្កើតជោគជ័យ!`);
       
+      // ⭐️ Send instant alert to Telegram Bot ⭐️
+      try {
+        fetch('/api/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'new_store_registered',
+            store: newStore
+          })
+        }).catch(e => console.warn('Telegram notice skipped', e));
+      } catch (tgErr) {}
+
       // Auto-login session for owner
       if (typeof window !== 'undefined') {
         localStorage.setItem('sabay_admin_authenticated', 'true');

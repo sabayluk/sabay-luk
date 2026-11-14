@@ -1901,6 +1901,35 @@ export default function CustomerStorefront() {
         </div>
       )}
 
+      {/* ⭐️ SAAS CLOUD POS PROMO BAR ⭐️ */}
+      <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white text-[11px] sm:text-xs py-1.5 px-4 flex items-center justify-between border-b border-white/10 shadow-xs">
+        <div className="max-w-[1440px] mx-auto w-full flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 truncate">
+            <span className="bg-amber-400 text-slate-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase">
+              ✨ អាជីវកម្ម
+            </span>
+            <span className="font-bold truncate text-white">
+              ចង់បើកហាងលក់ & ប្រព័ន្ធ POS ផ្ទាល់ខ្លួន? ប្រើឥតគិតថ្លៃ ១៥ មុខទំនិញ ឬត្រឹម $1 ទៅ $3/ខែ!
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/plans"
+              className="text-[11px] font-black text-amber-300 hover:text-white underline"
+            >
+              មើលកញ្ចប់តម្លៃ ($0 - $3)
+            </Link>
+            <span className="text-white/40">|</span>
+            <Link
+              href="/register"
+              className="bg-white text-blue-800 hover:bg-amber-300 hover:text-slate-950 font-black text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 shadow-xs"
+            >
+              ចុះឈ្មោះហាង ➔
+            </Link>
+          </div>
+        </div>
+      </div>
+
       {/* ⭐️ 2. STICKY GLASSMORPHISM HEADER ⭐️ */}
       <header className={`${themeMode === 'dark' ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-gray-100 text-gray-900'} backdrop-blur-md sticky top-0 z-40 border-b shadow-xs transition-colors`}>
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4">
@@ -1996,6 +2025,16 @@ export default function CustomerStorefront() {
               <span className="text-sm">🔍</span>
               <span className="hidden sm:inline">{t('trackOrder', 'តាមដានការកុម្ម៉ង់')}</span>
             </button>
+
+            {/* 🚀 SaaS POS Landing Link */}
+            <Link
+              href="/plans"
+              className="cursor-pointer hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white transition text-xs font-black shadow-xs active:scale-95"
+              title="បើកហាង & ប្រើប្រព័ន្ធ POS ផ្ទាល់ខ្លួន"
+            >
+              <span>🚀</span>
+              <span>កញ្ចប់ POS ($0-$3)</span>
+            </Link>
 
             {/* Cart Button with Total Preview */}
             <button 
