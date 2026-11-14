@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../supabase';
+import { getActiveStore, setActiveStore, getLocalStores, STORE_PLANS, checkStorePlanLimit } from '../../../lib/stores';
 import * as XLSX from 'xlsx';
 
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក & បញ្ចុះតម្លៃ ធានាមិនបាត់ ១០០%
@@ -738,6 +739,22 @@ export default function UnifiedAdminDashboard() {
       localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
     }
   }, [staffList]);
+
+  // ⭐️ MULTI-TENANT STORE STATES (ហាងមួយៗដាច់ដោយឡែកពីគ្នា ១០០%) ⭐️
+  const [activeStore, setActiveStoreState] = useState(() => getActiveStore());
+  const [registeredStores, setRegisteredStores] = useState(() => getLocalStores());
+  const [storeSwitchModalOpen, setStoreSwitchModalOpen] = useState(false);
+  const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
+
+  // Sync active store on change
+  useEffect(() => {
+    const handleStoreChange = () => {
+      setActiveStoreState(getActiveStore());
+      setRegisteredStores(getLocalStores());
+    };
+    window.addEventListener('sabay_store_changed', handleStoreChange);
+    return () => window.removeEventListener('sabay_store_changed', handleStoreChange);
+  }, []);
 
   // ⭐️ AUTHENTICATION STATES (FULL OPTION LOGIN SYSTEM) ⭐️
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -3254,6 +3271,16 @@ export default function UnifiedAdminDashboard() {
     const handleSaveProduct = async (e) => {
     e.preventDefault();
     if (!name || !sellingPrice) return alert('សូមបំពេញឈ្មោះ និងតម្លៃលក់ឱ្យបានត្រឹមត្រូវ!');
+
+    // ⭐️ ពិនិត្យមើលកម្រិតកំណត់នៃកញ្ចប់ទំនិញ (Store Plan Limit Check) ⭐️
+    if (!editingProductId) {
+      const storeProds = products.filter(p => !p.store_id || p.store_id === activeStore?.id || activeStore?.id === 'store_default_sabayluk');
+      const maxLimit = activeStore?.max_products || 15;
+      if (storeProds.length >= maxLimit) {
+        setUpgradePlanModalOpen(true);
+        return alert(`🎉 ហាងរបស់អ្នកបានប្រើដល់កម្រិតកំណត់ ${maxLimit} មុខទំនិញនៃកញ្ចប់ ${activeStore?.plan || 'FREE'} ហើយ!\n\nសូមដំឡើងកញ្ចប់ (Upgrade Plan) ត្រឹម $1/ខែ ឬ $10/ឆ្នាំ ដើម្បីបន្ថែមទំនិញបន្តទៀត។`);
+      }
+    }
     setUploading(true); setMessage('');
 
     try {
@@ -3355,6 +3382,7 @@ export default function UnifiedAdminDashboard() {
       });
 
       const productData = {
+        store_id: activeStore?.id || 'store_default_sabayluk',
         sku: sku || `SL-${Math.floor(1000 + Math.random() * 9000)}`,
         name: name.trim(),
         category: category.trim(),
@@ -17667,6 +17695,69 @@ export default function UnifiedAdminDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-6 md:p-10 bg-gray-50 h-full relative">
+        {/* ⭐️ TOP STORE CONTEXT & MULTI-TENANT SWITCHER BAR ⭐️ */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white px-4 sm:px-6 py-3 rounded-2xl border border-slate-800 shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ff6a00] to-orange-600 flex items-center justify-center text-xl shadow-md shrink-0">
+              🏬
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-sm text-white">{activeStore?.name || 'SABAY LUK'}</span>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                  {STORE_PLANS[activeStore?.plan]?.name || '🎁 FREE (15 មុខ)'}
+                </span>
+                {activeStore?.id !== 'store_default_sabayluk' && (
+                  <span className="text-[9px] font-mono text-slate-400 hidden sm:inline">
+                    ID: {activeStore?.slug}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                <span>🔗 មុខហាង: <a href={`/store/${activeStore?.slug || 'sabay-luk'}`} target="_blank" rel="noreferrer" className="text-orange-400 hover:underline font-mono">/store/{activeStore?.slug || 'sabay-luk'}</a></span>
+                <span>•</span>
+                <span>ទំនិញ: <b>{products.filter(p => !p.store_id || p.store_id === activeStore?.id || activeStore?.id === 'store_default_sabayluk').length}</b> / {activeStore?.max_products || 15} មុខ</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setUpgradePlanModalOpen(true)}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="ដំឡើងកញ្ចប់ទំនិញ & បុគ្គលិក"
+            >
+              <span>⚡</span>
+              <span>ដំឡើងកញ្ចប់ (Upgrade)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setRegisteredStores(getLocalStores());
+                setStoreSwitchModalOpen(true);
+              }}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-black border border-slate-700 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="ប្តូរទៅកាន់ហាងផ្សេងទៀត"
+            >
+              <span>🔄</span>
+              <span>ប្តូរហាង ({registeredStores.length})</span>
+            </button>
+
+            <a
+              href="/register"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="បង្កើតហាងថ្មីមួយទៀត"
+            >
+              <span>➕</span>
+              <span className="hidden sm:inline">បង្កើតហាងថ្មី</span>
+            </a>
+          </div>
+        </div>
+
         {/* ⭐️ TOP STAFF STATUS & SWITCH BAR ⭐️ */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-white/90 backdrop-blur-md px-4 sm:px-5 py-3 rounded-2xl border border-gray-200/80 shadow-xs">
           <div className="flex items-center gap-3">
@@ -18546,6 +18637,213 @@ export default function UnifiedAdminDashboard() {
                 បិទ
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐️ MODAL ប្តូរហាង (STORE SWITCHER MODAL) ⭐️ */}
+      {storeSwitchModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-2xl bg-orange-50 text-[#ff6a00] flex items-center justify-center text-lg font-black">
+                  🏬
+                </span>
+                <div>
+                  <h3 className="font-black text-sm text-gray-900">ជ្រើសរើសហាងដែលចង់គ្រប់គ្រង (Switch Store)</h3>
+                  <p className="text-[11px] text-gray-400">ហាងនីមួយៗមានទិន្នន័យទំនិញ ស្តុក និងលុយកាក់ដាច់ដោយឡែកពីគ្នា</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStoreSwitchModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+              {registeredStores.map(st => {
+                const isSelected = activeStore?.id === st.id;
+                const planDetails = STORE_PLANS[st.plan] || STORE_PLANS.FREE;
+
+                return (
+                  <div
+                    key={st.id}
+                    onClick={() => {
+                      setActiveStore(st);
+                      setActiveStoreState(st);
+                      setStoreSwitchModalOpen(false);
+                      setToastNotification(`🏬 បានប្តូរទៅកាន់ហាង "${st.name}" ជោគជ័យ!`);
+                      setTimeout(() => setToastNotification(null), 3000);
+                    }}
+                    className={`p-4 rounded-2xl border-2 transition cursor-pointer flex items-center justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-orange-50/80 border-[#ff6a00] shadow-2xs'
+                        : 'bg-slate-50/80 hover:bg-slate-100 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg font-black shadow-2xs shrink-0">
+                        {st.settings?.logoUrl ? <img src={st.settings.logoUrl} alt="Logo" className="w-8 h-8 object-contain rounded-lg" /> : '🛍️'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-black text-xs text-gray-900 truncate">{st.name}</h4>
+                          {isSelected && (
+                            <span className="text-[9px] font-black bg-[#ff6a00] text-white px-2 py-0.2 rounded-full">
+                              កំពុងប្រើ
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                          Link: /store/{st.slug} • {planDetails.name}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] font-bold text-gray-500 block">
+                        ទំនិញអតិបរមា: {st.max_products || 15}
+                      </span>
+                      <span className={`text-[11px] font-black ${isSelected ? 'text-[#ff6a00]' : 'text-blue-600'}`}>
+                        {isSelected ? '✓ ជ្រើសរើសរួច' : 'ចុចប្តូរ →'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-4 border-t border-gray-100 mt-4 flex items-center justify-between gap-2">
+              <a
+                href="/register"
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-black text-blue-600 hover:underline flex items-center gap-1"
+              >
+                <span>➕</span> បង្កើតហាងថ្មីមួយទៀត (/register)
+              </a>
+              <button
+                type="button"
+                onClick={() => setStoreSwitchModalOpen(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition"
+              >
+                បិទ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐️ MODAL ដំឡើងកញ្ចប់ UPGRADE PLAN (MICRO-SAAS PRICING) ⭐️ */}
+      {upgradePlanModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 text-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative border border-slate-800 animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
+            
+            <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-6">
+              <div>
+                <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest bg-orange-500/10 px-2.5 py-0.5 rounded-full border border-orange-500/20">
+                  Sabay Luk Micro-SaaS
+                </span>
+                <h3 className="font-black text-lg text-white mt-1">
+                  ដំឡើងកញ្ចប់ទំនិញ & បុគ្គលិកសម្រាប់ហាង "{activeStore?.name}"
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUpgradePlanModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold flex items-center justify-center text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Plans Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+              {[
+                { key: 'STARTER', name: '🌱 Starter', price: '$1/ខែ', yearly: '$10/ឆ្នាំ', prods: '៥០ មុខ', staff: '២ នាក់' },
+                { key: 'BASIC', name: '⚡ Basic', price: '$2/ខែ', yearly: '$20/ឆ្នាំ', prods: '១០០ មុខ', staff: '២ នាក់', highlight: true },
+                { key: 'PRO', name: '🚀 Pro', price: '$3/ខែ', yearly: '$30/ឆ្នាំ', prods: '២៥០ មុខ', staff: '៣ នាក់' },
+              ].map(p => (
+                <div 
+                  key={p.key}
+                  className={`p-4 rounded-2xl border transition relative flex flex-col justify-between ${
+                    p.highlight ? 'bg-orange-500/10 border-[#ff6a00]' : 'bg-slate-950/70 border-slate-800'
+                  }`}
+                >
+                  <div>
+                    <h4 className="font-black text-sm text-white">{p.name}</h4>
+                    <p className="text-xl font-black text-white my-1">{p.price}</p>
+                    <p className="text-[10px] text-orange-400 font-bold mb-3">{p.yearly} (សន្សំ ២ ខែ)</p>
+                    <ul className="text-[11px] text-slate-300 space-y-1">
+                      <li>✓ ទំនិញរហូតដល់ <b>{p.prods}</b></li>
+                      <li>✓ គណនីបុគ្គលិក <b>{p.staff}</b></li>
+                      <li>✓ POS & ព្រីនវិក្កយបត្រ</li>
+                    </ul>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updatedStore = {
+                        ...activeStore,
+                        plan: p.key,
+                        max_products: p.key === 'STARTER' ? 50 : (p.key === 'BASIC' ? 100 : 250),
+                        max_staff: p.key === 'PRO' ? 3 : 2
+                      };
+                      setActiveStore(updatedStore);
+                      setActiveStoreState(updatedStore);
+                      const stores = getLocalStores().map(s => s.id === updatedStore.id ? updatedStore : s);
+                      saveLocalStores(stores);
+                      setUpgradePlanModalOpen(false);
+                      setToastNotification(`🎉 អបអរសាទរ! ហាង "${activeStore.name}" ត្រូវបានដំឡើងទៅកាន់កញ្ចប់ ${p.name} រួចរាល់!`);
+                      setTimeout(() => setToastNotification(null), 3500);
+                    }}
+                    className={`mt-4 w-full py-2 rounded-xl text-xs font-black transition cursor-pointer ${
+                      p.highlight 
+                        ? 'bg-[#ff6a00] hover:bg-[#e65c00] text-white shadow-md shadow-orange-500/25' 
+                        : 'bg-slate-800 hover:bg-slate-700 text-white'
+                    }`}
+                  >
+                    ជ្រើសរើសកញ្ចប់នេះ
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* KHQR ABA Payment Box */}
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">
+                  💳 វិធីសាស្ត្របង់ប្រាក់ស្វ័យប្រវត្តិ
+                </span>
+                <h4 className="font-black text-xs text-white">ស្កេនទូទាត់តាម Bakong KHQR / ABA Pay</h4>
+                <p className="text-[11px] text-slate-400">
+                  ឈ្មោះគណនី: <b>SABAY LUK PLATFORM</b> (096 720 5522)
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  ចំណាំពេលវេរ៖ <b>Upgrade - {activeStore?.name}</b>
+                </p>
+              </div>
+
+              <div className="w-24 h-24 bg-white p-1 rounded-xl shrink-0 border border-slate-700 flex items-center justify-center">
+                <img src="/khqr-aba.jpg" alt="ABA KHQR" className="w-full h-full object-contain" />
+              </div>
+            </div>
+
+            <div className="text-center pt-4">
+              <button
+                type="button"
+                onClick={() => setUpgradePlanModalOpen(false)}
+                className="text-xs font-bold text-slate-400 hover:text-white"
+              >
+                ✕ បិទផ្ទាំងនេះ
+              </button>
+            </div>
+
           </div>
         </div>
       )}
