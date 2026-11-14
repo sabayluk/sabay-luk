@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { supabase } from '../../../supabase';
 import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, STORE_PLANS, checkStorePlanLimit } from '../../../lib/stores';
 import * as XLSX from 'xlsx';
