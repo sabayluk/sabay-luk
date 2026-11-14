@@ -2034,6 +2034,29 @@ export default function UnifiedAdminDashboard() {
   const [posPriceMode, setPosPriceMode] = useState('retail'); // 'retail' = លក់រាយ, 'wholesale' = លក់បោះដុំ
   const [modalPriceMode, setModalPriceMode] = useState('retail');
 
+  // ⭐️ States សម្រាប់ពន្ធអាករក្នុង POS (POS TAX / VAT 10% CONTROLS) ⭐️
+  const [posTaxActive, setPosTaxActive] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_pos_tax_active');
+      if (saved !== null) return saved === 'true';
+    }
+    return true; // Default ON (10% VAT)
+  });
+  const [posTaxRate, setPosTaxRate] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_pos_tax_rate');
+      if (saved !== null) return Number(saved) || 10;
+    }
+    return 10; // Default 10%
+  });
+  const [posTaxMode, setPosTaxMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_pos_tax_mode');
+      if (saved) return saved;
+    }
+    return 'exclusive'; // Default 'exclusive' (+10%)
+  });
+
 
   const [zReportModalOpen, setZReportModalOpen] = useState(false);
   const [shiftStartingCash, setShiftStartingCash] = useState(() => {
@@ -2112,8 +2135,11 @@ export default function UnifiedAdminDashboard() {
   useEffect(() => {
     if (isMounted) {
       localStorage.setItem('sabay_pos_price_mode', posPriceMode);
+      localStorage.setItem('sabay_pos_tax_active', posTaxActive);
+      localStorage.setItem('sabay_pos_tax_rate', posTaxRate);
+      localStorage.setItem('sabay_pos_tax_mode', posTaxMode);
     }
-  }, [posPriceMode, isMounted]);
+  }, [posPriceMode, posTaxActive, posTaxRate, posTaxMode, isMounted]);
 
   useEffect(() => {
     if (isMounted) {
@@ -2396,10 +2422,27 @@ export default function UnifiedAdminDashboard() {
   const removePosItem = (cartItemId) => setPosCart(prev => prev.filter(item => item.cartItemId !== cartItemId));
   const clearCart = () => setPosCart([]);
 
-  // ៥. គណនាប្រាក់ ($ និង ៛)
+  // ៥. គណនាប្រាក់ ($ និង ៛) រួមទាំងពន្ធអាករ VAT 10% Full Option
   const posSubtotal = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const posDiscountValue = discountType === '%' ? posSubtotal * (Number(discount) / 100) : Number(discount);
-  const posTotal = Math.max(0, posSubtotal - posDiscountValue);
+  const posAfterDiscount = Math.max(0, posSubtotal - posDiscountValue);
+
+  // គណនាពន្ធអាករ VAT
+  const effectiveTaxRate = posTaxActive ? (Number(posTaxRate) || 0) : 0;
+  let posTaxAmount = 0;
+  let posTotal = posAfterDiscount;
+
+  if (effectiveTaxRate > 0) {
+    if (posTaxMode === 'exclusive') {
+      posTaxAmount = (posAfterDiscount * effectiveTaxRate) / 100;
+      posTotal = posAfterDiscount + posTaxAmount;
+    } else {
+      // Inclusive: ពន្ធមានស្រាប់ក្នុងតម្លៃ
+      posTaxAmount = posAfterDiscount - (posAfterDiscount / (1 + (effectiveTaxRate / 100)));
+      posTotal = posAfterDiscount;
+    }
+  }
+
   const posTotalKHR = Math.round(posTotal * exchangeRate);
   const changeAmount = Number(amountTendered) - posTotal;
 
@@ -2666,18 +2709,29 @@ export default function UnifiedAdminDashboard() {
         total_amount: posTotal,
         subtotal: posSubtotal,
         discount: posDiscountValue,
+        tax_amount: posTaxAmount,
         payment_method: paymentMethod,
         status: 'Completed',
         order_type: 'POS',
-        items: posCart.map(item => ({
-          id: item.id,
-          name: item.name,
-          size: item.size || 'N/A',
-          color: item.color || 'N/A',
-          price: item.price,
-          qty: item.qty,
-          image_url: item.image_url
-        }))
+        items: [
+          ...posCart.map(item => ({
+            id: item.id,
+            name: item.name,
+            size: item.size || 'N/A',
+            color: item.color || 'N/A',
+            price: item.price,
+            qty: item.qty,
+            image_url: item.image_url
+          })),
+          ...(posTaxAmount > 0 ? [{
+            is_tax_meta: true,
+            tax_rate: effectiveTaxRate,
+            tax_amount: posTaxAmount,
+            tax_mode: posTaxMode,
+            tax_label: storeSettings.taxLabel || 'ពន្ធអាករ (VAT 10%)',
+            vat_tin: storeSettings.vatTin || invoiceSettings.vatTin || ''
+          }] : [])
+        ]
       };
 
       const { error: orderError } = await supabase.from('orders').insert([orderPayload]);
@@ -2690,6 +2744,11 @@ export default function UnifiedAdminDashboard() {
         items: [...posCart],
         subtotal: posSubtotal,
         discount: posDiscountValue,
+        taxAmount: posTaxAmount,
+        taxRate: effectiveTaxRate,
+        taxMode: posTaxMode,
+        taxLabel: storeSettings.taxLabel || 'ពន្ធអាករ (VAT 10%)',
+        vatTin: storeSettings.vatTin || invoiceSettings.vatTin || '',
         total: posTotal,
         totalKHR: posTotalKHR,
         method: paymentMethod,
@@ -10371,10 +10430,10 @@ export default function UnifiedAdminDashboard() {
               )}
             </div>
 
-            <div className="space-y-2 mb-4 text-xs font-bold text-gray-600 border-b border-dashed border-gray-200 pb-4">
+            <div className="space-y-2.5 mb-4 text-xs font-bold text-gray-600 border-b border-dashed border-gray-200 pb-4">
               <div className="flex justify-between">
                 <span className="text-gray-400">សរុបរង (Subtotal):</span>
-                <span>${posSubtotal.toFixed(2)}</span>
+                <span className="font-bold text-gray-800">${posSubtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">បញ្ចុះតម្លៃ (Discount):</span>
@@ -10385,6 +10444,69 @@ export default function UnifiedAdminDashboard() {
                     <option value="$">$</option>
                   </select>
                 </div>
+              </div>
+
+              {/* ⭐️ កន្លែងគិតពន្ធអាករ VAT 10% (TAX / VAT CALCULATOR) ⭐️ */}
+              <div className="p-2.5 bg-blue-50/80 rounded-2xl border border-blue-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-blue-950 font-black text-[11px] select-none">
+                    <input
+                      type="checkbox"
+                      checked={posTaxActive}
+                      onChange={(e) => setPosTaxActive(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 cursor-pointer accent-blue-600"
+                    />
+                    <span>🏛️ គិតពន្ធ (VAT {posTaxRate}%)</span>
+                  </label>
+                  <span className={`text-xs font-black ${posTaxActive ? 'text-blue-700' : 'text-gray-400 line-through'}`}>
+                    {posTaxMode === 'exclusive' 
+                      ? (posTaxActive && posTaxAmount > 0 ? `+${posTaxAmount.toFixed(2)}` : '$0.00') 
+                      : (posTaxActive && posTaxAmount > 0 ? `(${posTaxAmount.toFixed(2)})` : '$0.00')}
+                  </span>
+                </div>
+
+                {posTaxActive && (
+                  <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-blue-200/60 text-[10px]">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPosTaxMode('exclusive')}
+                        className={`px-2 py-0.5 rounded-lg font-black transition cursor-pointer ${
+                          posTaxMode === 'exclusive'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-white text-blue-700 border border-blue-200 hover:bg-blue-100'
+                        }`}
+                        title="បូកពន្ធបន្ថែមលើតម្លៃទំនិញ (+10%)"
+                      >
+                        + បូកពន្ធ ({posTaxRate}%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPosTaxMode('inclusive')}
+                        className={`px-2 py-0.5 rounded-lg font-black transition cursor-pointer ${
+                          posTaxMode === 'inclusive'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-white text-blue-700 border border-blue-200 hover:bg-blue-100'
+                        }`}
+                        title="តម្លៃទំនិញរួមបញ្ចូលពន្ធរួច"
+                      >
+                        ក្នុងតម្លៃ (Inclusive)
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-500 font-bold">%:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={posTaxRate}
+                        onChange={(e) => setPosTaxRate(Number(e.target.value) || 0)}
+                        className="w-11 bg-white border border-blue-300 rounded-lg px-1 py-0.5 text-center font-black text-blue-900 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -10612,11 +10734,31 @@ export default function UnifiedAdminDashboard() {
                 <button onClick={() => setPaymentModalOpen(false)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-bold">✕</button>
               </div>
 
-              {/* Total Display */}
-              <div className="text-center mb-4 p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                <p className="text-[11px] font-black text-blue-600 uppercase mb-0.5">ទឹកប្រាក់ត្រូវទូទាត់សរុប</p>
-                <p className="text-3xl font-black text-blue-700">${posTotal.toFixed(2)}</p>
-                <p className="text-xs font-bold text-gray-500 mt-0.5">= {posTotalKHR.toLocaleString()} រៀល</p>
+              {/* Total Display with Tax Breakdown */}
+              <div className="mb-4 p-4 bg-blue-50/90 rounded-2xl border border-blue-200 space-y-2">
+                <div className="flex justify-between text-xs text-gray-600 font-bold">
+                  <span>តម្លៃទំនិញសរុប (Subtotal):</span>
+                  <span>${posSubtotal.toFixed(2)}</span>
+                </div>
+                {posDiscountValue > 0 && (
+                  <div className="flex justify-between text-xs text-red-600 font-bold">
+                    <span>បញ្ចុះតម្លៃ (Discount):</span>
+                    <span>-${posDiscountValue.toFixed(2)}</span>
+                  </div>
+                )}
+                {posTaxActive && posTaxAmount > 0 && (
+                  <div className="flex justify-between text-xs text-blue-800 font-bold">
+                    <span>ពន្ធអាករ VAT ({posTaxRate}% {posTaxMode === 'exclusive' ? 'Exclusive' : 'Inclusive'}):</span>
+                    <span>{posTaxMode === 'exclusive' ? `+${posTaxAmount.toFixed(2)}` : `(${posTaxAmount.toFixed(2)})`}</span>
+                  </div>
+                )}
+                <div className="border-t border-blue-200/80 pt-2 flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-black text-blue-600 uppercase">ទឹកប្រាក់ត្រូវទូទាត់សរុប</p>
+                    <p className="text-xs font-bold text-orange-600">= {posTotalKHR.toLocaleString()} រៀល</p>
+                  </div>
+                  <p className="text-3xl font-black text-blue-700">${posTotal.toFixed(2)}</p>
+                </div>
               </div>
 
               {/* ⭐️ កន្លែង ADD / កែសម្រួលឈ្មោះអតិថិជនក្នុង MODAL ទូទាត់ ⭐️ */}
@@ -10872,6 +11014,12 @@ export default function UnifiedAdminDashboard() {
                       <div className="flex justify-between text-red-600">
                         <span>បញ្ចុះតម្លៃ (Discount):</span>
                         <span>-${receiptData.discount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {receiptData.taxAmount > 0 && (
+                      <div className="flex justify-between text-blue-900 font-bold">
+                        <span>{receiptData.taxLabel || 'ពន្ធអាករ (VAT)'}{receiptData.taxMode === 'inclusive' ? ' (រួមបញ្ចូល)' : ''}:</span>
+                        <span>{receiptData.taxMode === 'inclusive' ? `(${receiptData.taxAmount.toFixed(2)})` : `+${receiptData.taxAmount.toFixed(2)}`}</span>
                       </div>
                     )}
                     <div className="flex justify-between font-black text-sm pt-1.5 border-t border-black">
