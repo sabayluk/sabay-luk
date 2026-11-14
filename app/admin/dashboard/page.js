@@ -2016,13 +2016,157 @@ export default function UnifiedAdminDashboard() {
     }
   };
 
-  // មុខងារ Save ការកំណត់វិក្កយបត្រ
+  // មុខងារ Save ការកំណត់វិក្កយបត្រ (រួមទាំងពន្ធ VAT និងការកំណត់ហាង)
   const handleSaveInvoiceSettings = (e) => {
     e.preventDefault();
     localStorage.setItem('sabay_invoice_settings', JSON.stringify(invoiceSettings));
-    setExchangeRate(invoiceSettings.exchangeRate); // update exchange rate ក្នុង POS ស្វ័យប្រវត្តិ
-    setInvoiceSavedMsg('✅ រក្សាទុកទម្រង់វិក្កយបត្រជោគជ័យ!');
+    localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+    setExchangeRate(invoiceSettings.exchangeRate || storeSettings.exchangeRate || 4100);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('storage'));
+    }
+    setInvoiceSavedMsg('✅ រក្សាទុកទម្រង់វិក្កយបត្រ និងការកំណត់ពន្ធអាករ VAT ជោគជ័យ!');
     setTimeout(() => setInvoiceSavedMsg(''), 3000);
+  };
+
+  // 🖨️ មុខងារតេស្តព្រីនវិក្កយបត្រសាកល្បង (Test Print Receipt)
+  const handleTestPrintInvoice = () => {
+    const widthCss = thermalPaperSize === '58mm' ? '54mm' : '76mm';
+    const pageCss = thermalPaperSize === '58mm' ? '58mm auto' : '80mm auto';
+    const fontSize = thermalPaperSize === '58mm' ? '10px' : '11px';
+
+    const isLogoVisible = (storeSettings.showInvoiceLogo !== false && invoiceSettings.showLogo !== false) && storeSettings.logoUrl;
+    const isTaxEnabled = storeSettings.enableTax !== false;
+    const taxRate = storeSettings.taxRate ?? 10;
+    const taxMode = storeSettings.taxMode || 'exclusive';
+    const taxLabel = storeSettings.taxLabel || `ពន្ធអាករ (VAT ${taxRate}%)`;
+    const vatTin = storeSettings.vatTin || invoiceSettings.vatTin || '';
+
+    const sampleSubtotal = 40.00;
+    const sampleTax = isTaxEnabled ? (taxMode === 'inclusive' ? (sampleSubtotal * taxRate / (100 + taxRate)) : (sampleSubtotal * taxRate / 100)) : 0;
+    const sampleTotal = isTaxEnabled && taxMode === 'exclusive' ? (sampleSubtotal + sampleTax) : sampleSubtotal;
+    const sampleExchange = invoiceSettings.exchangeRate || storeSettings.exchangeRate || 4100;
+    const sampleTotalKHR = Math.round(sampleTotal * sampleExchange);
+
+    const testContent = `
+      <div style="font-family: 'Courier New', Courier, monospace, 'Hanuman', 'Siemreap', sans-serif; width: ${widthCss}; margin: 0 auto; padding: 2.5mm; color: #000; font-size: ${fontSize}; line-height: 1.3;">
+        <div style="text-align: center; margin-bottom: 8px;">
+          ${isLogoVisible ? `<img src="${storeSettings.logoUrl}" style="height: 38px; max-width: 100%; object-fit: contain; margin: 0 auto 4px auto; filter: grayscale(100%); display: block;" />` : ''}
+          <h2 style="font-size: 15px; font-weight: 900; text-transform: uppercase; margin: 0; line-height: 1.1;">${invoiceSettings.storeName || storeSettings.storeName || 'SABAY LUK'}</h2>
+          ${storeSettings.storeSlogan ? `<p style="font-size: 9px; margin: 2px 0 0 0; color: #555;">${storeSettings.storeSlogan}</p>` : ''}
+          <p style="font-size: 9px; margin: 2px 0 0 0;">អាសយដ្ឋាន: ${invoiceSettings.address || storeSettings.address || 'ភ្នំពេញ, កម្ពុជា'}</p>
+          <p style="font-size: 9px; font-weight: bold; margin: 2px 0 0 0;">ទូរស័ព្ទ: ${invoiceSettings.phone || storeSettings.phone || '096 720 5522'}</p>
+          ${vatTin ? `<p style="font-size: 9px; font-family: monospace; font-weight: bold; margin: 2px 0 0 0;">VATTIN: ${vatTin}</p>` : ''}
+          <div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>
+          <h3 style="font-size: 11px; font-weight: 900; text-transform: uppercase; margin: 0;">*** វិក្កយបត្រតេស្តព្រីន / TEST RECEIPT ***</h3>
+        </div>
+
+        <div style="font-size: 10px; margin-bottom: 6px;">
+          <div style="display: flex; justify-content: space-between;"><span>លេខវិក្កយបត្រ:</span><b>ORD-TEST-PRINT</b></div>
+          <div style="display: flex; justify-content: space-between;"><span>កាលបរិច្ឆេទ:</span><span>${new Date().toLocaleDateString('km-KH')} ${new Date().toLocaleTimeString()}</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>អ្នកគិតប្រាក់:</span><span>${invoiceSettings.cashierName || 'Admin'}</span></div>
+          <div style="display: flex; justify-content: space-between;"><span>អតិថិជន:</span><b>អតិថិជនសាកល្បង (Test)</b></div>
+        </div>
+
+        <div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>
+        <table style="width: 100%; border-collapse: collapse; font-size: inherit; margin-bottom: 6px;">
+          <thead>
+            <tr style="border-bottom: 1px dashed #000; font-size: 9px; font-weight: bold;">
+              <th style="text-align: left; padding: 2px 0;">មុខទំនិញ (Item)</th>
+              <th style="text-align: center; padding: 2px 0; width: 40px;">ចំនួន</th>
+              <th style="text-align: right; padding: 2px 0; width: 60px;">តម្លៃសរុប</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 1px dotted #ccc;">
+              <td style="padding: 3px 0;">
+                <b>ស្បែកជើងប៉ាតា Sneaker Pro</b>
+                <div style="font-size: 8.5px; color: #555;">Size: 41 | ពណ៌ខ្មៅ @$20.00</div>
+              </td>
+              <td style="text-align: center; font-weight: bold; padding: 3px 0;">1</td>
+              <td style="text-align: right; font-weight: bold; padding: 3px 0;">$20.00</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted #ccc;">
+              <td style="padding: 3px 0;">
+                <b>ស្បែកជើងកីឡា Sport Runner</b>
+                <div style="font-size: 8.5px; color: #555;">Size: 42 | ពណ៌ស @$20.00</div>
+              </td>
+              <td style="text-align: center; font-weight: bold; padding: 3px 0;">1</td>
+              <td style="text-align: right; font-weight: bold; padding: 3px 0;">$20.00</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>
+        <div style="font-size: 10px; line-height: 1.4;">
+          <div style="display: flex; justify-content: space-between;"><span>តម្លៃសរុប (Subtotal):</span><b>${sampleSubtotal.toFixed(2)}</b></div>
+          ${isTaxEnabled ? `
+            <div style="display: flex; justify-content: space-between; color: #1d4ed8; font-weight: bold;">
+              <span>${taxLabel}${taxMode === 'inclusive' ? ' (រួមបញ្ចូល)' : ''}:</span>
+              <span>${taxMode === 'inclusive' ? `(${sampleTax.toFixed(2)})` : `+${sampleTax.toFixed(2)}`}</span>
+            </div>
+          ` : ''}
+          <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 900; padding-top: 4px; border-top: 1px solid #000; margin-top: 2px;">
+            <span>ទឹកប្រាក់សរុប (TOTAL):</span>
+            <span>${sampleTotal.toFixed(2)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: #333;">
+            <span>គិតជាប្រាក់រៀល (KHR):</span>
+            <span>${sampleTotalKHR.toLocaleString()} ៛</span>
+          </div>
+        </div>
+
+        <div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px;">
+          <span>វិធីទូទាត់ (Payment):</span>
+          <b>Bakong KHQR / Cash</b>
+        </div>
+
+        ${storeSettings.khqrImageUrl ? `
+          <div style="margin: 6px 0; padding: 2px; text-align: center;">
+            <img src="${storeSettings.khqrImageUrl}" style="width: 76px; height: 76px; margin: 0 auto; object-fit: contain; display: block;" />
+            <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; margin: 3px 0 0 0;">${storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK'}</p>
+          </div>
+        ` : '<div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>'}
+
+        <div style="text-align: center; font-size: 9px; margin-top: 6px;">
+          <p style="font-weight: bold; margin: 0;">${invoiceSettings.thankYouMsg || 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត'}</p>
+          <p style="font-size: 8px; color: #555; margin: 2px 0 0 0;">${invoiceSettings.policyNote || 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ'}</p>
+          <p style="font-size: 7.5px; color: #888; margin: 3px 0 0 0;">*** System Powered by Sabay Luk POS ***</p>
+        </div>
+      </div>
+    `;
+
+    const printWindow = window.open('', '_blank', 'height=650,width=450');
+    if (!printWindow) {
+      alert('សូមអនុញ្ញាត Popup ដើម្បីបើកផ្ទាំងព្រីន (Please allow popups for printing)');
+      return;
+    }
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Test Receipt Print - Sabay Luk</title>
+          <style>
+            @page { size: ${pageCss}; margin: 0mm; }
+            * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body { margin: 0; padding: 0; background: #fff; }
+          </style>
+        </head>
+        <body>
+          ${testContent}
+          <script>
+            window.onload = function() {
+              window.focus();
+              window.print();
+              window.onafterprint = function() { window.close(); };
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   // State សម្រាប់ Modal ជ្រើសរើស Size/Variant ពេលចុចលើទំនិញ
@@ -14118,34 +14262,75 @@ export default function UnifiedAdminDashboard() {
               </div>
             </div>
 
-            <button 
-              type="submit" 
-              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-base shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition"
-            >
-              💾 រក្សាទុកការកំណត់វិក្កយបត្រ (Save Invoice Settings)
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button 
+                type="submit" 
+                className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+              >
+                <span>💾</span>
+                <span>រក្សាទុកការកំណត់ (Save Settings)</span>
+              </button>
+              <button 
+                type="button" 
+                onClick={handleTestPrintInvoice}
+                className="px-6 bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-black text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                title="ចុចដើម្បីតេស្តព្រីនសាកល្បងទៅម៉ាស៊ីនព្រីនផ្ទាល់"
+              >
+                <span>🖨️</span>
+                <span>តេស្តព្រីន (Test Print)</span>
+              </button>
+            </div>
           </form>
         </div>
 
-        {/* ផ្នែកខាងស្តាំ: Live Preview សន្លឹកវិក្កយបត្រជាក់ស្តែង */}
-        <div className="lg:col-span-5 flex flex-col items-center">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">👁️ គំរូសន្លឹកវិក្កយបត្រផ្ទាល់ (Live Preview 80mm)</p>
+        {/* ផ្នែកខាងស្តាំ: Live Preview សន្លឹកវិក្កយបត្រជាក់ស្តែង & ប៊ូតុងតេស្តព្រីន */}
+        <div className="lg:col-span-5 flex flex-col items-center space-y-4">
           
+          {/* Quick Print Toolbar */}
+          <div className="w-[320px] bg-white p-3 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+              <span>ក្រដាស:</span>
+              <select
+                value={thermalPaperSize}
+                onChange={(e) => setThermalPaperSize(e.target.value)}
+                className="bg-gray-100 border border-gray-300 rounded-lg px-2 py-1 text-xs font-black outline-none cursor-pointer"
+              >
+                <option value="80mm">80mm (ស្តង់ដារ)</option>
+                <option value="58mm">58mm (តូច)</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTestPrintInvoice}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md shadow-blue-500/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="ចុចដើម្បីតេស្តព្រីនវិក្កយបត្រសាកល្បងទៅម៉ាស៊ីនព្រីនផ្ទាល់"
+            >
+              <span>🖨️</span>
+              <span>តេស្តព្រីន (Test Print)</span>
+            </button>
+          </div>
+
           <div className="bg-white w-[320px] rounded-2xl shadow-xl p-6 font-mono text-black border border-gray-300">
             <div className="text-center mb-3">
               {(storeSettings.showInvoiceLogo !== false && invoiceSettings.showLogo !== false) && storeSettings.logoUrl && (
                 <img src={storeSettings.logoUrl} alt="Store Logo" className="h-8 mx-auto object-contain mb-1 filter grayscale" />
               )}
-              <h2 className="text-2xl font-black uppercase tracking-widest">{invoiceSettings.storeName || 'SABAY LUK'}</h2>
+              <h2 className="text-xl font-black uppercase tracking-widest">{invoiceSettings.storeName || 'SABAY LUK'}</h2>
               <p className="text-[10px] text-gray-600">{invoiceSettings.address || 'Phnom Penh, Cambodia'}</p>
-              <p className="text-[10px] text-gray-600">Tel: {invoiceSettings.phone || '096 720 5522'}</p>
+              <p className="text-[10px] text-gray-600 font-bold">Tel: {invoiceSettings.phone || '096 720 5522'}</p>
+              {(storeSettings.vatTin || invoiceSettings.vatTin) && (
+                <p className="text-[9.5px] font-mono font-bold text-gray-800">
+                  VATTIN: {storeSettings.vatTin || invoiceSettings.vatTin}
+                </p>
+              )}
               <div className="border-b border-black border-dashed my-2"></div>
               <h3 className="font-bold text-xs">{invoiceSettings.title || 'OFFICIAL RECEIPT'}</h3>
             </div>
 
             <div className="space-y-0.5 mb-2 text-[11px]">
               <p>Order : <span className="font-bold">ORD-SAMPLE</span></p>
-              <p>Date  : {new Date().toLocaleString()}</p>
+              <p>Date  : {new Date().toLocaleDateString('km-KH')} {new Date().toLocaleTimeString()}</p>
               <p>Cashier: {invoiceSettings.cashierName || 'Admin'}</p>
               <p>Customer: អតិថិជនទូទៅ</p>
             </div>
@@ -14162,33 +14347,44 @@ export default function UnifiedAdminDashboard() {
               <tbody>
                 <tr>
                   <td className="py-1">
-                    <p className="font-bold">ស្បែកជើងបុរស</p>
+                    <p className="font-bold">ស្បែកជើងប៉ាតា Sneaker Pro</p>
                     <span className="text-[9px] text-gray-600">Size: 41</span>
                   </td>
-                  <td className="py-1 text-center">1</td>
-                  <td className="py-1 text-right">$20.00</td>
+                  <td className="py-1 text-center font-bold">1</td>
+                  <td className="py-1 text-right font-bold">$20.00</td>
                 </tr>
                 <tr>
                   <td className="py-1">
-                    <p className="font-bold">ស្បែកជើងបុរស</p>
-                    <span className="text-[9px] text-gray-600">Size: 39</span>
+                    <p className="font-bold">ស្បែកជើងកីឡា Sport Runner</p>
+                    <span className="text-[9px] text-gray-600">Size: 42</span>
                   </td>
-                  <td className="py-1 text-center">1</td>
-                  <td className="py-1 text-right">$20.00</td>
+                  <td className="py-1 text-center font-bold">1</td>
+                  <td className="py-1 text-right font-bold">$20.00</td>
                 </tr>
               </tbody>
             </table>
             <div className="border-b border-black border-dashed my-2"></div>
             
+            {/* Financials with Tax VAT */}
             <div className="space-y-1 text-[11px]">
-              <div className="flex justify-between"><p>Subtotal</p><p>$40.00</p></div>
-              <div className="flex justify-between"><p>Discount</p><p>-$0.00</p></div>
+              <div className="flex justify-between"><p>Subtotal</p><p className="font-bold">$40.00</p></div>
+              <div className="flex justify-between"><p>Discount</p><p className="font-bold">-$0.00</p></div>
+              
+              {/* ⭐️ TAX / VAT LINE ITEM ⭐️ */}
+              {storeSettings.enableTax !== false && (
+                <div className="flex justify-between text-blue-700 font-bold">
+                  <p>{storeSettings.taxLabel || `ពន្ធអាករ VAT (${storeSettings.taxRate ?? 10}%)`}{storeSettings.taxMode === 'inclusive' ? ' (រួមបញ្ចូល)' : ''}:</p>
+                  <p>{storeSettings.taxMode === 'inclusive' ? `(${(40 * (storeSettings.taxRate ?? 10) / (100 + (storeSettings.taxRate ?? 10))).toFixed(2)})` : `+${(40 * (storeSettings.taxRate ?? 10) / 100).toFixed(2)}`}</p>
+                </div>
+              )}
+
               <div className="flex justify-between font-black text-sm pt-1 border-t border-black">
-                <p>TOTAL (USD)</p><p>$40.00</p>
+                <p>TOTAL (USD)</p>
+                <p>${(40 + (storeSettings.enableTax !== false && storeSettings.taxMode !== 'inclusive' ? (40 * (storeSettings.taxRate ?? 10) / 100) : 0)).toFixed(2)}</p>
               </div>
               <div className="flex justify-between font-black text-xs text-gray-700">
                 <p>TOTAL (KHR)</p>
-                <p>{(40 * (invoiceSettings.exchangeRate || 4100)).toLocaleString()} ៛</p>
+                <p>${Math.round((40 + (storeSettings.enableTax !== false && storeSettings.taxMode !== 'inclusive' ? (40 * (storeSettings.taxRate ?? 10) / 100) : 0)) * (invoiceSettings.exchangeRate || 4100)).toLocaleString()} ៛</p>
               </div>
             </div>
 
@@ -14196,11 +14392,26 @@ export default function UnifiedAdminDashboard() {
             <div className="space-y-0.5 text-[11px]">
               <div className="flex justify-between"><p>Paid By</p><p className="font-bold">ABA Pay / KHQR</p></div>
             </div>
-            <div className="border-b border-black border-dashed my-3"></div>
+
+            {/* Compact QR + Name */}
+            {storeSettings.khqrImageUrl ? (
+              <div className="my-2 p-1 text-center">
+                <img 
+                  src={storeSettings.khqrImageUrl} 
+                  alt="KHQR" 
+                  className="w-20 h-20 mx-auto object-contain" 
+                />
+                <p className="text-[9px] font-black uppercase mt-1 leading-tight">
+                  {storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK'}
+                </p>
+              </div>
+            ) : (
+              <div className="border-b border-black border-dashed my-2"></div>
+            )}
             
-            <div className="text-center text-[10px]">
+            <div className="text-center text-[10px] space-y-0.5 pt-1">
               <p className="font-bold">{invoiceSettings.thankYouMsg || 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត'}</p>
-              <p className="mt-1 text-[9px] text-gray-600">{invoiceSettings.policyNote}</p>
+              <p className="text-[8.5px] text-gray-600">{invoiceSettings.policyNote || 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ'}</p>
             </div>
           </div>
         </div>
