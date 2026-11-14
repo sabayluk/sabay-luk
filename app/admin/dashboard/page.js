@@ -1282,6 +1282,7 @@ export default function UnifiedAdminDashboard() {
     bankAccountUsd: '010 723 080',
     khqrImageUrl: '/khqr-aba.jpg',
     showInvoiceLogo: true,
+    showReceiptQr: true,
     deliveryPhnomPenh: '1.50',
     deliveryProvince: '2.00',
     policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)',
@@ -1303,7 +1304,8 @@ export default function UnifiedAdminDashboard() {
             bankAccountKhr: parsed.bankAccountKhr || '004 500 394',
             bankAccountUsd: parsed.bankAccountUsd || parsed.bankAccountNumber || '010 723 080',
             khqrImageUrl: parsed.khqrImageUrl || '/khqr-aba.jpg',
-            showInvoiceLogo: parsed.showInvoiceLogo !== undefined ? parsed.showInvoiceLogo : true
+            showInvoiceLogo: parsed.showInvoiceLogo !== undefined ? parsed.showInvoiceLogo : true,
+            showReceiptQr: parsed.showReceiptQr !== undefined ? parsed.showReceiptQr : true
           };
         } catch (e) {}
       }
@@ -2122,7 +2124,7 @@ export default function UnifiedAdminDashboard() {
           <b>Bakong KHQR / Cash</b>
         </div>
 
-        ${storeSettings.khqrImageUrl ? `
+        ${(storeSettings.showReceiptQr !== false && storeSettings.khqrImageUrl) ? `
           <div style="margin: 6px 0; padding: 2px; text-align: center;">
             <img src="${storeSettings.khqrImageUrl}" style="width: 76px; height: 76px; margin: 0 auto; object-fit: contain; display: block;" />
             <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; margin: 3px 0 0 0;">${storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK'}</p>
@@ -13428,32 +13430,56 @@ export default function UnifiedAdminDashboard() {
           <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
             <div className="bg-white rounded-3xl shadow-2xl p-5 flex flex-col max-h-[92vh] font-mono text-black border border-gray-300 max-w-sm w-full animate-in zoom-in-95">
               
-              {/* Top Controls: 80mm vs 58mm Paper Size Switcher */}
-              <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-gray-200">
+              {/* Top Controls: Paper Size Switcher & Quick QR Toggle Button */}
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-gray-200">
                 <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">
                   <button
                     type="button"
                     onClick={() => setThermalPaperSize('80mm')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
                       thermalPaperSize === '80mm'
                         ? 'bg-white text-black shadow-xs font-black'
                         : 'text-gray-500 hover:text-black'
                     }`}
                   >
-                    🖨️ 80mm ស្តង់ដារ
+                    80mm
                   </button>
                   <button
                     type="button"
                     onClick={() => setThermalPaperSize('58mm')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
                       thermalPaperSize === '58mm'
                         ? 'bg-white text-black shadow-xs font-black'
                         : 'text-gray-500 hover:text-black'
                     }`}
                   >
-                    📱 58mm ខ្នាតតូច
+                    58mm
                   </button>
                 </div>
+
+                {/* ⭐️ Quick Toggle: QR Code ON/OFF (ដាក់ QR ក៏បាន អត់ដាក់ក៏បាន) ⭐️ */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = storeSettings.showReceiptQr === false;
+                    setStoreSettings(prev => ({ ...prev, showReceiptQr: nextVal }));
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('sabay_store_settings', JSON.stringify({ ...storeSettings, showReceiptQr: nextVal }));
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-xl text-xs font-black transition flex items-center gap-1 cursor-pointer border ${
+                    storeSettings.showReceiptQr !== false
+                      ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 shadow-2xs'
+                      : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
+                  }`}
+                  title="ចុចដើម្បី បើក/បិទ ការបង្ហាញ QR Code លើក្រដាសព្រីន"
+                >
+                  <span>📱 QR:</span>
+                  <span className={storeSettings.showReceiptQr !== false ? 'text-blue-700 font-black' : 'text-rose-600 font-bold line-through'}>
+                    {storeSettings.showReceiptQr !== false ? '✅ បើក' : '❌ បិទ'}
+                  </span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setReceiptData(null)}
@@ -13603,8 +13629,8 @@ export default function UnifiedAdminDashboard() {
                     )}
                   </div>
 
-                  {/* KHQR Code Section (Compact: QR + Name Only to keep receipt short) */}
-                  {storeSettings.khqrImageUrl ? (
+                  {/* KHQR Code Section (Compact: QR + Name Only IF ENABLED) */}
+                  {(storeSettings.showReceiptQr !== false && storeSettings.khqrImageUrl) ? (
                     <div className="my-1.5 p-1 text-center bg-white">
                       <img 
                         src={storeSettings.khqrImageUrl} 
@@ -14108,6 +14134,32 @@ export default function UnifiedAdminDashboard() {
               )}
             </div>
 
+            {/* 📱 ការកំណត់ QR Code លើក្រដាសព្រីន (Receipt QR Toggle) */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+              <div>
+                <label className="text-xs font-black text-slate-800 block">
+                  📱 បង្ហាញ QR Code លើក្រដាសវិក្កយបត្រព្រីន (Show QR on Receipt)
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  អាចជ្រើសរើស «បើក» ដើម្បីឱ្យមាន QR លើវិក្កយបត្រ ឬ «បិទ» ដើម្បីកុំឱ្យវែងខាតក្រដាស
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextVal = storeSettings.showReceiptQr === false;
+                  setStoreSettings(prev => ({ ...prev, showReceiptQr: nextVal }));
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition border cursor-pointer ${
+                  storeSettings.showReceiptQr !== false
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-gray-200 text-gray-700 border-gray-300'
+                }`}
+              >
+                {storeSettings.showReceiptQr !== false ? '✅ បើក (Show QR)' : '❌ បិទ (No QR)'}
+              </button>
+            </div>
+
             <div>
               <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide mb-3">🏢 ១. ព័ត៌មានក្បាលវិក្កយបត្រ (Header)</h3>
               <div className="space-y-3">
@@ -14308,19 +14360,36 @@ export default function UnifiedAdminDashboard() {
                 onChange={(e) => setThermalPaperSize(e.target.value)}
                 className="bg-gray-100 border border-gray-300 rounded-lg px-2 py-1 text-xs font-black outline-none cursor-pointer"
               >
-                <option value="80mm">80mm (ស្តង់ដារ)</option>
-                <option value="58mm">58mm (តូច)</option>
+                <option value="80mm">80mm</option>
+                <option value="58mm">58mm</option>
               </select>
             </div>
+
+            {/* Quick QR toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const nextVal = storeSettings.showReceiptQr === false;
+                setStoreSettings(prev => ({ ...prev, showReceiptQr: nextVal }));
+              }}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition border cursor-pointer ${
+                storeSettings.showReceiptQr !== false
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 shadow-2xs'
+                  : 'bg-gray-100 text-gray-400 border-gray-200 line-through'
+              }`}
+              title="ចុចដើម្បី បើក/បិទ QR Code លើវិក្កយបត្រ"
+            >
+              <span>QR: {storeSettings.showReceiptQr !== false ? '✅' : '❌'}</span>
+            </button>
 
             <button
               type="button"
               onClick={handleTestPrintInvoice}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md shadow-blue-500/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-md shadow-blue-500/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
               title="ចុចដើម្បីតេស្តព្រីនវិក្កយបត្រសាកល្បងទៅម៉ាស៊ីនព្រីនផ្ទាល់"
             >
               <span>🖨️</span>
-              <span>តេស្តព្រីន (Test Print)</span>
+              <span>តេស្តព្រីន</span>
             </button>
           </div>
 
@@ -14406,8 +14475,8 @@ export default function UnifiedAdminDashboard() {
               <div className="flex justify-between"><p>Paid By</p><p className="font-bold">ABA Pay / KHQR</p></div>
             </div>
 
-            {/* Compact QR + Name */}
-            {storeSettings.khqrImageUrl ? (
+            {/* Compact QR + Name (Only if enabled) */}
+            {(storeSettings.showReceiptQr !== false && storeSettings.khqrImageUrl) ? (
               <div className="my-2 p-1 text-center">
                 <img 
                   src={storeSettings.khqrImageUrl} 
