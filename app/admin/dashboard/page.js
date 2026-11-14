@@ -3573,7 +3573,7 @@ export default function UnifiedAdminDashboard() {
           })()}
           <div className="space-y-4">
             {/* ជួរទី ១: ស្តុក & តម្លៃដើម */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {(() => {
                 const activeCols = selectedColors.length > 0 ? selectedColors : (color ? color.split(',').map(c => c.trim()).filter(Boolean) : []);
                 const hasMatrixActive = selectedSizes.length > 0 || activeCols.length > 0;
@@ -5887,6 +5887,19 @@ export default function UnifiedAdminDashboard() {
               </div>
             </div>
 
+            {/* Step 2.5: VAT Tax Collected */}
+            <div className="p-4 rounded-2xl bg-blue-50/80 border-2 border-blue-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-blue-900 uppercase">ពន្ធអាករ VAT (10%)</span>
+                <span className="text-base">🏛️</span>
+              </div>
+              <p className="text-2xl font-black text-blue-700">${totalTaxCollected.toFixed(2)}</p>
+              <div className="text-[11px] text-blue-800 space-y-0.5 pt-1 border-t border-blue-200">
+                <div className="flex justify-between"><span>ចំណូលដកពន្ធ:</span> <b>${netRevenueExclTax.toFixed(2)}</b></div>
+                <div className="flex justify-between"><span>គិតជាប្រាក់រៀល:</span> <b>≈ {(totalTaxCollected * exchangeRate).toLocaleString()} ៛</b></div>
+              </div>
+            </div>
+
             {/* Step 3: Net Profit */}
             <div className="p-4 rounded-2xl bg-emerald-50/80 border-2 border-emerald-300 space-y-2">
               <div className="flex items-center justify-between">
@@ -6551,13 +6564,19 @@ export default function UnifiedAdminDashboard() {
                           {/* ⭐️ ប៊ូតុង Re-Print វិក្កយបត្រ ⭐️ */}
                           <button 
                             onClick={() => {
-                              const items = order.items && Array.isArray(order.items) ? order.items : [];
+                              const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+                              const orderTax = getOrderTax(order);
                               setReceiptData({
                                 orderId: displayId,
                                 date: order.created_at ? new Date(order.created_at).toLocaleString() : new Date().toLocaleString(),
                                 items: items,
                                 subtotal: order.subtotal || order.total,
                                 discount: order.discount || 0,
+                                taxAmount: orderTax,
+                                taxRate: orderTax > 0 ? 10 : 0,
+                                taxMode: 'exclusive',
+                                taxLabel: 'ពន្ធអាករ (VAT 10%)',
+                                vatTin: storeSettings.vatTin || invoiceSettings.vatTin || '',
                                 total: order.total,
                                 totalKHR: Math.round(order.total * exchangeRate),
                                 method: order.payment || 'Cash',
@@ -6601,7 +6620,7 @@ export default function UnifiedAdminDashboard() {
               {/* Items List */}
               <div className="max-h-80 overflow-y-auto space-y-3 pr-1 mb-5">
                 {selectedOrderDetails.items && Array.isArray(selectedOrderDetails.items) && selectedOrderDetails.items.length > 0 ? (
-                  selectedOrderDetails.items.map((item, idx) => (
+                  selectedOrderDetails.items.filter(it => !it.is_tax_meta).map((item, idx) => (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl border border-gray-100">
                       {item.image_url ? (
                         <img src={item.image_url} className="w-12 h-12 rounded-xl object-cover bg-white border shrink-0" alt="" />
@@ -6634,6 +6653,24 @@ export default function UnifiedAdminDashboard() {
                   <span>វិធីទូទាត់:</span>
                   <span className="text-gray-900">{selectedOrderDetails.payment || 'Cash'}</span>
                 </div>
+                {selectedOrderDetails.subtotal != null && (
+                  <div className="flex justify-between text-gray-500">
+                    <span>តម្លៃសរុបរង (Subtotal):</span>
+                    <span className="text-gray-900">${parseFloat(selectedOrderDetails.subtotal).toFixed(2)}</span>
+                  </div>
+                )}
+                {selectedOrderDetails.discount > 0 && (
+                  <div className="flex justify-between text-red-600">
+                    <span>បញ្ចុះតម្លៃ (Discount):</span>
+                    <span>-${parseFloat(selectedOrderDetails.discount).toFixed(2)}</span>
+                  </div>
+                )}
+                {getOrderTax(selectedOrderDetails) > 0 && (
+                  <div className="flex justify-between text-blue-700">
+                    <span>ពន្ធអាករ (VAT 10%):</span>
+                    <span>+${getOrderTax(selectedOrderDetails).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-base font-black text-gray-900 pt-2 border-t border-gray-200">
                   <span>ទឹកប្រាក់សរុប:</span>
                   <span className="text-blue-600">${parseFloat(selectedOrderDetails.total || 0).toFixed(2)}</span>
@@ -6786,9 +6823,11 @@ export default function UnifiedAdminDashboard() {
     };
 
     const periodRevenue = periodOrders.reduce((sum, o) => sum + (parseFloat(o.total_amount != null ? o.total_amount : o.total) || 0), 0);
+    const periodTaxCollected = periodOrders.reduce((sum, o) => sum + getOrderTax(o), 0);
+    const periodNetSalesExclTax = Math.max(0, periodRevenue - periodTaxCollected);
     const periodCOGS = periodOrders.reduce((sum, o) => sum + getOrderCost(o), 0);
-    const periodGrossProfit = Math.max(0, periodRevenue - periodCOGS);
-    const grossMarginPercent = periodRevenue > 0 ? ((periodGrossProfit / periodRevenue) * 100) : 0;
+    const periodGrossProfit = Math.max(0, periodNetSalesExclTax - periodCOGS);
+    const grossMarginPercent = periodNetSalesExclTax > 0 ? ((periodGrossProfit / periodNetSalesExclTax) * 100) : 0;
 
     // ២. ចម្រាញ់ចំណាយតាមកាលបរិច្ឆេទ
     const filteredByPeriodExpenses = expenses.filter(exp => {
@@ -10718,6 +10757,11 @@ export default function UnifiedAdminDashboard() {
                     )}
                     <p className="text-[10px] text-gray-700">អាសយដ្ឋាន: {storeSettings.address || 'ភ្នំពេញ, កម្ពុជា'}</p>
                     <p className="text-[10px] text-gray-700 font-bold">ទូរស័ព្ទ: {storeSettings.phone || '096 720 5522'}</p>
+                    {(storeSettings.vatTin || invoiceSettings.vatTin || receiptData.vatTin) && (
+                      <p className="text-[9.5px] font-mono font-black text-gray-900">
+                        VATTIN: {storeSettings.vatTin || invoiceSettings.vatTin || receiptData.vatTin}
+                      </p>
+                    )}
                     <div className="border-b border-black border-dashed my-2"></div>
                     <h3 className="font-black text-xs uppercase tracking-widest">
                       *** វិក្កយបត្រផ្លូវការ / RECEIPT ***
@@ -11362,6 +11406,79 @@ export default function UnifiedAdminDashboard() {
                     onChange={(e) => setInvoiceSettings({...invoiceSettings, cashierName: e.target.value})}
                     className="w-full border-2 border-gray-200 p-3 rounded-xl text-sm font-medium outline-none focus:border-blue-500"
                   />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-gray-100 space-y-4">
+              <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-2">
+                <span>🏛️</span> ៣. ការកំណត់ពន្ធអាករ (Tax & VAT 10% System)
+              </h3>
+              
+              <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-200/80 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-black text-gray-800 block">
+                      បើកដំណើរការគិតពន្ធ VAT (Enable Tax System)
+                    </label>
+                    <p className="text-[11px] text-gray-500">បើកដំណើរការគិតពន្ធ ១០% លើប្រព័ន្ធលក់ POS និងវិក្កយបត្រស្វ័យប្រវត្តិ</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={storeSettings.enableTax !== false}
+                    onChange={(e) => setStoreSettings({ ...storeSettings, enableTax: e.target.checked })}
+                    className="w-5 h-5 rounded text-blue-600 cursor-pointer accent-blue-600"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-blue-200/60">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">អត្រាពន្ធ VAT (%) *</label>
+                    <input
+                      type="number"
+                      value={storeSettings.taxRate ?? 10}
+                      onChange={(e) => setStoreSettings({ ...storeSettings, taxRate: Number(e.target.value) || 0 })}
+                      className="w-full bg-white border border-gray-300 p-2.5 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                      min="0"
+                      max="100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">របៀបគិតពន្ធ (Tax Mode)</label>
+                    <select
+                      value={storeSettings.taxMode || 'exclusive'}
+                      onChange={(e) => setStoreSettings({ ...storeSettings, taxMode: e.target.value })}
+                      className="w-full bg-white border border-gray-300 p-2.5 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                    >
+                      <option value="exclusive">បូកពន្ធបន្ថែមលើតម្លៃទំនិញ (+10% Tax Exclusive)</option>
+                      <option value="inclusive">តម្លៃទំនិញរួមបញ្ចូលពន្ធរួច (Tax Inclusive)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                      លេខអត្តសញ្ញាណកម្មសារពើពន្ធ (VAT TIN / Tax ID)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ឧ. K008-902345678"
+                      value={storeSettings.vatTin || ''}
+                      onChange={(e) => setStoreSettings({ ...storeSettings, vatTin: e.target.value.trim() })}
+                      className="w-full bg-white border border-gray-300 p-2.5 rounded-xl text-xs font-bold outline-none focus:border-blue-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">ឈ្មោះពន្ធលើវិក្កយបត្រ (Tax Label)</label>
+                    <input
+                      type="text"
+                      placeholder="អាករលើតម្លៃបន្ថែម (VAT 10%)"
+                      value={storeSettings.taxLabel || 'អាករលើតម្លៃបន្ថែម (VAT 10%)'}
+                      onChange={(e) => setStoreSettings({ ...storeSettings, taxLabel: e.target.value })}
+                      className="w-full bg-white border border-gray-300 p-2.5 rounded-xl text-xs font-bold outline-none focus:border-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

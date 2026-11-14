@@ -876,7 +876,12 @@ export default function CustomerStorefront() {
     policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)',
     exchangeRate: 4100,
     themeColor: '#ff6a00',
-    themePreset: 'orange'
+    themePreset: 'orange',
+    enableTax: true,
+    taxRate: 10,
+    taxMode: 'exclusive',
+    vatTin: '',
+    taxLabel: 'អាករលើតម្លៃបន្ថែម (VAT 10%)'
   };
 
   const [storeSettings, setStoreSettings] = useState(DEFAULT_STORE_SETTINGS);
@@ -1362,7 +1367,25 @@ export default function CustomerStorefront() {
     }
   }
 
-  const totalPrice = Math.max(0, subtotalPrice - couponDiscountAmount);
+  // ⭐️ គណនាពន្ធ VAT (បើហាងបានបើកដំណើរការក្នុង Settings) ⭐️
+  const isTaxEnabled = storeSettings.enableTax !== false;
+  const taxRatePercent = Number(storeSettings.taxRate) || 10;
+  const taxMode = storeSettings.taxMode || 'exclusive'; // 'exclusive' | 'inclusive'
+
+  const netBeforeTax = Math.max(0, subtotalPrice - couponDiscountAmount);
+  let taxAmount = 0;
+  let totalPrice = netBeforeTax;
+
+  if (isTaxEnabled && taxRatePercent > 0) {
+    if (taxMode === 'exclusive') {
+      taxAmount = Math.round((netBeforeTax * (taxRatePercent / 100)) * 100) / 100;
+      totalPrice = netBeforeTax + taxAmount;
+    } else {
+      taxAmount = Math.round((netBeforeTax - (netBeforeTax / (1 + (taxRatePercent / 100)))) * 100) / 100;
+      totalPrice = netBeforeTax;
+    }
+  }
+
   const totalRiel = Math.round(totalPrice * (storeSettings.exchangeRate || 4100));
 
   // ⭐️ បញ្ជាក់ការបញ្ជាទិញ (Submit Online Checkout to Supabase) ⭐️
@@ -1497,20 +1520,29 @@ export default function CustomerStorefront() {
         payment_slip_url: uploadedSlipUrl || null,
         status: 'Pending',
         order_type: 'ONLINE',
-        items: cart.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          qty: item.qty,
-          size: item.size || '',
-          color: item.color || '',
-          variantId: item.variantId || null,
-          image_url: item.image_url || '',
-          payment_slip_url: uploadedSlipUrl || null,
-          google_map_url: googleMapUrl || null,
-          location_photo_url: uploadedLocationPhotoUrl || null,
-          coupon_code: appliedCoupon ? appliedCoupon.code : null
-        }))
+        items: [
+          ...cart.map(item => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            qty: item.qty,
+            size: item.size || '',
+            color: item.color || '',
+            variantId: item.variantId || null,
+            image_url: item.image_url || '',
+            payment_slip_url: uploadedSlipUrl || null,
+            google_map_url: googleMapUrl || null,
+            location_photo_url: uploadedLocationPhotoUrl || null,
+            coupon_code: appliedCoupon ? appliedCoupon.code : null
+          })),
+          ...(isTaxEnabled && taxAmount > 0 ? [{
+            is_tax_meta: true,
+            tax_rate: taxRatePercent,
+            tax_amount: taxAmount,
+            tax_mode: taxMode,
+            tax_label: storeSettings.taxLabel || `អាករលើតម្លៃបន្ថែម (VAT ${taxRatePercent}%)`
+          }] : [])
+        ]
       };
 
       // ⚠️ សំខាន់៖ បញ្ចូលតែ Columns ដែលមានពិតប្រាកដក្នុង DB Supabase ដើម្បីកុំឱ្យជាប់ error schema cache
@@ -3408,6 +3440,12 @@ export default function CustomerStorefront() {
                       <span>-${couponDiscountAmount.toFixed(2)}</span>
                     </div>
                   )}
+                  {isTaxEnabled && taxAmount > 0 && (
+                    <div className="flex justify-between items-center text-xs text-blue-600 font-bold">
+                      <span>ពន្ធអាករ (VAT {taxRatePercent}%):</span>
+                      <span>{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${taxAmount.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center text-xs text-gray-500">
                     <span>សរុបប្រាក់រៀល:</span>
                     <span className="font-bold text-gray-800">{totalRiel.toLocaleString()} ៛</span>
@@ -3951,6 +3989,12 @@ export default function CustomerStorefront() {
                   <div className="flex justify-between items-center text-xs font-bold text-emerald-600 mb-2">
                     <span>បញ្ចុះតម្លៃ Promo Code ({appliedCoupon.code}):</span>
                     <span>-${couponDiscountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                {isTaxEnabled && taxAmount > 0 && (
+                  <div className="flex justify-between items-center text-xs font-bold text-blue-600 mb-2">
+                    <span>ពន្ធអាករ (VAT {taxRatePercent}%):</span>
+                    <span>{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${taxAmount.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center text-xs font-bold text-emerald-600 mb-2">
