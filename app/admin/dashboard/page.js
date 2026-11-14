@@ -1330,6 +1330,17 @@ export default function UnifiedAdminDashboard() {
   const [telegramTesting, setTelegramTesting] = useState(false);
   const [telegramStatusMsg, setTelegramStatusMsg] = useState('');
 
+  // ⭐️ Helper Function គណនាពន្ធអាករលើ Order មួយៗ (Tax VAT calculation for any order) ⭐️
+  const getOrderTax = (order) => {
+    if (!order) return 0;
+    if (order.tax_amount != null) return parseFloat(order.tax_amount) || 0;
+    if (order.tax != null) return parseFloat(order.tax) || 0;
+    const items = Array.isArray(order.items) ? order.items : [];
+    const taxMeta = items.find(it => it && it.is_tax_meta);
+    if (taxMeta && taxMeta.tax_amount != null) return parseFloat(taxMeta.tax_amount) || 0;
+    return 0;
+  };
+
   // រក្សាទុកការកំណត់ហាងទាំងអស់ (Save Store Settings)
   const handleSaveStoreSettings = (e) => {
     if (e && e.preventDefault) e.preventDefault();
