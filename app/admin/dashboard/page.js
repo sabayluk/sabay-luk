@@ -4124,15 +4124,8 @@ export default function UnifiedAdminDashboard() {
               </div>
             )}
 
-          </div>
-
-
-          {/* ======================================================== */}
-          {/* 👉 ផ្នែកខាងស្តាំ: តម្លៃ ស្តុក និង LIVE PREVIEW (4 COLUMNS)  */}
-          {/* ======================================================== */}
-          <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-24">
-
-            {/* ១. តម្លៃ និងការគណនាប្រាក់ចំណេញ (Pricing & Profit Calculator) */}
+            {/* ៥. 💰 តម្លៃ និងការគណនាប្រាក់ចំណេញ (Pricing & Profit Analyzer) */}
+            {/* ៥. 💰 តម្លៃ និងការគណនាប្រាក់ចំណេញ (Pricing & Profit Calculator) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -4287,7 +4280,7 @@ export default function UnifiedAdminDashboard() {
               </div>
             </div>
 
-            {/* ២. ស្តុកសរុប & ការដាស់តឿន (Inventory Summary & Alert) */}
+            {/* ៦. 📦 ស្តុកសរុប & ការដាស់តឿន (Inventory Summary & Alert) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -4343,6 +4336,13 @@ export default function UnifiedAdminDashboard() {
                 </div>
               </div>
             </div>
+          </div>
+
+
+          {/* ======================================================== */}
+          {/* 👉 ផ្នែកខាងស្តាំ: LIVE PREVIEW & SAVE BUTTON (4 COLUMNS STICKY) */}
+          {/* ======================================================== */}
+          <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-24 self-start z-20">
 
             {/* ៣. ទិដ្ឋភាពផ្ទាល់លើ Storefront (Live Customer Preview) */}
             <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-lg space-y-3">
