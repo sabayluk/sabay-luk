@@ -2039,6 +2039,7 @@ export default function UnifiedAdminDashboard() {
   // ⭐️ States សម្រាប់ Dropdown រើសអតិថិជន (MODERN CUSTOMER SELECTOR DROPDOWNS) ⭐️
   const [modalCustomerDropdownOpen, setModalCustomerDropdownOpen] = useState(false);
   const [posCustomerDropdownOpen, setPosCustomerDropdownOpen] = useState(false);
+  const [customerPickerSearch, setCustomerPickerSearch] = useState('');
 
   const selectCustomerForSale = (cust) => {
     if (!cust) {
@@ -10308,11 +10309,15 @@ export default function UnifiedAdminDashboard() {
                 <input
                   type="text"
                   value={customerName}
-                  onFocus={() => setPosCustomerDropdownOpen(true)}
+                  onFocus={() => {
+                    setCustomerPickerSearch('');
+                    setPosCustomerDropdownOpen(true);
+                  }}
                   onClick={() => setPosCustomerDropdownOpen(true)}
                   onChange={(e) => {
                     const val = e.target.value;
                     setCustomerName(val);
+                    setCustomerPickerSearch(val);
                     setPosCustomerDropdownOpen(true);
                     const matched = customers.find(c => c.name && c.name.toLowerCase() === val.toLowerCase());
                     if (matched) {
@@ -10326,58 +10331,72 @@ export default function UnifiedAdminDashboard() {
                 />
                 <button
                   type="button"
-                  onClick={() => setPosCustomerDropdownOpen(!posCustomerDropdownOpen)}
+                  onClick={() => {
+                    setCustomerPickerSearch('');
+                    setPosCustomerDropdownOpen(!posCustomerDropdownOpen);
+                  }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-black cursor-pointer"
                   title="បើកបញ្ជីអតិថិជន"
                 >
                   {posCustomerDropdownOpen ? '▲' : '▼'}
                 </button>
 
-                {/* ⭐️ DROPDOWN POPUP LIST សម្រាប់ POS SIDEBAR ⭐️ */}
+                {/* ⭐️ DROPDOWN POPUP LIST សម្រាប់ POS SIDEBAR (ធំ & វែង - WIDE & TALL) ⭐️ */}
                 {posCustomerDropdownOpen && (
                   <>
                     <div 
-                      className="fixed inset-0 z-40" 
+                      className="fixed inset-0 z-40 bg-black/20" 
                       onClick={() => setPosCustomerDropdownOpen(false)}
                     />
-                    <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 max-h-60 flex flex-col text-white">
-                      <div className="p-2 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-[10px] font-bold text-slate-400">
-                        <span>👥 អតិថិជន ({customers.length})</span>
-                        <button
-                          type="button"
-                          onClick={() => selectCustomerForSale(null)}
-                          className="text-blue-400 hover:underline cursor-pointer"
-                        >
-                          ⚡ រើសទូទៅ
-                        </button>
+                    <div className="absolute left-0 -right-24 top-full mt-1.5 z-50 bg-slate-950 border-2 border-blue-500/60 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 max-h-[380px] flex flex-col text-white">
+                      
+                      <div className="p-2.5 bg-slate-900 border-b border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-black">
+                          <span>👥 អតិថិជនទាំងអស់ ({customers.length})</span>
+                          <button
+                            type="button"
+                            onClick={() => selectCustomerForSale(null)}
+                            className="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-lg cursor-pointer"
+                          >
+                            ⚡ រើសទូទៅ
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={customerPickerSearch}
+                          onChange={(e) => setCustomerPickerSearch(e.target.value)}
+                          placeholder="🔍 ស្វែងរកឈ្មោះ ឬលេខទូរស័ព្ទ..."
+                          className="w-full bg-slate-950 border border-slate-700 text-white placeholder-slate-400 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none focus:border-blue-400"
+                          autoFocus
+                        />
                       </div>
 
-                      <div className="overflow-y-auto p-1.5 space-y-1 divide-y divide-slate-800/60">
+                      <div className="overflow-y-auto p-2 space-y-1.5 divide-y divide-slate-800/60 flex-1 max-h-[260px]">
                         <button
                           type="button"
                           onClick={() => selectCustomerForSale(null)}
-                          className={`w-full text-left p-2 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                            customerName === 'អតិថិជនទូទៅ'
+                          className={`w-full text-left p-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
+                            customerName === 'អតិថិជនទូទៅ' || !customerName
                               ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40'
-                              : 'hover:bg-slate-800 text-slate-200'
+                              : 'hover:bg-slate-900 text-slate-200'
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-lg bg-slate-800 text-slate-300 flex items-center justify-center text-xs">
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center text-sm shadow-xs">
                               🚶
                             </span>
                             <div>
-                              <p className="font-black text-xs">អតិថិជនទូទៅ</p>
-                              <p className="text-[9px] text-slate-400">គ្មានបញ្ចុះតម្លៃ</p>
+                              <p className="font-black text-xs text-white">អតិថិជនទូទៅ (Walk-in)</p>
+                              <p className="text-[10px] text-slate-400">ទិញផ្ទាល់ • គ្មានបញ្ចុះតម្លៃ</p>
                             </div>
                           </div>
-                          <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-bold">Default</span>
+                          <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-bold">Default</span>
                         </button>
 
                         {customers
                           .filter(c => {
-                            if (!customerName || customerName === 'អតិថិជនទូទៅ') return true;
-                            const q = customerName.toLowerCase();
+                            if (!customerPickerSearch) return true;
+                            const q = customerPickerSearch.toLowerCase().trim();
                             return (c.name && c.name.toLowerCase().includes(q)) || 
                                    (c.phone && c.phone.includes(q)) ||
                                    (c.tier && c.tier.toLowerCase().includes(q));
@@ -10387,31 +10406,37 @@ export default function UnifiedAdminDashboard() {
                               key={cust.id}
                               type="button"
                               onClick={() => selectCustomerForSale(cust)}
-                              className={`w-full text-left p-2 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
+                              className={`w-full text-left p-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
                                 customerName === cust.name
-                                  ? 'bg-blue-600/30 border border-blue-500/40 text-blue-300'
-                                  : 'hover:bg-slate-800 text-slate-200'
+                                  ? 'bg-blue-600/40 border border-blue-500 text-blue-200 shadow-xs'
+                                  : 'hover:bg-slate-900 text-slate-200'
                               }`}
                             >
-                              <div className="flex items-center gap-2">
-                                <span className="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-600/30 to-indigo-600/30 text-blue-400 flex items-center justify-center text-xs shrink-0">
+                              <div className="flex items-center gap-2.5">
+                                <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 shadow-xs ${
+                                  cust.tier === 'VIP' 
+                                    ? 'bg-gradient-to-tr from-amber-500 to-orange-600 text-white' 
+                                    : cust.tier === 'WHOLESALE' 
+                                      ? 'bg-gradient-to-tr from-purple-600 to-indigo-600 text-white' 
+                                      : 'bg-gradient-to-tr from-emerald-500 to-teal-600 text-white'
+                                }`}>
                                   {cust.tier === 'VIP' ? '🥇' : cust.tier === 'WHOLESALE' ? '💼' : cust.tier === 'LOYAL' ? '🥈' : '👤'}
                                 </span>
                                 <div>
                                   <p className="font-black text-white text-xs leading-tight flex items-center gap-1">
                                     <span>{cust.name}</span>
-                                    <span className="text-[9px] bg-slate-800 text-amber-400 px-1 py-0.2 rounded font-mono">
+                                    <span className="text-[9px] bg-slate-800 text-amber-400 px-1.5 py-0.2 rounded font-mono">
                                       {cust.tier}
                                     </span>
                                   </p>
-                                  <p className="text-[9px] text-slate-400 mt-0.5 font-medium">
+                                  <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
                                     📞 {cust.phone || 'គ្មានលេខ'}
                                   </p>
                                 </div>
                               </div>
 
                               {cust.discount_percent > 0 && (
-                                <span className="text-[9px] bg-red-500/20 text-red-300 font-bold px-1.5 py-0.5 rounded border border-red-500/30 shrink-0">
+                                <span className="text-[10px] bg-red-500/20 text-red-300 font-bold px-1.5 py-0.5 rounded-full border border-red-500/30 shrink-0">
                                   -{cust.discount_percent}%
                                 </span>
                               )}
@@ -10868,8 +10893,8 @@ export default function UnifiedAdminDashboard() {
                 </div>
               </div>
 
-              {/* ⭐️ កន្លែង ADD / កែសម្រួល & ជ្រើសរើសអតិថិជនទំនើប (MODERN CUSTOMER SELECTOR PICKER) ⭐️ */}
-              <div className="mb-5 p-4 bg-gradient-to-br from-slate-50 to-blue-50/40 rounded-2xl border border-blue-200/80 shadow-xs relative">
+              {/* ⭐️ កន្លែង ADD / កែសម្រួល & ជ្រើសរើសអតិថិជនទំនើប (MODERN CUSTOMER SELECTOR PICKER - BIG & TALL) ⭐️ */}
+              <div className="mb-5 p-4 bg-gradient-to-br from-slate-50 to-blue-50/50 rounded-2xl border border-blue-200 shadow-sm relative">
                 <div className="flex justify-between items-center mb-2.5">
                   <label className="text-xs font-black text-gray-800 flex items-center gap-1.5 uppercase tracking-wide">
                     <span className="text-blue-600">👤</span> ជ្រើសរើសអតិថិជន (Customer Name)
@@ -10877,7 +10902,7 @@ export default function UnifiedAdminDashboard() {
                   <button
                     type="button"
                     onClick={() => selectCustomerForSale(null)}
-                    className={`text-[11px] font-black px-2.5 py-1 rounded-xl transition cursor-pointer flex items-center gap-1 border ${
+                    className={`text-[11px] font-black px-3 py-1 rounded-xl transition cursor-pointer flex items-center gap-1 border ${
                       customerName === 'អតិថិជនទូទៅ' || !customerName
                         ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                         : 'bg-white text-gray-600 hover:text-blue-600 border-gray-200'
@@ -10888,17 +10913,21 @@ export default function UnifiedAdminDashboard() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 relative">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
                   {/* Name Input with Custom Modern Dropdown Trigger */}
                   <div className="sm:col-span-7 relative">
                     <div className="relative">
                       <input
                         type="text"
                         value={customerName}
-                        onFocus={() => setModalCustomerDropdownOpen(true)}
+                        onFocus={() => {
+                          setCustomerPickerSearch('');
+                          setModalCustomerDropdownOpen(true);
+                        }}
                         onClick={() => setModalCustomerDropdownOpen(true)}
                         onChange={(e) => {
                           setCustomerName(e.target.value);
+                          setCustomerPickerSearch(e.target.value);
                           setModalCustomerDropdownOpen(true);
                         }}
                         placeholder="ចុចរើស ឬវាយឈ្មោះអតិថិជន..."
@@ -10906,131 +10935,16 @@ export default function UnifiedAdminDashboard() {
                       />
                       <button
                         type="button"
-                        onClick={() => setModalCustomerDropdownOpen(!modalCustomerDropdownOpen)}
+                        onClick={() => {
+                          setCustomerPickerSearch('');
+                          setModalCustomerDropdownOpen(!modalCustomerDropdownOpen);
+                        }}
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 p-1 rounded cursor-pointer transition"
                         title="បើកបញ្ជីអតិថិជន"
                       >
                         <span className="text-xs font-black">{modalCustomerDropdownOpen ? '▲' : '▼'}</span>
                       </button>
                     </div>
-
-                    {/* ⭐️ DROPDOWN POPUP LIST ទំនើប ស្អាត កម្រិតខ្ពស់ ⭐️ */}
-                    {modalCustomerDropdownOpen && (
-                      <>
-                        <div 
-                          className="fixed inset-0 z-40" 
-                          onClick={() => setModalCustomerDropdownOpen(false)}
-                        />
-                        <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-top-2 max-h-64 flex flex-col">
-                          {/* Search Header inside Dropdown */}
-                          <div className="p-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between text-[11px] font-bold text-gray-500">
-                            <span>📋 បញ្ជីអតិថិជនក្នុងប្រព័ន្ធ ({customers.length})</span>
-                            <button
-                              type="button"
-                              onClick={() => selectCustomerForSale(null)}
-                              className="text-blue-600 hover:underline font-bold text-[10px] cursor-pointer"
-                            >
-                              ⚡ រើសទូទៅ (Walk-in)
-                            </button>
-                          </div>
-
-                          {/* List Items */}
-                          <div className="overflow-y-auto p-1.5 space-y-1 divide-y divide-gray-50">
-                            {/* General walk-in preset */}
-                            <button
-                              type="button"
-                              onClick={() => selectCustomerForSale(null)}
-                              className={`w-full text-left p-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                                customerName === 'អតិថិជនទូទៅ'
-                                  ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                  : 'hover:bg-gray-100 text-gray-800'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <span className="w-8 h-8 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center text-sm shadow-xs">
-                                  🚶
-                                </span>
-                                <div>
-                                  <p className="font-black text-gray-900">អតិថិជនទូទៅ (Walk-in)</p>
-                                  <p className="text-[10px] text-gray-400">ទិញផ្ទាល់មុខហាង គ្មានបញ្ចុះតម្លៃ</p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-bold">Default</span>
-                            </button>
-
-                            {/* Registered Customers */}
-                            {customers
-                              .filter(c => {
-                                if (!customerName || customerName === 'អតិថិជនទូទៅ') return true;
-                                const q = customerName.toLowerCase();
-                                return (c.name && c.name.toLowerCase().includes(q)) || 
-                                       (c.phone && c.phone.includes(q)) ||
-                                       (c.tier && c.tier.toLowerCase().includes(q));
-                              })
-                              .map(cust => {
-                                const isSelected = customerName === cust.name;
-                                return (
-                                  <button
-                                    key={cust.id}
-                                    type="button"
-                                    onClick={() => selectCustomerForSale(cust)}
-                                    className={`w-full text-left p-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-blue-50 border border-blue-300 text-blue-700 shadow-xs'
-                                        : 'hover:bg-blue-50/60 text-gray-800'
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-2.5">
-                                      <span className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-500/20 to-indigo-500/20 text-blue-600 flex items-center justify-center text-base shrink-0 shadow-xs">
-                                        {cust.tier === 'VIP' ? '🥇' : cust.tier === 'WHOLESALE' ? '💼' : cust.tier === 'LOYAL' ? '🥈' : '👤'}
-                                      </span>
-                                      <div>
-                                        <p className="font-black text-gray-900 leading-tight flex items-center gap-1.5">
-                                          <span>{cust.name}</span>
-                                          <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-black ${
-                                            cust.tier === 'VIP' 
-                                              ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-                                              : cust.tier === 'WHOLESALE' 
-                                                ? 'bg-purple-100 text-purple-800 border border-purple-300' 
-                                                : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                          }`}>
-                                            {cust.tier}
-                                          </span>
-                                        </p>
-                                        <p className="text-[10px] text-gray-500 mt-0.5 font-medium flex items-center gap-2">
-                                          <span>📞 {cust.phone || 'គ្មានលេខ'}</span>
-                                          {cust.address && <span className="truncate max-w-[120px]">📍 {cust.address}</span>}
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    {cust.discount_percent > 0 && (
-                                      <span className="text-[10px] bg-red-100 text-red-700 font-black px-2 py-0.5 rounded-full shrink-0 border border-red-200">
-                                        -{cust.discount_percent}%
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                          </div>
-
-                          {/* Quick Create shortcut */}
-                          <div className="p-2 bg-gray-50 border-t border-gray-100 text-center">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setModalCustomerDropdownOpen(false);
-                                setEditingCustomer(null);
-                                setCustomerModalOpen(true);
-                              }}
-                              className="text-xs font-black text-blue-600 hover:text-blue-800 flex items-center justify-center gap-1 w-full py-1.5 rounded-lg hover:bg-blue-100/50 transition cursor-pointer"
-                            >
-                              <span>➕ បង្កើតអតិថិជនថ្មីក្នុងប្រព័ន្ធ</span>
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
                   </div>
 
                   {/* Phone Input */}
@@ -11044,6 +10958,169 @@ export default function UnifiedAdminDashboard() {
                     />
                   </div>
                 </div>
+
+                {/* ⭐️ DROPDOWN POPUP LIST ធំ និងវែង (BIG & TALL OVERLAY) ⭐️ */}
+                {modalCustomerDropdownOpen && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" 
+                      onClick={() => setModalCustomerDropdownOpen(false)}
+                    />
+                    <div className="absolute left-2 right-2 top-[72px] z-50 bg-white rounded-3xl shadow-2xl border-2 border-blue-400 overflow-hidden animate-in fade-in zoom-in-95 max-h-[420px] flex flex-col">
+                      
+                      {/* Search & Header inside Dropdown */}
+                      <div className="p-3 bg-gradient-to-r from-slate-900 to-slate-950 text-white border-b border-slate-800 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                            <span>👥</span> បញ្ជីអតិថិជនទាំងអស់ ({customers.length})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => selectCustomerForSale(null)}
+                            className="bg-blue-600 hover:bg-blue-500 text-white font-black text-[11px] px-2.5 py-1 rounded-xl transition cursor-pointer flex items-center gap-1"
+                          >
+                            <span>⚡</span> រើសទូទៅ (Walk-in)
+                          </button>
+                        </div>
+
+                        {/* Search Input */}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={customerPickerSearch}
+                            onChange={(e) => setCustomerPickerSearch(e.target.value)}
+                            placeholder="🔍 ស្វែងរកតាមឈ្មោះ, លេខទូរស័ព្ទ ឬកម្រិត VIP..."
+                            className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-400 rounded-xl pl-3 pr-8 py-2 text-xs font-bold outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 shadow-inner"
+                            autoFocus
+                          />
+                          {customerPickerSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setCustomerPickerSearch('')}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white font-bold text-xs"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* List of Customers (Tall & Roomy) */}
+                      <div className="overflow-y-auto p-2 space-y-1.5 divide-y divide-gray-100 flex-1 max-h-[300px]">
+                        {/* 1. Walk-in Customer card */}
+                        <button
+                          type="button"
+                          onClick={() => selectCustomerForSale(null)}
+                          className={`w-full text-left p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition cursor-pointer border ${
+                            customerName === 'អតិថិជនទូទៅ' || !customerName
+                              ? 'bg-blue-50/80 border-blue-300 text-blue-900 shadow-xs'
+                              : 'bg-white hover:bg-gray-50 border-gray-100 text-gray-800'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-gray-200 to-gray-300 text-gray-700 flex items-center justify-center text-lg shadow-xs shrink-0">
+                              🚶
+                            </div>
+                            <div>
+                              <p className="font-black text-sm text-gray-900">អតិថិជនទូទៅ (General Walk-in)</p>
+                              <p className="text-[11px] text-gray-500 font-medium">ទិញផ្ទាល់មុខហាង • មិនចុះឈ្មោះ • គ្មានបញ្ចុះតម្លៃ</p>
+                            </div>
+                          </div>
+                          <span className="text-[11px] bg-gray-100 text-gray-600 px-3 py-1 rounded-xl font-bold">
+                            Default
+                          </span>
+                        </button>
+
+                        {/* 2. Registered customers */}
+                        {customers
+                          .filter(c => {
+                            if (!customerPickerSearch) return true;
+                            const q = customerPickerSearch.toLowerCase().trim();
+                            return (c.name && c.name.toLowerCase().includes(q)) || 
+                                   (c.phone && c.phone.includes(q)) ||
+                                   (c.tier && c.tier.toLowerCase().includes(q)) ||
+                                   (c.address && c.address.toLowerCase().includes(q));
+                          })
+                          .map(cust => {
+                            const isSelected = customerName === cust.name;
+                            return (
+                              <button
+                                key={cust.id}
+                                type="button"
+                                onClick={() => selectCustomerForSale(cust)}
+                                className={`w-full text-left p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition cursor-pointer border ${
+                                  isSelected
+                                    ? 'bg-blue-50/90 border-blue-400 text-blue-900 shadow-md ring-2 ring-blue-400/30'
+                                    : 'bg-white hover:bg-blue-50/60 border-gray-100 text-gray-800'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0 shadow-xs ${
+                                    cust.tier === 'VIP' 
+                                      ? 'bg-gradient-to-tr from-amber-400 to-orange-500 text-white' 
+                                      : cust.tier === 'WHOLESALE' 
+                                        ? 'bg-gradient-to-tr from-purple-500 to-indigo-600 text-white' 
+                                        : 'bg-gradient-to-tr from-emerald-400 to-teal-500 text-white'
+                                  }`}>
+                                    {cust.tier === 'VIP' ? '🥇' : cust.tier === 'WHOLESALE' ? '💼' : cust.tier === 'LOYAL' ? '🥈' : '👤'}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-black text-sm text-gray-900">{cust.name}</span>
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-lg font-black uppercase ${
+                                        cust.tier === 'VIP' 
+                                          ? 'bg-amber-100 text-amber-900 border border-amber-300' 
+                                          : cust.tier === 'WHOLESALE' 
+                                            ? 'bg-purple-100 text-purple-900 border border-purple-300' 
+                                            : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                      }`}>
+                                        {cust.tier}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-600 mt-0.5 font-medium flex items-center gap-2.5">
+                                      <span className="font-bold text-gray-700">📞 {cust.phone || 'គ្មានលេខ'}</span>
+                                      {cust.address && <span className="truncate max-w-[200px]">📍 {cust.address}</span>}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="text-right shrink-0">
+                                  {cust.discount_percent > 0 && (
+                                    <span className="text-[11px] bg-red-100 text-red-700 font-black px-2.5 py-1 rounded-xl border border-red-200 block">
+                                      បញ្ចុះ {cust.discount_percent}%
+                                    </span>
+                                  )}
+                                  {cust.tier === 'WHOLESALE' && (
+                                    <span className="text-[10px] text-purple-700 font-bold block mt-0.5">
+                                      តម្លៃបោះដុំ
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                      </div>
+
+                      {/* Quick Create shortcut at bottom */}
+                      <div className="p-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs">
+                        <span className="text-gray-500 font-medium text-[11px]">រកមិនឃើញអតិថិជន?</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setModalCustomerDropdownOpen(false);
+                            setEditingCustomer(null);
+                            setCustomerModalOpen(true);
+                          }}
+                          className="bg-slate-900 hover:bg-slate-800 text-white font-black text-xs px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                        >
+                          <span>➕</span>
+                          <span>បង្កើតអតិថិជនថ្មី</span>
+                        </button>
+                      </div>
+
+                    </div>
+                  </>
+                )}
 
                 {/* Customer Badge Details Bar when selected */}
                 {(() => {
