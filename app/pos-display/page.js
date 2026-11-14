@@ -1,0 +1,602 @@
+'use client';
+import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import { supabase } from '../../supabase';
+
+export default function CustomerDisplayPage() {
+  const [displayState, setDisplayState] = useState({
+    status: 'idle', // 'idle' | 'scanning' | 'checkout' | 'completed'
+    items: [],
+    subtotal: 0,
+    discountAmount: 0,
+    taxAmount: 0,
+    taxRate: 0,
+    grandTotal: 0,
+    exchangeRate: 4100,
+    paymentMethod: 'KHQR',
+    qrCodeUrl: '/khqr-aba.jpg',
+    cashReceived: 0,
+    changeAmount: 0,
+    receiptNo: '',
+    customerName: '',
+    lastUpdated: Date.now()
+  });
+
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+
+  // Featured promo shoes for Idle mode
+  const featuredSlides = [
+    {
+      title: 'ស្បែកជើងប៉ាតាទាន់សម័យ Sneaker Pro',
+      subtitle: 'ការរចនាបែប Sporty ទន់ស្រួលពាក់ និងធន់រឹងមាំ',
+      badge: '🔥 ទំនិញលក់ដាច់បំផុត',
+      price: '$28.00',
+      image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&auto=format&fit=crop&q=80'
+    },
+    {
+      title: 'ស្បែកជើងស្បែកបុរស Classic Oxford',
+      subtitle: 'ស្បែកសុទ្ធ ១០០% ស័ក្តិសមសម្រាប់ការងារ និងកម្មវិធីធំៗ',
+      badge: '✨ VIP Premium Style',
+      price: '$45.00',
+      image: 'https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?w=800&auto=format&fit=crop&q=80'
+    },
+    {
+      title: 'ស្បែកជើងកែងនារី Elegant Heels',
+      subtitle: 'ទន់ស្រួលជើង កែងរឹងមាំ បង្កើនភាពជឿជាក់គ្រប់ជំហាន',
+      badge: '💖 New Collection',
+      price: '$32.00',
+      image: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=800&auto=format&fit=crop&q=80'
+    }
+  ];
+
+  // Digital clock update every second
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Slide auto-change in Idle mode
+  useEffect(() => {
+    if (displayState.status !== 'idle') return;
+    const slideTimer = setInterval(() => {
+      setFeaturedIndex(prev => (prev + 1) % featuredSlides.length);
+    }, 4500);
+    return () => clearInterval(slideTimer);
+  }, [displayState.status]);
+
+  // Sync listener: BroadcastChannel + LocalStorage + Supabase
+  useEffect(() => {
+    // 1. Initial load from localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sabay_pos_customer_display_state');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') {
+            setDisplayState(parsed);
+            setIsConnected(true);
+          }
+        }
+      } catch (e) {}
+
+      // 2. BroadcastChannel (0ms ultra-fast sync across windows/tabs)
+      let bc = null;
+      try {
+        bc = new BroadcastChannel('sabay_pos_customer_display');
+        bc.onmessage = (event) => {
+          if (event.data && typeof event.data === 'object') {
+            setDisplayState(event.data);
+            setIsConnected(true);
+          }
+        };
+      } catch (e) {}
+
+      // 3. Storage Event (backup across tabs/windows)
+      const handleStorage = (e) => {
+        if (!e || !e.key || e.key === 'sabay_pos_customer_display_state') {
+          try {
+            const raw = localStorage.getItem('sabay_pos_customer_display_state');
+            if (raw) {
+              setDisplayState(JSON.parse(raw));
+              setIsConnected(true);
+            }
+          } catch (err) {}
+        }
+      };
+      window.addEventListener('storage', handleStorage);
+
+      // 4. Supabase Realtime Channel (for wireless iPad / separate tablet sync)
+      const subChannel = supabase
+        .channel('pos_customer_display_realtime')
+        .on('broadcast', { event: 'display_update' }, (payload) => {
+          if (payload && payload.payload) {
+            setDisplayState(payload.payload);
+            setIsConnected(true);
+          }
+        })
+        .subscribe();
+
+      return () => {
+        if (bc) bc.close();
+        window.removeEventListener('storage', handleStorage);
+        supabase.removeChannel(subChannel);
+      };
+    }
+  }, []);
+
+  // Fullscreen toggle helper
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      }
+    }
+  };
+
+  const currentSlide = featuredSlides[featuredIndex];
+  const itemsCount = displayState.items?.reduce((s, it) => s + (it.qty || 1), 0) || 0;
+  const grandTotalUSD = Number(displayState.grandTotal || 0);
+  const grandTotalKHR = Math.round(grandTotalUSD * (displayState.exchangeRate || 4100));
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between font-sans selection:bg-orange-500 selection:text-white relative overflow-hidden">
+      
+      {/* Background Glows */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-40 -left-40 w-96 h-96 bg-orange-500/15 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute top-1/2 -right-40 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-40 left-1/3 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+      </div>
+
+      {/* TOP HEADER BAR */}
+      <header className="relative z-20 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-6 py-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-lg shadow-orange-500/25">
+            👟
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="font-black text-xl tracking-tight text-white">SABAY LUK</h1>
+              <span className="text-[10px] font-black uppercase tracking-wider bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-md">
+                Customer Screen
+              </span>
+            </div>
+            <p className="text-[11px] font-bold text-slate-400">ហាងលក់ស្បែកជើងទាន់សម័យ & គុណភាពខ្ពស់</p>
+          </div>
+        </div>
+
+        {/* Center: Live Connection status */}
+        <div className="hidden sm:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3.5 py-1.5 rounded-full text-xs font-bold shadow-inner">
+          <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`}></span>
+          <span className="text-slate-300">
+            {displayState.status === 'idle' && '🟢 រង់ចាំការកុម្ម៉ង់ (Ready for Orders)'}
+            {displayState.status === 'scanning' && '🛍️ កំពុងគិតលុយទំនិញ (Scanning Items...)'}
+            {displayState.status === 'checkout' && '💳 កំពុងរង់ចាំការទូទាត់ (Awaiting Payment)'}
+            {displayState.status === 'completed' && '🎉 ទូទាត់ជោគជ័យ (Payment Success)'}
+          </span>
+        </div>
+
+        {/* Right: Clock & Fullscreen button */}
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden md:block">
+            <div className="font-mono font-black text-base text-amber-400 tracking-wider">
+              {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </div>
+            <div className="text-[10px] font-bold text-slate-400">
+              {currentTime.toLocaleDateString('km-KH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="w-10 h-10 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm border border-slate-700 transition cursor-pointer"
+            title="ពង្រីកពេញអេក្រង់ (Toggle Fullscreen)"
+          >
+            {isFullscreen ? '⤦' : '⤢'}
+          </button>
+        </div>
+      </header>
+
+      {/* MAIN CONTENT AREA (Dynamically Switches Modes) */}
+      <main className="relative z-10 flex-1 p-4 sm:p-6 lg:p-8 flex flex-col justify-center max-w-7xl mx-auto w-full">
+        
+        {/* ======================================================== */}
+        {/* MODE 1: IDLE / WELCOME STATE (Cart is empty)              */}
+        {/* ======================================================== */}
+        {displayState.status === 'idle' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-in fade-in zoom-in-95 duration-300">
+            
+            {/* Left Column: Big Welcome Greetings & Store Brand */}
+            <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
+              <div className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-500/40 text-orange-400 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-lg shadow-orange-500/10">
+                <span>👋</span>
+                <span>សូមស្វាគមន៍មកកាន់ហាងយើងខ្ញុំ!</span>
+              </div>
+
+              <div className="space-y-2">
+                <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
+                  SABAY LUK
+                </h2>
+                <h3 className="text-2xl sm:text-3xl font-black bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-400 bg-clip-text text-transparent">
+                  ស្បែកជើងទាន់សម័យ & ផាសុកភាព
+                </h3>
+                <p className="text-slate-400 text-sm sm:text-base max-w-xl font-medium leading-relaxed pt-2">
+                  ស្បែកជើងគុណភាពខ្ពស់ បាតទន់ស្រួលពាក់ រចនាម៉ូដទាន់សម័យ និងមានការធានាគុណភាពត្រឹមត្រូវជូនលោកអ្នក។
+                </p>
+              </div>
+
+              {/* Service Badges */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3">
+                <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-2xl flex items-center gap-3">
+                  <span className="text-2xl">✨</span>
+                  <div className="text-left">
+                    <span className="text-xs font-black text-white block">គុណភាពខ្ពស់</span>
+                    <span className="text-[10px] text-slate-400">ស្បែកសុទ្ធ & បាតទន់</span>
+                  </div>
+                </div>
+                <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-2xl flex items-center gap-3">
+                  <span className="text-2xl">⚡</span>
+                  <div className="text-left">
+                    <span className="text-xs font-black text-white block">KHQR Pay</span>
+                    <span className="text-[10px] text-slate-400">ស្កេនគ្រប់ធនាគារ</span>
+                  </div>
+                </div>
+                <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-2xl flex items-center gap-3 col-span-2 sm:col-span-1">
+                  <span className="text-2xl">🤝</span>
+                  <div className="text-left">
+                    <span className="text-xs font-black text-white block">ប្តូរទំហំបាន</span>
+                    <span className="text-[10px] text-slate-400">ក្នុងរយៈពេល ៣ ថ្ងៃ</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cashier status notice */}
+              <div className="p-4 rounded-2xl bg-slate-900/50 border border-dashed border-slate-800 flex items-center gap-3 text-xs text-slate-400">
+                <span className="text-xl">💳</span>
+                <span>អ្នកគិតលុយកំពុងរៀបចំប្រព័ន្ធ... សូមរង់ចាំការស្កេនទំនិញរបស់អ្នក!</span>
+              </div>
+            </div>
+
+            {/* Right Column: Featured Shoe Showcase Banner */}
+            <div className="lg:col-span-5">
+              <div className="relative rounded-3xl overflow-hidden border-2 border-slate-800 bg-slate-900 shadow-2xl group">
+                <div className="aspect-[4/3] w-full overflow-hidden relative">
+                  <img 
+                    src={currentSlide.image} 
+                    alt={currentSlide.title} 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent"></div>
+                  
+                  {/* Badge */}
+                  <span className="absolute top-4 left-4 bg-orange-600/90 text-white text-[11px] font-black px-3 py-1 rounded-full shadow-lg backdrop-blur-md">
+                    {currentSlide.badge}
+                  </span>
+
+                  {/* Price */}
+                  <span className="absolute top-4 right-4 bg-slate-950/80 text-amber-300 border border-amber-400/40 font-mono font-black text-sm px-3.5 py-1 rounded-full shadow-lg backdrop-blur-md">
+                    {currentSlide.price}
+                  </span>
+
+                  {/* Caption */}
+                  <div className="absolute bottom-4 left-4 right-4 space-y-1">
+                    <h4 className="text-lg sm:text-xl font-black text-white drop-shadow-md">{currentSlide.title}</h4>
+                    <p className="text-xs text-slate-300 line-clamp-1">{currentSlide.subtitle}</p>
+                  </div>
+                </div>
+
+                {/* Slider indicators */}
+                <div className="p-3 bg-slate-950/90 flex items-center justify-center gap-2 border-t border-slate-800">
+                  {featuredSlides.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setFeaturedIndex(i)}
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        i === featuredIndex ? 'w-8 bg-orange-500' : 'w-2 bg-slate-700 hover:bg-slate-600'
+                      }`}
+                    ></button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* MODE 2: ACTIVE SCANNING STATE (Cashier is scanning shoes) */}
+        {/* ======================================================== */}
+        {(displayState.status === 'scanning' || (displayState.status === 'idle' && displayState.items?.length > 0)) && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full items-stretch animate-in fade-in duration-200">
+            
+            {/* Left: Scanned Items List */}
+            <div className="lg:col-span-7 flex flex-col bg-slate-900/80 rounded-3xl border border-slate-800 p-5 shadow-2xl backdrop-blur-md max-h-[70vh]">
+              <div className="flex items-center justify-between pb-3.5 border-b border-slate-800 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🛍️</span>
+                  <h3 className="font-black text-lg text-white">ទំនិញដែលបានស្កេន (Scanned Items)</h3>
+                </div>
+                <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-black px-3 py-1 rounded-full">
+                  {itemsCount} មុខទំនិញ
+                </span>
+              </div>
+
+              {/* Items Scrollable List */}
+              <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                {displayState.items?.map((item, idx) => {
+                  const rowTotal = (Number(item.price) || 0) * (Number(item.qty) || 1);
+                  return (
+                    <div 
+                      key={item.cartItemId || idx}
+                      className="bg-slate-950/70 border border-slate-800/80 hover:border-orange-500/40 p-3.5 rounded-2xl flex items-center justify-between gap-3 transition"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                          {item.image_url ? (
+                            <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-2xl">👟</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-black text-sm text-white truncate">{item.name}</h4>
+                          <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                            {item.size && (
+                              <span className="bg-slate-800 text-slate-300 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                Size: {item.size}
+                              </span>
+                            )}
+                            {item.color && (
+                              <span className="text-[10px] text-slate-400 font-bold">
+                                • {item.color}
+                              </span>
+                            )}
+                            <span className="font-mono text-slate-400">
+                              ${Number(item.price).toFixed(2)} × {item.qty}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="font-mono font-black text-base text-amber-400">
+                          ${rowTotal.toFixed(2)}
+                        </div>
+                        <div className="text-[10px] font-bold text-slate-500">
+                          {(rowTotal * (displayState.exchangeRate || 4100)).toLocaleString()} ៛
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom Tip */}
+              <div className="pt-3 border-t border-slate-800/80 mt-2 flex items-center justify-between text-xs text-slate-500">
+                <span>💡 សូមពិនិត្យមើលទំនិញ និងទំហំស្បែកជើងឱ្យបានត្រឹមត្រូវ</span>
+                <span className="font-mono text-slate-400">1 USD = {(displayState.exchangeRate || 4100).toLocaleString()} KHR</span>
+              </div>
+            </div>
+
+            {/* Right: Big Price Board & Summary */}
+            <div className="lg:col-span-5 flex flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 rounded-3xl border-2 border-orange-500/30 p-6 shadow-2xl backdrop-blur-md">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-400">
+                    សង្ខេបការទូទាត់ (Payment Summary)
+                  </span>
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                    <span>●</span> កំពុងគិតលុយ
+                  </span>
+                </div>
+
+                {/* Subtotal */}
+                <div className="flex justify-between items-center text-sm font-bold text-slate-300">
+                  <span>តម្លៃសរុប (Subtotal):</span>
+                  <span className="font-mono text-base text-white">
+                    ${Number(displayState.subtotal || 0).toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Discount (if any) */}
+                {Number(displayState.discountAmount || 0) > 0 && (
+                  <div className="flex justify-between items-center text-sm font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+                    <span>បញ្ចុះតម្លៃ (Discount):</span>
+                    <span className="font-mono font-black text-base">
+                      -${Number(displayState.discountAmount).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Tax (if any) */}
+                {Number(displayState.taxAmount || 0) > 0 && (
+                  <div className="flex justify-between items-center text-sm font-bold text-slate-300">
+                    <span>ពន្ធអាករ VAT ({displayState.taxRate || 10}%):</span>
+                    <span className="font-mono text-base text-white">
+                      +${Number(displayState.taxAmount).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* GIANT GRAND TOTAL BOX */}
+              <div className="my-6 p-6 rounded-3xl bg-gradient-to-tr from-orange-500/20 via-amber-500/15 to-orange-600/10 border-2 border-orange-500/40 text-center space-y-2 shadow-xl shadow-orange-500/10">
+                <span className="text-xs font-black uppercase tracking-widest text-orange-400 block">
+                  ទឹកប្រាក់ត្រូវទូទាត់សរុប (TOTAL DUE)
+                </span>
+                
+                <div className="text-5xl sm:text-6xl font-black text-amber-300 font-mono tracking-tight drop-shadow-md">
+                  ${grandTotalUSD.toFixed(2)}
+                </div>
+
+                <div className="text-xl sm:text-2xl font-black text-slate-200">
+                  ≈ {grandTotalKHR.toLocaleString()} រៀល (៛)
+                </div>
+              </div>
+
+              {/* Ready for Payment Notice */}
+              <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                <span>⚡</span>
+                <span>ទទួលការទូទាត់តាម <b>Bakong / ABA KHQR</b> និង <b>សាច់ប្រាក់សុទ្ធ (Cash)</b></span>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* MODE 3: CHECKOUT / PAYMENT (Prominent KHQR Code)          */}
+        {/* ======================================================== */}
+        {displayState.status === 'checkout' && (
+          <div className="max-w-4xl mx-auto w-full bg-slate-900 rounded-3xl border-2 border-orange-500/50 p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              
+              {/* Left: Summary & Instruction */}
+              <div className="space-y-5 text-center md:text-left">
+                <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider">
+                  <span>💳</span>
+                  <span>ដំណាក់កាលទូទាត់ប្រាក់ (Payment Due)</span>
+                </div>
+
+                <div className="space-y-1">
+                  <h3 className="text-2xl sm:text-3xl font-black text-white">
+                    សូមស្កេនទូទាត់ប្រាក់
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    លោកអ្នកអាចប្រើប្រាស់ App ធនាគារណាមួយក៏បាន ដើម្បីស្កេនទូទាត់ (ABA, ACLEDA, Bakong, Wing, Canadia...)
+                  </p>
+                </div>
+
+                {/* Big Due Box */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-left space-y-1">
+                  <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">ចំនួនទឹកប្រាក់សរុប:</span>
+                  <div className="text-4xl font-black text-amber-300 font-mono">
+                    ${grandTotalUSD.toFixed(2)}
+                  </div>
+                  <div className="text-lg font-bold text-slate-300">
+                    ≈ {grandTotalKHR.toLocaleString()} ៛
+                  </div>
+                </div>
+
+                {/* Bank Support Logos */}
+                <div className="pt-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-2">
+                    ទ្រទ្រង់គ្រប់ធនាគារសមាជិកបាគង (KHQR Standard):
+                  </span>
+                  <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+                    {['ABA PAY', 'BAKONG', 'ACLEDA', 'WING', 'CANADIA'].map(b => (
+                      <span key={b} className="text-[10px] font-black bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700">
+                        {b}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Giant KHQR Code Card */}
+              <div className="flex flex-col items-center justify-center p-6 bg-white rounded-3xl shadow-2xl border-4 border-red-500">
+                <div className="bg-red-600 text-white font-black text-xs uppercase px-4 py-1.5 rounded-full tracking-widest mb-3 shadow-md flex items-center gap-1.5">
+                  <span>🇰🇭</span>
+                  <span>KHQR BAKONG PAYMENT</span>
+                </div>
+
+                <div className="p-3 bg-white rounded-2xl border border-gray-200 shadow-inner flex items-center justify-center">
+                  <img 
+                    src={displayState.qrCodeUrl || '/khqr-aba.jpg'} 
+                    alt="KHQR Code" 
+                    className="w-56 h-56 sm:w-64 sm:h-64 object-contain rounded-xl"
+                  />
+                </div>
+
+                <div className="mt-3 text-center">
+                  <span className="text-xs font-black text-gray-900 block font-mono">
+                    SABAY LUK STORE
+                  </span>
+                  <span className="text-[11px] text-gray-500 font-bold block">
+                    Scan & Pay with Any Banking App
+                  </span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* MODE 4: PAYMENT COMPLETED STATE (Success Celebration)    */}
+        {/* ======================================================== */}
+        {displayState.status === 'completed' && (
+          <div className="max-w-xl mx-auto w-full text-center bg-slate-900 border-2 border-emerald-500/50 rounded-3xl p-8 sm:p-10 shadow-2xl animate-in zoom-in-95 duration-300 space-y-6">
+            <div className="w-24 h-24 rounded-full bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-5xl mx-auto shadow-xl shadow-emerald-500/25 animate-bounce">
+              ✓
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-3xl sm:text-4xl font-black text-white">
+                ការទូទាត់ទទួលបានជោគជ័យ!
+              </h3>
+              <p className="text-sm font-bold text-emerald-400">
+                Payment Received Successfully!
+              </p>
+            </div>
+
+            {/* Receipt detail snippet */}
+            <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-sm space-y-2 text-left">
+              {displayState.receiptNo && (
+                <div className="flex justify-between border-b border-slate-800 pb-1.5 font-bold">
+                  <span className="text-slate-400">លេខវិក្កយបត្រ (Receipt No):</span>
+                  <span className="font-mono text-amber-400">#{displayState.receiptNo}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold">
+                <span className="text-slate-400">ទឹកប្រាក់សរុប (Total Paid):</span>
+                <span className="text-emerald-400 font-mono text-base font-black">
+                  ${grandTotalUSD.toFixed(2)} ({grandTotalKHR.toLocaleString()} ៛)
+                </span>
+              </div>
+              {Number(displayState.changeAmount || 0) > 0 && (
+                <div className="flex justify-between border-t border-slate-800 pt-1.5 font-black text-amber-300">
+                  <span>ប្រាក់អាប់ជូនភ្ញៀវ (Change):</span>
+                  <span className="font-mono text-base">
+                    ${Number(displayState.changeAmount).toFixed(2)} ({(Number(displayState.changeAmount) * 4100).toLocaleString()} ៛)
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-400 font-medium">
+              🙏 សូមអរគុណសម្រាប់ការគាំទ្រ Sabay Luk! សូមអញ្ជើញមកម្តងទៀត!
+            </p>
+          </div>
+        )}
+
+      </main>
+
+      {/* FOOTER BAR */}
+      <footer className="relative z-20 border-t border-slate-800/80 bg-slate-950/80 px-6 py-3 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
+        <div className="flex items-center gap-2">
+          <span>📍 អាសយដ្ឋាន៖ រាជធានីភ្នំពេញ</span>
+          <span>•</span>
+          <span>📞 ទំនាក់ទំនង៖ 096 720 5522</span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="text-slate-500 font-mono text-[11px]">SABAY LUK POS DUAL SCREEN v2.0</span>
+          <Link 
+            href="/admin/dashboard"
+            className="text-[10px] font-bold text-slate-500 hover:text-slate-300 underline"
+          >
+            ផ្ទាំងគ្រប់គ្រង Cashier
+          </Link>
+        </div>
+      </footer>
+
+    </div>
+  );
+}

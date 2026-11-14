@@ -1088,6 +1088,11 @@ export default function UnifiedAdminDashboard() {
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
   const [barcodeProduct, setBarcodeProduct] = useState(null);
   const [barcodePrintQty, setBarcodePrintQty] = useState(1);
+  const [barcodeLabelFormat, setBarcodeLabelFormat] = useState('50x30'); // '50x30' | '40x30' | '60x40' | 'a4_grid'
+  const [barcodeSymbology, setBarcodeSymbology] = useState('code128'); // 'code128' | 'qrcode'
+  const [barcodeShowPrice, setBarcodeShowPrice] = useState(true);
+  const [barcodeShowSize, setBarcodeShowSize] = useState(true);
+  const [barcodeShowStoreName, setBarcodeShowStoreName] = useState(true);
 
   // Function ទាញយកទិន្នន័យ Orders ពិតពី Supabase
   const fetchRealOrders = async () => {
@@ -2421,6 +2426,7 @@ export default function UnifiedAdminDashboard() {
   // ៣. ស្កេនបាកូដ / SKU
   const handleBarcodeScan = (e) => {
     if (e.key === 'Enter' && posSearch.trim() !== '') {
+        playScannerBeep();
       const query = posSearch.trim().toLowerCase();
       const matchedProduct = products.find(p => p.sku && (p.sku.toLowerCase() === query || p.name.toLowerCase().includes(query)));
       if (matchedProduct) {
@@ -10563,6 +10569,147 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
+  // ⭐️ CODE 128 BARCODE SVG GENERATOR (CRISP VECTOR BARS FOR LASER SCANNERS) ⭐️
+  const CODE128B_PATTERNS = [
+    '212222','222122','222221','121223','121322','131222','122213','122312','132212','221213',
+    '221312','231212','112232','122132','122231','113222','123122','123221','223211','221132',
+    '221231','213212','223112','312131','311222','321122','321221','312212','322112','322211',
+    '212123','212321','232121','111323','131123','131321','112313','132113','132311','211313',
+    '231113','231311','112133','112331','132131','113123','113321','133121','313121','211331',
+    '231131','213113','213311','213131','311123','311321','331121','312113','312311','332111',
+    '314111','221411','431111','111224','111422','121124','121421','141122','141221','112214',
+    '112412','122114','122411','142112','142211','241211','221114','413111','241112','134111',
+    '111242','121142','121241','114212','124112','124211','411212','421112','421211','212141',
+    '214121','412121','111143','111341','131141','114113','114311','411113','411311','113141',
+    '114131','311141','411131','211412','211214','211232','2331112'
+  ];
+
+  function generateCode128SvgString(text, options = {}) {
+    const clean = String(text || '000000').trim().toUpperCase();
+    const height = options.height || 50;
+    const barWidth = options.barWidth || 1.8;
+    const quietZone = options.quietZone !== false ? 12 : 0;
+    
+    let checksum = 104;
+    const indices = [104];
+    
+    for (let i = 0; i < clean.length; i++) {
+      const code = clean.charCodeAt(i) - 32;
+      if (code >= 0 && code <= 95) {
+        indices.push(code);
+        checksum += code * (i + 1);
+      }
+    }
+    
+    const checkCode = checksum % 103;
+    indices.push(checkCode);
+    indices.push(106);
+    
+    let currentX = quietZone;
+    let rects = [];
+    
+    for (const idx of indices) {
+      const pattern = CODE128B_PATTERNS[idx];
+      if (!pattern) continue;
+      let isBar = true;
+      for (let j = 0; j < pattern.length; j++) {
+        const width = parseInt(pattern[j], 10) * barWidth;
+        if (isBar) {
+          rects.push(`<rect x="${currentX}" y="0" width="${width}" height="${height}" fill="#000000" />`);
+        }
+        currentX += width;
+        isBar = !isBar;
+      }
+    }
+    
+    const totalWidth = currentX + quietZone;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${height}" width="100%" height="${height}" preserveAspectRatio="none">${rects.join('')}</svg>`;
+  }
+
+  // 🔊 SCANNER GUN BEEP SOUND (ទឺត)
+  const playScannerBeep = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1400, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.09);
+    } catch (e) {}
+  };
+
+  // ⭐️ REALTIME BROADCAST ទៅកាន់អេក្រង់ភ្ញៀវ (DUAL CUSTOMER DISPLAY SYNC) ⭐️
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let displayStatus = 'idle';
+    if (receiptData) {
+      displayStatus = 'completed';
+    } else if (paymentModalOpen) {
+      displayStatus = 'checkout';
+    } else if (posCart.length > 0) {
+      displayStatus = 'scanning';
+    } else {
+      displayStatus = 'idle';
+    }
+
+    const payload = {
+      status: displayStatus,
+      items: posCart.map(it => ({
+        cartItemId: it.cartItemId,
+        name: it.name,
+        price: it.price,
+        qty: it.qty,
+        image_url: it.image_url,
+        size: it.size,
+        color: it.color,
+        sku: it.sku
+      })),
+      subtotal: posSubtotal,
+      discountAmount: posDiscountValue,
+      taxAmount: posTaxAmount,
+      taxRate: effectiveTaxRate,
+      grandTotal: posTotal,
+      exchangeRate: exchangeRate || 4100,
+      paymentMethod: paymentMethod || 'Cash',
+      qrCodeUrl: '/khqr-aba.jpg',
+      cashReceived: Number(amountTendered) || 0,
+      changeAmount: receiptData?.change || (Number(amountTendered) > posTotal ? Number(amountTendered) - posTotal : 0),
+      receiptNo: receiptData?.orderId || receiptData?.receiptNo || '',
+      customerName: customerName || 'អតិថិជនទូទៅ',
+      lastUpdated: Date.now()
+    };
+
+    // 1. BroadcastChannel (0ms sync for dual monitor on same machine)
+    try {
+      const bc = new BroadcastChannel('sabay_pos_customer_display');
+      bc.postMessage(payload);
+      bc.close();
+    } catch (e) {}
+
+    // 2. LocalStorage (Cross-tab/Cross-window sync)
+    try {
+      localStorage.setItem('sabay_pos_customer_display_state', JSON.stringify(payload));
+      window.dispatchEvent(new Event('storage'));
+    } catch (e) {}
+
+    // 3. Supabase Realtime broadcast (For wireless iPad on counter)
+    try {
+      supabase.channel('pos_customer_display_realtime').send({
+        type: 'broadcast',
+        event: 'display_update',
+        payload
+      });
+    } catch (e) {}
+  }, [posCart, posSubtotal, posDiscountValue, posTaxAmount, posTotal, paymentModalOpen, receiptData, amountTendered, exchangeRate, effectiveTaxRate, paymentMethod, customerName]);
+
   // ⭐️ ផ្ទាំង POS ⭐️
     const PosView = () => {
     // ស្វែងរកប្រភេទ Category បន្ថែមដែលមានស្រាប់ក្នុង products ប៉ុន្តែមិនទាន់មានក្នុង categories list
@@ -10612,6 +10759,38 @@ export default function UnifiedAdminDashboard() {
             >
               <span>📋</span>
               <span>បិទបញ្ជីវេនលក់ (Z-Report)</span>
+            </button>
+
+            {/* ⭐️ DUAL CUSTOMER-FACING SCREEN BUTTON ⭐️ */}
+            <button
+              type="button"
+              onClick={() => {
+                window.open('/pos-display', 'SabayCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
+              }}
+              className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-black hover:to-slate-900 text-amber-300 border border-slate-700 hover:border-amber-400/60 px-4 py-2.5 rounded-2xl text-xs font-black shadow-md flex items-center gap-2 cursor-pointer transition transform hover:scale-[1.02] active:scale-95 shrink-0"
+              title="បើកផ្ទាំងបង្ហាញតម្លៃទៅកាន់ភ្ញៀវលើ iPad ឬអេក្រង់ទី ២ (Customer Display)"
+            >
+              <span className="text-sm">🖥️</span>
+              <span>អេក្រង់ភ្ញៀវ (Display ↗)</span>
+            </button>
+
+            {/* ⭐️ BARCODE LABEL PRINT BUTTON IN POS TOOLBAR ⭐️ */}
+            <button
+              type="button"
+              onClick={() => {
+                if (products.length > 0) {
+                  setBarcodeProduct(products[0]);
+                  setBarcodePrintQty(1);
+                  setBarcodeModalOpen(true);
+                } else {
+                  alert('មិនមានទំនិញក្នុងប្រព័ន្ធដើម្បីបោះពុម្ពបាកូដឡើយ!');
+                }
+              }}
+              className="bg-white hover:bg-purple-50 text-gray-800 hover:text-purple-700 border-2 border-gray-200 hover:border-purple-300 px-4 py-2.5 rounded-2xl text-xs font-black shadow-xs flex items-center gap-2 cursor-pointer transition transform hover:scale-[1.02] active:scale-95 shrink-0"
+              title="បោះពុម្ពតែម Barcode / Sticker បិទលើប្រអប់ស្បែកជើង"
+            >
+              <span className="text-sm">🏷️</span>
+              <span>ព្រីនតែម Barcode</span>
             </button>
 
             {/* ⭐️ TOGGLE របៀបលក់: លក់រាយ (Retail) vs លក់បោះដុំ (Wholesale) ⭐️ */}
@@ -12355,80 +12534,437 @@ export default function UnifiedAdminDashboard() {
           );
         })()}
 
-        {barcodeModalOpen && barcodeProduct && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 border border-gray-100 animate-in zoom-in-95">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
-                <h3 className="text-base font-black text-gray-900">🏷️ បោះពុម្ពស្លាក Barcode</h3>
-                <button 
-                  onClick={() => setBarcodeModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-bold text-xs"
-                >
-                  ✕
-                </button>
-              </div>
+        {/* ⭐️ ស្ទូឌីយោបោះពុម្ពស្លាក BARCODE & STICKER បិទលើប្រអប់ស្បែកជើង (PRO BARCODE STUDIO) ⭐️ */}
+{barcodeModalOpen && barcodeProduct && (
+  <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+    <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl p-6 sm:p-7 border border-gray-100 animate-in zoom-in-95 duration-200 max-h-[94vh] flex flex-col">
+      
+      {/* Header */}
+      <div className="flex justify-between items-center pb-4 border-b border-gray-100 mb-5">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-purple-500/20">
+            🏷️
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-gray-900 leading-tight">
+              ស្ទូឌីយោបោះពុម្ពស្លាក Barcode / Sticker ប្រអប់ស្បែកជើង
+            </h3>
+            <p className="text-xs text-gray-400">
+              Print Scannable Barcode Labels for Shoe Boxes (Xprinter & Thermal Printers)
+            </p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setBarcodeModalOpen(false)}
+          className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-bold text-sm cursor-pointer transition"
+        >
+          ✕
+        </button>
+      </div>
 
-              {/* ស្លាកបាកូដគំរូ (Barcode Sticker Preview 50x30mm) */}
-              <div className="p-4 bg-gray-50 rounded-2xl flex flex-col items-center justify-center mb-4 border border-dashed border-gray-300">
-                <div id="barcode-sticker-area" className="bg-white p-4 rounded-xl border border-gray-400 w-64 text-center font-mono text-black shadow-xs">
-                  <p className="font-black text-xs tracking-wider uppercase">SABAY LUK STORE</p>
-                  <p className="font-bold text-[11px] line-clamp-1 my-1">{barcodeProduct.name}</p>
-                  
-                  {/* បាកូដក្លែងធ្វើជាបន្ទាត់ Code 128 ស្អាតច្បាស់ */}
-                  <div className="my-2 flex flex-col items-center">
-                    <div className="tracking-[3px] font-black text-2xl scale-y-125 select-none font-mono">
-                      ||| | |||| | || ||| ||
-                    </div>
-                    <span className="text-[10px] font-bold tracking-widest mt-0.5">{barcodeProduct.sku}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center mt-2 pt-1 border-t border-dashed border-gray-300 text-xs">
-                    <span className="font-bold text-[10px] bg-gray-100 px-1.5 py-0.5 rounded">
-                      {barcodeProduct.size ? `Size: ${barcodeProduct.size}` : 'Standard'}
-                    </span>
-                    <span className="font-black text-sm text-black">${barcodeProduct.price ? barcodeProduct.price.toFixed(2) : '0.00'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* ប៊ូតុង Print Sticker */}
-              <div className="flex gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => setBarcodeModalOpen(false)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-bold text-xs transition"
-                >
-                  បោះបង់
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const content = document.getElementById('barcode-sticker-area').innerHTML;
-                    const printWindow = window.open('', '', 'height=400,width=400');
-                    printWindow.document.write(`
-                      <html>
-                        <head>
-                          <style>
-                            body { font-family: monospace; display: flex; justify-content: center; align-items: center; margin: 0; padding: 10px; color: black; }
-                            .sticker { text-align: center; border: 1px dashed black; padding: 10px; width: 60mm; }
-                          </style>
-                        </head>
-                        <body>
-                          <div class="sticker">${content}</div>
-                        </body>
-                      </html>
-                    `);
-                    printWindow.document.close();
-                    printWindow.print();
-                  }}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-black text-xs shadow-md shadow-purple-600/30 transition flex items-center justify-center gap-1.5"
-                >
-                  🖨️ បោះពុម្ពស្លាក
-                </button>
+      <div className="flex-1 overflow-y-auto pr-1 space-y-6">
+        
+        {/* Top Product Selector & Info */}
+        <div className="bg-purple-50/60 p-4 rounded-2xl border border-purple-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-14 h-14 rounded-2xl bg-white border border-purple-200 overflow-hidden shrink-0 flex items-center justify-center shadow-xs">
+              {barcodeProduct.image_url ? (
+                <img src={barcodeProduct.image_url} alt={barcodeProduct.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-2xl">👟</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] font-black bg-purple-200/80 text-purple-800 px-2 py-0.5 rounded uppercase tracking-wider">
+                {barcodeProduct.category || 'ស្បែកជើង'}
+              </span>
+              <h4 className="font-black text-sm text-gray-900 truncate mt-0.5">{barcodeProduct.name}</h4>
+              <div className="flex items-center gap-2 text-xs text-gray-500 font-mono mt-0.5">
+                <span>SKU: <b>{barcodeProduct.sku}</b></span>
+                {barcodeProduct.stock_quantity != null && (
+                  <span className="text-purple-700 font-bold">• ស្តុក: {barcodeProduct.stock_quantity} គូ</span>
+                )}
               </div>
             </div>
           </div>
-        )}
+
+          {/* Quick Product Switcher */}
+          <div className="w-full sm:w-auto flex items-center gap-2">
+            <label className="text-[11px] font-bold text-gray-500 shrink-0">ប្តូរទំនិញ:</label>
+            <select
+              value={barcodeProduct.id}
+              onChange={(e) => {
+                const p = products.find(prod => String(prod.id) === String(e.target.value));
+                if (p) setBarcodeProduct(p);
+              }}
+              className="bg-white border border-purple-200 text-xs font-bold text-gray-800 rounded-xl px-3 py-1.5 outline-none focus:border-purple-600 max-w-[200px] truncate"
+            >
+              {products.map(p => (
+                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Main Grid: Controls (Left) & Live Preview (Right) */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+          
+          {/* Controls Column */}
+          <div className="md:col-span-7 space-y-4">
+            
+            {/* 1. Label Size Format */}
+            <div>
+              <label className="text-xs font-black text-gray-800 uppercase tracking-wider block mb-1.5">
+                📐 ១. ទំហំស្លាក Sticker (Label Size)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: '50x30', label: '50mm × 30mm', sub: 'ស្តង់ដារប្រអប់ស្បែកជើង' },
+                  { id: '40x30', label: '40mm × 30mm', sub: 'ស្លាកខ្នាតតូច Compact' },
+                  { id: '60x40', label: '60mm × 40mm', sub: 'ស្លាកខ្នាតធំ Large Box' },
+                  { id: 'a4_grid', label: 'ក្រដាស A4 (24 ស្លាក)', sub: 'ម៉ាស៊ីនព្រីនធម្មតា Grid' }
+                ].map(fmt => (
+                  <button
+                    key={fmt.id}
+                    type="button"
+                    onClick={() => setBarcodeLabelFormat(fmt.id)}
+                    className={`p-2.5 rounded-2xl border text-left transition cursor-pointer ${
+                      barcodeLabelFormat === fmt.id
+                        ? 'border-purple-600 bg-purple-50 text-purple-900 shadow-2xs font-black'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-700 bg-white'
+                    }`}
+                  >
+                    <span className="text-xs font-black block">{fmt.label}</span>
+                    <span className="text-[10px] text-gray-500 block truncate">{fmt.sub}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Barcode Symbology */}
+            <div>
+              <label className="text-xs font-black text-gray-800 uppercase tracking-wider block mb-1.5">
+                ⚡ ២. ប្រភេទកូដ (Barcode Symbology)
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBarcodeSymbology('code128')}
+                  className={`p-2.5 rounded-2xl border text-center transition cursor-pointer text-xs font-black flex items-center justify-center gap-2 ${
+                    barcodeSymbology === 'code128'
+                      ? 'border-purple-600 bg-purple-50 text-purple-900 shadow-2xs'
+                      : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="text-base">|||||||</span>
+                  <span>Code 128 (Barcode បន្ទាត់)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBarcodeSymbology('qrcode')}
+                  className={`p-2.5 rounded-2xl border text-center transition cursor-pointer text-xs font-black flex items-center justify-center gap-2 ${
+                    barcodeSymbology === 'qrcode'
+                      ? 'border-purple-600 bg-purple-50 text-purple-900 shadow-2xs'
+                      : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="text-base">▦</span>
+                  <span>QR Code (2D Code)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 3. Print Copies (Quantity) */}
+            <div>
+              <label className="text-xs font-black text-gray-800 uppercase tracking-wider block mb-1">
+                🖨️ ៣. ចំនួនសន្លឹកដែលត្រូវព្រីន (Print Quantity)
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBarcodePrintQty(Math.max(1, barcodePrintQty - 1))}
+                  className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 font-black text-base text-gray-700 transition cursor-pointer"
+                >
+                  -
+                </button>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={barcodePrintQty}
+                  onChange={(e) => setBarcodePrintQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-24 text-center font-mono font-black text-base bg-gray-50 border-2 border-gray-200 rounded-xl py-2 outline-none focus:border-purple-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => setBarcodePrintQty(barcodePrintQty + 1)}
+                  className="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 font-black text-base text-gray-700 transition cursor-pointer"
+                >
+                  +
+                </button>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 ml-2 overflow-x-auto">
+                  {[1, 5, 10, 20].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setBarcodePrintQty(n)}
+                      className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border transition cursor-pointer ${
+                        barcodePrintQty === n ? 'bg-purple-600 text-white border-purple-600' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  {barcodeProduct.stock_quantity > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setBarcodePrintQty(barcodeProduct.stock_quantity)}
+                      className="text-[11px] font-black text-purple-700 bg-purple-100 hover:bg-purple-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer whitespace-nowrap"
+                    >
+                      ស្មើស្តុក ({barcodeProduct.stock_quantity})
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Display Toggles */}
+            <div className="pt-1 space-y-2">
+              <label className="text-xs font-black text-gray-800 uppercase tracking-wider block">
+                ⚙️ ៤. ធាតុដែលត្រូវបង្ហាញលើស្លាក
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { state: barcodeShowStoreName, set: setBarcodeShowStoreName, label: 'ឈ្មោះហាង' },
+                  { state: barcodeShowPrice, set: setBarcodeShowPrice, label: 'តម្លៃ ($ & ៛)' },
+                  { state: barcodeShowSize, set: setBarcodeShowSize, label: 'ទំហំ & ពណ៌' }
+                ].map((tg, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => tg.set(!tg.state)}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer flex items-center gap-1.5 ${
+                      tg.state
+                        ? 'bg-purple-50 text-purple-800 border-purple-300'
+                        : 'bg-gray-100 text-gray-400 border-gray-200 line-through'
+                    }`}
+                  >
+                    <span>{tg.state ? '✓' : '✕'}</span>
+                    <span>{tg.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Live Preview Column */}
+          <div className="md:col-span-5 flex flex-col items-center justify-center p-5 bg-gray-100 rounded-3xl border border-gray-200">
+            <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-1.5">
+              <span>👀</span> ស្លាកគំរូជាក់ស្តែង (1:1 Live Preview):
+            </span>
+
+            {/* THE PHYSICAL LABEL STICKER (Rendered exact to look like a thermal print) */}
+            <div 
+              id="barcode-sticker-print-target"
+              className="bg-white text-black p-3.5 rounded-xl border-2 border-dashed border-gray-400 shadow-md w-full max-w-[260px] text-center font-sans select-none flex flex-col justify-between"
+              style={{ minHeight: barcodeLabelFormat === '60x40' ? '180px' : '150px' }}
+            >
+              {/* Store Name */}
+              {barcodeShowStoreName && (
+                <div className="border-b border-black pb-1 mb-1">
+                  <p className="font-black text-[11px] tracking-wider uppercase leading-none font-mono">
+                    {storeSettings.storeName || 'SABAY LUK STORE'}
+                  </p>
+                </div>
+              )}
+
+              {/* Product Name */}
+              <p className="font-black text-xs line-clamp-1 leading-tight text-gray-900 mt-0.5">
+                {barcodeProduct.name}
+              </p>
+
+              {/* Variant Tag: Size & Color */}
+              {barcodeShowSize && (
+                <div className="flex items-center justify-center gap-1.5 my-1 text-[10px] font-black">
+                  <span className="bg-black text-white px-1.5 py-0.2 rounded text-[9px]">
+                    {barcodeProduct.size ? `SIZE: ${barcodeProduct.size}` : 'STANDARD'}
+                  </span>
+                  {barcodeProduct.color && (
+                    <span className="text-gray-700 text-[9px] uppercase">
+                      {barcodeProduct.color}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* REAL SCANNABLE CODE 128 SVG BARCODE OR QR CODE */}
+              <div className="my-1.5 flex flex-col items-center justify-center px-1">
+                {barcodeSymbology === 'code128' ? (
+                  <div 
+                    className="w-full flex justify-center py-1 overflow-hidden"
+                    dangerouslySetInnerHTML={{
+                      __html: generateCode128SvgString(barcodeProduct.sku || barcodeProduct.id, { height: 42, barWidth: 1.6 })
+                    }}
+                  />
+                ) : (
+                  <div className="p-1 bg-white border border-gray-300 rounded-lg">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(barcodeProduct.sku || barcodeProduct.id)}`}
+                      alt="QR" 
+                      className="w-20 h-20 object-contain"
+                    />
+                  </div>
+                )}
+                
+                {/* SKU Digits text */}
+                <span className="font-mono font-black text-[11px] tracking-[2px] mt-0.5 text-black">
+                  {barcodeProduct.sku || barcodeProduct.id}
+                </span>
+              </div>
+
+              {/* Price Banner */}
+              {barcodeShowPrice && (
+                <div className="pt-1 border-t border-dashed border-gray-400 flex items-center justify-between text-xs mt-1">
+                  <span className="text-[10px] text-gray-600 font-bold">
+                    {(Number(barcodeProduct.price || 0) * (exchangeRate || 4100)).toLocaleString()} ៛
+                  </span>
+                  <span className="font-mono font-black text-sm text-black">
+                    ${Number(barcodeProduct.price || 0).toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-[10px] text-gray-400 mt-3 text-center">
+              ម៉ាស៊ីនស្កេន Barcode កាំភ្លើង (Scanner Gun) អាចស្កេនបាញ់ "ទឺត" ចូលកន្ត្រកភ្លាមៗ!
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* Modal Footer Actions */}
+      <div className="pt-4 border-t border-gray-100 flex items-center justify-between gap-3 mt-4">
+        <span className="text-xs text-gray-500 font-bold hidden sm:inline">
+          🖨️ នឹងបោះពុម្ពចំនួន <b>{barcodePrintQty} សន្លឹក</b> ({barcodeLabelFormat})
+        </span>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <button 
+            type="button" 
+            onClick={() => setBarcodeModalOpen(false)}
+            className="px-5 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xs transition cursor-pointer"
+          >
+            បោះបង់
+          </button>
+          
+          <button 
+            type="button" 
+            onClick={() => {
+              const stickerHtml = document.getElementById('barcode-sticker-print-target').innerHTML;
+              const isA4 = barcodeLabelFormat === 'a4_grid';
+              const sizeStyle = barcodeLabelFormat === '60x40' 
+                ? '@page { size: 60mm 40mm; margin: 0; }' 
+                : barcodeLabelFormat === '40x30' 
+                ? '@page { size: 40mm 30mm; margin: 0; }' 
+                : isA4
+                ? '@page { size: A4 portrait; margin: 8mm; }'
+                : '@page { size: 50mm 30mm; margin: 0; }';
+
+              const printWin = window.open('', 'PrintBarcodeStickers', 'height=600,width=800');
+              if (!printWin) {
+                alert('សូមអនុញ្ញាត Popup Permission លើ Browser ដើម្បីបោះពុម្ពស្លាក!');
+                return;
+              }
+
+              let stickersList = '';
+              for (let i = 0; i < barcodePrintQty; i++) {
+                stickersList += `
+                  <div class="sticker-container">
+                    ${stickerHtml}
+                  </div>
+                `;
+              }
+
+              printWin.document.write(`
+                <!DOCTYPE html>
+                <html>
+                  <head>
+                    <meta charset="utf-8" />
+                    <title>Print Barcodes - ${barcodeProduct.name}</title>
+                    <style>
+                      ${sizeStyle}
+                      * { box-sizing: border-box; }
+                      body {
+                        margin: 0;
+                        padding: 0;
+                        background: #fff;
+                        color: #000;
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                      }
+                      ${isA4 ? `
+                        .a4-grid {
+                          display: grid;
+                          grid-template-columns: repeat(3, 1fr);
+                          gap: 4mm;
+                        }
+                        .sticker-container {
+                          border: 1px dashed #bbb;
+                          border-radius: 4px;
+                          padding: 2.5mm;
+                          height: 32mm;
+                          display: flex;
+                          flex-direction: column;
+                          justify-content: space-between;
+                          text-align: center;
+                          page-break-inside: avoid;
+                        }
+                      ` : `
+                        .sticker-container {
+                          width: ${barcodeLabelFormat === '60x40' ? '60mm' : barcodeLabelFormat === '40x30' ? '40mm' : '50mm'};
+                          height: ${barcodeLabelFormat === '60x40' ? '40mm' : '30mm'};
+                          padding: 1.5mm 2mm;
+                          display: flex;
+                          flex-direction: column;
+                          justify-content: space-between;
+                          text-align: center;
+                          page-break-after: always;
+                          overflow: hidden;
+                        }
+                      `}
+                      svg { max-width: 100%; height: auto; }
+                    </style>
+                  </head>
+                  <body>
+                    ${isA4 ? `<div class="a4-grid">${stickersList}</div>` : stickersList}
+                    <script>
+                      window.onload = function() {
+                        window.focus();
+                        window.print();
+                        setTimeout(function() { window.close(); }, 500);
+                      };
+                    <\/script>
+                  </body>
+                </html>
+              `);
+              printWin.document.close();
+            }}
+            className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+          >
+            <span>🖨️</span>
+            <span>បោះពុម្ពស្លាកឥឡូវនេះ ({barcodePrintQty})</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+)}
+
 
       </div>
     );
