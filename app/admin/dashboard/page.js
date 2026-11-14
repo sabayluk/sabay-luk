@@ -746,6 +746,13 @@ export default function UnifiedAdminDashboard() {
   const [storeSwitchModalOpen, setStoreSwitchModalOpen] = useState(false);
   const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
 
+  // Edit store modal for master owner
+  const [editStoreModalOpen, setEditStoreModalOpen] = useState(false);
+  const [storeFormToEdit, setStoreFormToEdit] = useState(null);
+  const [storeSearchQuery, setStoreSearchQuery] = useState('');
+  const [storeFilterPlan, setStoreFilterPlan] = useState('ALL');
+  const [storeFilterStatus, setStoreFilterStatus] = useState('ALL');
+
   // Sync active store on change
   useEffect(() => {
     const handleStoreChange = () => {
@@ -816,6 +823,14 @@ export default function UnifiedAdminDashboard() {
       localStorage.setItem('sabay_active_staff', JSON.stringify(currentStaff));
     }
   }, [currentStaff]);
+
+  // ⭐️ MASTER OWNER ACCESS CONTROL (សម្រាប់តែ Owner ផ្តាច់មុខ) ⭐️
+  const isMasterOwner = Boolean(
+    !currentStaff ||
+    currentStaff.id === 'STAFF-1' ||
+    currentStaff.username === 'admin' ||
+    (currentStaff.role === 'ADMIN' && (!currentStaff.store_id || currentStaff.store_id === 'store_default_sabayluk'))
+  );
 
   // ⭐️ Helper ពិនិត្យមើលសិទ្ធិរបស់បុគ្គលិកបច្ចុប្បន្ន (hasStaffPermission) ⭐️
   const hasStaffPermission = (permissionKey) => {
@@ -9881,6 +9896,538 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
+  // ================= 🌐 ផ្ទាំងគ្រប់គ្រងហាងទាំងអស់លើប្រព័ន្ធ (MASTER PLATFORM STORES VIEW) =================
+  // ⭐️ សម្រាប់តែ Platform Owner ម្នាក់គត់ដែលអាចមើលឃើញ និងគ្រប់គ្រងបាន ⭐️
+  const MasterStoresManagementView = () => {
+    // គណនាស្ថិតិទូទៅលើប្រព័ន្ធ (System Platform Analytics)
+    const totalStores = registeredStores.length;
+    const activeCount = registeredStores.filter(s => s.status !== 'SUSPENDED').length;
+    const suspendedCount = registeredStores.filter(s => s.status === 'SUSPENDED').length;
+    const paidCount = registeredStores.filter(s => s.plan && s.plan !== 'FREE').length;
+    const freeCount = totalStores - paidCount;
+
+    // Monthly Recurring Revenue (MRR)
+    const estimatedMRR = registeredStores.reduce((sum, s) => {
+      if (s.status === 'SUSPENDED') return sum;
+      const planInfo = STORE_PLANS[s.plan] || STORE_PLANS.FREE;
+      return sum + (planInfo.price || 0);
+    }, 0);
+
+    // Toggle store active/suspended
+    const handleToggleStoreStatus = (targetStore) => {
+      if (targetStore.id === 'store_default_sabayluk') {
+        alert('មិនអាចផ្អាកហាងមេ Sabay Luk Flagship Store បានទេ!');
+        return;
+      }
+      const newStatus = targetStore.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+      const updated = registeredStores.map(s => s.id === targetStore.id ? { ...s, status: newStatus } : s);
+      setRegisteredStores(updated);
+      saveLocalStores(updated);
+      if (activeStore?.id === targetStore.id) {
+        const nextActive = { ...activeStore, status: newStatus };
+        setActiveStore(nextActive);
+        setActiveStoreState(nextActive);
+      }
+      setToastNotification(`${newStatus === 'ACTIVE' ? '🟢 បានបើកដំណើរការហាង' : '🔴 បានផ្អាកដំណើរការហាង'} "${targetStore.name}" រួចរាល់!`);
+      setTimeout(() => setToastNotification(null), 3000);
+    };
+
+    // Change plan directly
+    const handleChangeStorePlan = (targetStore, newPlanKey) => {
+      const planInfo = STORE_PLANS[newPlanKey] || STORE_PLANS.FREE;
+      const updated = registeredStores.map(s => s.id === targetStore.id ? { 
+        ...s, 
+        plan: newPlanKey, 
+        max_products: planInfo.maxProducts,
+        max_staff: planInfo.maxStaff 
+      } : s);
+      setRegisteredStores(updated);
+      saveLocalStores(updated);
+      if (activeStore?.id === targetStore.id) {
+        const nextActive = { ...activeStore, plan: newPlanKey, max_products: planInfo.maxProducts, max_staff: planInfo.maxStaff };
+        setActiveStore(nextActive);
+        setActiveStoreState(nextActive);
+      }
+      setToastNotification(`💎 បានប្តូរកញ្ចប់ហាង "${targetStore.name}" ទៅកាន់ ${planInfo.name} ជោគជ័យ!`);
+      setTimeout(() => setToastNotification(null), 3000);
+    };
+
+    // Delete store
+    const handleDeleteStore = (targetStore) => {
+      if (targetStore.id === 'store_default_sabayluk') {
+        alert('មិនអាចលុបហាងមេ Sabay Luk Flagship Store បានទេ!');
+        return;
+      }
+      if (!window.confirm(`តើបងពិតជាចង់លុបហាង "${targetStore.name}" នេះចេញពីប្រព័ន្ធមែនទេ? ទិន្នន័យទាំងអស់នឹងត្រូវបាត់បង់!`)) return;
+      const updated = registeredStores.filter(s => s.id !== targetStore.id);
+      setRegisteredStores(updated);
+      saveLocalStores(updated);
+      if (activeStore?.id === targetStore.id) {
+        const fallback = updated[0] || DEFAULT_FLAGSHIP_STORE;
+        setActiveStore(fallback);
+        setActiveStoreState(fallback);
+      }
+      setToastNotification(`🗑️ បានលុបហាង "${targetStore.name}" រួចរាល់!`);
+      setTimeout(() => setToastNotification(null), 3000);
+    };
+
+    // Save edited store info
+    const handleSaveStoreDetails = (e) => {
+      e.preventDefault();
+      if (!storeFormToEdit) return;
+      const updated = registeredStores.map(s => s.id === storeFormToEdit.id ? { ...storeFormToEdit } : s);
+      setRegisteredStores(updated);
+      saveLocalStores(updated);
+      if (activeStore?.id === storeFormToEdit.id) {
+        setActiveStore(storeFormToEdit);
+        setActiveStoreState(storeFormToEdit);
+      }
+      setEditStoreModalOpen(false);
+      setToastNotification(`✅ បានកែប្រែព័ត៌មានហាង "${storeFormToEdit.name}" ជោគជ័យ!`);
+      setTimeout(() => setToastNotification(null), 3000);
+    };
+
+    // Filtered stores
+    const filteredStores = registeredStores.filter(s => {
+      const q = storeSearchQuery.toLowerCase();
+      const matchSearch = !storeSearchQuery ||
+        (s.name || '').toLowerCase().includes(q) ||
+        (s.slug || '').toLowerCase().includes(q) ||
+        (s.phone || '').includes(q) ||
+        (s.owner_name || '').toLowerCase().includes(q);
+      const matchPlan = storeFilterPlan === 'ALL' || s.plan === storeFilterPlan;
+      const matchStatus = storeFilterStatus === 'ALL' || 
+        (storeFilterStatus === 'ACTIVE' && s.status !== 'SUSPENDED') ||
+        (storeFilterStatus === 'SUSPENDED' && s.status === 'SUSPENDED');
+      return matchSearch && matchPlan && matchStatus;
+    });
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-200">
+        
+        {/* Header Bar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white p-6 rounded-3xl border border-slate-800 shadow-xl">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <span className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl font-bold border border-amber-500/30">
+                🌐
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-black text-white leading-tight">
+                    គ្រប់គ្រងហាងទាំងអស់លើប្រព័ន្ធ (Platform Stores Manager)
+                  </h2>
+                  <span className="bg-amber-500 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    👑 Owner Only
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  ផ្ទាំងគ្រប់គ្រងផ្តាច់មុខសម្រាប់តែ Master Owner ដើម្បីតាមដានហាង បើក/បិទដំណើរការ និងមើលចំណូល SaaS
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href="/register"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-gradient-to-r from-[#ff6a00] to-orange-500 hover:from-[#e65c00] hover:to-orange-600 text-white font-black text-xs px-4 py-2.5 rounded-2xl transition shadow-md shadow-orange-500/25 flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <span>➕</span>
+              <span>បង្កើតហាងថ្មី (/register)</span>
+            </a>
+          </div>
+        </div>
+
+        {/* ⭐️ PLATFORM KPI ANALYTICS CARDS ⭐️ */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">🏬 ហាងសរុប</span>
+            <span className="text-2xl font-black text-slate-900">{totalStores}</span>
+            <span className="text-[10px] text-slate-500 block">ហាងបានចុះឈ្មោះ</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider block">🟢 ដំណើរការ</span>
+            <span className="text-2xl font-black text-emerald-600">{activeCount}</span>
+            <span className="text-[10px] text-emerald-700/70 block">ហាងកំពុងលក់សកម្ម</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+            <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider block">🔴 បានផ្អាក</span>
+            <span className="text-2xl font-black text-rose-600">{suspendedCount}</span>
+            <span className="text-[10px] text-rose-600/70 block">ហាងត្រូវបិទ/មិនទាន់បង់</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+            <span className="text-[10px] font-black text-blue-600 uppercase tracking-wider block">💎 កញ្ចប់ PAID</span>
+            <span className="text-2xl font-black text-blue-600">{paidCount}</span>
+            <span className="text-[10px] text-blue-600/70 block">ហាងបង់ប្រចាំខែ</span>
+          </div>
+
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+            <span className="text-[10px] font-black text-amber-600 uppercase tracking-wider block">🎁 កញ្ចប់ FREE</span>
+            <span className="text-2xl font-black text-amber-600">{freeCount}</span>
+            <span className="text-[10px] text-amber-600/70 block">ទំនិញក្រោម ១៥ មុខ</span>
+          </div>
+
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
+            <span className="text-[10px] font-black text-orange-400 uppercase tracking-wider block">💰 ចំណូល SaaS MRR</span>
+            <span className="text-2xl font-black text-white">${estimatedMRR.toFixed(2)}</span>
+            <span className="text-[10px] text-slate-400 block">ចំណូលប្រចាំខែពីកញ្ចប់</span>
+          </div>
+
+        </div>
+
+        {/* ⭐️ STORES FILTER & SEARCH TOOLBAR ⭐️ */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
+          
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <input
+              type="text"
+              value={storeSearchQuery}
+              onChange={(e) => setStoreSearchQuery(e.target.value)}
+              placeholder="🔍 ស្វែងរកហាង, Slug, លេខទូរស័ព្ទ, ម្ចាស់ហាង..."
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none w-full sm:w-64 focus:border-[#ff6a00]"
+            />
+
+            <select
+              value={storeFilterPlan}
+              onChange={(e) => setStoreFilterPlan(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+            >
+              <option value="ALL">គ្រប់កញ្ចប់ (All Plans)</option>
+              <option value="FREE">🎁 ឥតគិតថ្លៃ (Free)</option>
+              <option value="STARTER">🌱 Starter ($1)</option>
+              <option value="BASIC">⚡ Basic ($2)</option>
+              <option value="PRO">🚀 Pro ($3)</option>
+              <option value="BUSINESS">🔥 Business ($5)</option>
+              <option value="ENTERPRISE">👑 Enterprise ($10)</option>
+            </select>
+
+            <select
+              value={storeFilterStatus}
+              onChange={(e) => setStoreFilterStatus(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+            >
+              <option value="ALL">គ្រប់ស្ថានភាព (All Status)</option>
+              <option value="ACTIVE">🟢 កំពុងដំណើរការ (Active)</option>
+              <option value="SUSPENDED">🔴 បានផ្អាក (Suspended)</option>
+            </select>
+          </div>
+
+          <div className="text-xs font-bold text-slate-500">
+            បង្ហាញ <b>{filteredStores.length}</b> នៃ <b>{totalStores}</b> ហាង
+          </div>
+        </div>
+
+        {/* ⭐️ ALL STORES DATA TABLE ⭐️ */}
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="px-5 py-3.5">ហាង (Store Details)</th>
+                  <th className="px-5 py-3.5">ម្ចាស់ & ទំនាក់ទំនង</th>
+                  <th className="px-5 py-3.5">កញ្ចប់សេវា (Plan)</th>
+                  <th className="px-5 py-3.5 text-center">កម្រិតទំនិញ</th>
+                  <th className="px-5 py-3.5 text-center">ស្ថានភាព (Status)</th>
+                  <th className="px-5 py-3.5">ថ្ងៃបង្កើត</th>
+                  <th className="px-5 py-3.5 text-right pr-6">សកម្មភាព (Actions)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredStores.map(st => {
+                  const isFlagship = st.id === 'store_default_sabayluk';
+                  const isSuspended = st.status === 'SUSPENDED';
+                  const isCurrent = activeStore?.id === st.id;
+                  const planKey = st.plan || 'FREE';
+
+                  return (
+                    <tr key={st.id} className={`hover:bg-slate-50/70 transition ${isCurrent ? 'bg-orange-50/20' : ''} ${isSuspended ? 'bg-rose-50/20 opacity-80' : ''}`}>
+                      
+                      {/* Store Identity */}
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-lg font-black shrink-0 overflow-hidden">
+                            {st.settings?.logoUrl ? (
+                              <img src={st.settings.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                            ) : (
+                              <span>🛍️</span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-black text-slate-900 text-xs">{st.name}</span>
+                              {isFlagship && (
+                                <span className="text-[9px] bg-amber-500 text-slate-950 font-black px-1.5 py-0.2 rounded-md">
+                                  ហាងមេ
+                                </span>
+                              )}
+                              {isCurrent && (
+                                <span className="text-[9px] bg-orange-600 text-white font-bold px-1.5 py-0.2 rounded-md">
+                                  កំពុងចូល
+                                </span>
+                              )}
+                            </div>
+                            <a 
+                              href={`/store/${st.slug}`} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="text-[10px] text-orange-600 hover:underline font-mono block mt-0.5"
+                            >
+                              🔗 /store/{st.slug} ↗
+                            </a>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Owner & Contact */}
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <p className="font-bold text-slate-800">{st.owner_name || 'ម្ចាស់ហាង'}</p>
+                        <p className="text-[10px] text-slate-500 font-mono">
+                          📞 {st.phone || '—'} {st.telegram ? `• TG: @${st.telegram}` : ''}
+                        </p>
+                      </td>
+
+                      {/* Plan Dropdown */}
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <select
+                          value={planKey}
+                          onChange={(e) => handleChangeStorePlan(st, e.target.value)}
+                          className={`px-2.5 py-1 rounded-xl text-[10px] font-black border outline-none cursor-pointer ${
+                            planKey === 'FREE' ? 'bg-slate-100 text-slate-700 border-slate-300' :
+                            planKey === 'STARTER' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                            planKey === 'BASIC' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                            planKey === 'PRO' ? 'bg-purple-50 text-purple-700 border-purple-300' :
+                            planKey === 'BUSINESS' ? 'bg-orange-50 text-orange-700 border-orange-300' :
+                            'bg-amber-50 text-amber-800 border-amber-300'
+                          }`}
+                        >
+                          <option value="FREE">🎁 ឥតគិតថ្លៃ (Free 15 មុខ)</option>
+                          <option value="STARTER">🌱 Starter ($1/ខែ, 50 មុខ)</option>
+                          <option value="BASIC">⚡ Basic ($2/ខែ, 100 មុខ)</option>
+                          <option value="PRO">🚀 Pro ($3/ខែ, 250 មុខ)</option>
+                          <option value="BUSINESS">🔥 Business ($5/ខែ, 600 មុខ)</option>
+                          <option value="ENTERPRISE">👑 Enterprise ($10/ខែ, 2500 មុខ)</option>
+                        </select>
+                      </td>
+
+                      {/* Product Limit */}
+                      <td className="px-5 py-4 whitespace-nowrap text-center">
+                        <span className="font-black text-slate-800 text-xs">
+                          {st.max_products || 15}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block">ទំនិញអតិបរមា</span>
+                      </td>
+
+                      {/* Status Toggle (បើក / បិទ) */}
+                      <td className="px-5 py-4 whitespace-nowrap text-center">
+                        <button
+                          type="button"
+                          disabled={isFlagship}
+                          onClick={() => handleToggleStoreStatus(st)}
+                          className={`px-3 py-1 rounded-xl text-[10px] font-black transition cursor-pointer border ${
+                            isSuspended
+                              ? 'bg-rose-50 text-rose-600 border-rose-300 hover:bg-rose-100'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                          } ${isFlagship ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          title="ចុចដើម្បី បើកដំណើរការ ឬ ផ្អាកដំណើរការហាងនេះ"
+                        >
+                          {isSuspended ? '🔴 ផ្អាក (Suspended)' : '🟢 សកម្ម (Active)'}
+                        </button>
+                      </td>
+
+                      {/* Created Date */}
+                      <td className="px-5 py-4 whitespace-nowrap text-[10px] text-slate-500 font-mono">
+                        {st.created_at ? new Date(st.created_at).toLocaleDateString('km-KH') : '—'}
+                      </td>
+
+                      {/* Action Buttons */}
+                      <td className="px-5 py-4 whitespace-nowrap text-right pr-6 space-x-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveStore(st);
+                            setActiveStoreState(st);
+                            setToastNotification(`🔑 បានប្តូរទៅគ្រប់គ្រងហាង "${st.name}" រួចរាល់!`);
+                            setTimeout(() => setToastNotification(null), 3000);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-[11px] transition shadow-2xs cursor-pointer"
+                          title="ចូលទៅគ្រប់គ្រងហាងនេះ (Switch to this store)"
+                        >
+                          🔑 ចូលហាង
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStoreFormToEdit({ ...st });
+                            setEditStoreModalOpen(true);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
+                          title="កែប្រែព័ត៌មានហាង"
+                        >
+                          ✏️ កែប្រែ
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isFlagship}
+                          onClick={() => handleDeleteStore(st)}
+                          className={`px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] border border-rose-200 transition cursor-pointer ${
+                            isFlagship ? 'opacity-40 cursor-not-allowed' : ''
+                          }`}
+                          title="លុបហាងនេះចោល"
+                        >
+                          🗑️
+                        </button>
+                      </td>
+
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ⭐️ MODAL កែប្រែព័ត៌មានហាង (EDIT STORE DETAILS MODAL) ⭐️ */}
+        {editStoreModalOpen && storeFormToEdit && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
+              
+              <div className="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-base font-bold">
+                    ✏️
+                  </span>
+                  <div>
+                    <h3 className="font-black text-sm text-gray-900">កែប្រែព័ត៌មានហាង "{storeFormToEdit.name}"</h3>
+                    <p className="text-[10px] text-gray-400">កំណត់ឈ្មោះហាង លេខទូរស័ព្ទ កញ្ចប់ និងចំនួនទំនិញអនុញ្ញាត</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditStoreModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveStoreDetails} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">ឈ្មោះហាង *</label>
+                  <input
+                    type="text"
+                    required
+                    value={storeFormToEdit.name}
+                    onChange={(e) => setStoreFormToEdit({ ...storeFormToEdit, name: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">លេខទូរស័ព្ទ *</label>
+                    <input
+                      type="text"
+                      required
+                      value={storeFormToEdit.phone || ''}
+                      onChange={(e) => setStoreFormToEdit({ ...storeFormToEdit, phone: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">Telegram ហាង</label>
+                    <input
+                      type="text"
+                      value={storeFormToEdit.telegram || ''}
+                      onChange={(e) => setStoreFormToEdit({ ...storeFormToEdit, telegram: e.target.value })}
+                      placeholder="Sabayluk"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">កញ្ចប់សេវា (Plan)</label>
+                    <select
+                      value={storeFormToEdit.plan || 'FREE'}
+                      onChange={(e) => {
+                        const p = e.target.value;
+                        const info = STORE_PLANS[p] || STORE_PLANS.FREE;
+                        setStoreFormToEdit({ 
+                          ...storeFormToEdit, 
+                          plan: p,
+                          max_products: info.maxProducts,
+                          max_staff: info.maxStaff 
+                        });
+                      }}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold outline-none cursor-pointer"
+                    >
+                      <option value="FREE">🎁 ឥតគិតថ្លៃ (Free 15 មុខ)</option>
+                      <option value="STARTER">🌱 Starter ($1/ខែ, 50 មុខ)</option>
+                      <option value="BASIC">⚡ Basic ($2/ខែ, 100 មុខ)</option>
+                      <option value="PRO">🚀 Pro ($3/ខែ, 250 មុខ)</option>
+                      <option value="BUSINESS">🔥 Business ($5/ខែ, 600 មុខ)</option>
+                      <option value="ENTERPRISE">👑 Enterprise ($10/ខែ, 2500 មុខ)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-1">ចំនួនទំនិញអតិបរមា</label>
+                    <input
+                      type="number"
+                      value={storeFormToEdit.max_products || 15}
+                      onChange={(e) => setStoreFormToEdit({ ...storeFormToEdit, max_products: parseInt(e.target.value) || 15 })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">ស្ថានភាពដំណើរការ</label>
+                  <select
+                    value={storeFormToEdit.status || 'ACTIVE'}
+                    onChange={(e) => setStoreFormToEdit({ ...storeFormToEdit, status: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold outline-none cursor-pointer"
+                  >
+                    <option value="ACTIVE">🟢 សកម្ម (Active — អាចដំណើរការលក់ធម្មតា)</option>
+                    <option value="SUSPENDED">🔴 ផ្អាកដំណើរការ (Suspended — មិនទាន់បង់លុយ ឬមានបញ្ហា)</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-2 pt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setEditStoreModalOpen(false)}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold transition"
+                  >
+                    បោះបង់
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-black transition shadow-md shadow-blue-600/20"
+                  >
+                    រក្សាទុកការកែប្រែ
+                  </button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
+
   // ================= 👥 ផ្ទាំងគ្រប់គ្រងបុគ្គលិក & បែងចែកសិទ្ធិ (MULTI-STAFF & ROLES VIEW) =================
   const StaffManagementView = () => {
     // Save or Edit Staff
@@ -17616,6 +18163,36 @@ export default function UnifiedAdminDashboard() {
                   </span>
                 </button>
               )}
+
+              {/* 👑 MASTER OWNER ONLY: 🌐 គ្រប់គ្រងហាងទាំងអស់ (ALL STORES) */}
+              {isMasterOwner && (
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab('stores')} 
+                  className={`w-full group relative flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                    activeTab === 'stores' 
+                      ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-lg shadow-orange-500/25 font-black' 
+                      : 'text-amber-400 hover:text-white hover:bg-slate-800/80 font-bold border border-amber-500/25'
+                  }`}
+                >
+                  {activeTab === 'stores' && (
+                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                  )}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                      activeTab === 'stores' ? 'bg-white/20 text-white shadow-inner' : 'bg-amber-500/20 text-amber-300 group-hover:bg-slate-700'
+                    }`}>
+                      🌐
+                    </span>
+                    <span className="text-xs truncate">គ្រប់គ្រងហាងទាំងអស់</span>
+                  </div>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                    activeTab === 'stores' ? 'bg-white text-slate-900' : 'bg-amber-500/20 text-amber-300'
+                  }`}>
+                    {registeredStores.length} ហាង
+                  </span>
+                </button>
+              )}
             </div>
           )}
 
@@ -17759,6 +18336,38 @@ export default function UnifiedAdminDashboard() {
         </div>
 
         {/* ⭐️ TOP STAFF STATUS & SWITCH BAR ⭐️ */}
+        {/* ⚠️ SUSPENSION WARNING ALERT IF STORE IS SUSPENDED ⚠️ */}
+        {activeStore?.status === 'SUSPENDED' && (
+          <div className="p-4 mb-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 text-xs font-bold flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">🛑</span>
+              <div>
+                <p className="font-black text-rose-900 text-sm">ហាងនេះត្រូវបានផ្អាកដំណើរការជាបណ្តោះអាសន្ន (Store Suspended)</p>
+                <p className="text-[11px] text-rose-700 mt-0.5">
+                  សូមទំនាក់ទំនងមកកាន់ម្ចាស់ប្រព័ន្ធ Sabay Luk ដើម្បីដោះស្រាយបញ្ហា ឬបន្តសុពលភាពកញ្ចប់សេវា។
+                </p>
+              </div>
+            </div>
+            {isMasterOwner && (
+              <button
+                type="button"
+                onClick={() => {
+                  const updatedStore = { ...activeStore, status: 'ACTIVE' };
+                  setActiveStore(updatedStore);
+                  setActiveStoreState(updatedStore);
+                  const stores = getLocalStores().map(s => s.id === updatedStore.id ? updatedStore : s);
+                  saveLocalStores(stores);
+                  setToastNotification('🟢 បានបើកដំណើរការហាងឡើងវិញជោគជ័យ!');
+                  setTimeout(() => setToastNotification(null), 3000);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition shrink-0 cursor-pointer shadow-xs active:scale-95"
+              >
+                ✓ បើកដំណើរការវិញ
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-white/90 backdrop-blur-md px-4 sm:px-5 py-3 rounded-2xl border border-gray-200/80 shadow-xs">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${currentStaff?.color || 'from-amber-500 to-orange-600'} text-white flex items-center justify-center text-xl shadow-xs shrink-0`}>
@@ -17825,6 +18434,7 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'settings' && StoreSettingsView()}
         {activeTab === 'invoice' && InvoiceSettingsView()}
         {activeTab === 'staff' && StaffManagementView()}
+        {activeTab === 'stores' && isMasterOwner && MasterStoresManagementView()}
       </main>
 
       {/* ⭐️ SLIP LIGHTBOX MODAL ⭐️ */}
