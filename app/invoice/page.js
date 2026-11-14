@@ -276,8 +276,12 @@ function InvoiceContent() {
         {/* Header Ribbon */}
         <div className="bg-slate-900 text-white p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">👟</span>
+            <div className="flex items-center gap-2.5">
+              {storeSettings.showInvoiceLogo !== false && storeSettings.logoUrl ? (
+                <img src={storeSettings.logoUrl} alt="Store Logo" className="h-10 max-w-[120px] object-contain rounded-lg bg-white/10 p-1" />
+              ) : (
+                <span className="text-2xl">👟</span>
+              )}
               <h1 className="text-xl sm:text-2xl font-black tracking-wide uppercase">
                 {storeSettings.storeName || 'SABAY LUK SHOES STORE'}
               </h1>

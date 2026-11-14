@@ -1247,6 +1247,7 @@ export default function UnifiedAdminDashboard() {
       exchangeRate: 4100,
       cashierName: 'Admin',
       showKHR: true,
+      showLogo: true,
       thankYouMsg: 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត',
       policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៣ ថ្ងៃ)'
     };
@@ -1280,6 +1281,7 @@ export default function UnifiedAdminDashboard() {
     bankAccountKhr: '004 500 394',
     bankAccountUsd: '010 723 080',
     khqrImageUrl: '/khqr-aba.jpg',
+    showInvoiceLogo: true,
     deliveryPhnomPenh: '1.50',
     deliveryProvince: '2.00',
     policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)',
@@ -1300,7 +1302,8 @@ export default function UnifiedAdminDashboard() {
             bankAccountName: parsed.bankAccountName || 'SENG SOVEASNA',
             bankAccountKhr: parsed.bankAccountKhr || '004 500 394',
             bankAccountUsd: parsed.bankAccountUsd || parsed.bankAccountNumber || '010 723 080',
-            khqrImageUrl: parsed.khqrImageUrl || '/khqr-aba.jpg'
+            khqrImageUrl: parsed.khqrImageUrl || '/khqr-aba.jpg',
+            showInvoiceLogo: parsed.showInvoiceLogo !== undefined ? parsed.showInvoiceLogo : true
           };
         } catch (e) {}
       }
@@ -13313,7 +13316,7 @@ export default function UnifiedAdminDashboard() {
                 >
                   {/* Store Header */}
                   <div className="text-center mb-2.5 space-y-1">
-                    {storeSettings.logoUrl && (
+                    {(storeSettings.showInvoiceLogo !== false && invoiceSettings.showLogo !== false) && storeSettings.logoUrl && (
                       <img 
                         src={storeSettings.logoUrl} 
                         alt="Logo" 
@@ -13443,33 +13446,20 @@ export default function UnifiedAdminDashboard() {
                     )}
                   </div>
 
-                  {/* KHQR Code Section */}
+                  {/* KHQR Code Section (Compact: QR + Name Only to keep receipt short) */}
                   {storeSettings.khqrImageUrl ? (
-                    <div className="my-3 p-2 border border-black border-dashed rounded-lg text-center space-y-1 bg-white">
-                      <p className="text-[10px] font-black uppercase">📱 ស្កេន KHQR ដើម្បីទូទាត់ប្រាក់</p>
+                    <div className="my-1.5 p-1 text-center bg-white">
                       <img 
                         src={storeSettings.khqrImageUrl} 
                         alt="KHQR Code" 
-                        className="w-28 h-28 mx-auto object-contain p-1 border border-black" 
+                        className="w-20 h-20 mx-auto object-contain" 
                       />
-                      <p className="text-[9px] font-black text-gray-800 uppercase">{storeSettings.bankAccountName || storeSettings.storeName}</p>
-                      <div className="text-[8.5px] font-bold text-gray-600 flex flex-col items-center gap-0.5 pt-0.5">
-                        {storeSettings.bankAccountKhr && (
-                          <div className="flex items-center gap-1">
-                            <span>៛ KHR:</span>
-                            <span className="font-mono font-black">{storeSettings.bankAccountKhr}</span>
-                          </div>
-                        )}
-                        {(storeSettings.bankAccountUsd || storeSettings.bankAccountNumber) && (
-                          <div className="flex items-center gap-1">
-                            <span>$ USD:</span>
-                            <span className="font-mono font-black">{storeSettings.bankAccountUsd || storeSettings.bankAccountNumber}</span>
-                          </div>
-                        )}
-                      </div>
+                      <p className="text-[9.5px] font-black text-black uppercase mt-1 leading-tight">
+                        {storeSettings.bankAccountName || storeSettings.storeName}
+                      </p>
                     </div>
                   ) : (
-                    <div className="border-b border-black border-dashed my-2.5"></div>
+                    <div className="border-b border-black border-dashed my-1.5"></div>
                   )}
                   
                   {/* Receipt Footer */}
@@ -13890,6 +13880,77 @@ export default function UnifiedAdminDashboard() {
         {/* ផ្នែកខាងឆ្វេង: Form កែប្រែព័ត៌មាន */}
         <div className="lg:col-span-7 bg-white p-8 rounded-3xl shadow-sm border border-gray-200">
           <form onSubmit={handleSaveInvoiceSettings} className="space-y-5">
+            {/* 🖼️ ការកំណត់ Logo លើវិក្កយបត្រ (Invoice Logo Customizer) */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-black text-slate-800 block">
+                    🖼️ បង្ហាញ Logo លើវិក្កយបត្រ (Show Logo on Invoice/Receipt)
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    អាចជ្រើសរើស «បើក» ដើម្បីដាក់ Logo ហាង ឬ «បិទ» ដើម្បីសន្សំសំចៃក្រដាសព្រីន
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={storeSettings.showInvoiceLogo !== false && invoiceSettings.showLogo !== false}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setStoreSettings(prev => ({ ...prev, showInvoiceLogo: checked }));
+                    setInvoiceSettings(prev => ({ ...prev, showLogo: checked }));
+                  }}
+                  className="w-5 h-5 rounded text-blue-600 cursor-pointer accent-blue-600"
+                />
+              </div>
+
+              {(storeSettings.showInvoiceLogo !== false && invoiceSettings.showLogo !== false) && (
+                <div className="flex items-center gap-3 pt-2.5 border-t border-slate-200">
+                  {storeSettings.logoUrl ? (
+                    <div className="w-14 h-14 rounded-xl border border-slate-200 bg-white p-1 flex items-center justify-center shrink-0">
+                      <img src={storeSettings.logoUrl} alt="Store Logo" className="w-full h-full object-contain" />
+                    </div>
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl border border-dashed border-slate-300 bg-white flex items-center justify-center text-slate-400 text-xs shrink-0 text-center font-bold">
+                      គ្មាន Logo
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <label className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold cursor-pointer transition shadow-2xs">
+                      <span>📁 ជ្រើសរើសរូបភាព Logo ថ្មី</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setStoreSettings(prev => ({ ...prev, logoUrl: event.target.result }));
+                              setInvoiceSettings(prev => ({ ...prev, logoUrl: event.target.result }));
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }} 
+                      />
+                    </label>
+                    {storeSettings.logoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStoreSettings(prev => ({ ...prev, logoUrl: '' }));
+                          setInvoiceSettings(prev => ({ ...prev, logoUrl: '' }));
+                        }}
+                        className="block text-[11px] font-bold text-rose-600 hover:underline"
+                      >
+                        ✕ លុប Logo ចេញ
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <h3 className="text-sm font-black text-gray-800 uppercase tracking-wide mb-3">🏢 ១. ព័ត៌មានក្បាលវិក្កយបត្រ (Header)</h3>
               <div className="space-y-3">
@@ -14072,6 +14133,9 @@ export default function UnifiedAdminDashboard() {
           
           <div className="bg-white w-[320px] rounded-2xl shadow-xl p-6 font-mono text-black border border-gray-300">
             <div className="text-center mb-3">
+              {(storeSettings.showInvoiceLogo !== false && invoiceSettings.showLogo !== false) && storeSettings.logoUrl && (
+                <img src={storeSettings.logoUrl} alt="Store Logo" className="h-8 mx-auto object-contain mb-1 filter grayscale" />
+              )}
               <h2 className="text-2xl font-black uppercase tracking-widest">{invoiceSettings.storeName || 'SABAY LUK'}</h2>
               <p className="text-[10px] text-gray-600">{invoiceSettings.address || 'Phnom Penh, Cambodia'}</p>
               <p className="text-[10px] text-gray-600">Tel: {invoiceSettings.phone || '096 720 5522'}</p>
@@ -14915,6 +14979,19 @@ export default function UnifiedAdminDashboard() {
                   <p className="text-[11px] text-gray-400 font-medium">
                     ទំហំដែលណែនាំ៖ 400x120px ឬ 512x512px (PNG, SVG, JPG, WebP ផ្ទៃថ្លា Transparent កាន់តែស្អាត)
                   </p>
+                  <label className="flex items-center gap-2 pt-1 text-xs font-bold text-gray-700 cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={storeSettings.showInvoiceLogo !== false}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setStoreSettings(prev => ({ ...prev, showInvoiceLogo: checked }));
+                        setInvoiceSettings(prev => ({ ...prev, showLogo: checked }));
+                      }}
+                      className="w-4 h-4 rounded text-blue-600 accent-blue-600 cursor-pointer"
+                    />
+                    <span>🧾 បង្ហាញ Logo លើសន្លឹកវិក្កយបត្រ និងបង្កាន់ដៃព្រីន (Show Logo on Invoice/Receipt)</span>
+                  </label>
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
                     <label className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 shadow-xs">
                       <span>📤</span> Upload Logo ថ្មី
