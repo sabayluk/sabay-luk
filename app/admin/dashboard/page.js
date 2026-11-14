@@ -684,6 +684,45 @@ export default function UnifiedAdminDashboard() {
     }
   }, [staffList]);
 
+  // ⭐️ AUTHENTICATION STATES (FULL OPTION LOGIN SYSTEM) ⭐️
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedAuth = localStorage.getItem('sabay_admin_authenticated');
+      return savedAuth === 'true';
+    }
+    return false;
+  });
+
+  const [rememberMe, setRememberMe] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_admin_remember_me');
+      return saved !== 'false';
+    }
+    return true;
+  });
+
+  const [loginMode, setLoginMode] = useState('pin'); // 'pin' | 'credentials'
+  const [loginUsername, setLoginUsername] = useState('admin');
+  const [loginPassword, setLoginPassword] = useState('1234');
+  const [loginShowPassword, setLoginShowPassword] = useState(false);
+  const [loginSelectedStaff, setLoginSelectedStaff] = useState(() => DEFAULT_STAFF_ACCOUNTS[0]);
+  const [loginEnteredPin, setLoginEnteredPin] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginSuccessMsg, setLoginSuccessMsg] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Logout / Lock Portal
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setLoginEnteredPin('');
+    setLoginPassword('');
+    setLoginError('');
+    setLoginSuccessMsg('');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('sabay_admin_authenticated');
+    }
+  };
+
   // Current logged in staff
   const [currentStaff, setCurrentStaff] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -13387,6 +13426,441 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
+  // ================= 🔐 ផ្ទាំង LOGIN ពេញលេញ FULL OPTION (AUTHENTICATION PORTAL) =================
+  const FullOptionLoginPortal = () => {
+    const handlePinDigit = (digit) => {
+      setLoginError('');
+      if (loginEnteredPin.length < 6) {
+        const next = loginEnteredPin + digit;
+        setLoginEnteredPin(next);
+        const expectedPinLen = loginSelectedStaff?.pin?.length || 4;
+        if (next.length === expectedPinLen) {
+          validatePin(next, loginSelectedStaff);
+        }
+      }
+    };
+
+    const handlePinBackspace = () => {
+      setLoginError('');
+      setLoginEnteredPin(prev => prev.slice(0, -1));
+    };
+
+    const handlePinClear = () => {
+      setLoginError('');
+      setLoginEnteredPin('');
+    };
+
+    const validatePin = (pinToTest, staffToTest) => {
+      const targetStaff = staffToTest || loginSelectedStaff;
+      if (!targetStaff) return;
+      if (pinToTest === targetStaff.pin) {
+        setIsLoggingIn(true);
+        setLoginSuccessMsg(`🎉 ស្វាគមន៍ ${targetStaff.name}! កំពុងបើកផ្ទាំងគ្រប់គ្រង...`);
+        setTimeout(() => {
+          setCurrentStaff(targetStaff);
+          setIsAuthenticated(true);
+          if (rememberMe) {
+            localStorage.setItem('sabay_admin_authenticated', 'true');
+            localStorage.setItem('sabay_admin_remember_me', 'true');
+          }
+          if (targetStaff.role === 'CASHIER') setActiveTab('pos');
+          else if (targetStaff.role === 'STOCK') setActiveTab('inventory');
+          else setActiveTab('pos');
+          setIsLoggingIn(false);
+          setLoginEnteredPin('');
+        }, 500);
+      } else {
+        setLoginError('❌ លេខកូដសម្ងាត់ PIN មិនត្រឹមត្រូវ! សូមព្យាយាមម្តងទៀត');
+        setLoginEnteredPin('');
+      }
+    };
+
+    const handleCredentialSubmit = (e) => {
+      e.preventDefault();
+      setLoginError('');
+      const u = (loginUsername || '').trim().toLowerCase();
+      const p = (loginPassword || '').trim();
+      if (!u || !p) {
+        setLoginError('សូមបញ្ចូលឈ្មោះគណនី និងពាក្យសម្ងាត់!');
+        return;
+      }
+      const matched = staffList.find(s => 
+        (s.username && s.username.toLowerCase() === u) && 
+        (s.pin === p || (s.password && s.password === p) || s.username === p)
+      );
+
+      if (matched) {
+        setIsLoggingIn(true);
+        setLoginSuccessMsg(`🎉 ស្វាគមន៍ ${matched.name}! កំពុងបើកផ្ទាំងគ្រប់គ្រង...`);
+        setTimeout(() => {
+          setCurrentStaff(matched);
+          setIsAuthenticated(true);
+          if (rememberMe) {
+            localStorage.setItem('sabay_admin_authenticated', 'true');
+            localStorage.setItem('sabay_admin_remember_me', 'true');
+          }
+          if (matched.role === 'CASHIER') setActiveTab('pos');
+          else if (matched.role === 'STOCK') setActiveTab('inventory');
+          else setActiveTab('pos');
+          setIsLoggingIn(false);
+        }, 500);
+      } else {
+        setLoginError('❌ ឈ្មោះគណនី ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវ!');
+      }
+    };
+
+    // Keyboard support for PIN entry
+    useEffect(() => {
+      if (loginMode !== 'pin') return;
+      const handleKeyDown = (e) => {
+        if (e.key >= '0' && e.key <= '9') {
+          handlePinDigit(e.key);
+        } else if (e.key === 'Backspace') {
+          handlePinBackspace();
+        } else if (e.key === 'Escape' || e.key === 'c' || e.key === 'C') {
+          handlePinClear();
+        } else if (e.key === 'Enter') {
+          validatePin(loginEnteredPin, loginSelectedStaff);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [loginMode, loginEnteredPin, loginSelectedStaff]);
+
+    const activePinLength = loginSelectedStaff?.pin?.length || 4;
+
+    return (
+      <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex flex-col justify-between p-4 sm:p-6 md:p-8 font-sans relative overflow-hidden select-none">
+        {/* Ambient Light Orbs */}
+        <div className="absolute -top-40 -left-40 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-orange-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        {/* Top Navbar */}
+        <header className="flex justify-between items-center relative z-10 max-w-5xl mx-auto w-full">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-lg shadow-orange-500/25">
+              🛍️
+            </div>
+            <div>
+              <h1 className="text-white font-black text-lg tracking-tight leading-none flex items-center gap-2">
+                {storeSettings.storeName || 'SABAY LUK'}
+                <span className="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-mono">
+                  v2.5 PRO
+                </span>
+              </h1>
+              <p className="text-[11px] text-slate-400 font-bold mt-0.5">
+                Cloud POS & Store Management
+              </p>
+            </div>
+          </div>
+
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 text-xs font-bold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 px-3.5 py-2 rounded-xl border border-slate-700 transition"
+          >
+            <span>🌐</span>
+            <span className="hidden sm:inline">មើលមុខហាង (Storefront)</span>
+            <span>↗</span>
+          </a>
+        </header>
+
+        {/* Center Login Box */}
+        <main className="relative z-10 my-auto py-6 flex justify-center">
+          <div className="w-full max-w-md bg-slate-900/80 backdrop-blur-2xl p-6 sm:p-8 rounded-3xl border border-slate-800 shadow-2xl shadow-black/80 space-y-6">
+            
+            {/* Header / Mode Switcher */}
+            <div className="text-center space-y-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                🔒 ប្រព័ន្ធសុវត្ថិភាពខ្ពស់ 256-bit Secure
+              </span>
+              <h2 className="text-2xl font-black text-white">ចូលប្រើប្រាស់ប្រព័ន្ធ</h2>
+              <p className="text-xs text-slate-400 font-medium">
+                សូមជ្រើសរើសគណនីបុគ្គលិក ឬវាយបញ្ចូលគណនីរបស់អ្នក
+              </p>
+            </div>
+
+            {/* Mode Switcher Tabs */}
+            <div className="grid grid-cols-2 gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('pin');
+                  setLoginError('');
+                  setLoginEnteredPin('');
+                }}
+                className={`py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  loginMode === 'pin'
+                    ? 'bg-blue-600 text-white shadow-md font-black'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>🔢</span>
+                <span>លេខ PIN រហ័ស</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('credentials');
+                  setLoginError('');
+                }}
+                className={`py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  loginMode === 'credentials'
+                    ? 'bg-blue-600 text-white shadow-md font-black'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>👤</span>
+                <span>ឈ្មោះ & Password</span>
+              </button>
+            </div>
+
+            {/* Error & Success Messages */}
+            {loginError && (
+              <div className="p-3 bg-red-500/15 border border-red-500/40 rounded-xl text-red-400 text-xs font-bold text-center animate-in shake">
+                {loginError}
+              </div>
+            )}
+            {loginSuccessMsg && (
+              <div className="p-3 bg-emerald-500/15 border border-emerald-500/40 rounded-xl text-emerald-400 text-xs font-bold text-center animate-pulse">
+                {loginSuccessMsg}
+              </div>
+            )}
+
+            {/* TAB 1: PIN MODE */}
+            {loginMode === 'pin' && (
+              <div className="space-y-5 animate-in fade-in">
+                {/* Staff Avatars Selection */}
+                <div>
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider block mb-2.5">
+                    ជ្រើសរើសគណនីបុគ្គលិក (Staff Account)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {staffList.filter(s => s.active !== false).map(staff => {
+                      const isSelected = loginSelectedStaff?.id === staff.id;
+                      return (
+                        <button
+                          key={staff.id}
+                          type="button"
+                          onClick={() => {
+                            setLoginSelectedStaff(staff);
+                            setLoginEnteredPin('');
+                            setLoginError('');
+                          }}
+                          className={`p-3 rounded-2xl border transition-all text-center flex flex-col items-center gap-1.5 cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-600/20 border-blue-500 ring-2 ring-blue-500/40 shadow-lg shadow-blue-500/20'
+                              : 'bg-slate-950/60 border-slate-800 hover:bg-slate-800 text-slate-300'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${staff.color || 'from-blue-500 to-indigo-600'} text-white flex items-center justify-center text-lg shadow-xs`}>
+                            {staff.avatar || '👤'}
+                          </div>
+                          <span className="text-[11px] font-black text-white truncate max-w-full block">
+                            {staff.name.split(' ')[0]}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-bold truncate max-w-full block">
+                            {staff.role}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Selected Staff Info & PIN Dots */}
+                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 text-center space-y-3">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-xs text-slate-300 font-bold">
+                      វាយបញ្ចូល PIN សម្រាប់ <b className="text-white">{loginSelectedStaff?.name}</b>:
+                    </span>
+                  </div>
+
+                  {/* Visual PIN Dots Indicator */}
+                  <div className="flex justify-center gap-3 py-1">
+                    {Array.from({ length: activePinLength }).map((_, i) => {
+                      const isFilled = i < loginEnteredPin.length;
+                      return (
+                        <div
+                          key={i}
+                          className={`w-4 h-4 rounded-full transition-all duration-150 ${
+                            isFilled
+                              ? 'bg-blue-500 scale-125 shadow-[0_0_12px_#3b82f6]'
+                              : 'bg-slate-700/60 border border-slate-600'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  {/* Quick Auto-Fill Demo Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (loginSelectedStaff?.pin) {
+                        setLoginEnteredPin(loginSelectedStaff.pin);
+                        validatePin(loginSelectedStaff.pin, loginSelectedStaff);
+                      }
+                    }}
+                    className="text-[10px] text-blue-400 hover:text-blue-300 font-bold underline cursor-pointer"
+                  >
+                    ⚡ បំពេញ PIN ស្វ័យប្រវត្តិ ({loginSelectedStaff?.pin}) សម្រាប់តេស្ត
+                  </button>
+                </div>
+
+                {/* Touch Numpad */}
+                <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'].map(btn => {
+                    const isAction = btn === 'C' || btn === '⌫';
+                    return (
+                      <button
+                        key={btn}
+                        type="button"
+                        onClick={() => {
+                          if (btn === 'C') handlePinClear();
+                          else if (btn === '⌫') handlePinBackspace();
+                          else handlePinDigit(btn);
+                        }}
+                        className={`h-12 rounded-2xl font-black text-base transition-all active:scale-90 cursor-pointer flex items-center justify-center ${
+                          isAction
+                            ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                            : 'bg-slate-950 hover:bg-blue-600 hover:text-white text-white border border-slate-800 shadow-xs'
+                        }`}
+                      >
+                        {btn}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: CREDENTIALS MODE */}
+            {loginMode === 'credentials' && (
+              <form onSubmit={handleCredentialSubmit} className="space-y-4 animate-in fade-in">
+                {/* Fast Preset Selectors */}
+                <div>
+                  <span className="text-[11px] font-bold text-slate-400 block mb-1.5">គណនីគំរូរហ័ស (Quick Demo Accounts):</span>
+                  <div className="grid grid-cols-3 gap-1.5 text-[10px] font-black">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoginUsername('admin');
+                        setLoginPassword('1234');
+                      }}
+                      className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 p-2 rounded-xl transition text-center cursor-pointer"
+                    >
+                      👑 Admin
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoginUsername('cashier');
+                        setLoginPassword('1111');
+                      }}
+                      className="bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/30 p-2 rounded-xl transition text-center cursor-pointer"
+                    >
+                      💻 Cashier
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoginUsername('stock');
+                        setLoginPassword('2222');
+                      }}
+                      className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 p-2 rounded-xl transition text-center cursor-pointer"
+                    >
+                      🗄️ Stock
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    ឈ្មោះគណនី (Username)
+                  </label>
+                  <input
+                    type="text"
+                    value={loginUsername}
+                    onChange={(e) => setLoginUsername(e.target.value)}
+                    placeholder="ឧ. admin / cashier / stock"
+                    className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    ពាក្យសម្ងាត់ ឬ PIN (Password / PIN)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={loginShowPassword ? 'text' : 'password'}
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="បញ្ចូលពាក្យសម្ងាត់..."
+                      className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition pr-10"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLoginShowPassword(!loginShowPassword)}
+                      className="absolute right-3 top-3 text-slate-400 hover:text-white text-xs cursor-pointer"
+                    >
+                      {loginShowPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Remember Me */}
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-slate-400 hover:text-slate-300 select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+                    />
+                    <span>ចងចាំការចូលប្រើ (Remember Me)</span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isLoggingIn ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>កំពុងផ្ទៀងផ្ទាត់...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🔑</span>
+                      <span>ចូលប្រើប្រាស់ (Login)</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+          </div>
+        </main>
+
+        {/* Footer */}
+        <footer className="text-center text-[11px] text-slate-500 font-bold relative z-10 space-y-1">
+          <p>© 2026 {storeSettings.storeName || 'SABAY LUK'} ERP • All Rights Reserved</p>
+          <p className="text-slate-600 text-[10px]">
+            Super Admin PIN: <b>1234</b> • Cashier PIN: <b>1111</b> • Stock Keeper PIN: <b>2222</b>
+          </p>
+        </footer>
+      </div>
+    );
+  };
+
   // ⭐️ បន្ថែមលក្ខខណ្ឌ Loading នេះ ដើម្បីកុំឱ្យ UI បង្ហាញចេញមុនពេលអាន LocalStorage រួចរាល់
   if (!isMounted || activeTab === '') {
     return (
@@ -13397,6 +13871,11 @@ export default function UnifiedAdminDashboard() {
         </div>
       </div>
     );
+  }
+
+  // ⭐️ ប្រសិនបើមិនទាន់បាន Login ចូលប្រព័ន្ធទេ ត្រូវបង្ហាញផ្ទាំង Login Full Option ⭐️
+  if (!isAuthenticated) {
+    return <FullOptionLoginPortal />;
   }
 
   return (
@@ -13883,19 +14362,29 @@ export default function UnifiedAdminDashboard() {
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStaffToLogin(null);
-                  setEnteredPin('');
-                  setPinError('');
-                  setSwitchStaffModalOpen(true);
-                }}
-                className="bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white px-2.5 py-1.5 rounded-xl text-[10px] font-black transition border border-slate-700/80 shrink-0 cursor-pointer"
-                title="ប្តូរបុគ្គលិក ឬចាក់សោ PIN"
-              >
-                🔒 ប្តូរ
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStaffToLogin(null);
+                    setEnteredPin('');
+                    setPinError('');
+                    setSwitchStaffModalOpen(true);
+                  }}
+                  className="bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white px-2 py-1.5 rounded-xl text-[10px] font-black transition border border-slate-700/80 cursor-pointer"
+                  title="ប្តូរបុគ្គលិក (Switch Staff)"
+                >
+                  🔒
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white px-2 py-1.5 rounded-xl text-[10px] font-black transition border border-rose-500/30 cursor-pointer"
+                  title="ចាកចេញពីប្រព័ន្ធ (Logout & Lock)"
+                >
+                  🚪
+                </button>
+              </div>
             </div>
           </div>
 
@@ -13972,6 +14461,15 @@ export default function UnifiedAdminDashboard() {
             >
               <span>🔒</span>
               <span>ប្តូរគណនី (Switch Profile)</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="bg-red-50 hover:bg-red-600 text-red-600 hover:text-white px-3 py-2 rounded-xl text-xs font-black transition border border-red-200 hover:border-red-600 flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+              title="ចាកចេញ និងចាក់សោប្រព័ន្ធ (Logout & Lock Portal)"
+            >
+              <span>🚪</span>
+              <span className="hidden sm:inline">ចាកចេញ</span>
             </button>
           </div>
         </div>
