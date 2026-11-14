@@ -417,7 +417,7 @@ export default function UnifiedAdminDashboard() {
       return next;
     });
   }; // សម្រាប់បើក/បិទ Dropdown គ្រប់គ្រងមុខហាង
-  const [activeTab, setActiveTab] = useState(''); // កំណត់តម្លៃទទេរសិន ដើម្បីកុំឱ្យវាលោតទៅអីមុន
+  const [activeTab, setActiveTab] = useState('pos'); // កំណត់លំនាំដើមជា pos កុំឱ្យគាំង
   const [isMounted, setIsMounted] = useState(false); // State ត្រួតពិនិត្យដំណើរការ Load
   const searchInputRef = useRef(null);
 
@@ -687,10 +687,11 @@ export default function UnifiedAdminDashboard() {
   // ⭐️ AUTHENTICATION STATES (FULL OPTION LOGIN SYSTEM) ⭐️
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window !== 'undefined') {
-      const savedAuth = localStorage.getItem('sabay_admin_authenticated');
-      return savedAuth === 'true';
+      const isLoggedOut = localStorage.getItem('sabay_admin_logged_out') === 'true';
+      if (isLoggedOut) return false;
+      return true; // ដំណើរការចូល POS ភ្លាម មិនឱ្យគាំង
     }
-    return false;
+    return true;
   });
 
   const [rememberMe, setRememberMe] = useState(() => {
@@ -719,6 +720,7 @@ export default function UnifiedAdminDashboard() {
     setLoginError('');
     setLoginSuccessMsg('');
     if (typeof window !== 'undefined') {
+      localStorage.setItem('sabay_admin_logged_out', 'true');
       localStorage.removeItem('sabay_admin_authenticated');
     }
   };
@@ -13574,8 +13576,7 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
-  // ================= 🔐 ផ្ទាំង LOGIN ពេញលេញ FULL OPTION (AUTHENTICATION PORTAL) =================
-  const FullOptionLoginPortal = () => {
+  // ================= 🔐 ផ្នែក LOGIN ពេញលេញ FULL OPTION (AUTHENTICATION HELPERS) =================
     const handlePinDigit = (digit) => {
       setLoginError('');
       if (loginEnteredPin.length < 6) {
@@ -13608,7 +13609,8 @@ export default function UnifiedAdminDashboard() {
           setCurrentStaff(targetStaff);
           setIsAuthenticated(true);
           if (rememberMe) {
-            localStorage.setItem('sabay_admin_authenticated', 'true');
+            localStorage.removeItem('sabay_admin_logged_out');
+          localStorage.setItem('sabay_admin_authenticated', 'true');
             localStorage.setItem('sabay_admin_remember_me', 'true');
           }
           if (targetStaff.role === 'CASHIER') setActiveTab('pos');
@@ -13657,26 +13659,26 @@ export default function UnifiedAdminDashboard() {
       }
     };
 
-    // Keyboard support for PIN entry
-    useEffect(() => {
-      if (loginMode !== 'pin') return;
-      const handleKeyDown = (e) => {
-        if (e.key >= '0' && e.key <= '9') {
-          handlePinDigit(e.key);
-        } else if (e.key === 'Backspace') {
-          handlePinBackspace();
-        } else if (e.key === 'Escape' || e.key === 'c' || e.key === 'C') {
-          handlePinClear();
-        } else if (e.key === 'Enter') {
-          validatePin(loginEnteredPin, loginSelectedStaff);
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [loginMode, loginEnteredPin, loginSelectedStaff]);
+  // Keyboard support for PIN entry when login portal is visible
+  useEffect(() => {
+    if (isAuthenticated || loginMode !== 'pin') return;
+    const handleKeyDown = (e) => {
+      if (e.key >= '0' && e.key <= '9') {
+        handlePinDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        handlePinBackspace();
+      } else if (e.key === 'Escape' || e.key === 'c' || e.key === 'C') {
+        handlePinClear();
+      } else if (e.key === 'Enter') {
+        validatePin(loginEnteredPin, loginSelectedStaff);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAuthenticated, loginMode, loginEnteredPin, loginSelectedStaff]);
 
+  const renderLoginPortal = () => {
     const activePinLength = loginSelectedStaff?.pin?.length || 4;
-
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex flex-col justify-between p-4 sm:p-6 md:p-8 font-sans relative overflow-hidden select-none">
         {/* Ambient Light Orbs */}
@@ -14009,13 +14011,13 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
-  // ⭐️ បន្ថែមលក្ខខណ្ឌ Loading នេះ ដើម្បីកុំឱ្យ UI បង្ហាញចេញមុនពេលអាន LocalStorage រួចរាល់
-  if (!isMounted || activeTab === '') {
+  // ⭐️ ផ្នែក Loading ការពារ Hydration
+  if (!isMounted) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-900">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-[#ff6a00] border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-[#ff6a00] font-bold text-sm tracking-widest animate-pulse">LOADING...</p>
+          <p className="text-[#ff6a00] font-bold text-sm tracking-widest animate-pulse">LOADING SABAY LUK...</p>
         </div>
       </div>
     );
@@ -14023,7 +14025,7 @@ export default function UnifiedAdminDashboard() {
 
   // ⭐️ ប្រសិនបើមិនទាន់បាន Login ចូលប្រព័ន្ធទេ ត្រូវបង្ហាញផ្ទាំង Login Full Option ⭐️
   if (!isAuthenticated) {
-    return <FullOptionLoginPortal />;
+    return renderLoginPortal();
   }
 
   return (
