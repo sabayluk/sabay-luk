@@ -8797,11 +8797,11 @@ export default function UnifiedAdminDashboard() {
                         </td>
                         <td className="px-6 py-4 text-xs font-bold text-gray-700">
                           <div className="flex items-center gap-1.5">
-                            <span className="bg-gray-100 px-2 py-1 rounded-md">{order.payment || 'Cash'}</span>
-                            {(order.payment_slip_url || (Array.isArray(order.items) && order.items[0]?.payment_slip_url)) && (
+                            <span className="bg-gray-100 px-2 py-1 rounded-md">{order.payment || order.payment_method || 'Cash'}</span>
+                            {(order.payment_slip_url || order.slip_url || (Array.isArray(order.items) && (order.items[0]?.payment_slip_url || order.items[0]?.slip_url))) && (
                               <button 
-                                onClick={() => setViewingSlipUrl(order.payment_slip_url || order.items[0]?.payment_slip_url)}
-                                className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-black text-[10px] px-2 py-1 rounded-lg border border-blue-200 transition inline-flex items-center gap-1 shadow-2xs"
+                                onClick={() => setViewingSlipUrl(order.payment_slip_url || order.slip_url || order.items[0]?.payment_slip_url || order.items[0]?.slip_url)}
+                                className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-black text-[10px] px-2 py-1 rounded-lg border border-blue-200 transition inline-flex items-center gap-1 shadow-2xs cursor-pointer animate-pulse"
                                 title="ពិនិត្យវិក្កយបត្រផ្ទេរប្រាក់ (Payment Slip)"
                               >
                                 🧾 Slip
@@ -16830,11 +16830,161 @@ export default function UnifiedAdminDashboard() {
             <div className="space-y-6 animate-in fade-in">
               <div>
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
-                  <span>🧹</span> ការគ្រប់គ្រងទិន្នន័យ & នាំចេញរបាយការណ៍ (Data Management & Export)
+                  <span>🧹</span> ការគ្រប់គ្រងទិន្នន័យ & នាំចេញរបាយការណ៍ (Data Management & Backup)
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  ទាញយករបាយការណ៍ទាំងអស់ជា Excel/CSV ឬសម្អាតទិន្នន័យតេស្តចោល មុនពេលប្រគល់ Website ឱ្យអតិថិជនប្រើប្រាស់ផ្លូវការ
+                  Backup ទិន្នន័យហាងពេញលេញ (.JSON / Multi-Sheet Excel), Restore ទិន្នន័យពី File ឬសម្អាតទិន្នន័យតេស្ត
                 </p>
+              </div>
+
+              {/* ⭐️ ០. កាត BACKUP & RESTORE ទិន្នន័យហាងពេញលេញ ⭐️ */}
+              <div className="p-6 rounded-3xl bg-blue-50/70 border-2 border-blue-200/80 space-y-4">
+                <div className="flex items-center justify-between border-b border-blue-200 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 bg-blue-600 text-white rounded-xl text-sm">💾</span>
+                    <div>
+                      <h4 className="text-xs font-black text-blue-950 uppercase">
+                        ០. ការ Backup & Restore ទិន្នន័យហាងពេញលេញ (Cloud Backup & Restore)
+                      </h4>
+                      <p className="text-[11px] text-blue-800">
+                        ទាញយកទិន្នន័យទាំងអស់ (ទំនិញ, ស្តុក, ការលក់, ចំណាយ, អតិថិជន) ទុក ឬ Restore ចូលវិញបានគ្រប់ពេល
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Backup as JSON */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const backupData = {
+                        version: '2.5',
+                        store: activeStore,
+                        settings: storeSettings,
+                        products: products,
+                        orders: realOrders,
+                        customers: customers,
+                        expenses: expenses,
+                        timestamp: new Date().toISOString()
+                      };
+                      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${activeStore?.slug || 'sabayluk'}_backup_${new Date().toISOString().slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      setToastNotification('💾 បានទាញយក File Backup (JSON) ជោគជ័យ!');
+                      setTimeout(() => setToastNotification(null), 3000);
+                    }}
+                    className="p-4 bg-white hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-2xl text-xs font-black transition flex flex-col items-center gap-2 text-center cursor-pointer shadow-xs active:scale-95"
+                  >
+                    <span className="text-2xl">📦</span>
+                    <span>ទាញយក Backup ពេញលេញ (.JSON)</span>
+                    <span className="text-[10px] text-slate-500 font-bold">ទំនិញ, ស្តុក, វិក្កយបត្រ, អតិថិជន</span>
+                  </button>
+
+                  {/* Export Multi-Sheet Excel */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        const wb = XLSX.utils.book_new();
+
+                        // Sheet 1: Products
+                        const prodsData = products.map((p, i) => ({
+                          'ល.រ': i + 1,
+                          'ឈ្មោះទំនិញ': p.name,
+                          'SKU': p.sku || '',
+                          'ប្រភេទ': p.category || p.category_name || '',
+                          'តម្លៃដើម ($)': p.cost_price || 0,
+                          'តម្លៃលក់ ($)': p.price || 0,
+                          'ស្តុកជាក់ស្តែង': p.stock_qty || p.stock || 0
+                        }));
+                        const wsProds = XLSX.utils.json_to_sheet(prodsData);
+                        XLSX.utils.book_append_sheet(wb, wsProds, 'Products');
+
+                        // Sheet 2: Orders
+                        const ordersData = realOrders.map((o, i) => ({
+                          'ល.រ': i + 1,
+                          'លេខវិក្កយបត្រ': o.order_id || o.id,
+                          'អតិថិជន': o.customer || o.customer_name || 'អតិថិជន',
+                          'ទូរស័ព្ទ': o.phone || '',
+                          'សរុប ($)': o.total || 0,
+                          'វិធីទូទាត់': o.payment || o.payment_method || 'Bakong KHQR',
+                          'កាលបរិច្ឆេទ': o.created_at ? new Date(o.created_at).toLocaleDateString('km-KH') : ''
+                        }));
+                        const wsOrders = XLSX.utils.json_to_sheet(ordersData);
+                        XLSX.utils.book_append_sheet(wb, wsOrders, 'Orders');
+
+                        // Sheet 3: Customers
+                        const custData = customers.map((c, i) => ({
+                          'ល.រ': i + 1,
+                          'ឈ្មោះ': c.name,
+                          'ទូរស័ព្ទ': c.phone,
+                          'ចំណាយសរុប ($)': c.total_spent || 0,
+                          'បំណុល ($)': c.debt || 0
+                        }));
+                        const wsCust = XLSX.utils.json_to_sheet(custData);
+                        XLSX.utils.book_append_sheet(wb, wsCust, 'Customers');
+
+                        XLSX.writeFile(wb, `${activeStore?.slug || 'sabayluk'}_full_excel_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                        setToastNotification('📊 បានទាញយកឯកសារ Excel (.xlsx) ជោគជ័យ!');
+                        setTimeout(() => setToastNotification(null), 3000);
+                      } catch (err) {
+                        alert('ការទាញយក Excel បរាជ័យ៖ ' + err.message);
+                      }
+                    }}
+                    className="p-4 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-2xl text-xs font-black transition flex flex-col items-center gap-2 text-center cursor-pointer shadow-xs active:scale-95"
+                  >
+                    <span className="text-2xl">📊</span>
+                    <span>នាំចេញ Excel គ្រប់តារាង (.XLSX)</span>
+                    <span className="text-[10px] text-slate-500 font-bold">ទំនិញ, ការលក់, អតិថិជន (Multi-Sheet)</span>
+                  </button>
+
+                  {/* Restore from JSON */}
+                  <label className="p-4 bg-white hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-2xl text-xs font-black transition flex flex-col items-center gap-2 text-center cursor-pointer shadow-xs active:scale-95">
+                    <span className="text-2xl">📂</span>
+                    <span>Restore ទិន្នន័យពី File Backup</span>
+                    <span className="text-[10px] text-slate-500 font-bold">ជ្រើសរើស File .JSON ដើម្បីបញ្ចូល</span>
+                    <input
+                      type="file"
+                      accept=".json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async () => {
+                          try {
+                            const parsed = JSON.parse(reader.result);
+                            if (parsed.products && Array.isArray(parsed.products)) {
+                              setProducts(parsed.products);
+                            }
+                            if (parsed.orders && Array.isArray(parsed.orders)) {
+                              setOrders(parsed.orders);
+                            }
+                            if (parsed.customers && Array.isArray(parsed.customers)) {
+                              setCustomers(parsed.customers);
+                            }
+                            if (parsed.expenses && Array.isArray(parsed.expenses)) {
+                              setExpenses(parsed.expenses);
+                            }
+                            if (parsed.settings) {
+                              setStoreSettings(parsed.settings);
+                            }
+                            setToastNotification(`🎉 បាន Restore ទិន្នន័យជោគជ័យ! (ទំនិញ ${parsed.products?.length || 0} មុខ, ការលក់ ${parsed.orders?.length || 0} វិក្កយបត្រ)`);
+                            setTimeout(() => setToastNotification(null), 4000);
+                          } catch (parseErr) {
+                            alert('❌ File Backup មិនត្រឹមត្រូវ៖ ' + parseErr.message);
+                          }
+                        };
+                        reader.readAsText(file);
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
 
               {/* ១. កាតទាញយករបាយការណ៍ Excel */}

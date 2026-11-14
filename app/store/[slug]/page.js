@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../supabase';
 import { getLocalStores, DEFAULT_FLAGSHIP_STORE } from '../../../lib/stores';
+import { generateKhqrString, getKhqrQrImageUrl } from '../../../lib/khqr';
 
 export default function StoreFrontBySlug() {
   const params = useParams();
@@ -24,6 +25,10 @@ export default function StoreFrontBySlug() {
   const [custName, setCustName] = useState('');
   const [custPhone, setCustPhone] = useState('');
   const [custAddress, setCustAddress] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('KHQR'); // 'KHQR' | 'COD'
+  const [khqrCurrency, setKhqrCurrency] = useState('USD'); // 'USD' | 'KHR'
+  const [paymentSlipUrl, setPaymentSlipUrl] = useState(null);
+  const [transactionRef, setTransactionRef] = useState('');
   const [orderSuccess, setOrderSuccess] = useState(null);
 
   // Load store details by slug
@@ -409,12 +414,164 @@ export default function StoreFrontBySlug() {
                   />
                 </div>
 
-                {/* KHQR Payment Preview */}
-                {currentStore.settings?.khqrImageUrl && (
-                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-center space-y-1">
-                    <p className="font-black text-slate-800 text-[11px]">ស្កេនទូទាត់តាម KHQR ទៅកាន់ {currentStore.name}</p>
-                    <img src={currentStore.settings.khqrImageUrl} alt="KHQR" className="w-24 h-24 mx-auto object-contain" />
-                    <p className="text-[10px] text-slate-500 font-bold">ទឹកប្រាក់សរុប: ${cartTotal.toFixed(2)} ({cartTotalKHR.toLocaleString()} ៛)</p>
+                {/* Payment Method Selector */}
+                <div className="space-y-1.5 pt-1">
+                  <label className="font-bold block text-slate-700">វិធីសាស្ត្រទូទាត់ប្រាក់ *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('KHQR')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition cursor-pointer ${
+                        paymentMethod === 'KHQR'
+                          ? 'bg-orange-50 border-orange-500 ring-1 ring-orange-500/30 text-orange-950 font-black'
+                          : 'bg-white border-slate-200 text-slate-700 font-bold hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="text-base">💳</span>
+                      <div>
+                        <span className="block text-[11px] leading-tight">Bakong KHQR</span>
+                        <span className="text-[9px] text-orange-600 block">មានលុយស្រាប់ ⚡</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('COD')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition cursor-pointer ${
+                        paymentMethod === 'COD'
+                          ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500/30 text-blue-950 font-black'
+                          : 'bg-white border-slate-200 text-slate-700 font-bold hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="text-base">💵</span>
+                      <div>
+                        <span className="block text-[11px] leading-tight">ទូទាត់ពេលដល់ (COD)</span>
+                        <span className="text-[9px] text-slate-500 block">បង់លុយសុទ្ធ</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* ⭐️ BAKONG DYNAMIC KHQR PAYMENT BOX ⭐️ */}
+                {paymentMethod === 'KHQR' && (
+                  <div className="p-3.5 bg-gradient-to-br from-slate-50 to-orange-50/40 rounded-2xl border border-orange-200/80 text-center space-y-2.5 animate-in fade-in">
+                    <div className="flex items-center justify-between gap-2 border-b border-orange-100 pb-2">
+                      <div className="text-left">
+                        <span className="text-[10px] bg-red-600 text-white font-black px-1.5 py-0.5 rounded tracking-wider uppercase">
+                          KHQR DYNAMIC
+                        </span>
+                        <p className="font-black text-slate-900 text-xs mt-0.5">{currentStore.name}</p>
+                      </div>
+
+                      {/* Currency Switcher */}
+                      <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-200 text-[10px] font-black">
+                        <button
+                          type="button"
+                          onClick={() => setKhqrCurrency('USD')}
+                          className={`px-2 py-0.5 rounded-lg transition ${
+                            khqrCurrency === 'USD' ? 'bg-[#ff6a00] text-white shadow-xs' : 'text-slate-600'
+                          }`}
+                        >
+                          USD ($)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setKhqrCurrency('KHR')}
+                          className={`px-2 py-0.5 rounded-lg transition ${
+                            khqrCurrency === 'KHR' ? 'bg-[#ff6a00] text-white shadow-xs' : 'text-slate-600'
+                          }`}
+                        >
+                          KHR (៛)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Dynamic QR Code Image */}
+                    {(() => {
+                      const dynamicKhqr = generateKhqrString({
+                        bakongAccountId: currentStore.settings?.bankAccountUsd || currentStore.phone || 'sengsoveasna@aba',
+                        merchantName: currentStore.name || 'SABAY LUK',
+                        amount: khqrCurrency === 'USD' ? cartTotal : cartTotalKHR,
+                        currency: khqrCurrency,
+                        billNumber: `ORD-${Date.now().toString().slice(-4)}`,
+                        mobileNumber: currentStore.phone,
+                        storeLabel: currentStore.name
+                      });
+                      const qrUrl = getKhqrQrImageUrl(dynamicKhqr, 260);
+
+                      return (
+                        <div className="space-y-2">
+                          <div className="w-48 h-48 mx-auto bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center">
+                            <img
+                              src={qrUrl}
+                              alt="Bakong Dynamic KHQR"
+                              className="w-full h-full object-contain rounded-xl"
+                            />
+                          </div>
+
+                          <div className="bg-white/80 p-2 rounded-xl border border-orange-100 space-y-0.5">
+                            <p className="text-[11px] font-black text-slate-900">
+                              ទឹកប្រាក់ត្រូវបង់: <span className="text-[#ff6a00] text-sm">
+                                {khqrCurrency === 'USD' ? `$${cartTotal.toFixed(2)}` : `${cartTotalKHR.toLocaleString()} ៛`}
+                              </span>
+                            </p>
+                            <p className="text-[10px] text-emerald-700 font-bold">
+                              ✨ ស្កេនភ្លាម លុយលោតចូល App ធនាគារស្វ័យប្រវត្តិ (ABA, Wing, ACLEDA...) មិនបាច់វាយចំនួនលុយឡើយ!
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ⭐️ PAYMENT SLIP UPLOAD (បង្កាន់ដៃផ្ទេរប្រាក់) ⭐️ */}
+                    <div className="text-left pt-1 border-t border-orange-100/80 space-y-1.5">
+                      <label className="font-bold block text-slate-700 text-[11px] flex items-center justify-between">
+                        <span>📸 ភ្ជាប់រូបថតបង្កាន់ដៃផ្ទេរប្រាក់ (Payment Slip)</span>
+                        <span className="text-[10px] text-slate-400 font-medium">(ជម្រើស)</span>
+                      </label>
+
+                      {paymentSlipUrl ? (
+                        <div className="relative inline-block border-2 border-emerald-400 rounded-xl overflow-hidden shadow-xs">
+                          <img src={paymentSlipUrl} alt="Slip" className="w-24 h-24 object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => setPaymentSlipUrl(null)}
+                            className="absolute top-1 right-1 bg-rose-600 text-white w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center cursor-pointer hover:bg-rose-700 shadow-xs"
+                            title="លុបរូបភាព"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex items-center justify-center gap-2 p-3 bg-white border border-dashed border-slate-300 rounded-xl text-slate-600 hover:border-orange-400 hover:bg-orange-50/30 transition cursor-pointer text-xs font-bold">
+                          <span className="text-base">📷</span>
+                          <span>ចុចទីនេះដើម្បីថត ឬជ្រើសរើសរូបបង្កាន់ដៃ</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  setPaymentSlipUrl(reader.result);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+
+                      <input
+                        type="text"
+                        value={transactionRef}
+                        onChange={(e) => setTransactionRef(e.target.value)}
+                        placeholder="លេខកូដប្រតិបត្តិការ (TxID / Ref) ឧ. 839482..."
+                        className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs font-bold outline-none focus:border-[#ff6a00]"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -433,9 +590,12 @@ export default function StoreFrontBySlug() {
                       phone: custPhone,
                       delivery_address: custAddress,
                       total: cartTotal,
+                      currency: khqrCurrency,
                       items: cart,
-                      payment_method: 'Bakong KHQR',
-                      status: 'PENDING',
+                      payment_method: paymentMethod === 'KHQR' ? 'Bakong Dynamic KHQR' : 'COD (Cash On Delivery)',
+                      slip_url: paymentSlipUrl || null,
+                      transaction_ref: transactionRef || null,
+                      status: paymentSlipUrl ? 'PAID_VERIFYING' : 'PENDING',
                       created_at: new Date().toISOString()
                     };
 
