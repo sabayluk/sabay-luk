@@ -32,14 +32,38 @@ function InvoiceContent() {
       try {
         const savedSettings = localStorage.getItem('sabay_store_settings');
         if (savedSettings) {
-          setStoreSettings(prev => ({ ...prev, ...JSON.parse(savedSettings) }));
+          const parsed = JSON.parse(savedSettings);
+          setStoreSettings(prev => ({ 
+            ...prev, 
+            ...parsed,
+            telegramBotToken: parsed.telegramBotToken || prev.telegramBotToken || '',
+            telegramChatId: parsed.telegramChatId || prev.telegramChatId || ''
+          }));
         }
       } catch (e) {}
     }
 
+    // Auto-sync settings from Supabase if available
+    try {
+      supabase.from('stores').select('settings, name, phone, telegram, address').eq('id', 'store_default_sabayluk').maybeSingle().then(({ data }) => {
+        if (data?.settings) {
+          setStoreSettings(prev => ({
+            ...prev,
+            ...data.settings,
+            storeName: data.name || data.settings.storeName || prev.storeName,
+            phone: data.phone || data.settings.phone || prev.phone,
+            telegram: data.telegram || data.settings.telegram || prev.telegram,
+            address: data.address || data.settings.address || prev.address
+          }));
+        }
+      });
+    } catch (e) {}
+
     const fetchOrder = async () => {
       setLoading(true);
-      if (!orderId) {
+      const cleanId = (orderId || '').replace(/^#/, '').trim();
+
+      if (!cleanId) {
         // Fallback sample order for demo
         setOrder({
           order_id: 'ORD-DEMO-2026',
@@ -63,13 +87,40 @@ function InvoiceContent() {
         return;
       }
 
+      // 1. ពិនិត្យមើល Cache ក្នុង LocalStorage ជាមុនសិន (Instant Match សម្រាប់ POS)
+      if (typeof window !== 'undefined') {
+        try {
+          const directKeyMatch = localStorage.getItem(`sabay_order_${cleanId}`) || localStorage.getItem(`sabay_order_#${cleanId}`);
+          if (directKeyMatch) {
+            const parsed = JSON.parse(directKeyMatch);
+            if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+              setOrder(parsed);
+              setLoading(false);
+              return;
+            }
+          }
+
+          const currentInv = localStorage.getItem('sabay_current_invoice_order');
+          if (currentInv) {
+            const parsed = JSON.parse(currentInv);
+            if (parsed && (parsed.order_id === cleanId || parsed.order_id === `#${cleanId}` || parsed.id === cleanId)) {
+              if (Array.isArray(parsed.items) && parsed.items.length > 0) {
+                setOrder(parsed);
+                setLoading(false);
+                return;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      // 2. ស្វែងរកក្នុង Supabase orders table (ទាំង cleanId និង #${cleanId})
       try {
-        // 1. Try Supabase
         const { data, error } = await supabase
           .from('orders')
           .select('*')
-          .or(`order_id.eq.${orderId},id.eq.${orderId}`)
-          .single();
+          .or(`order_id.eq.${cleanId},order_id.eq.#${cleanId},id.eq.${cleanId}`)
+          .maybeSingle();
 
         if (!error && data) {
           setOrder(data);
@@ -80,25 +131,31 @@ function InvoiceContent() {
         console.warn('Error fetching order from supabase:', e);
       }
 
-      // 2. Try localStorage fallback (recent orders)
+      // 3. ស្វែងរកក្នុងបញ្ជី LocalStorage (sabay_real_orders, sabay_orders)
       if (typeof window !== 'undefined') {
         try {
-          const cachedOrders = localStorage.getItem('sabay_real_orders') || localStorage.getItem('sabay_orders');
-          if (cachedOrders) {
-            const parsed = JSON.parse(cachedOrders);
-            const found = parsed.find(o => o.order_id === orderId || o.id === orderId);
-            if (found) {
-              setOrder(found);
-              setLoading(false);
-              return;
+          const keys = ['sabay_real_orders', 'sabay_orders'];
+          for (const k of keys) {
+            const cachedOrders = localStorage.getItem(k);
+            if (cachedOrders) {
+              const parsed = JSON.parse(cachedOrders);
+              const found = parsed.find(o => 
+                (o.order_id && (o.order_id === cleanId || o.order_id === `#${cleanId}`)) || 
+                (o.id && o.id === cleanId)
+              );
+              if (found) {
+                setOrder(found);
+                setLoading(false);
+                return;
+              }
             }
           }
         } catch (e) {}
       }
 
-      // 3. Fallback dummy if not found
+      // 4. Fallback បើរកមិនឃើញ
       setOrder({
-        order_id: orderId,
+        order_id: cleanId,
         created_at: new Date().toISOString(),
         customer_name: 'អតិថិជនទូទៅ',
         phone: 'N/A',
@@ -161,22 +218,25 @@ function InvoiceContent() {
     setSendingTelegram(true);
     setTelegramSentMsg('');
     try {
-      const botToken = storeSettings.telegramBotToken || '';
-      const chatId = storeSettings.telegramChatId || '';
+      const botToken = (storeSettings.telegramBotToken || '').trim();
+      const chatId = (storeSettings.telegramChatId || '').trim();
 
       const res = await fetch('/api/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          botToken,
-          chatId,
-          storeName: storeSettings.storeName,
+          botToken: botToken || undefined,
+          chatId: chatId || undefined,
+          storeId: order.store_id || 'store_default_sabayluk',
+          storeSlug: 'sabay-luk',
+          storeName: storeSettings.storeName || 'SABAY LUK SHOES STORE',
           action: 'send_invoice',
           order,
-          storePhone: storeSettings.phone,
-          storeAddress: storeSettings.address,
-          storeTelegram: storeSettings.telegram,
-          vatTin: storeSettings.vatTin
+          storePhone: storeSettings.phone || '096 720 5522',
+          storeAddress: storeSettings.address || 'Street 271, Phnom Penh, Cambodia',
+          storeTelegram: storeSettings.telegram || 'Sabayluk',
+          vatTin: storeSettings.vatTin,
+          exchangeRate: storeSettings.exchangeRate || 4100
         })
       });
 

@@ -2,23 +2,25 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { STORE_PLANS } from '../../lib/stores';
 
 export default function PlansAndSaaSPage() {
-  const [billingCycle, setBillingCycle] = useState('monthly'); // 'monthly' | 'yearly'
+  const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
 
   const plans = [
     {
       key: 'FREE',
-      name: 'កញ្ចប់សាកល្បង (Free Lifetime)',
+      name: '🎁 FREE (សាកល្បង)',
       priceMonthly: 0,
       priceYearly: 0,
+      savingsYearly: 0,
+      productsText: 'រហូតដល់ 15 មុខ',
+      accountsText: '1 Admin',
       badge: '🎁 ឥតគិតថ្លៃជារៀងរហូត',
       badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      desc: 'ស័ក្តិសមសម្រាប់អ្នកទើបចាប់ផ្តើមលក់ដំបូង ឬចង់តេស្តប្រព័ន្ធសាកល្បង ប្រើបានរហូត',
+      desc: 'អ្នកលក់ថ្មីថ្មោង ឬអ្នកចង់តេស្តសាកល្បង (គ្មានហានិភ័យ)',
       features: [
         'ទំនិញរហូតដល់ ១៥ មុខ',
-        'គណនីគ្រប់គ្រង (Admin) ១ នាក់',
+        'គណនីគ្រប់គ្រង (1 Admin)',
         'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
         'ចេញវិក្កយបត្រស្កេន ABA KHQR',
         'មានវេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
@@ -28,33 +30,39 @@ export default function PlansAndSaaSPage() {
     },
     {
       key: 'STARTER',
-      name: 'កញ្ចប់ Starter ($1/ខែ)',
+      name: '🌱 STARTER',
       priceMonthly: 1,
       priceYearly: 10,
-      badge: '🌱 ធូរថ្លៃបំផុតត្រឹម $1',
+      savingsYearly: 2,
+      productsText: 'រហូតដល់ 25 មុខ',
+      accountsText: '1 Admin + 1 បុគ្គលិក',
+      badge: '🌱 ធូរថ្លៃបំផុតត្រឹម $1/ខែ',
       badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-      desc: 'សម្រាប់តូបតូចៗ អ្នកលក់តាមផ្សារ ឬអ្នកលក់ Online Live តាមផ្ទះ',
+      desc: 'តូបតូចៗ អ្នកលក់ Live តាមផ្ទះ',
       features: [
-        'ទំនិញរហូតដល់ ៥០ មុខ',
-        'គណនី Admin ១ + បុគ្គលិក ១ នាក់',
+        'ទំនិញរហូតដល់ ២៥ មុខ',
+        '1 Admin + 1 គណនីបុគ្គលិក',
         'កាត់ស្តុក Size & Color លម្អិត',
         'ចេញវិក្កយបត្រស្កេន KHQR & បោះពុម្ព Thermal',
         'របាយការណ៍លក់ និងប្រាក់ចំណេញសង្ខេប',
-        'មានវេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន'
+        'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន'
       ],
       popular: false
     },
     {
       key: 'BASIC',
-      name: 'កញ្ចប់ Basic ($2/ខែ)',
+      name: '⚡ BASIC',
       priceMonthly: 2,
       priceYearly: 20,
+      savingsYearly: 4,
+      productsText: 'រហូតដល់ 50 មុខ',
+      accountsText: '1 Admin + 1 បុគ្គលិក',
       badge: '⚡ សន្សំសំចៃខ្ពស់',
       badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-      desc: 'សម្រាប់ហាងខ្នាតតូច មានបុគ្គលិកជួយគិតលុយ និងស្តុកទំនិញល្មម',
+      desc: 'ហាងខោអាវ ស្បែកជើងខ្នាតតូច',
       features: [
-        'ទំនិញរហូតដល់ ១០០ មុខ',
-        'គណនី Admin ១ + បុគ្គលិក ១ នាក់',
+        'ទំនិញរហូតដល់ ៥០ មុខ',
+        '1 Admin + 1 គណនីបុគ្គលិក',
         'តារាងស្តុកទំនិញ Variant Matrix (Size/Color)',
         'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
         'កត់ត្រាចំណាយ និងរបាយការណ៍ P&L',
@@ -64,15 +72,18 @@ export default function PlansAndSaaSPage() {
     },
     {
       key: 'PRO',
-      name: 'កញ្ចប់ Pro ($3/ខែ)',
+      name: '🚀 PRO',
       priceMonthly: 3,
       priceYearly: 30,
+      savingsYearly: 6,
+      productsText: 'រហូតដល់ 100 មុខ',
+      accountsText: '1 Admin + 1 បុគ្គលិក',
       badge: '🔥 ពេញនិយមបំផុត (Best Value)',
       badgeColor: 'bg-orange-50 text-orange-700 border-orange-200',
-      desc: 'សម្រាប់ហាងពេញនិយម មានស្តុកទំនិញច្រើនទំហំ/ពណ៌ និងបុគ្គលិកលក់',
+      desc: 'ហាងពេញនិយម មានបុគ្គលិកឆ្លាស់វេន',
       features: [
-        'ទំនិញរហូតដល់ ២៥០ មុខ',
-        'គណនី Admin ១ + បុគ្គលិក ២ នាក់',
+        'ទំនិញរហូតដល់ ១០០ មុខ',
+        '1 Admin + 1 គណនីបុគ្គលិក',
         'គ្រប់គ្រងបំណុលអតិថិជន & ប្រព័ន្ធ Loyalty Points',
         'របាយការណ៍វិភាគការលក់ និងប្រាក់ចំណេញកម្រិតខ្ពស់',
         'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot',
@@ -82,15 +93,18 @@ export default function PlansAndSaaSPage() {
     },
     {
       key: 'BUSINESS',
-      name: 'កញ្ចប់ Business ($5/ខែ)',
+      name: '🔥 BUSINESS',
       priceMonthly: 5,
       priceYearly: 50,
+      savingsYearly: 10,
+      productsText: 'រហូតដល់ 200 មុខ',
+      accountsText: '1 Admin + 2 បុគ្គលិក',
       badge: '🚀 សម្រាប់ហាងធំ',
       badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
-      desc: 'សម្រាប់ហាងខ្នាតកណ្តាល និងធំ មានទំនិញច្រើន និងបុគ្គលិកច្រើនផ្នែក',
+      desc: 'ហាងធំគួរសម មានស្តុកច្រើន Size/Color',
       features: [
-        'ទំនិញរហូតដល់ ៦០០ មុខ',
-        'គណនី Admin ១ + បុគ្គលិក ៣ នាក់',
+        'ទំនិញរហូតដល់ ២០០ មុខ',
+        '1 Admin + 2 គណនីបុគ្គលិក',
         'មុខងារ POS ពេញលេញ គ្មានដែនកំណត់',
         'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
         'គ្រប់គ្រងសិទ្ធិបុគ្គលិកដាច់ដោយឡែកលម្អិត',
@@ -99,16 +113,40 @@ export default function PlansAndSaaSPage() {
       popular: false
     },
     {
+      key: 'PREMIUM',
+      name: '💎 PREMIUM',
+      priceMonthly: 7,
+      priceYearly: 70,
+      savingsYearly: 14,
+      productsText: 'រហូតដល់ 500 មុខ',
+      accountsText: '1 Admin + 3 បុគ្គលិក',
+      badge: '💎 សម្រាប់ហាងលក់ដុំ & រាយ',
+      badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
+      desc: 'ហាងមានមុខទំនិញច្រើន និងបុគ្គលិកច្រើន',
+      features: [
+        'ទំនិញរហូតដល់ ៥០០ មុខ',
+        '1 Admin + 3 គណនីបុគ្គលិក',
+        'មុខងារគ្រប់គ្រងស្តុក និងលក់ដុំ/រាយកម្រិតខ្ពស់',
+        'រៀបចំរបាយការណ៍លក់ប្រចាំខែ & ប្រចាំឆ្នាំ',
+        'ជូនដំណឹងស្វ័យប្រវត្តិតាម Telegram',
+        'ការគាំទ្របច្ចេកទេសពិសេស ២៤/៧'
+      ],
+      popular: false
+    },
+    {
       key: 'ENTERPRISE',
-      name: 'កញ្ចប់ Enterprise ($10/ខែ)',
+      name: '👑 ENTERPRISE',
       priceMonthly: 10,
-      priceYearly: 99,
+      priceYearly: 100,
+      savingsYearly: 20,
+      productsText: 'រហូតដល់ 1,000 មុខ',
+      accountsText: '1 Admin + 5 បុគ្គលិក',
       badge: '👑 កម្រិតកំពូល Full Option',
       badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-      desc: 'សម្រាប់ហាងធំៗ ដេប៉ូបោះដុំ ឬហាងដែលមានសាខា និងទំនិញរាប់ពាន់មុខ',
+      desc: 'ហាងធំៗ សាខា ឬឃ្លាំងស្តុកធំ',
       features: [
-        'ទំនិញរហូតដល់ ២,៥០០ មុខ',
-        'គណនី Admin ១ + បុគ្គលិក ៥ នាក់',
+        'ទំនិញរហូតដល់ ១,០០០ មុខ',
+        '1 Admin + 5 គណនីបុគ្គលិក',
         'មុខងារទាំងអស់លើប្រព័ន្ធ SABAY LUK POS',
         'បម្រុងទុកទិន្នន័យស្វ័យប្រវត្តិ (Cloud Backup)',
         'ជំនួយការរៀបចំប្រព័ន្ធពីក្រុមការងារផ្ទាល់',
@@ -165,7 +203,7 @@ export default function PlansAndSaaSPage() {
       </header>
 
       {/* ⭐️ HERO SECTION ⭐️ */}
-      <section className="py-16 md:py-24 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto text-center space-y-6">
+      <section className="py-14 md:py-20 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto text-center space-y-6">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-black uppercase tracking-wider animate-in fade-in">
           <span>🚀</span>
           <span>Cloud POS & Store Management Software</span>
@@ -183,8 +221,26 @@ export default function PlansAndSaaSPage() {
           និងមើលរបាយការណ៍ចំណេញខាតបានយ៉ាងងាយស្រួល ពីគ្រប់ទីកន្លែងលើទូរស័ព្ទដៃ និងកុំព្យូទ័រ។
         </p>
 
+        {/* ⭐️ STRATEGIC YEARLY PAYMENT CALLOUT BANNER ⭐️ */}
+        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/15 to-amber-500/10 border-2 border-amber-300 rounded-3xl p-5 sm:p-6 text-left max-w-4xl mx-auto shadow-md">
+          <div className="flex items-start gap-3.5">
+            <span className="text-3xl shrink-0 p-2 bg-amber-500 text-white rounded-2xl shadow-xs">💡</span>
+            <div className="space-y-2">
+              <h4 className="font-black text-sm sm:text-base text-slate-900">
+                ចំណុចគន្លឹះសំខាន់៖ យុទ្ធសាស្ត្រជ្រើសរើសបង់ប្រចាំឆ្នាំ ($10 / $20 / $30 ក្នុងមួយឆ្នាំ)
+              </h4>
+              <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
+                ដោយសារតម្លៃត្រឹមតែ <b>$1 ឬ $2 ក្នុងមួយខែ</b> វាទាបខ្លាំង ការបង់ផ្តាច់ប្រចាំឆ្នាំ <b>($10/ឆ្នាំ ឬ $20/ឆ្នាំ)</b> ជួយឱ្យលោកអ្នកចំណេញប្រាក់ច្រើន និងចំណេញពេលវេលា <b>វេរលុយតែម្តង ប្រើប្រាស់បានពេញមួយឆ្នាំរលូន</b> មិនបាច់រវល់វេរ $1 ឬ $2 រៀងរាល់ខែឡើយ!
+              </p>
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-600 text-white text-[11px] font-black shadow-xs">
+                <span>👉 ចំណេញពី $2 ដល់ $21 ភ្លាមៗ ពេលជ្រើសរើសបង់ផ្តាច់ប្រចាំឆ្នាំ!</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Billing Cycle Switcher */}
-        <div className="pt-4 flex items-center justify-center gap-3">
+        <div className="pt-2 flex items-center justify-center gap-3">
           <div className="bg-slate-100 p-1.5 rounded-2xl border border-slate-200 inline-flex items-center gap-1 text-xs font-bold shadow-inner">
             <button
               type="button"
@@ -206,11 +262,11 @@ export default function PlansAndSaaSPage() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <span>បង់ប្រចាំឆ្នាំ (Yearly)</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+              <span>⭐ បង់ប្រចាំឆ្នាំ (បង់ផ្តាច់)</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
                 billingCycle === 'yearly' ? 'bg-amber-400 text-slate-950' : 'bg-emerald-100 text-emerald-700'
               }`}>
-                សន្សំ ២០%
+                ចំណេញរហូតដល់ $21
               </span>
             </button>
           </div>
@@ -218,7 +274,7 @@ export default function PlansAndSaaSPage() {
       </section>
 
       {/* ⭐️ PRICING CARDS GRID ⭐️ */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {plans.map((p) => {
             const price = billingCycle === 'yearly' ? p.priceYearly : p.priceMonthly;
@@ -244,6 +300,11 @@ export default function PlansAndSaaSPage() {
                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-black border ${p.badgeColor}`}>
                       {p.badge}
                     </span>
+                    {billingCycle === 'yearly' && p.savingsYearly > 0 && (
+                      <span className="text-[11px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        ចំណេញ ${p.savingsYearly}
+                      </span>
+                    )}
                   </div>
 
                   <div>
@@ -262,7 +323,18 @@ export default function PlansAndSaaSPage() {
                   </div>
 
                   <div className="space-y-2.5 pt-2">
-                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">ទំនិញ:</span>
+                        <span className="font-black text-slate-800">{p.productsText}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">គណនី:</span>
+                        <span className="font-black text-blue-700">{p.accountsText}</span>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider pt-1">
                       មុខងាររួមបញ្ចូល (Included Features):
                     </p>
                     <ul className="space-y-2 text-xs font-bold text-slate-700">
@@ -278,20 +350,98 @@ export default function PlansAndSaaSPage() {
 
                 <div className="pt-6 mt-6 border-t border-slate-100">
                   <Link
-                    href={`/register?plan=${p.key}`}
+                    href={`/register?plan=${p.key}&cycle=${billingCycle}`}
                     className={`w-full py-3.5 rounded-2xl font-black text-xs transition flex items-center justify-center gap-1.5 active:scale-95 shadow-md ${
                       p.popular
                         ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25'
                         : 'bg-slate-900 hover:bg-black text-white'
                     }`}
                   >
-                    <span>{p.priceMonthly === 0 ? '🎁 ចុះឈ្មោះប្រើ Free ឥឡូវនេះ' : `⚡ ជ្រើសរើសកញ្ចប់ ${p.name}`}</span>
+                    <span>{p.priceMonthly === 0 ? '🎁 ចុះឈ្មោះប្រើ Free ឥឡូវនេះ' : `⚡ ជ្រើសរើស ${p.name}`}</span>
                     <span>➔</span>
                   </Link>
                 </div>
               </div>
             );
           })}
+        </div>
+      </section>
+
+      {/* ⭐️ COMPLETE COMPARISON TABLE AS REQUESTED ⭐️ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden p-6 sm:p-8 space-y-4">
+          <div className="border-b border-slate-100 pb-4">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+              📊 តារាងប្រៀបធៀបកញ្ចប់តម្លៃលម្អិត (Official Pricing Matrix)
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              ជ្រើសរើសកញ្ចប់ដែលស័ក្តិសមបំផុតសម្រាប់ទំហំអាជីវកម្ម និងចំនួនទំនិញក្នុងស្តុករបស់អ្នក
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-[11px] text-slate-500 font-black uppercase tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3.5">កញ្ចប់ (Plan)</th>
+                  <th className="px-4 py-3.5">តម្លៃ / ខែ</th>
+                  <th className="px-4 py-3.5">បង់ប្រចាំឆ្នាំ (បង់ផ្តាច់)</th>
+                  <th className="px-4 py-3.5">ចំនួនទំនិញ (Products)</th>
+                  <th className="px-4 py-3.5">ចំនួនគណនី (Accounts)</th>
+                  <th className="px-4 py-3.5">ភាពទាក់ទាញ & ស័ក្តិសមសម្រាប់</th>
+                  <th className="px-4 py-3.5 text-right">សកម្មភាព</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {plans.map((p) => (
+                  <tr key={p.key} className={`hover:bg-slate-50/70 transition ${p.popular ? 'bg-orange-50/30' : ''}`}>
+                    <td className="px-4 py-4 whitespace-nowrap font-black text-slate-900 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span>{p.name}</span>
+                        {p.popular && (
+                          <span className="text-[9px] bg-orange-500 text-white font-black px-1.5 py-0.2 rounded-full uppercase">
+                            Popular
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap font-black text-slate-900">
+                      ${p.priceMonthly}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      {p.priceYearly === 0 ? (
+                        <span className="font-bold text-slate-500">$0</span>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-blue-700">${p.priceYearly} / ឆ្នាំ</span>
+                          <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                            ចំណេញ ${p.savingsYearly}
+                          </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap font-bold text-slate-800">
+                      {p.productsText}
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap font-bold text-blue-700">
+                      {p.accountsText}
+                    </td>
+                    <td className="px-4 py-4 text-slate-600 text-xs max-w-xs">
+                      {p.desc}
+                    </td>
+                    <td className="px-4 py-4 text-right whitespace-nowrap">
+                      <Link
+                        href={`/register?plan=${p.key}&cycle=yearly`}
+                        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[11px] hover:from-blue-700 hover:to-indigo-700 transition active:scale-95 shadow-xs"
+                      >
+                        ជ្រើសរើស ➔
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 

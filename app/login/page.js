@@ -1,0 +1,28 @@
+'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function LoginPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect directly to the Admin / Store Login Portal
+    router.replace('/admin/dashboard');
+  }, [router]);
+
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-slate-950 text-white font-sans">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="text-center space-y-1">
+          <p className="text-base font-black text-white tracking-wide">
+            🔑 កំពុងបើកផ្ទាំងចូលប្រព័ន្ធ Sabay Luk Login Portal...
+          </p>
+          <p className="text-xs text-slate-400">
+            សូមរង់ចាំមួយភ្លែត ប្រព័ន្ធកំពុងនាំអ្នកទៅកាន់ទំព័រ Login
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

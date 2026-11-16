@@ -11,13 +11,13 @@ export default function OrderTrackingPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Auto search if query param ?order= or ?phone= is provided
+  // Auto search if query param ?q=, ?order=, ?id=, or ?phone= is provided
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const orderParam = params.get('order') || params.get('id');
+      const orderParam = params.get('q') || params.get('order') || params.get('id') || params.get('orderId');
       const phoneParam = params.get('phone');
-      const q = orderParam || phoneParam;
+      const q = (orderParam || phoneParam || '').replace(/^#/, '').trim();
       if (q) {
         setSearchInput(q);
         handleSearch(q);
@@ -26,7 +26,8 @@ export default function OrderTrackingPage() {
   }, []);
 
   const handleSearch = async (queryToSearch) => {
-    const q = (queryToSearch || searchInput).trim();
+    const rawQ = (queryToSearch || searchInput).trim();
+    const q = rawQ.replace(/^#/, '').trim();
     if (!q) {
       setErrorMsg('សូមបញ្ចូលលេខទូរស័ព្ទ ឬលេខកូដកុម្ម៉ង់ (Order ID)!');
       return;
@@ -42,7 +43,7 @@ export default function OrderTrackingPage() {
       let { data: orderById, error: err1 } = await supabase
         .from('orders')
         .select('*')
-        .ilike('order_id', `%${q}%`)
+        .or(`order_id.ilike.%${q}%,order_id.ilike.%#${q}%,id.ilike.%${q}%`)
         .order('created_at', { ascending: false });
 
       // 2. Try phone number match
@@ -52,7 +53,30 @@ export default function OrderTrackingPage() {
         .or(`phone.ilike.%${q}%,phone_number.ilike.%${q}%,customer_name.ilike.%${q}%`)
         .order('created_at', { ascending: false });
 
-      const combined = [...(orderById || []), ...(orderByPhone || [])];
+      let combined = [...(orderById || []), ...(orderByPhone || [])];
+
+      // 3. Fallback to localStorage if offline or local order
+      if (combined.length === 0 && typeof window !== 'undefined') {
+        try {
+          const keys = ['sabay_real_orders', 'sabay_orders'];
+          for (const k of keys) {
+            const cached = localStorage.getItem(k);
+            if (cached) {
+              const list = JSON.parse(cached);
+              const matched = list.filter(o => {
+                const oid = (o.order_id || o.id || '').replace(/^#/, '').toLowerCase();
+                const ph = (o.phone || o.phone_number || '').toLowerCase();
+                const cust = (o.customer_name || o.customer || '').toLowerCase();
+                const target = q.toLowerCase();
+                return oid.includes(target) || ph.includes(target) || cust.includes(target);
+              });
+              if (matched.length > 0) {
+                combined = [...combined, ...matched];
+              }
+            }
+          }
+        } catch (localErr) {}
+      }
       // Deduplicate by id or order_id
       const unique = [];
       const seen = new Set();

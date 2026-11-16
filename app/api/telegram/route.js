@@ -1,13 +1,57 @@
 import { NextResponse } from 'next/server';
 import { generateInvoicePdf } from '../../../lib/generateInvoicePdf';
+import { supabase } from '../../../supabase';
+
+// Telegram Bot API strictly rejects inline keyboard button URLs pointing to localhost or private IPs.
+// This validator ensures only valid public URLs are sent in inline_keyboard buttons to prevent 400 Bad Request.
+function isValidTelegramUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const hostname = (parsed.hostname || '').toLowerCase();
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.endsWith('.local')
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request) {
   try {
     const body = await request.json();
     const { botToken, chatId, message, action, items, storeName, order } = body;
+    const storeId = body.storeId || body.store_id || 'store_default_sabayluk';
+    const storeSlug = body.storeSlug || body.store_slug;
 
-    const token = (botToken || process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || '').trim();
-    const chat = (chatId || process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || '').trim();
+    let token = (botToken || process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || '').trim();
+    let chat = (chatId || process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || '').trim();
+
+    // ⭐️ ប្រសិនបើ Client (ខាងទូរស័ព្ទភ្ញៀវ) មិនបានបញ្ជូន botToken/chatId មក គឺទាញយកស្វ័យប្រវត្តពី Supabase stores table
+    if (!token || !chat) {
+      try {
+        let query = supabase.from('stores').select('settings, telegram, phone, name');
+        if (storeSlug) {
+          query = query.ilike('slug', storeSlug);
+        } else if (storeId) {
+          query = query.eq('id', storeId);
+        }
+        const { data: storeRow } = await query.maybeSingle();
+        if (storeRow?.settings) {
+          if (!token && storeRow.settings.telegramBotToken) token = storeRow.settings.telegramBotToken.trim();
+          if (!chat && storeRow.settings.telegramChatId) chat = storeRow.settings.telegramChatId.trim();
+        }
+      } catch (dbErr) {
+        console.warn('Telegram store settings lookup error:', dbErr);
+      }
+    }
 
     let finalMessage = message;
     let inlineKeyboard = null;
@@ -43,12 +87,35 @@ export async function POST(request) {
         `━━━━━━━━━━━━━━━━━━\n` +
         `🏪 <b>ហាង:</b> <b>${st.name || 'ហាង'}</b> (<code>${st.slug || 'N/A'}</code>)\n` +
         `🚀 <b>Plan ថ្មី:</b> <b>${newPlan}</b>\n` +
-        `💰 <b>តម្លៃសេវា:</b> <b>$${planPrice}/ខែ</b>\n` +
+        `💰 <b>តម្លៃសេវា:</b> <b>${planPrice}</b>\n` +
         `👤 <b>ម្ចាស់ហាង:</b> ${st.owner_name || 'N/A'} (📞 <code>${st.phone || 'N/A'}</code>)\n` +
         `📧 <b>Gmail:</b> <code>${st.owner_email || 'N/A'}</code>\n` +
+        (body.slipUrl ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> <a href="${body.slipUrl}">ចុចមើលរូបភាព Slip ↗</a>\n` : '') +
         `━━━━━━━━━━━━━━━━━━\n` +
         `⏰ <b>កាលបរិច្ឆេទ:</b> ${new Date().toLocaleString('km-KH')}\n` +
-        `✅ <i>ប្រព័ន្ធបានទទួលការស្នើសុំ Upgrade រួចរាល់!</i>`;
+        `✅ <i>ប្រព័ន្ធបានទទួលការបង់ប្រាក់ & ស្នើសុំ Upgrade រួចរាល់!</i>`;
+      if (body.slipUrl) {
+        inlineKeyboard = [
+          [
+            { text: '🧾 មើលបង្កាន់ដៃ Slip', url: body.slipUrl },
+            { text: '📊 ផ្ទាំងគ្រប់គ្រងហាង', url: `${request.headers.get('origin') || 'http://localhost:3000'}/admin/dashboard` }
+          ]
+        ];
+      }
+    } else if (action === 'plan_renewed') {
+      const st = body.store || {};
+      const duration = body.duration || '១ ឆ្នាំ';
+      const newExpiry = body.newExpiryDate || 'N/A';
+      finalMessage = `🎉 <b>ហាងបានបន្តសុពលភាពជោគជ័យ (STORE PLAN RENEWED)!</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🏪 <b>ហាង:</b> <b>${st.name || 'ហាង'}</b> (<code>${st.slug || 'N/A'}</code>)\n` +
+        `📦 <b>កញ្ចប់សេវា:</b> <b>${st.plan || 'STARTER'}</b>\n` +
+        `⏳ <b>រយៈពេលបន្ថែម:</b> <b>${duration}</b>\n` +
+        `📅 <b>សុពលភាពថ្មីរហូតដល់:</b> <b>${newExpiry}</b>\n` +
+        `👤 <b>ម្ចាស់ហាង:</b> ${st.owner_name || 'N/A'} (📞 <code>${st.phone || 'N/A'}</code>)\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `⏰ <b>កាលបរិច្ឆេទបន្ត:</b> ${new Date().toLocaleString('km-KH')}\n` +
+        `⚡ <i>គណនីហាងត្រូវបានបើក និងដំណើរការបន្តដោយរលូន!</i>`;
     } else if (action === 'test') {
       finalMessage = `🔔 <b>សាកល្បងការតភ្ជាប់ Telegram Bot (Test Connection)</b>\n\n` +
         `🏪 <b>ហាង:</b> ${storeName || 'SABAY LUK'}\n` +
@@ -83,6 +150,7 @@ export async function POST(request) {
         `📍 <b>អាសយដ្ឋានដឹក:</b> ${ord.delivery_address || ord.address || 'N/A'}\n` +
         (ord.google_map_url ? `🗺️ <b>Google Maps:</b> <a href="${ord.google_map_url}">ចុចមើលទីតាំងលើផែនទី Google Maps</a>\n` : '') +
         (ord.location_photo_url ? `🏠 <b>រូបថតទីតាំង:</b> <a href="${ord.location_photo_url}">ចុចមើលរូបភាពទីតាំង</a>\n` : '') +
+        (ord.payment_slip_url ? `🧾 <b>បង្កាន់ដៃបង់ប្រាក់ KHQR:</b> <a href="${ord.payment_slip_url}">ចុចមើលរូបភាព Slip ↗</a>\n` : '') +
         `💳 <b>វិធីទូទាត់:</b> <b>${ord.payment_method || 'Bakong KHQR / Cash'}</b>\n` +
         (ord.coupon_code ? `🎟️ <b>កូដបញ្ចុះតម្លៃ:</b> <code>${ord.coupon_code}</code> (-$${Number(ord.discount || 0).toFixed(2)})\n` : '') +
         `━━━━━━━━━━━━━━━━━━\n` +
@@ -90,18 +158,50 @@ export async function POST(request) {
         `${itemsList || 'គ្មានបញ្ជីទំនិញ'}\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `💰 <b>ទឹកប្រាក់សរុប:</b> <b>$${totalNum.toFixed(2)}</b> (≈ ${totalRiel.toLocaleString()} ៛)\n` +
-        `✅ <b>ស្ថានភាព:</b> <b>PAID & CONFIRMED</b>\n\n` +
+        `✅ <b>ស្ថានភាព:</b> <b>${ord.payment_method?.includes('KHQR') || ord.payment_slip_url ? 'PAID / PENDING CONFIRMATION' : 'CASH ON DELIVERY (COD)'}</b>\n\n` +
         `⏰ <b>ពេលវេលា:</b> ${new Date().toLocaleString('km-KH')}\n` +
         `📄 <i>ឯកសារវិក្កយបត្រ PDF ផ្លូវការត្រូវបានភ្ជាប់ជូនខាងក្រោម!</i>`;
 
       // Origin host for links
       const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      const invoiceUrl = `${origin}/invoice?id=${ord.order_id || ''}`;
+      const trackUrl = `${origin}/track?q=${ord.order_id || ''}`;
+
       inlineKeyboard = [
         [
-          { text: '📄 មើលវិក្កយបត្រពេញលេញ (View Invoice)', url: `${origin}/invoice?id=${ord.order_id || ''}` },
-          { text: '🚚 តាមដានឥវ៉ាន់ (Track Order)', url: `${origin}/track?q=${ord.order_id || ''}` }
+          { text: '📄 មើលវិក្កយបត្រពេញលេញ (View Invoice)', url: invoiceUrl },
+          { text: '🚚 តាមដានឥវ៉ាន់ (Track Order)', url: trackUrl }
         ]
       ];
+
+      if (ord.payment_slip_url) {
+        inlineKeyboard.push([
+          { text: '🧾 មើលបង្កាន់ដៃបង់ប្រាក់ KHQR', url: ord.payment_slip_url }
+        ]);
+      }
+
+      // If running on localhost, append the link as text in HTML since Telegram rejects localhost in inline_keyboard
+      if (!isValidTelegramUrl(invoiceUrl)) {
+        finalMessage += `\n🔗 <b>តំណភ្ជាប់វិក្កយបត្រ:</b> <a href="${invoiceUrl}">${invoiceUrl}</a>`;
+      }
+
+      // ⭐️ Send Slip Photo directly if uploaded by customer ⭐️
+      if (ord.payment_slip_url && token && chat) {
+        try {
+          await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chat,
+              photo: ord.payment_slip_url,
+              caption: `🧾 <b>បង្កាន់ដៃផ្ទេរប្រាក់ KHQR សម្រាប់កុម្ម៉ង់ #${ord.order_id || ''}</b>\n👤 អតិថិជន: <b>${ord.customer_name || 'អតិថិជន'}</b>\n💰 ទឹកប្រាក់: <b>$${totalNum.toFixed(2)}</b> (~ ${totalRiel.toLocaleString()} ៛)`,
+              parse_mode: 'HTML'
+            })
+          }).catch(pErr => console.warn('Telegram sendPhoto slip error:', pErr));
+        } catch (slipErr) {
+          console.warn('Slip photo send error:', slipErr);
+        }
+      }
 
       // ⭐️ Generate and send the actual PDF Document directly to Telegram ⭐️
       try {
@@ -171,6 +271,36 @@ export async function POST(request) {
         `${itemsList}\n` +
         `───────────────\n\n` +
         `💡 <i>សូមរៀបចំកុម្ម៉ង់ទំនិញចូលបន្ថែម ដើម្បីកុំឱ្យខកខានការលក់!</i>`;
+    } else if (action === 'z_report' && body.zReport) {
+      const z = body.zReport;
+      const isMatch = Math.abs(z.cashDiff || 0) < 0.01;
+      const diffSign = z.cashDiff > 0 ? `+${z.cashDiff.toFixed(2)} (លើស)` : `${z.cashDiff.toFixed(2)} (ខ្វះ)`;
+      const diffBadge = isMatch ? '✅ ស្មើគ្នាត្រឹមត្រូវ (Perfect Match)' : `⚠️ ${diffSign}`;
+      const rate = z.exchangeRate || 4100;
+
+      finalMessage = `📊 <b>របាយការណ៍បិទបញ្ជីវេនលក់ប្រចាំថ្ងៃ (DAILY Z-REPORT)</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🏪 <b>ហាង:</b> <b>${storeName || 'SABAY LUK'}</b>\n` +
+        `📅 <b>កាលបរិច្ឆេទ:</b> ${z.todayStr || new Date().toISOString().slice(0, 10)}\n` +
+        `⏰ <b>ម៉ោងបិទបញ្ជី:</b> ${z.closedAtTime || new Date().toLocaleTimeString('km-KH')}\n` +
+        `👤 <b>បេឡាករ / អ្នកបិទវេន:</b> <b>${z.closedBy || 'បេឡាករ'}</b>\n` +
+        `🧾 <b>សរុបវិក្កយបត្រលក់:</b> <b>${z.orderCount || 0} កុម្ម៉ង់</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `💵 <b>សាច់ប្រាក់ដុល្លារ ($):</b> <b>$${Number(z.systemCashSalesUSD || z.systemCashSales || 0).toFixed(2)}</b>\n` +
+        `🇰🇭 <b>សាច់ប្រាក់រៀល (៛):</b> <b>${Number(z.systemCashSalesKHR || Math.round((z.systemCashSales || 0) * rate)).toLocaleString()} ៛</b>\n` +
+        `📱 <b>ស្កេន ABA KHQR ($/៛):</b> <b>$${Number(z.systemKhqrSales || 0).toFixed(2)}</b> (≈ ${Math.round((z.systemKhqrSales || 0) * rate).toLocaleString()} ៛)\n` +
+        `💰 <b>ចំណូលលក់សរុបប្រចាំវេន:</b> <b>$${Number(z.systemTotalSales || 0).toFixed(2)}</b> (≈ ${Math.round((z.systemTotalSales || 0) * rate).toLocaleString()} ៛)\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🪙 <b>លុយអាប់ដើមវេន:</b> $${Number(z.startingCash || 0).toFixed(2)}\n` +
+        `📥 <b>លុយត្រូវមានក្នុងកេស (ប្រព័ន្ធ):</b> $${Number(z.expectedDrawerCash || 0).toFixed(2)}\n` +
+        `🔍 <b>លុយរាប់ជាក់ស្តែងក្នុងថត:</b>\n` +
+        `   • សាច់ប្រាក់ USD: $${Number(z.actualCashUSD || 0).toFixed(2)}\n` +
+        `   • សាច់ប្រាក់ KHR: ${Number(z.actualCashKHR || 0).toLocaleString()} ៛\n` +
+        `   • សរុបរួម (USD): <b>$${Number(z.actualCashTotalUSD || z.actualCash || 0).toFixed(2)}</b>\n` +
+        `⚖️ <b>ស្ថានភាពផ្ទៀងផ្ទាត់:</b> <b>${diffBadge}</b>\n` +
+        (z.notes ? `📝 <b>កំណត់ហេតុបិទវេន:</b> <i>${z.notes}</i>\n` : '') +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `⚡ <i>របាយការណ៍បិទបញ្ជីត្រូវបានកត់ត្រាចូលប្រព័ន្ធដោយជោគជ័យ!</i>`;
     }
 
     if (!finalMessage) {
@@ -192,8 +322,15 @@ export async function POST(request) {
       parse_mode: 'HTML'
     };
 
-    if (inlineKeyboard) {
-      payload.reply_markup = { inline_keyboard: inlineKeyboard };
+    if (Array.isArray(inlineKeyboard) && inlineKeyboard.length > 0) {
+      // Filter out any buttons with invalid, empty, or localhost URLs to avoid Telegram API 400 rejection
+      const sanitizedKeyboard = inlineKeyboard
+        .map(row => (Array.isArray(row) ? row.filter(btn => btn?.url && isValidTelegramUrl(btn.url)) : []))
+        .filter(row => row.length > 0);
+
+      if (sanitizedKeyboard.length > 0) {
+        payload.reply_markup = { inline_keyboard: sanitizedKeyboard };
+      }
     }
 
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

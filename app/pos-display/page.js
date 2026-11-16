@@ -19,9 +19,11 @@ export default function CustomerDisplayPage() {
     changeAmount: 0,
     receiptNo: '',
     customerName: '',
-    lastUpdated: Date.now()
+    lastUpdated: 0
   });
 
+  const [mounted, setMounted] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState(false); // Default false = White Theme as requested
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -52,11 +54,27 @@ export default function CustomerDisplayPage() {
     }
   ];
 
-  // Digital clock update every second
+  // Digital clock update every second & Theme initial load
   useEffect(() => {
+    setMounted(true);
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('sabay_customer_display_theme');
+      if (savedTheme === 'dark') setIsDarkTheme(true);
+      else if (savedTheme === 'light') setIsDarkTheme(false);
+    }
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const toggleTheme = () => {
+    setIsDarkTheme(prev => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sabay_customer_display_theme', next ? 'dark' : 'light');
+      }
+      return next;
+    });
+  };
 
   // Slide auto-change in Idle mode
   useEffect(() => {
@@ -144,36 +162,60 @@ export default function CustomerDisplayPage() {
   const grandTotalKHR = Math.round(grandTotalUSD * (displayState.exchangeRate || 4100));
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between font-sans selection:bg-orange-500 selection:text-white relative overflow-hidden">
+    <div className={`min-h-screen flex flex-col justify-between font-sans selection:bg-orange-500 selection:text-white relative overflow-hidden transition-colors duration-300 ${
+      isDarkTheme ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+    }`}>
       
       {/* Background Glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-orange-500/15 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute top-1/2 -right-40 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 left-1/3 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+        <div className={`absolute -top-40 -left-40 w-96 h-96 rounded-full blur-3xl transition-opacity duration-500 ${
+          isDarkTheme ? 'bg-orange-500/15 animate-pulse' : 'bg-orange-300/20'
+        }`}></div>
+        <div className={`absolute top-1/2 -right-40 w-[500px] h-[500px] rounded-full blur-3xl transition-opacity duration-500 ${
+          isDarkTheme ? 'bg-blue-600/10' : 'bg-amber-200/25'
+        }`}></div>
+        <div className={`absolute -bottom-40 left-1/3 w-96 h-96 rounded-full blur-3xl transition-opacity duration-500 ${
+          isDarkTheme ? 'bg-emerald-500/10' : 'bg-emerald-200/20'
+        }`}></div>
       </div>
 
       {/* TOP HEADER BAR */}
-      <header className="relative z-20 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-6 py-3.5 flex items-center justify-between">
+      <header className={`relative z-20 backdrop-blur-md px-6 py-3.5 flex items-center justify-between transition-colors duration-300 ${
+        isDarkTheme 
+          ? 'border-b border-slate-800/80 bg-slate-950/85' 
+          : 'border-b border-gray-200/90 bg-white/95 shadow-xs'
+      }`}>
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-lg shadow-orange-500/25">
             👟
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-black text-xl tracking-tight text-white">SABAY LUK</h1>
-              <span className="text-[10px] font-black uppercase tracking-wider bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-md">
+              <h1 className={`font-black text-xl tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                SABAY LUK
+              </h1>
+              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                isDarkTheme 
+                  ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' 
+                  : 'bg-orange-100 text-orange-700 border-orange-300'
+              }`}>
                 Customer Screen
               </span>
             </div>
-            <p className="text-[11px] font-bold text-slate-400">ហាងលក់ស្បែកជើងទាន់សម័យ & គុណភាពខ្ពស់</p>
+            <p className={`text-[11px] font-bold ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
+              ហាងលក់ស្បែកជើងទាន់សម័យ & គុណភាពខ្ពស់
+            </p>
           </div>
         </div>
 
         {/* Center: Live Connection status */}
-        <div className="hidden sm:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3.5 py-1.5 rounded-full text-xs font-bold shadow-inner">
+        <div className={`hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors ${
+          isDarkTheme 
+            ? 'bg-slate-900/90 border border-slate-800 text-slate-300 shadow-inner' 
+            : 'bg-white border border-gray-200 text-slate-700 shadow-2xs'
+        }`}>
           <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-ping' : 'bg-amber-500'}`}></span>
-          <span className="text-slate-300">
+          <span>
             {displayState.status === 'idle' && '🟢 រង់ចាំការកុម្ម៉ង់ (Ready for Orders)'}
             {displayState.status === 'scanning' && '🛍️ កំពុងគិតលុយទំនិញ (Scanning Items...)'}
             {displayState.status === 'checkout' && '💳 កំពុងរង់ចាំការទូទាត់ (Awaiting Payment)'}
@@ -181,21 +223,42 @@ export default function CustomerDisplayPage() {
           </span>
         </div>
 
-        {/* Right: Clock & Fullscreen button */}
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden md:block">
-            <div className="font-mono font-black text-base text-amber-400 tracking-wider">
-              {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+        {/* Right: Clock & Theme Toggle & Fullscreen button */}
+        <div className="flex items-center gap-2.5">
+          <div className="text-right hidden md:block" suppressHydrationWarning>
+            <div className={`font-mono font-black text-base tracking-wider ${
+              isDarkTheme ? 'text-amber-400' : 'text-orange-600'
+            }`}>
+              {mounted ? currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'}
             </div>
-            <div className="text-[10px] font-bold text-slate-400">
-              {currentTime.toLocaleDateString('km-KH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            <div className={`text-[10px] font-bold ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
+              {mounted ? currentTime.toLocaleDateString('km-KH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Sabay Luk POS'}
             </div>
           </div>
 
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-base border transition cursor-pointer ${
+              isDarkTheme
+                ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700 shadow-xs'
+                : 'bg-white hover:bg-gray-100 text-slate-700 border-gray-200 shadow-2xs'
+            }`}
+            title={isDarkTheme ? 'ប្តូរទៅផ្ទាំងពណ៌ស (Switch to Light Mode)' : 'ប្តូរទៅផ្ទាំងពណ៌ងងឹត (Switch to Dark Mode)'}
+          >
+            {isDarkTheme ? '☀️' : '🌙'}
+          </button>
+
+          {/* Fullscreen Button */}
           <button
             type="button"
             onClick={toggleFullscreen}
-            className="w-10 h-10 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm border border-slate-700 transition cursor-pointer"
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-sm border transition cursor-pointer ${
+              isDarkTheme
+                ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                : 'bg-white hover:bg-gray-100 text-slate-700 hover:text-slate-900 border-gray-200 shadow-2xs'
+            }`}
             title="ពង្រីកពេញអេក្រង់ (Toggle Fullscreen)"
           >
             {isFullscreen ? '⤦' : '⤢'}
@@ -214,50 +277,74 @@ export default function CustomerDisplayPage() {
             
             {/* Left Column: Big Welcome Greetings & Store Brand */}
             <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-              <div className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500/20 to-amber-500/20 border border-orange-500/40 text-orange-400 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-lg shadow-orange-500/10">
+              <div className={`inline-flex items-center gap-2 border px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-sm ${
+                isDarkTheme 
+                  ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/20 border-orange-500/40 text-orange-400' 
+                  : 'bg-gradient-to-r from-orange-100 to-amber-100 border-orange-300 text-orange-800'
+              }`}>
                 <span>👋</span>
                 <span>សូមស្វាគមន៍មកកាន់ហាងយើងខ្ញុំ!</span>
               </div>
 
               <div className="space-y-2">
-                <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight">
+                <h2 className={`text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight ${
+                  isDarkTheme ? 'text-white' : 'text-slate-950'
+                }`}>
                   SABAY LUK
                 </h2>
-                <h3 className="text-2xl sm:text-3xl font-black bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-400 bg-clip-text text-transparent">
+                <h3 className="text-2xl sm:text-3xl font-black bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 bg-clip-text text-transparent">
                   ស្បែកជើងទាន់សម័យ & ផាសុកភាព
                 </h3>
-                <p className="text-slate-400 text-sm sm:text-base max-w-xl font-medium leading-relaxed pt-2">
+                <p className={`text-sm sm:text-base max-w-xl font-medium leading-relaxed pt-2 ${
+                  isDarkTheme ? 'text-slate-400' : 'text-slate-600'
+                }`}>
                   ស្បែកជើងគុណភាពខ្ពស់ បាតទន់ស្រួលពាក់ រចនាម៉ូដទាន់សម័យ និងមានការធានាគុណភាពត្រឹមត្រូវជូនលោកអ្នក។
                 </p>
               </div>
 
               {/* Service Badges */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3">
-                <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-2xl flex items-center gap-3">
+                <div className={`p-3.5 rounded-2xl flex items-center gap-3 border transition ${
+                  isDarkTheme 
+                    ? 'bg-slate-900/80 border-slate-800' 
+                    : 'bg-white border-gray-200 shadow-sm'
+                }`}>
                   <span className="text-2xl">✨</span>
                   <div className="text-left">
-                    <span className="text-xs font-black text-white block">គុណភាពខ្ពស់</span>
-                    <span className="text-[10px] text-slate-400">ស្បែកសុទ្ធ & បាតទន់</span>
+                    <span className={`text-xs font-black block ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>គុណភាពខ្ពស់</span>
+                    <span className={`text-[10px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>ស្បែកសុទ្ធ & បាតទន់</span>
                   </div>
                 </div>
-                <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-2xl flex items-center gap-3">
+                <div className={`p-3.5 rounded-2xl flex items-center gap-3 border transition ${
+                  isDarkTheme 
+                    ? 'bg-slate-900/80 border-slate-800' 
+                    : 'bg-white border-gray-200 shadow-sm'
+                }`}>
                   <span className="text-2xl">⚡</span>
                   <div className="text-left">
-                    <span className="text-xs font-black text-white block">KHQR Pay</span>
-                    <span className="text-[10px] text-slate-400">ស្កេនគ្រប់ធនាគារ</span>
+                    <span className={`text-xs font-black block ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>KHQR Pay</span>
+                    <span className={`text-[10px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>ស្កេនគ្រប់ធនាគារ</span>
                   </div>
                 </div>
-                <div className="bg-slate-900/80 border border-slate-800 p-3.5 rounded-2xl flex items-center gap-3 col-span-2 sm:col-span-1">
+                <div className={`p-3.5 rounded-2xl flex items-center gap-3 col-span-2 sm:col-span-1 border transition ${
+                  isDarkTheme 
+                    ? 'bg-slate-900/80 border-slate-800' 
+                    : 'bg-white border-gray-200 shadow-sm'
+                }`}>
                   <span className="text-2xl">🤝</span>
                   <div className="text-left">
-                    <span className="text-xs font-black text-white block">ប្តូរទំហំបាន</span>
-                    <span className="text-[10px] text-slate-400">ក្នុងរយៈពេល ៣ ថ្ងៃ</span>
+                    <span className={`text-xs font-black block ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>ប្តូរទំហំបាន</span>
+                    <span className={`text-[10px] ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>ក្នុងរយៈពេល ៣ ថ្ងៃ</span>
                   </div>
                 </div>
               </div>
 
               {/* Cashier status notice */}
-              <div className="p-4 rounded-2xl bg-slate-900/50 border border-dashed border-slate-800 flex items-center gap-3 text-xs text-slate-400">
+              <div className={`p-4 rounded-2xl border border-dashed flex items-center gap-3 text-xs ${
+                isDarkTheme 
+                  ? 'bg-slate-900/50 border-slate-800 text-slate-400' 
+                  : 'bg-orange-50/70 border-orange-200 text-slate-700'
+              }`}>
                 <span className="text-xl">💳</span>
                 <span>អ្នកគិតលុយកំពុងរៀបចំប្រព័ន្ធ... សូមរង់ចាំការស្កេនទំនិញរបស់អ្នក!</span>
               </div>
@@ -265,7 +352,9 @@ export default function CustomerDisplayPage() {
 
             {/* Right Column: Featured Shoe Showcase Banner */}
             <div className="lg:col-span-5">
-              <div className="relative rounded-3xl overflow-hidden border-2 border-slate-800 bg-slate-900 shadow-2xl group">
+              <div className={`relative rounded-3xl overflow-hidden border-2 group shadow-2xl transition ${
+                isDarkTheme ? 'border-slate-800 bg-slate-900' : 'border-gray-200 bg-white'
+              }`}>
                 <div className="aspect-[4/3] w-full overflow-hidden relative">
                   <img 
                     src={currentSlide.image} 
@@ -287,18 +376,20 @@ export default function CustomerDisplayPage() {
                   {/* Caption */}
                   <div className="absolute bottom-4 left-4 right-4 space-y-1">
                     <h4 className="text-lg sm:text-xl font-black text-white drop-shadow-md">{currentSlide.title}</h4>
-                    <p className="text-xs text-slate-300 line-clamp-1">{currentSlide.subtitle}</p>
+                    <p className="text-xs text-slate-200 line-clamp-1">{currentSlide.subtitle}</p>
                   </div>
                 </div>
 
                 {/* Slider indicators */}
-                <div className="p-3 bg-slate-950/90 flex items-center justify-center gap-2 border-t border-slate-800">
+                <div className={`p-3 flex items-center justify-center gap-2 border-t ${
+                  isDarkTheme ? 'bg-slate-950/90 border-slate-800' : 'bg-white border-gray-200'
+                }`}>
                   {featuredSlides.map((_, i) => (
                     <button
                       key={i}
                       onClick={() => setFeaturedIndex(i)}
                       className={`h-2 rounded-full transition-all duration-300 ${
-                        i === featuredIndex ? 'w-8 bg-orange-500' : 'w-2 bg-slate-700 hover:bg-slate-600'
+                        i === featuredIndex ? 'w-8 bg-orange-500' : isDarkTheme ? 'w-2 bg-slate-700 hover:bg-slate-600' : 'w-2 bg-gray-300 hover:bg-gray-400'
                       }`}
                     ></button>
                   ))}
@@ -316,13 +407,25 @@ export default function CustomerDisplayPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full items-stretch animate-in fade-in duration-200">
             
             {/* Left: Scanned Items List */}
-            <div className="lg:col-span-7 flex flex-col bg-slate-900/80 rounded-3xl border border-slate-800 p-5 shadow-2xl backdrop-blur-md max-h-[70vh]">
-              <div className="flex items-center justify-between pb-3.5 border-b border-slate-800 mb-3">
+            <div className={`lg:col-span-7 flex flex-col rounded-3xl border p-5 shadow-xl backdrop-blur-md max-h-[70vh] transition ${
+              isDarkTheme 
+                ? 'bg-slate-900/85 border-slate-800' 
+                : 'bg-white border-gray-200 shadow-md'
+            }`}>
+              <div className={`flex items-center justify-between pb-3.5 border-b mb-3 ${
+                isDarkTheme ? 'border-slate-800' : 'border-gray-200'
+              }`}>
                 <div className="flex items-center gap-2">
                   <span className="text-xl">🛍️</span>
-                  <h3 className="font-black text-lg text-white">ទំនិញដែលបានស្កេន (Scanned Items)</h3>
+                  <h3 className={`font-black text-lg ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                    ទំនិញដែលបានស្កេន (Scanned Items)
+                  </h3>
                 </div>
-                <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-black px-3 py-1 rounded-full">
+                <span className={`text-xs font-black px-3 py-1 rounded-full border ${
+                  isDarkTheme 
+                    ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' 
+                    : 'bg-orange-100 text-orange-700 border-orange-300'
+                }`}>
                   {itemsCount} មុខទំនិញ
                 </span>
               </div>
@@ -334,10 +437,16 @@ export default function CustomerDisplayPage() {
                   return (
                     <div 
                       key={item.cartItemId || idx}
-                      className="bg-slate-950/70 border border-slate-800/80 hover:border-orange-500/40 p-3.5 rounded-2xl flex items-center justify-between gap-3 transition"
+                      className={`p-3.5 rounded-2xl flex items-center justify-between gap-3 border transition ${
+                        isDarkTheme 
+                          ? 'bg-slate-950/70 border-slate-800/80 hover:border-orange-500/40' 
+                          : 'bg-slate-50/90 border-gray-200/90 hover:border-orange-400 hover:bg-white shadow-2xs'
+                      }`}
                     >
                       <div className="flex items-center gap-3.5 min-w-0">
-                        <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                        <div className={`w-14 h-14 rounded-xl border overflow-hidden shrink-0 flex items-center justify-center ${
+                          isDarkTheme ? 'bg-slate-900 border-slate-800' : 'bg-white border-gray-200 shadow-2xs'
+                        }`}>
                           {item.image_url ? (
                             <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                           ) : (
@@ -345,19 +454,23 @@ export default function CustomerDisplayPage() {
                           )}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-black text-sm text-white truncate">{item.name}</h4>
-                          <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                          <h4 className={`font-black text-sm truncate ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
+                            {item.name}
+                          </h4>
+                          <div className={`flex items-center gap-2 mt-0.5 text-xs ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
                             {item.size && (
-                              <span className="bg-slate-800 text-slate-300 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                              <span className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                                isDarkTheme ? 'bg-slate-800 text-slate-300' : 'bg-gray-200 text-slate-800'
+                              }`}>
                                 Size: {item.size}
                               </span>
                             )}
                             {item.color && (
-                              <span className="text-[10px] text-slate-400 font-bold">
+                              <span className="text-[10px] font-bold">
                                 • {item.color}
                               </span>
                             )}
-                            <span className="font-mono text-slate-400">
+                            <span className={`font-mono ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
                               ${Number(item.price).toFixed(2)} × {item.qty}
                             </span>
                           </div>
@@ -365,10 +478,10 @@ export default function CustomerDisplayPage() {
                       </div>
 
                       <div className="text-right shrink-0">
-                        <div className="font-mono font-black text-base text-amber-400">
+                        <div className={`font-mono font-black text-base ${isDarkTheme ? 'text-amber-400' : 'text-orange-600'}`}>
                           ${rowTotal.toFixed(2)}
                         </div>
-                        <div className="text-[10px] font-bold text-slate-500">
+                        <div className={`text-[10px] font-bold ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>
                           {(rowTotal * (displayState.exchangeRate || 4100)).toLocaleString()} ៛
                         </div>
                       </div>
@@ -378,35 +491,55 @@ export default function CustomerDisplayPage() {
               </div>
 
               {/* Bottom Tip */}
-              <div className="pt-3 border-t border-slate-800/80 mt-2 flex items-center justify-between text-xs text-slate-500">
+              <div className={`pt-3 border-t mt-2 flex items-center justify-between text-xs ${
+                isDarkTheme ? 'border-slate-800/80 text-slate-500' : 'border-gray-200 text-slate-500'
+              }`}>
                 <span>💡 សូមពិនិត្យមើលទំនិញ និងទំហំស្បែកជើងឱ្យបានត្រឹមត្រូវ</span>
-                <span className="font-mono text-slate-400">1 USD = {(displayState.exchangeRate || 4100).toLocaleString()} KHR</span>
+                <span className={`font-mono ${isDarkTheme ? 'text-slate-400' : 'text-slate-600'}`}>
+                  1 USD = {(displayState.exchangeRate || 4100).toLocaleString()} KHR
+                </span>
               </div>
             </div>
 
             {/* Right: Big Price Board & Summary */}
-            <div className="lg:col-span-5 flex flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 rounded-3xl border-2 border-orange-500/30 p-6 shadow-2xl backdrop-blur-md">
+            <div className={`lg:col-span-5 flex flex-col justify-between rounded-3xl border-2 p-6 shadow-2xl backdrop-blur-md transition ${
+              isDarkTheme 
+                ? 'bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border-orange-500/30' 
+                : 'bg-white border-orange-300 shadow-xl'
+            }`}>
               <div className="space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-400">
+                <div className={`flex items-center justify-between pb-3 border-b ${
+                  isDarkTheme ? 'border-slate-800' : 'border-gray-200'
+                }`}>
+                  <span className={`text-xs font-black uppercase tracking-wider ${
+                    isDarkTheme ? 'text-slate-400' : 'text-slate-500'
+                  }`}>
                     សង្ខេបការទូទាត់ (Payment Summary)
                   </span>
-                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                  <span className={`text-xs font-bold flex items-center gap-1 ${
+                    isDarkTheme ? 'text-emerald-400' : 'text-emerald-600'
+                  }`}>
                     <span>●</span> កំពុងគិតលុយ
                   </span>
                 </div>
 
                 {/* Subtotal */}
-                <div className="flex justify-between items-center text-sm font-bold text-slate-300">
+                <div className={`flex justify-between items-center text-sm font-bold ${
+                  isDarkTheme ? 'text-slate-300' : 'text-slate-700'
+                }`}>
                   <span>តម្លៃសរុប (Subtotal):</span>
-                  <span className="font-mono text-base text-white">
+                  <span className={`font-mono text-base ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
                     ${Number(displayState.subtotal || 0).toFixed(2)}
                   </span>
                 </div>
 
                 {/* Discount (if any) */}
                 {Number(displayState.discountAmount || 0) > 0 && (
-                  <div className="flex justify-between items-center text-sm font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
+                  <div className={`flex justify-between items-center text-sm font-bold px-3 py-1.5 rounded-xl border ${
+                    isDarkTheme 
+                      ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' 
+                      : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                  }`}>
                     <span>បញ្ចុះតម្លៃ (Discount):</span>
                     <span className="font-mono font-black text-base">
                       -${Number(displayState.discountAmount).toFixed(2)}
@@ -416,9 +549,11 @@ export default function CustomerDisplayPage() {
 
                 {/* Tax (if any) */}
                 {Number(displayState.taxAmount || 0) > 0 && (
-                  <div className="flex justify-between items-center text-sm font-bold text-slate-300">
+                  <div className={`flex justify-between items-center text-sm font-bold ${
+                    isDarkTheme ? 'text-slate-300' : 'text-slate-700'
+                  }`}>
                     <span>ពន្ធអាករ VAT ({displayState.taxRate || 10}%):</span>
-                    <span className="font-mono text-base text-white">
+                    <span className={`font-mono text-base ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
                       +${Number(displayState.taxAmount).toFixed(2)}
                     </span>
                   </div>
@@ -426,22 +561,36 @@ export default function CustomerDisplayPage() {
               </div>
 
               {/* GIANT GRAND TOTAL BOX */}
-              <div className="my-6 p-6 rounded-3xl bg-gradient-to-tr from-orange-500/20 via-amber-500/15 to-orange-600/10 border-2 border-orange-500/40 text-center space-y-2 shadow-xl shadow-orange-500/10">
-                <span className="text-xs font-black uppercase tracking-widest text-orange-400 block">
+              <div className={`my-6 p-6 rounded-3xl border-2 text-center space-y-2 shadow-xl ${
+                isDarkTheme 
+                  ? 'bg-gradient-to-tr from-orange-500/20 via-amber-500/15 to-orange-600/10 border-orange-500/40 shadow-orange-500/10' 
+                  : 'bg-gradient-to-tr from-orange-50 via-amber-50 to-orange-100/70 border-orange-400 shadow-orange-500/10'
+              }`}>
+                <span className={`text-xs font-black uppercase tracking-widest block ${
+                  isDarkTheme ? 'text-orange-400' : 'text-orange-700'
+                }`}>
                   ទឹកប្រាក់ត្រូវទូទាត់សរុប (TOTAL DUE)
                 </span>
                 
-                <div className="text-5xl sm:text-6xl font-black text-amber-300 font-mono tracking-tight drop-shadow-md">
+                <div className={`text-5xl sm:text-6xl font-black font-mono tracking-tight drop-shadow-sm ${
+                  isDarkTheme ? 'text-amber-300' : 'text-orange-600'
+                }`}>
                   ${grandTotalUSD.toFixed(2)}
                 </div>
 
-                <div className="text-xl sm:text-2xl font-black text-slate-200">
+                <div className={`text-xl sm:text-2xl font-black ${
+                  isDarkTheme ? 'text-slate-200' : 'text-slate-800'
+                }`}>
                   ≈ {grandTotalKHR.toLocaleString()} រៀល (៛)
                 </div>
               </div>
 
               {/* Ready for Payment Notice */}
-              <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+              <div className={`p-3.5 rounded-2xl border text-center text-xs flex items-center justify-center gap-2 ${
+                isDarkTheme 
+                  ? 'bg-slate-950/80 border-slate-800 text-slate-400' 
+                  : 'bg-slate-50 border-gray-200 text-slate-700 shadow-2xs'
+              }`}>
                 <span>⚡</span>
                 <span>ទទួលការទូទាត់តាម <b>Bakong / ABA KHQR</b> និង <b>សាច់ប្រាក់សុទ្ធ (Cash)</b></span>
               </div>
@@ -454,44 +603,68 @@ export default function CustomerDisplayPage() {
         {/* MODE 3: CHECKOUT / PAYMENT (Prominent KHQR Code)          */}
         {/* ======================================================== */}
         {displayState.status === 'checkout' && (
-          <div className="max-w-4xl mx-auto w-full bg-slate-900 rounded-3xl border-2 border-orange-500/50 p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className={`max-w-4xl mx-auto w-full rounded-3xl border-2 p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 duration-200 transition ${
+            isDarkTheme ? 'bg-slate-900 border-orange-500/50' : 'bg-white border-orange-400 shadow-2xl'
+          }`}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
               
               {/* Left: Summary & Instruction */}
               <div className="space-y-5 text-center md:text-left">
-                <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider">
+                <div className={`inline-flex items-center gap-2 border px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider ${
+                  isDarkTheme 
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}>
                   <span>💳</span>
                   <span>ដំណាក់កាលទូទាត់ប្រាក់ (Payment Due)</span>
                 </div>
 
                 <div className="space-y-1">
-                  <h3 className="text-2xl sm:text-3xl font-black text-white">
+                  <h3 className={`text-2xl sm:text-3xl font-black ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
                     សូមស្កេនទូទាត់ប្រាក់
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className={`text-xs ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
                     លោកអ្នកអាចប្រើប្រាស់ App ធនាគារណាមួយក៏បាន ដើម្បីស្កេនទូទាត់ (ABA, ACLEDA, Bakong, Wing, Canadia...)
                   </p>
                 </div>
 
                 {/* Big Due Box */}
-                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-left space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">ចំនួនទឹកប្រាក់សរុប:</span>
-                  <div className="text-4xl font-black text-amber-300 font-mono">
+                <div className={`p-5 rounded-2xl border text-left space-y-1 ${
+                  isDarkTheme 
+                    ? 'bg-slate-950 border-slate-800' 
+                    : 'bg-orange-50 border-orange-200'
+                }`}>
+                  <span className={`text-[11px] font-bold block uppercase tracking-wider ${
+                    isDarkTheme ? 'text-slate-400' : 'text-slate-600'
+                  }`}>
+                    ចំនួនទឹកប្រាក់សរុប:
+                  </span>
+                  <div className={`text-4xl font-black font-mono ${
+                    isDarkTheme ? 'text-amber-300' : 'text-orange-600'
+                  }`}>
                     ${grandTotalUSD.toFixed(2)}
                   </div>
-                  <div className="text-lg font-bold text-slate-300">
+                  <div className={`text-lg font-bold ${
+                    isDarkTheme ? 'text-slate-300' : 'text-slate-800'
+                  }`}>
                     ≈ {grandTotalKHR.toLocaleString()} ៛
                   </div>
                 </div>
 
                 {/* Bank Support Logos */}
                 <div className="pt-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-2">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider block mb-2 ${
+                    isDarkTheme ? 'text-slate-500' : 'text-slate-400'
+                  }`}>
                     ទ្រទ្រង់គ្រប់ធនាគារសមាជិកបាគង (KHQR Standard):
                   </span>
                   <div className="flex flex-wrap gap-2 justify-center md:justify-start">
                     {['ABA PAY', 'BAKONG', 'ACLEDA', 'WING', 'CANADIA'].map(b => (
-                      <span key={b} className="text-[10px] font-black bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700">
+                      <span key={b} className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${
+                        isDarkTheme 
+                          ? 'bg-slate-800 text-slate-300 border-slate-700' 
+                          : 'bg-gray-100 text-slate-700 border-gray-200'
+                      }`}>
                         {b}
                       </span>
                     ))}
@@ -532,36 +705,48 @@ export default function CustomerDisplayPage() {
         {/* MODE 4: PAYMENT COMPLETED STATE (Success Celebration)    */}
         {/* ======================================================== */}
         {displayState.status === 'completed' && (
-          <div className="max-w-xl mx-auto w-full text-center bg-slate-900 border-2 border-emerald-500/50 rounded-3xl p-8 sm:p-10 shadow-2xl animate-in zoom-in-95 duration-300 space-y-6">
-            <div className="w-24 h-24 rounded-full bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400 flex items-center justify-center text-5xl mx-auto shadow-xl shadow-emerald-500/25 animate-bounce">
+          <div className={`max-w-xl mx-auto w-full text-center border-2 rounded-3xl p-8 sm:p-10 shadow-2xl animate-in zoom-in-95 duration-300 space-y-6 transition ${
+            isDarkTheme 
+              ? 'bg-slate-900 border-emerald-500/50' 
+              : 'bg-white border-emerald-400 shadow-xl'
+          }`}>
+            <div className="w-24 h-24 rounded-full bg-emerald-500/20 border-2 border-emerald-500 text-emerald-500 flex items-center justify-center text-5xl mx-auto shadow-xl shadow-emerald-500/25 animate-bounce">
               ✓
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-3xl sm:text-4xl font-black text-white">
+              <h3 className={`text-3xl sm:text-4xl font-black ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
                 ការទូទាត់ទទួលបានជោគជ័យ!
               </h3>
-              <p className="text-sm font-bold text-emerald-400">
+              <p className={`text-sm font-bold ${isDarkTheme ? 'text-emerald-400' : 'text-emerald-600'}`}>
                 Payment Received Successfully!
               </p>
             </div>
 
             {/* Receipt detail snippet */}
-            <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-sm space-y-2 text-left">
+            <div className={`p-5 rounded-2xl border text-sm space-y-2 text-left ${
+              isDarkTheme ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-gray-200'
+            }`}>
               {displayState.receiptNo && (
-                <div className="flex justify-between border-b border-slate-800 pb-1.5 font-bold">
-                  <span className="text-slate-400">លេខវិក្កយបត្រ (Receipt No):</span>
-                  <span className="font-mono text-amber-400">#{displayState.receiptNo}</span>
+                <div className={`flex justify-between border-b pb-1.5 font-bold ${
+                  isDarkTheme ? 'border-slate-800' : 'border-gray-200'
+                }`}>
+                  <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-500'}>លេខវិក្កយបត្រ (Receipt No):</span>
+                  <span className={`font-mono ${isDarkTheme ? 'text-amber-400' : 'text-orange-600'}`}>
+                    #{displayState.receiptNo}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between font-bold">
-                <span className="text-slate-400">ទឹកប្រាក់សរុប (Total Paid):</span>
-                <span className="text-emerald-400 font-mono text-base font-black">
+                <span className={isDarkTheme ? 'text-slate-400' : 'text-slate-500'}>ទឹកប្រាក់សរុប (Total Paid):</span>
+                <span className="text-emerald-500 font-mono text-base font-black">
                   ${grandTotalUSD.toFixed(2)} ({grandTotalKHR.toLocaleString()} ៛)
                 </span>
               </div>
               {Number(displayState.changeAmount || 0) > 0 && (
-                <div className="flex justify-between border-t border-slate-800 pt-1.5 font-black text-amber-300">
+                <div className={`flex justify-between border-t pt-1.5 font-black ${
+                  isDarkTheme ? 'border-slate-800 text-amber-300' : 'border-gray-200 text-orange-600'
+                }`}>
                   <span>ប្រាក់អាប់ជូនភ្ញៀវ (Change):</span>
                   <span className="font-mono text-base">
                     ${Number(displayState.changeAmount).toFixed(2)} ({(Number(displayState.changeAmount) * 4100).toLocaleString()} ៛)
@@ -570,7 +755,7 @@ export default function CustomerDisplayPage() {
               )}
             </div>
 
-            <p className="text-xs text-slate-400 font-medium">
+            <p className={`text-xs font-medium ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
               🙏 សូមអរគុណសម្រាប់ការគាំទ្រ Sabay Luk! សូមអញ្ជើញមកម្តងទៀត!
             </p>
           </div>
@@ -579,7 +764,11 @@ export default function CustomerDisplayPage() {
       </main>
 
       {/* FOOTER BAR */}
-      <footer className="relative z-20 border-t border-slate-800/80 bg-slate-950/80 px-6 py-3 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
+      <footer className={`relative z-20 px-6 py-3 flex flex-wrap items-center justify-between text-xs gap-2 transition-colors duration-300 ${
+        isDarkTheme 
+          ? 'border-t border-slate-800/80 bg-slate-950/80 text-slate-400' 
+          : 'border-t border-gray-200 bg-white/95 text-slate-600 shadow-xs'
+      }`}>
         <div className="flex items-center gap-2">
           <span>📍 អាសយដ្ឋាន៖ រាជធានីភ្នំពេញ</span>
           <span>•</span>
@@ -587,10 +776,14 @@ export default function CustomerDisplayPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-slate-500 font-mono text-[11px]">SABAY LUK POS DUAL SCREEN v2.0</span>
+          <span className={`font-mono text-[11px] ${isDarkTheme ? 'text-slate-500' : 'text-slate-400'}`}>
+            SABAY LUK POS DUAL SCREEN v2.0
+          </span>
           <Link 
             href="/admin/dashboard"
-            className="text-[10px] font-bold text-slate-500 hover:text-slate-300 underline"
+            className={`text-[10px] font-bold underline ${
+              isDarkTheme ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-700'
+            }`}
           >
             ផ្ទាំងគ្រប់គ្រង Cashier
           </Link>

@@ -1,0 +1,9 @@
+{
+  "name": "Sabay Luk",
+  "short_name": "Sabay Luk",
+  "start_url": "/__disabled_pwa__",
+  "id": "/__disabled_pwa__",
+  "scope": "/__disabled_pwa__",
+  "display": "browser",
+  "display_override": ["browser"]
+}

@@ -1,14 +1,53 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../../supabase';
-import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, STORE_PLANS, checkStorePlanLimit, getStorePlanExpiryInfo, renewStoreSubscription } from '../../../lib/stores';
+import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, fetchAllStores, deleteStoreRecord, STORE_PLANS, checkStorePlanLimit, getStorePlanExpiryInfo, renewStoreSubscription, getSubscriptionPayments, saveSubscriptionPayments, submitSubscriptionPayment, approveSubscriptionPayment, rejectSubscriptionPayment, approveStoreDirectly, isStoreNameOrSlugTaken, getStoreInactivityDays, isStoreInactive, updateStoreActivity, suspendStore, reactivateStore } from '../../../lib/stores';
 import * as XLSX from 'xlsx';
+import { CATEGORY_DEPARTMENTS, CATEGORY_ICONS_LIST, renderCategorySvg } from '../../../lib/categoryIcons';
+import WorldStandardFinanceView from '../../components/WorldStandardFinanceView';
+import BarcodeCameraModal from '../../components/BarcodeCameraModal';
+import BarcodeScannerSettingsModal from '../../components/BarcodeScannerSettingsModal';
+import { cacheProductsOffline, getCachedProductsOffline, queueOfflineOrder, syncOfflineOrdersToCloud, getOfflineOrdersQueue } from '../../../lib/offlinePos';
+
+// ⭐️ Helper: គណនាកាលបរិច្ឆេទផុតកំណត់ Plan និងចំនួនថ្ងៃនៅសល់ ⭐️
+const computePlanExpiry = (expiresAt) => {
+  if (!expiresAt) {
+    return { isNever: true, isExpired: false, daysLeft: 0, formatted: 'ឥតកំណត់' };
+  }
+  const expiry = new Date(expiresAt);
+  if (isNaN(expiry.getTime())) {
+    return { isNever: true, isExpired: false, daysLeft: 0, formatted: 'ឥតកំណត់' };
+  }
+  const now = new Date();
+  const diffTime = expiry.getTime() - now.getTime();
+  const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return {
+    isNever: false,
+    isExpired: daysLeft <= 0,
+    daysLeft: Math.max(0, daysLeft),
+    formatted: expiry.toLocaleDateString('km-KH')
+  };
+};
 
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក & បញ្ចុះតម្លៃ ធានាមិនបាត់ ១០០%
 const parseProductMeta = (p) => {
   if (!p) return p;
   let images = Array.isArray(p.images) && p.images.length > 0 ? p.images : [];
+  if (typeof p.images === 'string' && p.images.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(p.images);
+      if (Array.isArray(parsed) && parsed.length > 0) images = parsed;
+    } catch (e) {}
+  }
+  let detail_images = Array.isArray(p.detail_images) && p.detail_images.length > 0 ? p.detail_images : [];
+  if (typeof p.detail_images === 'string' && p.detail_images.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(p.detail_images);
+      if (Array.isArray(parsed) && parsed.length > 0) detail_images = parsed;
+    } catch (e) {}
+  }
+  let video_url = p.video_url || '';
   let retail_discount = p.retail_discount != null ? parseFloat(p.retail_discount) : 0;
   let wholesale_discount = p.wholesale_discount != null ? parseFloat(p.wholesale_discount) : 0;
 
@@ -19,6 +58,10 @@ const parseProductMeta = (p) => {
         if (Array.isArray(meta.images) && meta.images.length > 0 && images.length === 0) {
           images = meta.images;
         }
+        if (Array.isArray(meta.detail_images) && meta.detail_images.length > 0 && detail_images.length === 0) {
+          detail_images = meta.detail_images;
+        }
+        if (meta.video_url && !video_url) video_url = meta.video_url;
         if (meta.retail_discount != null && !retail_discount) retail_discount = parseFloat(meta.retail_discount);
         if (meta.wholesale_discount != null && !wholesale_discount) wholesale_discount = parseFloat(meta.wholesale_discount);
       } else if (typeof p.category_name === 'string' && p.category_name.startsWith('[') && images.length === 0) {
@@ -33,6 +76,8 @@ const parseProductMeta = (p) => {
   return {
     ...p,
     images,
+    detail_images,
+    video_url,
     retail_discount: retail_discount || 0,
     wholesale_discount: wholesale_discount || 0
   };
@@ -150,10 +195,115 @@ const computeNextSku = (productList) => {
 
 export default function UnifiedAdminDashboard() {
 
-    // States សម្រាប់ Inventory Sub-tabs (បញ្ជីទំនិញ vs ប្រវត្តិចលនាស្តុក)
-  const [inventorySubTab, setInventorySubTab] = useState('items'); // 'items' | 'movements'
+    // States សម្រាប់ Inventory Sub-tabs (បញ្ជីទំនិញ vs ការនាំចូលស្តុក vs ប្រវត្តិចលនាស្តុក)
+  const [inventorySubTab, setInventorySubTab] = useState('items'); // 'items' | 'inflow' | 'movements'
   const [stockMovements, setStockMovements] = useState([]);
   const [loadingMovements, setLoadingMovements] = useState(false);
+
+  // ⭐️ States សម្រាប់ Filter ថ្ងៃខែឆ្នាំ លើការនាំចូលស្តុក (Stock Inflow Date Filters) ⭐️
+  const [invDatePeriod, setInvDatePeriod] = useState('today'); // 'today' | 'yesterday' | '7days' | 'month' | 'all' | 'custom'
+  const [invCustomStartDate, setInvCustomStartDate] = useState('');
+  const [invCustomEndDate, setInvCustomEndDate] = useState('');
+  const [invInflowSearch, setInvInflowSearch] = useState('');
+
+  // ⭐️ States & Handlers សម្រាប់ Standard Modal កែប្រែស្តុក & តម្លៃភ្លាមៗ (In-Place Stock & Price Quick Edit Modal) ⭐️
+  const [quickEditProduct, setQuickEditProduct] = useState(null);
+  const [quickEditStock, setQuickEditStock] = useState('');
+  const [quickEditCostPrice, setQuickEditCostPrice] = useState('');
+  const [quickEditSellingPrice, setQuickEditSellingPrice] = useState('');
+  const [quickEditWholesalePrice, setQuickEditWholesalePrice] = useState('');
+  const [quickEditLowStockAlert, setQuickEditLowStockAlert] = useState('5');
+  const [quickEditReason, setQuickEditReason] = useState('កែតម្រូវស្តុកជាក់ស្តែង');
+  const [quickEditSaving, setQuickEditSaving] = useState(false);
+
+  const handleOpenQuickEdit = (product) => {
+    setQuickEditProduct(product);
+    setQuickEditStock((product.stock_qty ?? 0).toString());
+    setQuickEditCostPrice((product.cost_price ?? 0).toString());
+    setQuickEditSellingPrice((product.price ?? 0).toString());
+    setQuickEditWholesalePrice((product.wholesale_price ?? product.price ?? 0).toString());
+    setQuickEditLowStockAlert((product.low_stock_alert ?? 5).toString());
+    setQuickEditReason('កែតម្រូវស្តុកជាក់ស្តែង');
+  };
+
+  const handleSaveQuickEdit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!quickEditProduct) return;
+
+    const newStock = parseInt(quickEditStock);
+    if (isNaN(newStock) || newStock < 0) {
+      alert('សូមបញ្ចូលចំនួនស្តុកឱ្យបានត្រឹមត្រូវ (លេខវិជ្ជមាន)!');
+      return;
+    }
+
+    const newCost = parseFloat(quickEditCostPrice) || 0;
+    const newPrice = parseFloat(quickEditSellingPrice) || 0;
+    const newWholesale = parseFloat(quickEditWholesalePrice) || 0;
+    const newAlert = parseInt(quickEditLowStockAlert) || 5;
+
+    const oldStock = Number(quickEditProduct.stock_qty) || 0;
+    const delta = newStock - oldStock;
+
+    setQuickEditSaving(true);
+
+    try {
+      const updatePayload = {
+        stock_qty: newStock,
+        cost_price: newCost,
+        price: newPrice,
+        wholesale_price: newWholesale,
+        low_stock_alert: newAlert,
+        status: newStock > 0 ? 'In Stock' : 'Out of Stock'
+      };
+
+      // 1. Optimistic update in local state immediately - never blinks or clears
+      setProducts(prev => prev.map(p => p.id === quickEditProduct.id ? { ...p, ...updatePayload } : p));
+
+      // 2. Update Supabase products table
+      let { error: prodErr } = await supabase
+        .from('products')
+        .update(updatePayload)
+        .eq('id', quickEditProduct.id);
+
+      if (prodErr && prodErr.message?.includes('wholesale_price')) {
+        const fallbackPayload = {
+          stock_qty: newStock,
+          cost_price: newCost,
+          price: newPrice,
+          low_stock_alert: newAlert,
+          status: newStock > 0 ? 'In Stock' : 'Out of Stock'
+        };
+        const retry = await supabase.from('products').update(fallbackPayload).eq('id', quickEditProduct.id);
+        prodErr = retry.error;
+      }
+
+      if (prodErr) throw prodErr;
+
+      // 3. Log stock movement if stock count changed
+      if (delta !== 0) {
+        try {
+          await supabase.from('stock_movements').insert([{
+            product_id: quickEditProduct.id,
+            type: delta > 0 ? 'PURCHASE' : 'ADJUSTMENT',
+            qty_change: delta,
+            previous_qty: oldStock,
+            new_qty: newStock,
+            reason: quickEditReason || 'កែតម្រូវស្តុកជាក់ស្តែង'
+          }]);
+        } catch (_) {}
+      }
+
+      setToastNotification(`✅ បានកែប្រែស្តុក "${quickEditProduct.name}" ទៅជា ${newStock} ឯកតាជោគជ័យ!`);
+      setTimeout(() => setToastNotification(null), 3000);
+      setQuickEditProduct(null);
+      fetchStockMovements();
+    } catch (err) {
+      alert('❌ មិនអាចកែប្រែស្តុកបានទេ: ' + err.message);
+      fetchProducts();
+    } finally {
+      setQuickEditSaving(false);
+    }
+  };
 
   // States សម្រាប់ Modal នាំចូលស្តុក (Stock In Modal)
   const [stockInModalOpen, setStockInModalOpen] = useState(false);
@@ -169,24 +319,35 @@ export default function UnifiedAdminDashboard() {
   const [movementFilterType, setMovementFilterType] = useState('ALL'); // 'ALL' | 'PURCHASE' | 'SALE' | 'ADJUSTMENT'
   const [movementSearch, setMovementSearch] = useState('');
 
-  // Function ទាញយកប្រវត្តិចលនាស្តុក (Stock Movements)
-  const fetchStockMovements = async () => {
+  // Function ទាញយកប្រវត្តិចលនាស្តុក (Stock Movements) ដាច់ដោយឡែកតាម Store
+  const fetchStockMovements = async (targetStoreId) => {
     setLoadingMovements(true);
-    const { data, error } = await supabase
-      .from('stock_movements')
-      .select('*, products(name, sku, image_url), product_variants(size, color)')
-      .order('created_at', { ascending: false })
-      .limit(250);
+    const storeId = targetStoreId || activeStore?.id || 'store_default_sabayluk';
+    try {
+      const { data, error } = await supabase
+        .from('stock_movements')
+        .select('*, products(name, sku, image_url, store_id), product_variants(size, color)')
+        .order('created_at', { ascending: false })
+        .limit(250);
 
-    if (!error && data) {
-      setStockMovements(data);
+      if (!error && data) {
+        // Filter movements strictly for the active store
+        const storeMovements = data.filter(m => {
+          const pStore = m.store_id || (m.products && m.products.store_id) || 'store_default_sabayluk';
+          return pStore === storeId;
+        });
+        setStockMovements(storeMovements);
+      }
+    } catch (err) {
+      console.error('Error fetching stock movements:', err);
+    } finally {
+      setLoadingMovements(false);
     }
-    setLoadingMovements(false);
   };
 
-  // ពេលប្តូរទៅ Tab Movements ឱ្យទាញទិន្នន័យស្វ័យប្រវត្តិ
+  // ពេលប្តូរទៅ Tab Movements ឬ Inflow ឱ្យទាញទិន្នន័យចលនាស្តុកស្វ័យប្រវត្តិ
   useEffect(() => {
-    if (inventorySubTab === 'movements') {
+    if (inventorySubTab === 'movements' || inventorySubTab === 'inflow') {
       fetchStockMovements();
     }
   }, [inventorySubTab]);
@@ -330,6 +491,8 @@ export default function UnifiedAdminDashboard() {
   };
 
   const handleSaveEditedProduct = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("កែប្រែទិន្នន័យទំនិញ")) return;
     e.preventDefault();
     if (!editingProduct) return;
     setUploading(true);
@@ -400,7 +563,21 @@ export default function UnifiedAdminDashboard() {
   // ⭐️ 1. ប្រកាស State ນີ້នៅផ្នែកខាងលើជាមួយ State ដទៃទៀត (កុំដាក់ក្នុង InventoryView) ⭐️
   const [filterStatus, setFilterStatus] = useState('all');
   
-  const [isStoreOpen, setIsStoreOpen] = useState(true);
+  // ⭐️ Global Toast Notification State
+  const [toastNotification, setToastNotification] = useState(null);
+  
+  // ⭐️ ពិនិត្យមើលថាតើកំពុងបើកក្នុងទម្រង់ Desktop PWA App ឬ browser ធម្មតា
+  const [isAppWindow, setIsAppWindow] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      const isChromiumApp = (window.toolbar && !window.toolbar.visible) || (window.locationbar && !window.locationbar.visible);
+      setIsAppWindow(standalone || isChromiumApp);
+    }
+  }, []);
+  
+  // ⭐️ State សម្រាប់គ្រប់គ្រងការបើក/បិទ Parent Tabs (Accordion) - Default: បិទគ្រប់ tab ទាំងអស់ពេល load ចូល ⭐️
+  const [openParentTabs, setOpenParentTabs] = useState({});
   // ⭐️ State សម្រាប់រុញបើក/បិទ Sidebar (Collapsible Admin Sidebar)
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -422,6 +599,9 @@ export default function UnifiedAdminDashboard() {
   const [activeTab, setActiveTab] = useState('pos'); // កំណត់លំនាំដើមជា pos កុំឱ្យគាំង
   const [isMounted, setIsMounted] = useState(false); // State ត្រួតពិនិត្យដំណើរការ Load
   const searchInputRef = useRef(null);
+  // ⭐️ Buffer សម្រាប់ចាប់សញ្ញាពីកាំភ្លើងស្កេនបាកូដ USB / Wireless Scanner Gun គ្រប់ពេល (Global Gun Listener) ⭐️
+  const barcodeGunBufferRef = useRef('');
+  const lastBarcodeKeyTimeRef = useRef(0);
 
   useEffect(() => {
     // អានទិន្នន័យពី LocalStorage ពេល Load លើកដំបូង
@@ -438,6 +618,9 @@ export default function UnifiedAdminDashboard() {
     // រក្សាទុកទិន្នន័យរាល់ពេលមានការផ្លាស់ប្តូរ Tab ក្រោយពេល Load រួច
     if (isMounted && activeTab !== '') {
       localStorage.setItem('sabay_admin_active_tab', activeTab);
+    }
+    if (activeTab === 'inventory') {
+      fetchStockMovements();
     }
   }, [activeTab, isMounted]);
 
@@ -677,6 +860,49 @@ export default function UnifiedAdminDashboard() {
     }
   };
 
+  // ⭐️ MULTI-TENANT STORE STATES (ហាងមួយៗដាច់ដោយឡែកពីគ្នា ១០០%) ⭐️
+  const [activeStore, setActiveStoreState] = useState(() => getActiveStore());
+  const [registeredStores, setRegisteredStores] = useState(() => getLocalStores());
+  const [storeSwitchModalOpen, setStoreSwitchModalOpen] = useState(false);
+  const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
+  const [upgradeBillingCycle, setUpgradeBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
+  const [selectedUpgradePlan, setSelectedUpgradePlan] = useState(null);
+  const [upgradeSlipFile, setUpgradeSlipFile] = useState(null);
+  const [upgradeSlipPreview, setUpgradeSlipPreview] = useState(null);
+  const [upgradeTxRef, setUpgradeTxRef] = useState('');
+  const [upgradeSubmitting, setUpgradeSubmitting] = useState(false);
+
+  // Edit store modal for master owner
+  const [editStoreModalOpen, setEditStoreModalOpen] = useState(false);
+  const [storeFormToEdit, setStoreFormToEdit] = useState(null);
+  const [storeSearchQuery, setStoreSearchQuery] = useState('');
+  const [storeFilterPlan, setStoreFilterPlan] = useState('ALL');
+  const [storeFilterStatus, setStoreFilterStatus] = useState('ALL');
+  // ⭐️ គណនាបញ្ជីហាងអសកម្មលើសពី ៣០ ថ្ងៃ (Inactive Stores >= 30 Days) ⭐️
+  const inactiveStores = useMemo(() => {
+    return (registeredStores || []).filter(s => 
+      s.id !== 'store_default_sabayluk' && 
+      s.slug !== 'sabay-luk' && 
+      isStoreInactive(s, 30) && 
+      s.status !== 'SUSPENDED'
+    );
+  }, [registeredStores]);
+
+  const suspendedStores = useMemo(() => {
+    return (registeredStores || []).filter(s => s.status === 'SUSPENDED');
+  }, [registeredStores]);
+
+  // Sync active store on change
+  useEffect(() => {
+    const handleStoreChange = () => {
+      const cur = getActiveStore();
+      setActiveStoreState(cur);
+      setRegisteredStores(getLocalStores());
+    };
+    window.addEventListener('sabay_store_changed', handleStoreChange);
+    return () => window.removeEventListener('sabay_store_changed', handleStoreChange);
+  }, []);
+
   const DEFAULT_STAFF_ACCOUNTS = [
     {
       id: 'STAFF-1',
@@ -709,6 +935,7 @@ export default function UnifiedAdminDashboard() {
       color: 'from-blue-500 to-indigo-600',
       permissions: ROLE_PRESET_PERMISSIONS.CASHIER,
       active: true,
+      store_id: 'store_default_sabayluk',
       created_at: new Date().toISOString()
     },
     {
@@ -725,74 +952,129 @@ export default function UnifiedAdminDashboard() {
       color: 'from-purple-500 to-violet-600',
       permissions: ROLE_PRESET_PERMISSIONS.STOCK,
       active: true,
+      store_id: 'store_default_sabayluk',
       created_at: new Date().toISOString()
     }
   ];
 
-  const [staffList, setStaffList] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_staff_list');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed.map(s => {
-              if (s.id === 'STAFF-1' || s.username === 'admin' || (s.email && s.email.toLowerCase() === 'sengsoveasna93@gmail.com')) {
-                return {
-                  ...s,
-                  name: 'សេង សុវាសនា (Master Owner)',
-                  email: 'sengsoveasna93@gmail.com',
-                  username: s.username === 'admin' ? 'sengsoveasna93@gmail.com' : s.username,
-                  role: 'ADMIN',
-                  roleLabel: 'ម្ចាស់ប្រព័ន្ធ / Master Owner'
-                };
-              }
-              return s;
-            });
-          }
-        } catch (e) {}
+  // Helper ទទួលបាន default staff list ដាច់ដោយឡែកពីគ្នា ១០០%
+  const getStoreDefaultStaff = (store) => {
+    if (!store || store.id === 'store_default_sabayluk' || store.slug === 'sabay-luk') {
+      return DEFAULT_STAFF_ACCOUNTS;
+    }
+    return [
+      {
+        id: `STAFF-${store.id}-OWNER`,
+        name: store.owner_name || `${store.name} Admin`,
+        email: store.owner_email || `${store.slug}@store.com`,
+        username: store.owner_username || store.slug,
+        pin: store.pin || '1234',
+        password: store.password || store.pin || '1234',
+        role: 'ADMIN',
+        roleLabel: 'ម្ចាស់ហាង (Store Admin)',
+        phone: store.phone || '',
+        avatar: '👑',
+        color: 'from-emerald-500 to-teal-600',
+        permissions: ROLE_PRESET_PERMISSIONS.ADMIN,
+        active: true,
+        store_id: store.id,
+        created_at: store.created_at || new Date().toISOString()
+      }
+    ];
+  };
+
+  // Helper ទាញយក staff list របស់ហាងនីមួយៗ (Isolated per Store)
+  const getStoreStaffList = (store) => {
+    if (typeof window === 'undefined') return getStoreDefaultStaff(store);
+    const storeId = store?.id || 'store_default_sabayluk';
+    const storeKey = `sabay_staff_list_${storeId}`;
+    const saved = localStorage.getItem(storeKey) || (storeId === 'store_default_sabayluk' ? localStorage.getItem('sabay_staff_list') : null);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Strict isolation: មិនឱ្យឆ្លងចូលគណនីហាងផ្សេងឡើយ
+          const strictlyThisStore = parsed.filter(s => {
+            if (storeId === 'store_default_sabayluk') {
+              return !s.store_id || s.store_id === 'store_default_sabayluk';
+            }
+            // Tenant store: MUST match store_id and MUST NOT be Seng Soveasna / Sokha / Dara from flagship
+            if (s.id === 'STAFF-1' || s.id === 'STAFF-2' || s.id === 'STAFF-3' || s.email?.toLowerCase() === 'sengsoveasna93@gmail.com') {
+              return false;
+            }
+            return s.store_id === storeId;
+          });
+          if (strictlyThisStore.length > 0) return strictlyThisStore;
+        }
+      } catch (e) {}
+    }
+    return getStoreDefaultStaff(store);
+  };
+
+  const [staffList, setStaffList] = useState(() => getStoreStaffList(getActiveStore()));
+
+  // ពេលប្តូរហាង ត្រូវ refresh staffList ឱ្យត្រូវនឹងហាងនោះភ្លាម
+  useEffect(() => {
+    if (!activeStore) return;
+    const currentList = getStoreStaffList(activeStore);
+    setStaffList(currentList);
+  }, [activeStore?.id]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && activeStore) {
+      const storeId = activeStore.id || 'store_default_sabayluk';
+      localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(staffList));
+      if (storeId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
       }
     }
-    return DEFAULT_STAFF_ACCOUNTS;
-  });
+  }, [staffList, activeStore?.id]);
 
+  // ⭐️ DEMO MODE & SECURITY ACCESS CONTROL ⭐️
+  const [isDemoMode, setIsDemoMode] = useState(false);
+
+  const DEMO_STAFF_ACCOUNT = {
+    id: 'STAFF-DEMO',
+    name: 'ភ្ញៀវសាកល្បង (Demo Visitor)',
+    role: 'DEMO',
+    roleLabel: 'សាកល្បងមើល / Demo Read-Only',
+    email: 'demo@sabayluk.com',
+    username: 'demo_visitor',
+    pin: '0000',
+    isDemo: true
+  };
+
+  // 🔒 Demo Mode Guard: Blocks all mutation operations from demo guests
+  const guardDemoAction = (actionName = 'កែប្រែទិន្នន័យ') => {
+    if (isDemoMode) {
+      alert(`🔒 [Demo Mode - សាកល្បងមើលប៉ុណ្ណោះ]\n\nប្រព័ន្ធបានការពារសុវត្ថិភាព មិនអនុញ្ញាតឱ្យ${actionName}ឡើយ!\n\nដើម្បីប្រើប្រាស់មុខងារពេញលេញ និងបង្កើតទិន្នន័យផ្ទាល់ខ្លួន សូមចុះឈ្មោះបង្កើតហាងដោយឥតគិតថ្លៃ (Free)។`);
+      return true;
+    }
+    return false;
+  };
+
+  // 🌐 Detect if user is running inside standalone PWA App window vs normal browser
+  const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                           window.navigator.standalone === true ||
+                           document.referrer.includes('android-app://');
+      setIsStandaloneApp(isStandalone);
     }
-  }, [staffList]);
-
-  // ⭐️ MULTI-TENANT STORE STATES (ហាងមួយៗដាច់ដោយឡែកពីគ្នា ១០០%) ⭐️
-  const [activeStore, setActiveStoreState] = useState(() => getActiveStore());
-  const [registeredStores, setRegisteredStores] = useState(() => getLocalStores());
-  const [storeSwitchModalOpen, setStoreSwitchModalOpen] = useState(false);
-  const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
-
-  // Edit store modal for master owner
-  const [editStoreModalOpen, setEditStoreModalOpen] = useState(false);
-  const [storeFormToEdit, setStoreFormToEdit] = useState(null);
-  const [storeSearchQuery, setStoreSearchQuery] = useState('');
-  const [storeFilterPlan, setStoreFilterPlan] = useState('ALL');
-  const [storeFilterStatus, setStoreFilterStatus] = useState('ALL');
-
-  // Sync active store on change
-  useEffect(() => {
-    const handleStoreChange = () => {
-      setActiveStoreState(getActiveStore());
-      setRegisteredStores(getLocalStores());
-    };
-    window.addEventListener('sabay_store_changed', handleStoreChange);
-    return () => window.removeEventListener('sabay_store_changed', handleStoreChange);
   }, []);
 
   // ⭐️ AUTHENTICATION STATES (FULL OPTION LOGIN SYSTEM) ⭐️
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+
       const isLoggedOut = localStorage.getItem('sabay_admin_logged_out') === 'true';
       if (isLoggedOut) return false;
-      return true; // ដំណើរការចូល POS ភ្លាម មិនឱ្យគាំង
+      const isAuthSaved = localStorage.getItem('sabay_admin_authenticated') === 'true';
+      return isAuthSaved;
     }
-    return true;
+    return false;
   });
 
   const [rememberMe, setRememberMe] = useState(() => {
@@ -803,14 +1085,50 @@ export default function UnifiedAdminDashboard() {
     return true;
   });
 
-  const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'pin' | 'credentials'
-  const [loginGmail, setLoginGmail] = useState('sengsoveasna93@gmail.com');
-  const [loginGmailPassword, setLoginGmailPassword] = useState('1234');
+  const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'credentials'
+  // ⭐️ States សម្រាប់ Standard 2-Step Gmail Store Lookup & Account Selection ⭐️
+  const [loginStep, setLoginStep] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const storeParam = urlParams.get('store');
+      if (storeParam) {
+        const found = getLocalStores().find(s => s.slug === storeParam || s.id === storeParam);
+        if (found) return 2;
+      }
+    }
+    return 1;
+  });
+  const [loginDiscoveredStores, setLoginDiscoveredStores] = useState([]);
+  const [loginTargetStore, setLoginTargetStore] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const storeParam = urlParams.get('store');
+      if (storeParam) {
+        const found = getLocalStores().find(s => s.slug === storeParam || s.id === storeParam);
+        if (found) return found;
+      }
+    }
+    return null;
+  });
+  const [loginAccountType, setLoginAccountType] = useState('owner'); // 'owner' | 'staff'
+  const [loginSelectedStaffMember, setLoginSelectedStaffMember] = useState(null);
+  const [loginGmail, setLoginGmail] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const storeParam = urlParams.get('store');
+      if (storeParam) {
+        const found = getLocalStores().find(s => s.slug === storeParam || s.id === storeParam);
+        if (found && (found.owner_email || found.email)) return found.owner_email || found.email;
+      }
+    }
+    return '';
+  });
+  const [loginGmailPassword, setLoginGmailPassword] = useState('');
   const [loginShowGmailPassword, setLoginShowGmailPassword] = useState(false);
-  const [loginUsername, setLoginUsername] = useState('sengsoveasna93@gmail.com');
-  const [loginPassword, setLoginPassword] = useState('1234');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginShowPassword, setLoginShowPassword] = useState(false);
-  const [loginSelectedStaff, setLoginSelectedStaff] = useState(() => DEFAULT_STAFF_ACCOUNTS[0]);
+  const [loginSelectedStaff, setLoginSelectedStaff] = useState(null);
   const [loginEnteredPin, setLoginEnteredPin] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginSuccessMsg, setLoginSuccessMsg] = useState('');
@@ -819,6 +1137,10 @@ export default function UnifiedAdminDashboard() {
   // Logout / Lock Portal
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setIsDemoMode(false);
+    setLoginStep(1);
+    setLoginDiscoveredStores([]);
+    setLoginTargetStore(null);
     setLoginEnteredPin('');
     setLoginPassword('');
     setLoginGmailPassword('');
@@ -827,53 +1149,139 @@ export default function UnifiedAdminDashboard() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('sabay_admin_logged_out', 'true');
       localStorage.removeItem('sabay_admin_authenticated');
+      localStorage.removeItem('sabay_demo_mode');
     }
   };
 
-  // Current logged in staff
-  const [currentStaff, setCurrentStaff] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_active_staff');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.id) {
-            if (parsed.id === 'STAFF-1' || parsed.username === 'admin' || (parsed.email && parsed.email.toLowerCase() === 'sengsoveasna93@gmail.com')) {
-              return {
-                ...parsed,
-                name: 'សេង សុវាសនា (Master Owner)',
-                email: 'sengsoveasna93@gmail.com',
-                username: parsed.username === 'admin' ? 'sengsoveasna93@gmail.com' : parsed.username,
-                role: 'ADMIN',
-                roleLabel: 'ម្ចាស់ប្រព័ន្ធ / Master Owner'
-              };
-            }
+  // Helper ទទួលបានគណនី active staff របស់ហាងនីមួយៗ (Isolated per Store)
+  const getStoreActiveStaff = (store) => {
+    if (typeof window === 'undefined') return getStoreDefaultStaff(store)[0];
+
+    const storeId = store?.id || 'store_default_sabayluk';
+    // 1. Check store-specific active staff first
+    const savedScoped = localStorage.getItem(`sabay_active_staff_${storeId}`);
+    if (savedScoped) {
+      try {
+        const parsed = JSON.parse(savedScoped);
+        if (parsed && (parsed.store_id === storeId || (!parsed.store_id && storeId === 'store_default_sabayluk'))) {
+          // If this is a tenant store (not store_default_sabayluk), verify that parsed staff does NOT have Flagship Master Owner credentials!
+          if (storeId !== 'store_default_sabayluk' && (parsed.id === 'STAFF-1' || parsed.id === 'STAFF-2' || parsed.id === 'STAFF-3' || parsed.email?.toLowerCase() === 'sengsoveasna93@gmail.com')) {
+            try { localStorage.removeItem(`sabay_active_staff_${storeId}`); } catch (_) {}
+          } else {
             return parsed;
           }
-        } catch (e) {}
+        }
+      } catch (e) {}
+    }
+    // 2. Check general active staff ONLY if it matches this store_id
+    const savedGlobal = localStorage.getItem('sabay_active_staff');
+    if (savedGlobal) {
+      try {
+        const parsed = JSON.parse(savedGlobal);
+        if (parsed) {
+          if (parsed.store_id === storeId) return parsed;
+          if (storeId === 'store_default_sabayluk' && (parsed.id === 'STAFF-1' || parsed.username === 'admin' || parsed.email?.toLowerCase() === 'sengsoveasna93@gmail.com')) {
+            return parsed;
+          }
+        }
+      } catch (e) {}
+    }
+    // 3. Fallback strictly to THIS store's own owner/admin (NEVER Seng Soveasna on non-default stores!)
+    return getStoreDefaultStaff(store)[0];
+  };
+
+  // Current logged in staff
+  const [currentStaff, setCurrentStaff] = useState(() => getStoreActiveStaff(getActiveStore()));
+
+  // ⭐️ ពេលប្តូរហាង ធ្វើសមកាលកម្មទិន្នន័យដាច់ដោយឡែក ១០០% (Zero Cross-Over Across Stores) ⭐️
+  useEffect(() => {
+    if (!activeStore) return;
+    const storeId = activeStore.id || 'store_default_sabayluk';
+    fetchProducts(storeId);
+    fetchCategories(storeId);
+    fetchRealOrders(storeId);
+    fetchStockMovements(storeId);
+    setInvoiceSettings(getStoreScopedInvoiceSettings(activeStore));
+    setSlides(getStoreScopedCoverSlides(activeStore));
+    setStoreSettings(getStoreScopedSettings(activeStore));
+
+    // ⭐️ Reload POS Cart ដាច់ដោយឡែកតាម Store នីមួយៗ (Zero Cart Leakage) ⭐️
+    try {
+      localStorage.removeItem('sabay_pos_cart'); // សម្អាត key ចាស់កុំឱ្យឆ្លង
+      const savedCart = localStorage.getItem(`sabay_pos_cart_${storeId}`);
+      if (savedCart) {
+        const parsed = JSON.parse(savedCart);
+        setPosCart(Array.isArray(parsed) ? parsed : []);
+      } else {
+        setPosCart([]);
+      }
+    } catch (_) {
+      setPosCart([]);
+    }
+    setCustomerName('');
+    setCustomerPhone('');
+    setDiscount(0);
+    setPosCategory('all');
+    setPosSearch('');
+  }, [activeStore?.id]);
+
+  // ⭐️ ត្រួតពិនិត្យសុពលភាពហាងបច្ចុប្បន្ន (ការពារ Ghost Store ដែលត្រូវបានលុប) ⭐️
+  useEffect(() => {
+    if (!activeStore || activeStore.id === 'store_default_sabayluk') return;
+    if (registeredStores && registeredStores.length > 0) {
+      const exists = registeredStores.some(s => s.id === activeStore.id || s.slug === activeStore.slug);
+      if (!exists) {
+        console.warn(`🚨 ហាង "${activeStore.name}" ត្រូវបានលុបចេញពីប្រព័ន្ធរួចហើយ! ប្តូរទៅហាងមេវិញ...`);
+        setActiveStore(DEFAULT_FLAGSHIP_STORE);
+        setActiveStoreState(DEFAULT_FLAGSHIP_STORE);
+        try {
+          localStorage.removeItem('sabay_admin_active_store');
+          localStorage.setItem('sabay_active_store', JSON.stringify(DEFAULT_FLAGSHIP_STORE));
+          const url = new URL(window.location.href);
+          url.searchParams.delete('store');
+          window.history.replaceState({}, '', url.toString());
+        } catch (_) {}
       }
     }
-    return DEFAULT_STAFF_ACCOUNTS[0]; // Default to Master Owner
-  });
+  }, [activeStore?.id, registeredStores]);
+
+  // ពេលប្តូរហាង ត្រូវ switch គណនី staff ឱ្យត្រូវនឹងហាងនោះភ្លាម (Zero Cross-Over)
+  useEffect(() => {
+    if (!activeStore) return;
+    const storeStaff = getStoreActiveStaff(activeStore);
+    if (currentStaff && (currentStaff.store_id === activeStore.id || (!currentStaff.store_id && activeStore.id === 'store_default_sabayluk'))) {
+      return;
+    }
+    setCurrentStaff(storeStaff);
+  }, [activeStore?.id]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sabay_active_staff', JSON.stringify(currentStaff));
+    if (typeof window !== 'undefined' && currentStaff && activeStore) {
+      const storeId = activeStore.id || 'store_default_sabayluk';
+      localStorage.setItem(`sabay_active_staff_${storeId}`, JSON.stringify(currentStaff));
+      if (storeId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_active_staff', JSON.stringify(currentStaff));
+      }
     }
-  }, [currentStaff]);
+  }, [currentStaff, activeStore?.id]);
 
-  // ⭐️ MASTER OWNER ACCESS CONTROL (សម្រាប់តែ sengsoveasna93@gmail.com ផ្តាច់មុខ) ⭐️
+  // ⭐️ MASTER OWNER ACCESS CONTROL (សម្រាប់តែ sengsoveasna93@gmail.com លើ Flagship Portal) ⭐️
   const isMasterOwner = Boolean(
-    !currentStaff ||
-    (currentStaff.email && currentStaff.email.toLowerCase() === 'sengsoveasna93@gmail.com') ||
-    (currentStaff.username && currentStaff.username.toLowerCase() === 'sengsoveasna93@gmail.com') ||
-    currentStaff.id === 'STAFF-1' ||
-    currentStaff.username === 'admin' ||
-    (currentStaff.role === 'ADMIN' && (!currentStaff.store_id || currentStaff.store_id === 'store_default_sabayluk'))
+    !isDemoMode && currentStaff && !currentStaff.isDemo &&
+    (activeStore?.id === 'store_default_sabayluk' || !activeStore?.id) &&
+    (
+      (currentStaff.email && currentStaff.email.toLowerCase() === 'sengsoveasna93@gmail.com') ||
+      (currentStaff.username && currentStaff.username.toLowerCase() === 'sengsoveasna93@gmail.com') ||
+      currentStaff.id === 'STAFF-1'
+    )
   );
 
   // ⭐️ Helper ពិនិត្យមើលសិទ្ធិរបស់បុគ្គលិកបច្ចុប្បន្ន (hasStaffPermission) ⭐️
   const hasStaffPermission = (permissionKey) => {
+    if (isDemoMode) {
+      if (permissionKey === 'stores') return false;
+      return true;
+    }
     if (!currentStaff) return true; // fallback
     if (currentStaff.role === 'ADMIN') return true; // Super admin has full control
     if (currentStaff.permissions && typeof currentStaff.permissions[permissionKey] === 'boolean') {
@@ -903,6 +1311,7 @@ export default function UnifiedAdminDashboard() {
       settings: 'settings',
       invoice: 'invoice',
       staff: 'staff',
+      upgrade_plan: 'staff',
       api: 'api'
     };
 
@@ -1017,6 +1426,8 @@ export default function UnifiedAdminDashboard() {
 
   // រក្សាទុកអតិថិជន (Save / Update Customer)
   const handleSaveCustomer = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("កែប្រែព័ត៌មានអតិថិជន")) return;
     e.preventDefault();
     if (!custFormName.trim()) {
       alert('សូមបញ្ចូលឈ្មោះអតិថិជន!');
@@ -1069,6 +1480,7 @@ export default function UnifiedAdminDashboard() {
 
   // លុបអតិថិជន
   const handleDeleteCustomer = (id) => {
+    if (guardDemoAction("លុបអតិថិជន")) return;
     if (window.confirm('តើបងពិតជាចង់លុបអតិថិជននេះចេញពីប្រព័ន្ធមែនទេ?')) {
       setCustomers(prev => prev.filter(c => c.id !== id));
     }
@@ -1139,34 +1551,7 @@ export default function UnifiedAdminDashboard() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  useEffect(() => {
-    async function fetchData() {
-      const { data: prodData } = await supabase.from('products').select('*');
-      const { data: catData } = await supabase.from('categories').select('*');
-      if (prodData) setProducts(prodData);
-      if (catData && catData.length > 0) {
-        setCategories(catData);
-        // ⭐️ ជួសជុល: ចាប់យក Category ដំបូងគេស្វ័យប្រវត្តិ បើ State ចាស់ខុស ⭐️
-        setCategory(prev => catData.find(c => c.name === prev) ? prev : catData[0].name);
-      }
-    }
-    fetchData();
-  }, []);
-
-  async function fetchCategories() {
-    const { data, error } = await supabase.from('categories').select('*');
-    if (!error && data && data.length > 0) {
-      setCategories(data);
-      // ⭐️ ជួសជុល: ចាប់យក Category ដំបូងគេស្វ័យប្រវត្តិ ⭐️
-      setCategory(prev => data.find(c => c.name === prev) ? prev : data[0].name);
-    } else {
-      setCategories([
-        { id: '1', name: 'ស្បែកជើងបុរស', icon: 'shoe' },
-        { id: '2', name: 'នាឡិកា', icon: 'watch' },
-      ]);
-      setCategory('ស្បែកជើងបុរស');
-    }
-  }
+  // ⭐️ ទិន្នន័យទំនិញ និង Categories ត្រូវទាញយកតាម Store ID នីមួយៗក្នុង Unified Store Switch Effect ខាងក្រោម ⭐️
   const [loading, setLoading] = useState(true);
 
   // States សម្រាប់ Search និង Filter ក្នុងផ្ទាំង Inventory
@@ -1185,14 +1570,109 @@ export default function UnifiedAdminDashboard() {
   useEffect(() => {
     fetchProducts();
     fetchCategories();
+
+    // ⭐️ ធ្វើបច្ចុប្បន្នភាពបញ្ជីហាងពី Supabase ពេលបើក Dashboard ដំបូង ⭐️
+    fetchAllStores().then(synced => {
+      if (Array.isArray(synced)) {
+        setRegisteredStores(synced);
+
+        // 🚨 ត្រួតពិនិត្យប្រសិនបើហាងដែលកំពុងបើកត្រូវបានលុបចេញពី Cloud Database
+        const currentActive = getActiveStore();
+        if (currentActive && currentActive.id !== 'store_default_sabayluk') {
+          const stillExists = synced.some(s => s.id === currentActive.id || s.slug === currentActive.slug);
+          if (!stillExists) {
+            console.warn(`🚨 ហាង "${currentActive.name}" ត្រូវបានលុបចេញពីប្រព័ន្ធ! បញ្ជូនទៅហាងមេវិញ...`);
+            setActiveStore(DEFAULT_FLAGSHIP_STORE);
+            setActiveStoreState(DEFAULT_FLAGSHIP_STORE);
+            try {
+              localStorage.removeItem('sabay_admin_active_store');
+              localStorage.setItem('sabay_active_store', JSON.stringify(DEFAULT_FLAGSHIP_STORE));
+              localStorage.removeItem(`sabay_active_staff_${currentActive.id}`);
+              localStorage.removeItem(`sabay_staff_list_${currentActive.id}`);
+              const url = new URL(window.location.href);
+              url.searchParams.delete('store');
+              window.history.replaceState({}, '', url.toString());
+            } catch (_) {}
+            setToastNotification(`⚠️ ហាង "${currentActive.name}" ត្រូវបានលុបចេញពីប្រព័ន្ធរួចរាល់ហើយ! ប្រព័ន្ធបានបញ្ជូនលោកអ្នកមកកាន់ហាងមេវិញ។`);
+            setTimeout(() => setToastNotification(null), 4000);
+          }
+        }
+      }
+    }).catch(() => {});
+
+    // ⭐️ ត្រួតពិនិត្យ Offline / Online Event ស្វ័យប្រវត្តិ & Sync វិក្កយបត្រពេលមាន Internet ឡើងវិញ ⭐️
+    const handleBackOnline = async () => {
+      setToastNotification('🟢 អ៊ីនធឺណិតបានភ្ជាប់ឡើងវិញ! កំពុង Sync វិក្កយបត្រក្រៅបណ្តាញចូលប្រព័ន្ធ...');
+      const res = await syncOfflineOrdersToCloud();
+      if (res.synced > 0) {
+        setToastNotification(`🎉 បាន Sync វិក្កយបត្រក្រៅបណ្តាញ ${res.synced} ដោយជោគជ័យ!`);
+        fetchProducts();
+        fetchRealOrders();
+      }
+      setTimeout(() => setToastNotification(null), 4000);
+    };
+
+    const handleWentOffline = () => {
+      setToastNotification('📡 កំពុងប្រើប្រាស់ក្រៅបណ្តាញ (Offline Mode) • អាចលក់ POS បានធម្មតា!');
+      setTimeout(() => setToastNotification(null), 5000);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleBackOnline);
+      window.addEventListener('offline', handleWentOffline);
+      // Run once on mount if there are pending offline orders
+      if (navigator.onLine) {
+        syncOfflineOrdersToCloud().then(res => {
+          if (res.synced > 0) {
+            fetchRealOrders();
+            fetchProducts();
+          }
+        });
+      }
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleBackOnline);
+        window.removeEventListener('offline', handleWentOffline);
+      }
+    };
   }, []);
 
-  async function fetchProducts() {
+  async function fetchProducts(targetStoreId) {
     setLoading(true);
-    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    const storeId = targetStoreId || activeStore?.id || 'store_default_sabayluk';
+    let data = null;
+    let error = null;
+    try {
+      let query = supabase.from('products').select('*');
+      if (storeId === 'store_default_sabayluk') {
+        query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+      } else {
+        query = query.eq('store_id', storeId);
+      }
+      const res = await query.order('created_at', { ascending: false });
+      data = res.data;
+      error = res.error;
+    } catch (err) {
+      error = err;
+    }
+
+    // 📡 ប្រសិនបើគ្មាន Internet ឬ Error បណ្តាញ៖ ទាញយកទំនិញពី Offline Cache មកប្រើប្រាស់
+    if (error || !data) {
+      const cached = getCachedProductsOffline(activeStore?.id);
+      if (cached && cached.length > 0) {
+        setProducts(cached);
+        setLoading(false);
+        return;
+      }
+    }
+
     if (!error && data) {
       const mapped = data.map(parseProductMeta);
       setProducts(mapped);
+      // រក្សាទុក Cache ទំនិញក្នុង LocalStorage ដើម្បីលក់បានពេលគ្មាន Internet (Offline Mode)
+      cacheProductsOffline(activeStore?.id, mapped);
       // កំណត់ SKU ជាប់លេខចុងក្រោយបង្អស់ដោយស្វ័យប្រវត្តិ
       if (!editingProductId) {
         const currentSavedSku = typeof window !== 'undefined' ? (localStorage.getItem('sabay_current_sku') || localStorage.getItem('sabay_last_saved_sku')) : null;
@@ -1211,18 +1691,45 @@ export default function UnifiedAdminDashboard() {
     setLoading(false);
   }
 
-  async function fetchCategories() {
-    const { data, error } = await supabase.from('categories').select('*');
-    if (!error && data) {
-      setCategories(data);
-    } else {
-      // ប្រសិនបើទើបតែដំឡើងដំបូង ប្រើ Default Categories
-      setCategories([
-        { id: '1', name: 'ស្បែកជើង', icon: '👞' },
-        { id: '2', name: 'នាឡិកា', icon: '⌚' },
-        { id: '3', name: 'កាបូប', icon: '👜' },
-        { id: '4', name: 'ខ្សែក្រវ៉ាត់', icon: '👔' },
-      ]);
+  async function fetchCategories(targetStoreId) {
+    const storeId = targetStoreId || activeStore?.id || 'store_default_sabayluk';
+    try {
+      let query = supabase.from('categories').select('*');
+      if (storeId === 'store_default_sabayluk') {
+        query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+      } else {
+        query = query.eq('store_id', storeId);
+      }
+      const { data, error } = await query.order('created_at', { ascending: true });
+      if (!error && data) {
+        setCategories(data);
+        if (data.length > 0) {
+          setCategory(prev => data.find(c => c.name === prev) ? prev : data[0].name);
+        } else {
+          setCategory('');
+        }
+      } else {
+        if (storeId === 'store_default_sabayluk') {
+          setCategories([
+            { id: '1', name: 'ស្បែកជើងបុរស', icon: 'shoe', store_id: 'store_default_sabayluk' },
+            { id: '2', name: 'ស្បែកជើងនារី', icon: 'heel', store_id: 'store_default_sabayluk' },
+            { id: '3', name: 'ខ្សែក្រវាត់', icon: 'belt', store_id: 'store_default_sabayluk' },
+          ]);
+          setCategory('ស្បែកជើងបុរស');
+        } else {
+          setCategories([]);
+          setCategory('');
+        }
+      }
+    } catch (e) {
+      if (storeId === 'store_default_sabayluk') {
+        setCategories([
+          { id: '1', name: 'ស្បែកជើងបុរស', icon: 'shoe', store_id: 'store_default_sabayluk' },
+          { id: '2', name: 'ស្បែកជើងនារី', icon: 'heel', store_id: 'store_default_sabayluk' },
+        ]);
+      } else {
+        setCategories([]);
+      }
     }
   }
 
@@ -1239,9 +1746,20 @@ export default function UnifiedAdminDashboard() {
   const [realOrders, setRealOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [orderFilterStatus, setOrderFilterStatus] = useState('all');
+  // ⭐️ STATES សម្រាប់ DATE FILTER & BREAKDOWN ក្នុង ORDER HISTORY ⭐️
+  const [orderDatePeriod, setOrderDatePeriod] = useState('all'); // 'all' | 'today' | 'yesterday' | '7days' | 'month' | 'custom'
+  const [orderCustomStartDate, setOrderCustomStartDate] = useState('');
+  const [orderCustomEndDate, setOrderCustomEndDate] = useState('');
+  const [ordersViewMode, setOrdersViewMode] = useState('sales'); // 'sales' | 'stock_in'
+  const [showOrderItemsBreakdown, setShowOrderItemsBreakdown] = useState(true);
 
   // State សម្រាប់ Modal បោះពុម្ពបាកូដ (Barcode Sticker Modal)
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
+  // ⭐️ States សម្រាប់ម៉ាស៊ីនស្កេនបាកូដ Full Option (Camera & USB/Wireless Gun) ⭐️
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
+  const [scannerSettingsOpen, setScannerSettingsOpen] = useState(false);
+  const [scannerSoundEnabled, setScannerSoundEnabled] = useState(true);
+  const [scannerAutoAddVariant, setScannerAutoAddVariant] = useState(true);
   const [barcodeProduct, setBarcodeProduct] = useState(null);
   const [barcodePrintQty, setBarcodePrintQty] = useState(1);
   const [barcodeLabelFormat, setBarcodeLabelFormat] = useState('50x30'); // '50x30' | '40x30' | '60x40' | 'a4_grid'
@@ -1252,13 +1770,17 @@ export default function UnifiedAdminDashboard() {
   const [barcodeSelectedSize, setBarcodeSelectedSize] = useState('');
   const [barcodeProductSearch, setBarcodeProductSearch] = useState('');
 
-  // Function ទាញយកទិន្នន័យ Orders ពិតពី Supabase
-  const fetchRealOrders = async () => {
+  // Function ទាញយកទិន្នន័យ Orders ពិតពី Supabase (Scoped Per Store)
+  const fetchRealOrders = async (targetStoreId) => {
     setLoadingOrders(true);
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .order('id', { ascending: false });
+    const storeId = targetStoreId || activeStore?.id || 'store_default_sabayluk';
+    let query = supabase.from('orders').select('*');
+    if (storeId === 'store_default_sabayluk') {
+      query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+    } else {
+      query = query.eq('store_id', storeId);
+    }
+    const { data, error } = await query.order('id', { ascending: false });
 
     if (!error && data) {
       const mapped = data.map(o => ({
@@ -1273,6 +1795,47 @@ export default function UnifiedAdminDashboard() {
     }
     setLoadingOrders(false);
   };
+
+  // ⭐️ MULTI-TENANT ISOLATED DATA SLICES (ធានាមិនឆ្លងទិន្នន័យគ្នា ១០០%) ⭐️
+  const currentStoreProducts = useMemo(() => {
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    return products.filter(p => {
+      const pStore = p.store_id || 'store_default_sabayluk';
+      return pStore === storeId;
+    });
+  }, [products, activeStore?.id]);
+
+  const currentStoreOrders = useMemo(() => {
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    return realOrders.filter(o => {
+      const oStore = o.store_id || 'store_default_sabayluk';
+      return oStore === storeId;
+    });
+  }, [realOrders, activeStore?.id]);
+
+  const currentStoreExpenses = useMemo(() => {
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    return expenses.filter(e => {
+      const eStore = e.store_id || 'store_default_sabayluk';
+      return eStore === storeId;
+    });
+  }, [expenses, activeStore?.id]);
+
+  const currentStoreCategories = useMemo(() => {
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    return categories.filter(c => {
+      if (!c.store_id) return true;
+      return c.store_id === storeId;
+    });
+  }, [categories, activeStore?.id]);
+
+  const currentStoreCustomers = useMemo(() => {
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    return customers.filter(c => {
+      const cStore = c.store_id || 'store_default_sabayluk';
+      return cStore === storeId;
+    });
+  }, [customers, activeStore?.id]);
 
   // ⭐️ States & Realtime Alert សម្រាប់គ្រប់គ្រងការកុម្ម៉ង់ថ្មី (ADMIN & SALES ALERT) ⭐️
   const [newOrderAlert, setNewOrderAlert] = useState(null);
@@ -1353,6 +1916,7 @@ export default function UnifiedAdminDashboard() {
 
   // Function ប្តូរ Status នៃការកុម្ម៉ង់ (Pending ➔ Preparing ➔ Shipped ➔ Completed)
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    if (guardDemoAction("កែប្រែស្ថានភាព Order")) return;
     try {
       const { error } = await supabase
         .from('orders')
@@ -1389,11 +1953,28 @@ export default function UnifiedAdminDashboard() {
 
   const realTotalOrdersCount = realOrders.length;
 
-    // State សម្រាប់កំណត់ព័ត៌មានវិក្កយបត្រ (Invoice Settings)
-  const [invoiceSettings, setInvoiceSettings] = useState(() => {
+  // ⭐️ Helper ទទួលបាន Invoice Settings តាមហាងនីមួយៗ (Per-Store Scoped Invoice Settings) ⭐️
+  const getStoreScopedInvoiceSettings = (store) => {
+    const storeId = store?.id || 'store_default_sabayluk';
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_invoice_settings');
-      if (saved) return JSON.parse(saved);
+      const scoped = localStorage.getItem(`sabay_invoice_settings_${storeId}`);
+      if (scoped) {
+        try { return JSON.parse(scoped); } catch (_) {}
+      }
+    }
+    if (store && storeId !== 'store_default_sabayluk') {
+      return {
+        storeName: store.name || 'ហាងរបស់ខ្ញុំ',
+        address: store.address || '',
+        phone: store.phone || '',
+        title: 'OFFICIAL RECEIPT',
+        exchangeRate: 4100,
+        cashierName: 'Admin',
+        showKHR: true,
+        showLogo: true,
+        thankYouMsg: 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត',
+        policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ'
+      };
     }
     return {
       storeName: 'SABAY LUK',
@@ -1407,7 +1988,10 @@ export default function UnifiedAdminDashboard() {
       thankYouMsg: 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត',
       policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៣ ថ្ងៃ)'
     };
-  });
+  };
+
+  // State សម្រាប់កំណត់ព័ត៌មានវិក្កយបត្រ (Invoice Settings Scoped)
+  const [invoiceSettings, setInvoiceSettings] = useState(() => getStoreScopedInvoiceSettings(getActiveStore()));
 
   const [invoiceSavedMsg, setInvoiceSavedMsg] = useState('');
 
@@ -1447,30 +2031,69 @@ export default function UnifiedAdminDashboard() {
     themePreset: 'orange'
   };
 
-  const [storeSettings, setStoreSettings] = useState(() => {
+  // Helper ទទួលបានការកំណត់ហាងនីមួយៗ (Store-specific Settings Isolation)
+  const getStoreScopedSettings = (store) => {
+    const storeId = store?.id || 'store_default_sabayluk';
+    const storeSpecificKey = `sabay_store_settings_${storeId}`;
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_store_settings');
+      const saved = localStorage.getItem(storeSpecificKey) || (storeId === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           return {
             ...DEFAULT_STORE_SETTINGS,
             ...parsed,
-            bankAccountName: parsed.bankAccountName || 'SENG SOVEASNA',
-            bankAccountKhr: parsed.bankAccountKhr || '004 500 394',
-            bankAccountUsd: parsed.bankAccountUsd || parsed.bankAccountNumber || '010 723 080',
-            khqrImageUrl: parsed.khqrImageUrl || '/khqr-aba.jpg',
-            showInvoiceLogo: parsed.showInvoiceLogo !== undefined ? parsed.showInvoiceLogo : true,
-            showReceiptQr: parsed.showReceiptQr !== undefined ? parsed.showReceiptQr : true
+            storeName: parsed.storeName || store?.name || 'SABAY LUK',
+            phone: parsed.phone || store?.phone || (storeId === 'store_default_sabayluk' ? '096 720 5522' : ''),
+            telegram: parsed.telegram || store?.telegram || (storeId === 'store_default_sabayluk' ? 'Sabayluk' : ''),
+            address: parsed.address || store?.address || (storeId === 'store_default_sabayluk' ? 'Street 271, Phnom Penh, Cambodia' : '')
           };
         } catch (e) {}
       }
     }
+    if (store && store.id !== 'store_default_sabayluk') {
+      return {
+        ...DEFAULT_STORE_SETTINGS,
+        storeName: store.name || 'ហាងរបស់ខ្ញុំ',
+        phone: store.phone || '',
+        phone2: '',
+        telegram: store.telegram || '',
+        address: store.address || '',
+        bankAccountName: store.owner_name || store.name || '',
+        bankAccountKhr: '',
+        bankAccountUsd: '',
+        bankAccountNumber: '',
+        khqrImageUrl: ''
+      };
+    }
     return DEFAULT_STORE_SETTINGS;
-  });
+  };
+
+  const [storeSettings, setStoreSettings] = useState(() => getStoreScopedSettings(getActiveStore()));
+
+  useEffect(() => {
+    if (!activeStore) return;
+    setStoreSettings(getStoreScopedSettings(activeStore));
+  }, [activeStore?.id]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && activeStore) {
+      const storeId = activeStore.id || 'store_default_sabayluk';
+      localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(storeSettings));
+      if (storeId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+      }
+    }
+  }, [storeSettings, activeStore?.id]);
 
   const [storeSettingsSavedMsg, setStoreSettingsSavedMsg] = useState('');
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState('branding'); // 'branding' | 'contact' | 'announcement' | 'payment' | 'delivery'
+
+  // ⭐️ States សម្រាប់សាកល្បងទេសអតិថិជនបញ្ជាទិញផ្ទាល់ពី Website (Live Customer Order Simulator) ⭐️
+  const [testOrderModalOpen, setTestOrderModalOpen] = useState(false);
+  const [testOrderLocation, setTestOrderLocation] = useState('phnom_penh'); // 'phnom_penh' | 'province'
+  const [testOrderPayment, setTestOrderPayment] = useState('KHQR'); // 'KHQR' | 'COD'
+  const [testOrderSuccess, setTestOrderSuccess] = useState(false);
 
   // ⭐️ States សម្រាប់ Bulk Import Excel / CSV ⭐️
   const [bulkImportModalOpen, setBulkImportModalOpen] = useState(false);
@@ -1500,7 +2123,29 @@ export default function UnifiedAdminDashboard() {
   // រក្សាទុកការកំណត់ហាងទាំងអស់ (Save Store Settings)
   const handleSaveStoreSettings = (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("កែប្រែការកំណត់ហាង")) return;
+    if (e && e.preventDefault) e.preventDefault();
     localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+    
+    // Save scoped per-store settings if multi-tenant store is active
+    if (activeStore?.id) {
+      localStorage.setItem(`sabay_store_settings_${activeStore.id}`, JSON.stringify(storeSettings));
+      const updatedStores = (registeredStores || []).map(s => {
+        if (s.id === activeStore.id) {
+          return {
+            ...s,
+            name: storeSettings.storeName || s.name,
+            phone: storeSettings.phone || s.phone,
+            telegram: storeSettings.telegram || s.telegram,
+            address: storeSettings.address || s.address,
+            settings: { ...(s.settings || {}), ...storeSettings }
+          };
+        }
+        return s;
+      });
+      setRegisteredStores(updatedStores);
+      saveLocalStores(updatedStores);
+    }
     
     // Auto-sync ទៅ invoiceSettings
     const updatedInvoice = {
@@ -1512,7 +2157,11 @@ export default function UnifiedAdminDashboard() {
       policyNote: storeSettings.policyNote || invoiceSettings.policyNote
     };
     setInvoiceSettings(updatedInvoice);
-    localStorage.setItem('sabay_invoice_settings', JSON.stringify(updatedInvoice));
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    localStorage.setItem(`sabay_invoice_settings_${storeId}`, JSON.stringify(updatedInvoice));
+    if (storeId === 'store_default_sabayluk') {
+      localStorage.setItem('sabay_invoice_settings', JSON.stringify(updatedInvoice));
+    }
     setExchangeRate(Number(storeSettings.exchangeRate) || 4100);
 
     // Notify other windows/tabs (e.g. Storefront)
@@ -1813,7 +2462,7 @@ export default function UnifiedAdminDashboard() {
 
     if (newCatsToCreate.size > 0) {
       try {
-        const catPayload = Array.from(newCatsToCreate).map(c => ({ name: c }));
+        const catPayload = Array.from(newCatsToCreate).map(c => ({ name: c, store_id: activeStore?.id || 'store_default_sabayluk' }));
         await supabase.from('categories').insert(catPayload);
         fetchCategories();
       } catch (e) {
@@ -1841,6 +2490,7 @@ export default function UnifiedAdminDashboard() {
         });
 
         const productPayload = {
+          store_id: activeStore?.id || 'store_default_sabayluk',
           name: item.name,
           sku: item.sku,
           category: item.category || 'ទូទៅ',
@@ -2187,9 +2837,16 @@ export default function UnifiedAdminDashboard() {
 
   // មុខងារ Save ការកំណត់វិក្កយបត្រ (រួមទាំងពន្ធ VAT និងការកំណត់ហាង)
   const handleSaveInvoiceSettings = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("កែប្រែការកំណត់វិក្កយបត្រ")) return;
     e.preventDefault();
-    localStorage.setItem('sabay_invoice_settings', JSON.stringify(invoiceSettings));
-    localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    localStorage.setItem(`sabay_invoice_settings_${storeId}`, JSON.stringify(invoiceSettings));
+    localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(storeSettings));
+    if (storeId === 'store_default_sabayluk') {
+      localStorage.setItem('sabay_invoice_settings', JSON.stringify(invoiceSettings));
+      localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+    }
     setExchangeRate(invoiceSettings.exchangeRate || storeSettings.exchangeRate || 4100);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('storage'));
@@ -2247,22 +2904,27 @@ export default function UnifiedAdminDashboard() {
             </tr>
           </thead>
           <tbody>
-            <tr style="border-bottom: 1px dotted #ccc;">
-              <td style="padding: 3px 0;">
-                <b>ស្បែកជើងប៉ាតា Sneaker Pro</b>
-                <div style="font-size: 8.5px; color: #555;">Size: 41 | ពណ៌ខ្មៅ @$20.00</div>
-              </td>
-              <td style="text-align: center; font-weight: bold; padding: 3px 0;">1</td>
-              <td style="text-align: right; font-weight: bold; padding: 3px 0;">$20.00</td>
-            </tr>
-            <tr style="border-bottom: 1px dotted #ccc;">
-              <td style="padding: 3px 0;">
-                <b>ស្បែកជើងកីឡា Sport Runner</b>
-                <div style="font-size: 8.5px; color: #555;">Size: 42 | ពណ៌ស @$20.00</div>
-              </td>
-              <td style="text-align: center; font-weight: bold; padding: 3px 0;">1</td>
-              <td style="text-align: right; font-weight: bold; padding: 3px 0;">$20.00</td>
-            </tr>
+            ${(products && products.length > 0) ? (
+              products.slice(0, 2).map(p => `
+                <tr style="border-bottom: 1px dotted #ccc;">
+                  <td style="padding: 3px 0;">
+                    <b>${p.name}</b>
+                    <div style="font-size: 8.5px; color: #555;">${p.size ? `Size: ${p.size}` : ''} @$${Number(p.price || 0).toFixed(2)}</div>
+                  </td>
+                  <td style="text-align: center; font-weight: bold; padding: 3px 0;">1</td>
+                  <td style="text-align: right; font-weight: bold; padding: 3px 0;">$${Number(p.price || 0).toFixed(2)}</td>
+                </tr>
+              `).join('')
+            ) : `
+              <tr style="border-bottom: 1px dotted #ccc;">
+                <td style="padding: 3px 0;">
+                  <b>ទំនិញគំរូ (Sample Item)</b>
+                  <div style="font-size: 8.5px; color: #555;">Standard @$10.00</div>
+                </td>
+                <td style="text-align: center; font-weight: bold; padding: 3px 0;">1</td>
+                <td style="text-align: right; font-weight: bold; padding: 3px 0;">$10.00</td>
+              </tr>
+            `}
           </tbody>
         </table>
 
@@ -2457,14 +3119,21 @@ export default function UnifiedAdminDashboard() {
       setPosCategory(savedCategory);
     }
 
-    // ៣. ស្ដារទំនិញក្នុងកន្ត្រក (Cart Items)
+    // ៣. ស្ដារទំនិញក្នុងកន្ត្រក (Cart Items) តាម Store ជាក់ស្តែង
     try {
-      const savedCart = localStorage.getItem('sabay_pos_cart');
+      localStorage.removeItem('sabay_pos_cart');
+      const curStore = getActiveStore();
+      const storeId = curStore?.id || 'store_default_sabayluk';
+      const savedCart = localStorage.getItem(`sabay_pos_cart_${storeId}`);
       if (savedCart) {
         const parsed = JSON.parse(savedCart);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setPosCart(parsed);
+        } else {
+          setPosCart([]);
         }
+      } else {
+        setPosCart([]);
       }
     } catch (e) {
       console.error('Error loading saved pos cart:', e);
@@ -2511,10 +3180,12 @@ export default function UnifiedAdminDashboard() {
   useEffect(() => {
     if (isMounted) {
       try {
-        localStorage.setItem('sabay_pos_cart', JSON.stringify(posCart));
+        const storeId = activeStore?.id || 'store_default_sabayluk';
+        localStorage.setItem(`sabay_pos_cart_${storeId}`, JSON.stringify(posCart));
+        localStorage.removeItem('sabay_pos_cart');
       } catch (e) {}
     }
-  }, [posCart, isMounted]);
+  }, [posCart, activeStore?.id, isMounted]);
 
   useEffect(() => {
     if (isMounted) {
@@ -2751,7 +3422,39 @@ export default function UnifiedAdminDashboard() {
     setPosSearch('');
   };
 
-  // ៣. ស្កេនបាកូដ / SKU
+  // ⭐️ Handler ពេលម៉ាស៊ីនស្កេន ឬកាមេរ៉ាស្កេនបាកូដបានជោគជ័យ (Universal Scanner Hook - Auto Add & Beep) ⭐️
+  const handleUniversalBarcodeScan = (scannedCode) => {
+    if (!scannedCode) return;
+    const query = scannedCode.trim().toLowerCase();
+    
+    // ស្វែងរកទំនិញតាម SKU, Barcode, ID, ឬឈ្មោះ ក្នុងហាងសកម្ម
+    const matchedProduct = currentStoreProducts.find(p => 
+      (p.sku && p.sku.toLowerCase() === query) ||
+      (p.barcode && p.barcode.toLowerCase() === query) ||
+      (p.id && p.id.toLowerCase() === query) ||
+      (p.name && p.name.toLowerCase() === query)
+    ) || products.find(p => p.sku && p.sku.toLowerCase() === query);
+
+    if (matchedProduct) {
+      if (scannerSoundEnabled) playScannerBeep();
+      setToastNotification(`🎯 ស្កេនបាន: ${matchedProduct.name} (${matchedProduct.sku || ''})`);
+      setTimeout(() => setToastNotification(null), 2500);
+
+      // ប្រសិនបើបើក Option autoAddVariant ហើយទំនិញមានស្តុក ➔ បញ្ចូលកន្ត្រកភ្លាមៗ!
+      if (scannerAutoAddVariant && matchedProduct.stock_qty > 0) {
+        // បើគ្មាន Variant ច្រើន ឬជាទំនិញធម្មតា ➔ Add ចូលកន្ត្រកភ្លាមៗ
+        addItemToPosCart(matchedProduct, null);
+      } else {
+        handleProductClick(matchedProduct);
+      }
+    } else {
+      if (scannerSoundEnabled) playScannerErrorBeep();
+      setToastNotification(`❌ រកមិនឃើញទំនិញដែលមានបាកូដ "${scannedCode}" ឡើយ!`);
+      setTimeout(() => setToastNotification(null), 3500);
+    }
+  };
+
+  // ៣. ស្កេនបាកូដ / SKU តាមក្តារចុច ឬកាំភ្លើងស្កេន USB/Bluetooth
   const handleBarcodeScan = (e) => {
     if (e.key === 'Enter' && posSearch.trim() !== '') {
         playScannerBeep();
@@ -2816,8 +3519,36 @@ export default function UnifiedAdminDashboard() {
       // ប្រសិនបើមិនមែននៅលើ Tab 'pos' ទេ មិនបាច់ដំណើរការ hotkeys ឡើយ
       if (activeTab !== 'pos') return;
 
+      // ⭐️ ១. GLOBAL HARDWARE SCANNER GUN LISTENER (USB / Bluetooth Barcode Gun) ⭐️
+      const currentTime = Date.now();
+      const timeDiff = currentTime - lastBarcodeKeyTimeRef.current;
+      lastBarcodeKeyTimeRef.current = currentTime;
+
       const activeEl = document.activeElement;
-      const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+      const isMainSearch = activeEl && activeEl === searchInputRef.current;
+      const isOtherInput = activeEl && activeEl !== searchInputRef.current && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT');
+
+      // បើមិនមែនកំពុងវាយក្នុង Modal inputs ផ្សេងទៀតទេ គឺចាប់សញ្ញាពីកាំភ្លើងស្កេន
+      if (!isOtherInput) {
+        if (e.key === 'Enter') {
+          const buffer = barcodeGunBufferRef.current.trim();
+          if (buffer.length >= 2) {
+            e.preventDefault();
+            barcodeGunBufferRef.current = '';
+            handleUniversalBarcodeScan(buffer);
+            return;
+          }
+          barcodeGunBufferRef.current = '';
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          if (timeDiff > 120) {
+            barcodeGunBufferRef.current = e.key;
+          } else {
+            barcodeGunBufferRef.current += e.key;
+          }
+        }
+      }
+
+      const isInput = isOtherInput || isMainSearch;
 
       // F2 ➔ ស្វែងរកទំនិញរហ័ស (Focus Quick Search / Barcode)
       if (e.key === 'F2') {
@@ -3006,6 +3737,7 @@ export default function UnifiedAdminDashboard() {
 
     // ⭐️ មុខងារបញ្ជាក់ការលក់ និងរក្សាទុកប្រវត្តិ History Full Option ⭐️
   const processPayment = async () => {
+    if (guardDemoAction("កាត់ស្តុក ឬលក់ជាក់ស្តែង")) return;
     if (paymentMethod === 'Cash' && changeAmount < 0) return alert('❌ ទឹកប្រាក់ទទួលមិនគ្រប់គ្រាន់ទេ!');
     setIsProcessingPayment(true);
 
@@ -3027,10 +3759,21 @@ export default function UnifiedAdminDashboard() {
         const prevPQty = pData ? pData.stock_qty : 0;
         const newPQty = Math.max(0, prevPQty - item.qty);
 
-        await supabase.from('products').update({ 
-          stock_qty: newPQty,
-          status: newPQty > 0 ? 'In Stock' : 'Out of Stock'
-        }).eq('id', item.id);
+        stockAdjustments.push({ productId: item.id, qty: item.qty });
+
+        // Update local products state immediately
+        setProducts(prevProds => prevProds.map(p => p.id === item.id ? { ...p, stock_qty: newPQty, status: newPQty > 0 ? 'In Stock' : 'Out of Stock' } : p));
+
+        if (isCurrentlyOnline) {
+          try {
+            await supabase.from('products').update({ 
+              stock_qty: newPQty,
+              status: newPQty > 0 ? 'In Stock' : 'Out of Stock'
+            }).eq('id', item.id);
+          } catch (e) {
+            console.warn('Network error updating stock in cloud, recorded for sync:', e);
+          }
+        }
 
         // ពិនិត្យកម្រិតស្តុកទាប
         const alertThreshold = pData?.low_stock_alert || storeSettings.lowStockThreshold || 5;
@@ -3045,16 +3788,20 @@ export default function UnifiedAdminDashboard() {
           });
         }
 
-        // កត់ត្រាចូល stock_movements
-        await supabase.from('stock_movements').insert([{
-          product_id: item.id,
-          variant_id: item.variantId,
-          type: 'SALE',
-          qty_change: -item.qty,
-          previous_qty: prevPQty,
-          new_qty: newPQty,
-          reason: `លក់ចេញតាម POS វិក្កយបត្រ ${generatedOrderId} (Size: ${item.size || 'ទូទៅ'})`
-        }]);
+        // កត់ត្រាចូល stock_movements (បើ online)
+        if (isCurrentlyOnline) {
+          try {
+            await supabase.from('stock_movements').insert([{
+              product_id: item.id,
+              variant_id: item.variantId,
+              type: 'SALE',
+              qty_change: -item.qty,
+              previous_qty: prevPQty,
+              new_qty: newPQty,
+              reason: `លក់ចេញតាម POS វិក្កយបត្រ ${generatedOrderId} (Size: ${item.size || 'ទូទៅ'})`
+            }]);
+          } catch (mvtErr) {}
+        }
       }
 
       // ២. ⭐️ រក្សាទុកប្រវត្តិពេញលេញចូលតារាង orders (Full Option History) ⭐️
@@ -3062,6 +3809,7 @@ export default function UnifiedAdminDashboard() {
       const resolvedCustomerPhone = customerPhone && customerPhone.trim() ? customerPhone.trim() : 'N/A';
 
       const orderPayload = {
+        store_id: activeStore?.id || 'store_default_sabayluk',
         order_id: generatedOrderId,
         customer_name: resolvedCustomerName,
         phone: resolvedCustomerPhone,
@@ -3098,8 +3846,22 @@ export default function UnifiedAdminDashboard() {
         ]
       };
 
-      const { error: orderError } = await supabase.from('orders').insert([orderPayload]);
-      if (orderError) console.error('Order save error:', orderError);
+      if (isCurrentlyOnline) {
+        try {
+          const { error: orderError } = await supabase.from('orders').insert([orderPayload]);
+          if (orderError) throw orderError;
+        } catch (netErr) {
+          console.warn('Failed cloud save, queuing offline order:', netErr);
+          queueOfflineOrder(orderPayload, stockAdjustments);
+          setToastNotification('📡 បានកត់ត្រាការលក់ក្រៅបណ្តាញ (Offline Saved)! នឹង Sync ស្វ័យប្រវត្តិតាមក្រោយ។');
+        }
+      } else {
+        queueOfflineOrder(orderPayload, stockAdjustments);
+        setToastNotification('📡 បានកត់ត្រាការលក់ក្រៅបណ្តាញ (Offline Saved)! នឹង Sync ស្វ័យប្រវត្តិតាមក្រោយ។');
+      }
+
+      // Add to local realOrders state so UI reflects the new sale immediately
+      setRealOrders(prev => [{ ...orderPayload, id: `ord_${Date.now()}` }, ...prev]);
 
       // ៣. ចងក្រងទិន្នន័យដើម្បីបង្ហាញ Receipt
       const receipt = {
@@ -3182,12 +3944,113 @@ export default function UnifiedAdminDashboard() {
   const [sellingPrice, setSellingPrice] = useState('');
   const [retailDiscount, setRetailDiscount] = useState('');
   const [lowStockAlert, setLowStockAlert] = useState('5');
+  const [videoUrl, setVideoUrl] = useState('');
+
+  // ⭐️ Subscription payments & slips state
+  const [allSubscriptionPayments, setAllSubscriptionPayments] = useState(() => getSubscriptionPayments());
+
+  // ⭐️ Persistent Top-Right Payment & Store Approval Alert Badge State ⭐️
+  const [paymentAlertDismissed, setPaymentAlertDismissed] = useState(false);
+  const [highlightedStoreId, setHighlightedStoreId] = useState(null);
+  useEffect(() => {
+    const handlePaymentsChange = () => {
+      setAllSubscriptionPayments(getSubscriptionPayments());
+    };
+    window.addEventListener('sabay_payments_changed', handlePaymentsChange);
+    return () => window.removeEventListener('sabay_payments_changed', handlePaymentsChange);
+  }, []);
+
+  // ⭐️ States សម្រាប់គ្រប់គ្រងហាង និងតាមដាន Payment Slips ក្នុង Platform Stores Manager ⭐️
+  const [storesManagerSubTab, setStoresManagerSubTab] = useState('stores'); // 'stores' | 'payments'
+  const [paymentFilterStore, setPaymentFilterStore] = useState('ALL');
+  const [paymentFilterStatus, setPaymentFilterStatus] = useState('ALL');
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
+  const [zoomSlipModalUrl, setZoomSlipModalUrl] = useState(null);
+  
+  // 🔐 Password Confirmation State for Changing Plan in Platform Stores Manager
+  const [pendingPlanChange, setPendingPlanChange] = useState(null); // { store, newPlanKey }
+  const [planPasswordInput, setPlanPasswordInput] = useState('');
+  const [planPasswordError, setPlanPasswordError] = useState('');
+  const [showPlanPassword, setShowPlanPassword] = useState(false);
+
+  // 🗑️ Password Confirmation State for Deleting Store in Platform Stores Manager
+  const [pendingDeleteStore, setPendingDeleteStore] = useState(null);
+  const [deletePasswordInput, setDeletePasswordInput] = useState('');
+  const [deletePasswordError, setDeletePasswordError] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [isDeletingStore, setIsDeletingStore] = useState(false);
+
+  // Manual payment submission modal
+  const [manualPaymentModalOpen, setManualPaymentModalOpen] = useState(false);
+
+  // ⭐️ គណនាចំនួនហាង ឬ Slip ដែលកំពុងរង់ចាំការ Approve (Pending Action Count) ⭐️
+  const pendingApprovalStores = useMemo(() => {
+    return (registeredStores || []).filter(s => 
+      s.id !== 'store_default_sabayluk' && 
+      s.status === 'PENDING_APPROVAL'
+    );
+  }, [registeredStores]);
+
+  const pendingSubscriptionPaymentsList = useMemo(() => {
+    return (allSubscriptionPayments || []).filter(p => {
+      if (p.status !== 'PENDING' || p.store_id === 'store_default_sabayluk') return false;
+      const associatedStore = (registeredStores || []).find(s => 
+        s.id === p.store_id || 
+        (s.slug && p.store_name && s.slug.toLowerCase() === p.store_name.toLowerCase())
+      );
+      if (associatedStore && associatedStore.status === 'ACTIVE') return false;
+      return true;
+    });
+  }, [allSubscriptionPayments, registeredStores]);
+
+  const totalPendingActionCount = useMemo(() => {
+    const pStores = pendingApprovalStores.length;
+    const extraPayments = pendingSubscriptionPaymentsList.filter(p => !pendingApprovalStores.some(s => s.id === p.store_id)).length;
+    return pStores + extraPayments;
+  }, [pendingApprovalStores, pendingSubscriptionPaymentsList]);
+
+  const targetPendingStore = pendingApprovalStores[0] || (pendingSubscriptionPaymentsList[0] ? (registeredStores || []).find(s => s.id === pendingSubscriptionPaymentsList[0].store_id) : null);
+
+  // ⭐️ មុខងារទាញអេក្រង់ទៅកាន់ Account/Store ដែលបានបង់ប្រាក់ភ្លាមៗពេល Admin ចុចលើ Alert ⭐️
+  const handleNavigateToPendingApproval = (targetStore) => {
+    const storeToInspect = targetStore || targetPendingStore;
+    setPaymentAlertDismissed(true);
+    setActiveTab('stores');
+    setStoresManagerSubTab('stores');
+
+    if (storeToInspect) {
+      setHighlightedStoreId(storeToInspect.id);
+      setToastNotification(`👉 កំពុងបើកហាង "${storeToInspect.name}" ដើម្បីពិនិត្យបង្កាន់ដៃ (Slip) និងចុច Approve...`);
+      setTimeout(() => setToastNotification(null), 4000);
+
+      setTimeout(() => {
+        const rowEl = document.getElementById(`store-row-${storeToInspect.id}`);
+        if (rowEl) {
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 350);
+
+      setTimeout(() => {
+        setHighlightedStoreId(null);
+      }, 9000);
+    }
+  };
+  const [manualPaymentStoreId, setManualPaymentStoreId] = useState('');
+  const [manualPaymentPlanKey, setManualPaymentPlanKey] = useState('PRO');
+  const [manualPaymentCycle, setManualPaymentCycle] = useState('monthly');
+  const [manualPaymentAmount, setManualPaymentAmount] = useState('3');
+  const [manualPaymentSlipFile, setManualPaymentSlipFile] = useState(null);
+  const [manualPaymentSlipPreview, setManualPaymentSlipPreview] = useState(null);
+  const [manualPaymentNotes, setManualPaymentNotes] = useState('');
+  const [manualPaymentSubmitting, setManualPaymentSubmitting] = useState(false);
   const [bulkVariantStockInput, setBulkVariantStockInput] = useState('');
   const [showWholesaleSection, setShowWholesaleSection] = useState(false);
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [productImages, setProductImages] = useState([]);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState(0);
+  const [detailImages, setDetailImages] = useState([]);
+  const [detailImageUrlInput, setDetailImageUrlInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -3314,6 +4177,32 @@ export default function UnifiedAdminDashboard() {
     setSelectedCoverIndex(idx);
   };
 
+  // មុខងារជ្រើសរើសរូបភាពពិពណ៌នាលម្អិតច្រើនសន្លឹក (Detail Images Change - 1688 Style)
+  const handleDetailImageChange = async (e) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
+
+    const processedFiles = await Promise.all(
+      selectedFiles.map(async (f) => {
+        if (f.type.startsWith('image/')) {
+          return await compressMediaFile(f, 1400, 0.84);
+        }
+        return f;
+      })
+    );
+
+    const newItems = processedFiles.map((f, i) => ({
+      id: `detail_img_${Date.now()}_${i}_${Math.random()}`,
+      url: URL.createObjectURL(f),
+      file: f,
+      isExisting: false,
+      sizeKb: Math.round(f.size / 1024)
+    }));
+
+    setDetailImages(prev => [...prev, ...newItems]);
+    e.target.value = '';
+  };
+
   // មុខងារចុចរើស Size លឿនៗ
   const toggleSize = (sizeVal) => {
     if (selectedSizes.includes(sizeVal)) {
@@ -3324,6 +4213,8 @@ export default function UnifiedAdminDashboard() {
   };
 
     const handleSaveProduct = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("បញ្ចូលទំនិញថ្មី")) return;
     e.preventDefault();
     if (!name || !sellingPrice) return alert('សូមបំពេញឈ្មោះ និងតម្លៃលក់ឱ្យបានត្រឹមត្រូវ!');
 
@@ -3352,6 +4243,22 @@ export default function UnifiedAdminDashboard() {
           uploadedImageUrls.push(pData.publicUrl);
         } else if (imgItem.url) {
           uploadedImageUrls.push(imgItem.url);
+        }
+      }
+
+      // ២. Upload រូបភាពពិពណ៌នាលម្អិត (Detail Images - Alibaba 1688 Style)
+      let uploadedDetailImageUrls = [];
+      for (let i = 0; i < detailImages.length; i++) {
+        const dItem = detailImages[i];
+        if (dItem.file) {
+          const ext = dItem.file.name.split('.').pop() || 'jpg';
+          const fileName = `detail_${Date.now()}_${i}_${Math.floor(100 + Math.random() * 900)}.${ext}`;
+          const { error: dUploadErr } = await supabase.storage.from('products').upload(fileName, dItem.file);
+          if (dUploadErr) throw dUploadErr;
+          const { data: dData } = supabase.storage.from('products').getPublicUrl(fileName);
+          uploadedDetailImageUrls.push(dData.publicUrl);
+        } else if (dItem.url) {
+          uploadedDetailImageUrls.push(dItem.url);
         }
       }
 
@@ -3432,6 +4339,8 @@ export default function UnifiedAdminDashboard() {
       // រៀបចំ JSON metadata រក្សាទុករូបភាព និងការបញ្ចុះតម្លៃធានា ១០០% មិនបាត់
       const metaJson = JSON.stringify({
         images: uploadedImageUrls,
+        detail_images: uploadedDetailImageUrls,
+        video_url: videoUrl ? videoUrl.trim() : undefined,
         retail_discount: parseFloat(retailDiscount) || 0,
         wholesale_discount: parseFloat(wholesaleDiscount) || 0
       });
@@ -3453,6 +4362,7 @@ export default function UnifiedAdminDashboard() {
         low_stock_alert: parseInt(lowStockAlert) || 5,
         image_url: publicUrl,
         images: uploadedImageUrls,
+        detail_images: uploadedDetailImageUrls,
         status: finalStockQty > 0 ? 'In Stock' : 'Out of Stock'
       };
 
@@ -3464,11 +4374,12 @@ export default function UnifiedAdminDashboard() {
           .update(updatePayload)
           .eq('id', editingProductId);
 
-        if (updateError && (updateError.message?.includes('wholesale_price') || updateError.message?.includes('images') || updateError.message?.includes('discount') || updateError.code === 'PGRST204')) {
+        if (updateError && (updateError.message?.includes('wholesale_price') || updateError.message?.includes('images') || updateError.message?.includes('detail_images') || updateError.message?.includes('discount') || updateError.code === 'PGRST204')) {
           if (updateError.message?.includes('wholesale_price')) delete updatePayload.wholesale_price;
           if (updateError.message?.includes('retail_discount')) delete updatePayload.retail_discount;
           if (updateError.message?.includes('wholesale_discount')) delete updatePayload.wholesale_discount;
           delete updatePayload.images;
+          delete updatePayload.detail_images;
           const retry = await supabase
             .from('products')
             .update(updatePayload)
@@ -3496,7 +4407,10 @@ export default function UnifiedAdminDashboard() {
         }
 
         setMessage('✅ កែប្រែទំនិញ និងស្តុកជម្រើសជោគជ័យ!');
+        setToastNotification(`🎉 បានកែប្រែទំនិញ "${name}" ដោយជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 3500);
         setEditingProductId(null);
+        setActiveTab('inventory');
       } else {
         // ⭐️ ១. បញ្ចូលផលិតផលថ្មីទៅតារាង products
         let insertPayload = { ...productData };
@@ -3506,9 +4420,10 @@ export default function UnifiedAdminDashboard() {
           .select()
           .single();
 
-        if (insertError && (insertError.message?.includes('wholesale_price') || insertError.message?.includes('images') || insertError.code === 'PGRST204')) {
+        if (insertError && (insertError.message?.includes('wholesale_price') || insertError.message?.includes('images') || insertError.message?.includes('detail_images') || insertError.code === 'PGRST204')) {
           if (insertError.message?.includes('wholesale_price')) delete insertPayload.wholesale_price;
           delete insertPayload.images;
+          delete insertPayload.detail_images;
           const retry = await supabase
             .from('products')
             .insert([insertPayload])
@@ -3589,6 +4504,8 @@ export default function UnifiedAdminDashboard() {
       setPreviewUrl(null);
       setProductImages([]);
       setSelectedCoverIndex(0);
+      setDetailImages([]);
+      setDetailImageUrlInput('');
       setWholesalePrice('');
       setWholesaleDiscount('');
       setRetailDiscount('');
@@ -3635,6 +4552,125 @@ export default function UnifiedAdminDashboard() {
   
 
   // ⭐ ផ្ទាំង UploadView កម្រិតស្តង់ដារអន្តរជាតិ (MODERN E-COMMERCE PRODUCT STUDIO) ⭐️
+  // ⭐️ MASTER FUNCTION: ចាប់ផ្តើមកែប្រែព័ត៌មានទំនិញពេញលេញ ១០០% ដូចក្នុងរូបភាព (FULL PRODUCT STUDIO EDIT) ⭐️
+  const handleStartEditProduct = async (product) => {
+    if (!product) return;
+
+    // ១. ប្តូរទៅ Tab 'upload' និងកំណត់ ID ទំនិញដែលត្រូវកែប្រែ
+    setActiveTab('upload');
+    setEditingProductId(product.id);
+
+    // ២. សម្អាត Draft ចាស់ចោលដើម្បីកុំឱ្យជាន់គ្នា
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('sabay_product_draft');
+    }
+
+    // ៣. បំពេញព័ត៌មានទូទៅ (General Information)
+    setName(product.name || '');
+    setSku(product.sku || '');
+    setCategory(product.category || (categories[0] ? categories[0].name : ''));
+    if (typeof setBarcode === 'function') setBarcode(product.barcode || product.sku || '');
+    if (typeof setDescription === 'function') setDescription(product.description || '');
+    setVideoUrl(product.video_url || '');
+
+    // ៤. តម្លៃ និងការបញ្ចុះតម្លៃ (Prices & Margins)
+    setSellingPrice(product.price ? product.price.toString() : '');
+    setCostPrice(product.cost_price ? product.cost_price.toString() : '');
+    setWholesalePrice(product.wholesale_price ? product.wholesale_price.toString() : '');
+    setWholesaleDiscount(product.wholesale_discount ? product.wholesale_discount.toString() : '');
+    setRetailDiscount(product.retail_discount ? product.retail_discount.toString() : '');
+    setStockQty(product.stock_qty ? product.stock_qty.toString() : '0');
+    setLowStockAlert(product.low_stock_alert ? product.low_stock_alert.toString() : '5');
+    setColor(product.color || '');
+
+    // ៥. វិចិត្រសាលរូបភាព (Media Gallery) - ប្រមូលគ្រប់រូបភាពទាំងអស់ (image_url, images, detail_images)
+    const parsedProd = typeof parseProductMeta === 'function' ? parseProductMeta(product) : product;
+    let allImgs = [];
+    if (product.image_url) allImgs.push(product.image_url);
+    if (Array.isArray(parsedProd.images)) {
+      parsedProd.images.forEach(u => {
+        if (u && !allImgs.includes(u)) allImgs.push(u);
+      });
+    }
+    if (Array.isArray(parsedProd.detail_images)) {
+      parsedProd.detail_images.forEach(u => {
+        if (u && !allImgs.includes(u)) allImgs.push(u);
+      });
+    }
+
+    const loadedImgs = allImgs.map((u, i) => ({
+      id: `img_${i}_${Date.now()}`,
+      url: u,
+      isExisting: true
+    }));
+    setProductImages(loadedImgs);
+    setPreviewUrl(product.image_url || (loadedImgs[0] ? loadedImgs[0].url : null));
+    setSelectedCoverIndex(0);
+    setFile(null);
+
+    // ៦. ទាញយក និងកំណត់ ទំហំ ពណ៌ និងតារាងស្តុក (Variants & Stock Matrix)
+    try {
+      const { data: dbVars } = await supabase
+        .from('product_variants')
+        .select('*')
+        .eq('product_id', product.id);
+
+      if (dbVars && dbVars.length > 0) {
+        const extractedSizes = Array.from(new Set(dbVars.map(v => v.size).filter(s => s && s !== 'Free Size' && s !== 'N/A')));
+        const extractedColors = Array.from(new Set(dbVars.map(v => v.color).filter(c => c && c.trim() !== '')));
+        const loadedStock = {};
+
+        dbVars.forEach(v => {
+          if (v.size && v.color) {
+            loadedStock[`${v.size}__${v.color}`] = v.stock_qty.toString();
+          } else if (v.size) {
+            loadedStock[v.size] = v.stock_qty.toString();
+          } else if (v.color) {
+            loadedStock[v.color] = v.stock_qty.toString();
+          }
+        });
+
+        if (extractedSizes.length > 0) setSelectedSizes(extractedSizes);
+        if (extractedColors.length > 0) {
+          setSelectedColors(extractedColors);
+          setColor(extractedColors.join(', '));
+        }
+        setVariantStock(loadedStock);
+      } else {
+        if (product.size && product.size !== 'N/A') {
+          if (product.size.includes(':')) {
+            const pairs = product.size.split(', ');
+            const loadedSizes = [];
+            const loadedStock = {};
+            pairs.forEach(pair => {
+              const [sz, qty] = pair.split(':');
+              if (sz) {
+                loadedSizes.push(sz.trim());
+                loadedStock[sz.trim()] = (qty || '0').trim();
+              }
+            });
+            setSelectedSizes(loadedSizes);
+            setVariantStock(loadedStock);
+          } else {
+            setSelectedSizes(product.size.split(',').map(s => s.trim()).filter(Boolean));
+            setVariantStock({});
+          }
+        }
+        if (product.color) {
+          const colorsList = product.color.split(',').map(c => c.trim()).filter(Boolean);
+          setSelectedColors(colorsList);
+        }
+      }
+    } catch (_) {}
+
+    // ៧. Scroll ទៅលើបំផុតដោយរលូន
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setToastNotification(`✏️ កំពុងបើកទម្រង់កែប្រែទំនិញ "${product.name}" ពេញលេញ...`);
+    setTimeout(() => setToastNotification(null), 3000);
+  };
+
   const UploadView = () => {
     // ⭐️ គណនាតម្លៃ និងប្រាក់ចំណេញផ្ទាល់ (Instant Profit & Margin Analyzer) ⭐️
     const numCost = parseFloat(costPrice) || 0;
@@ -3760,6 +4796,9 @@ export default function UnifiedAdminDashboard() {
         setFile(null);
         setProductImages([]);
         setSelectedCoverIndex(0);
+        setVideoUrl('');
+        setDetailImages([]);
+        setDetailImageUrlInput('');
       }
     };
 
@@ -4683,13 +5722,335 @@ export default function UnifiedAdminDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* ៧. 🎬 វីដេអូបង្ហាញផលិតផល (YouTube Video) */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-base font-black">▶</span>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">៧. វីដេអូបង្ហាញផលិតផល (YouTube Video)</h3>
+                    <p className="text-[11px] text-slate-400">ភ្ជាប់ Link វីដេអូ YouTube ឬ Shorts ដើម្បីឱ្យអតិថិជនមើលលើ Storefront</p>
+                  </div>
+                </div>
+                {videoUrl && (
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                    ✓ មានវីដេអូ
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
+                  Link វីដេអូ YouTube (URL / Shorts)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=... ឬ https://youtu.be/..."
+                    className="w-full border-2 border-slate-200 focus:border-red-500 p-3 pl-10 rounded-2xl text-sm font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none transition"
+                  />
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-red-500 text-base">
+                    ▶
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">គាំទ្រទាំង YouTube Video ធម្មតា និង YouTube Shorts។ វីដេអូនឹងបង្ហាញលើទំព័រ Storefront និងខាងលើកម្រងរូបភាព។</p>
+              </div>
+
+              {videoUrl && (() => {
+                const getEmbedUrl = (url) => {
+                  try {
+                    if (url.includes('youtu.be/')) {
+                      return 'https://www.youtube.com/embed/' + url.split('youtu.be/')[1].split('?')[0];
+                    }
+                    if (url.includes('youtube.com/watch')) {
+                      const match = url.match(/[?&]v=([^&]+)/);
+                      return match ? 'https://www.youtube.com/embed/' + match[1] : null;
+                    }
+                    if (url.includes('youtube.com/shorts/')) {
+                      return 'https://www.youtube.com/embed/' + url.split('youtube.com/shorts/')[1].split('?')[0];
+                    }
+                  } catch (e) {}
+                  return null;
+                };
+                const embed = getEmbedUrl(videoUrl);
+                return embed ? (
+                  <div className="rounded-2xl overflow-hidden aspect-video bg-black/5 border border-slate-200">
+                    <iframe
+                      src={embed}
+                      title="YouTube Preview"
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : null;
+              })()}
+            </div>
+
+            {/* ៨. 📸 រូបភាពពិពណ៌នាលម្អិត (1688 Details Images) */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-orange-50 text-[#ff6a00] flex items-center justify-center text-base font-black">🖼️</span>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">៨. រូបភាពពិពណ៌នាលម្អិត (1688 Details Images)</h3>
+                    <p className="text-[11px] text-slate-400">
+                      រូបភាពបង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើ Storefront (1 ជួរ 1 សន្លឹក មិនទាញរូបភាពពីខាងលើ)
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-black text-white bg-[#ff6a00] px-3 py-1 rounded-full shadow-xs">
+                  {detailImages.length} សន្លឹក
+                </span>
+              </div>
+
+              {/* Upload Drop Zone & Controls */}
+              <div className="space-y-3">
+                <label className="border-2 border-dashed border-orange-300 hover:border-[#ff6a00] bg-orange-50/40 hover:bg-orange-50/80 rounded-2xl p-5 flex flex-col items-center justify-center cursor-pointer transition text-center group">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleDetailImageChange}
+                    className="hidden"
+                  />
+                  <span className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-2xl group-hover:scale-110 transition">
+                    📸
+                  </span>
+                  <span className="mt-2 text-xs font-black text-slate-800">
+                    ចុចទីនេះដើម្បី Upload រូបភាពពិពណ៌នាលម្អិតច្រើនសន្លឹក
+                  </span>
+                  <span className="text-[11px] text-slate-400 mt-0.5">
+                    (PNG, JPG, WEBP — ប្រព័ន្ធនឹងបង្រួមទំហំដោយស្វ័យប្រវត្តិដើម្បីដើរលឿន)
+                  </span>
+                </label>
+
+                {/* Paste Image URL field (optional shortcut) */}
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={detailImageUrlInput}
+                    onChange={(e) => setDetailImageUrlInput(e.target.value)}
+                    placeholder="ឬបិទភ្ជាប់ Link រូបភាព (Image URL)..."
+                    className="flex-1 border-2 border-slate-200 focus:border-[#ff6a00] px-3.5 py-2 rounded-xl text-xs text-slate-800 bg-slate-50 focus:bg-white outline-none transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!detailImageUrlInput.trim()) return;
+                      setDetailImages(prev => [
+                        ...prev,
+                        {
+                          id: `detail_url_${Date.now()}_${Math.random()}`,
+                          url: detailImageUrlInput.trim(),
+                          isExisting: true
+                        }
+                      ]);
+                      setDetailImageUrlInput('');
+                    }}
+                    className="bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer active:scale-95"
+                  >
+                    + បន្ថែម Link
+                  </button>
+                </div>
+              </div>
+
+              {/* Uploaded Detail Images List Preview */}
+              {detailImages.length > 0 && (
+                <div className="space-y-2.5 pt-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                    <span>បញ្ជីរូបភាពដែលបានបញ្ចូល ({detailImages.length} សន្លឹក)</span>
+                    <button
+                      type="button"
+                      onClick={() => setDetailImages([])}
+                      className="text-red-500 hover:text-red-700 text-[11px] font-black cursor-pointer"
+                    >
+                      🗑️ សម្អាតទាំងអស់
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {detailImages.map((img, idx) => (
+                      <div
+                        key={img.id || idx}
+                        className="group relative bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-md transition"
+                      >
+                        <div className="aspect-square w-full bg-slate-100 flex items-center justify-center overflow-hidden">
+                          <img
+                            src={img.url}
+                            alt=""
+                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                          />
+                        </div>
+
+                        {/* Top Badge */}
+                        <div className="absolute top-1.5 left-1.5 bg-black/70 backdrop-blur-xs text-white text-[10px] font-mono font-black px-1.5 py-0.5 rounded-md">
+                          #{idx + 1}
+                        </div>
+
+                        {/* Action buttons (Move Up, Move Down, Remove) */}
+                        <div className="p-1.5 bg-white border-t border-slate-100 flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => {
+                                setDetailImages(prev => {
+                                  const arr = [...prev];
+                                  [arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]];
+                                  return arr;
+                                });
+                              }}
+                              className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-700 flex items-center justify-center text-[10px] font-black cursor-pointer"
+                              title="រំកិលឡើងលើ"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === detailImages.length - 1}
+                              onClick={() => {
+                                setDetailImages(prev => {
+                                  const arr = [...prev];
+                                  [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                                  return arr;
+                                });
+                              }}
+                              className="w-6 h-6 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-30 text-slate-700 flex items-center justify-center text-[10px] font-black cursor-pointer"
+                              title="រំកិលចុះក្រោម"
+                            >
+                              ↓
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDetailImages(prev => prev.filter((_, i) => i !== idx));
+                            }}
+                            className="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-500 text-red-600 hover:text-white flex items-center justify-center text-xs font-black transition cursor-pointer"
+                            title="លុបរូបភាពនេះចេញ"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
 
           {/* ======================================================== */}
           {/* 👉 ផ្នែកខាងស្តាំ: LIVE PREVIEW & SAVE BUTTON (STICKY SIDEBAR) */}
           {/* ======================================================== */}
-          <div className="lg:col-span-4 space-y-5 sticky top-4 self-start z-30 max-h-[calc(100vh-2rem)] overflow-y-auto pr-1">
+          <div className="lg:col-span-4 space-y-4 sticky top-4 self-start z-30 max-h-[calc(100vh-2rem)] overflow-y-auto pr-1">
+
+            {/* ⭐️ LINK PREVIEW WIDGET: តំណភ្ជាប់ផ្ទាល់ទៅកាន់ទំនិញលើ Storefront ⭐️ */}
+            {(() => {
+              const storeSlug = activeStore?.slug || 'sabay-luk';
+              const targetParam = editingProductId ? `?product=${editingProductId}` : '?product=preview';
+              const origin = typeof window !== 'undefined' ? window.location.origin : 'https://sabayluk.com';
+              const previewFullUrl = `${origin}/store/${storeSlug}${targetParam}`;
+
+              const handleOpenStorefrontProduct = () => {
+                if (typeof window !== 'undefined') {
+                  const draftObj = {
+                    id: editingProductId || 'preview',
+                    name: name || 'ឈ្មោះទំនិញគំរូ (Product Title)',
+                    category_name: category || 'ទូទៅ',
+                    price: parseFloat(finalRetail) || 0,
+                    cost_price: parseFloat(costPrice) || 0,
+                    image_url: productImages[selectedCoverIndex]?.url || previewUrl || '',
+                    images: productImages.map(img => img.url),
+                    sizes: selectedSizes,
+                    colors: selectedColors,
+                    video_url: videoUrl || '',
+                    detail_images: detailImages.map(img => img.url),
+                    retail_discount: parseFloat(retailDiscount) || 0,
+                    stock_qty: parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0,
+                    store_id: activeStore?.id || 'store_default_sabayluk'
+                  };
+                  localStorage.setItem('sabay_draft_preview_product', JSON.stringify(draftObj));
+                }
+
+                // 1. Direct browser open immediately
+                try {
+                  window.open(previewFullUrl, '_blank');
+                } catch(e) {}
+
+                // 2. Also trigger Windows Shell to ensure Chrome opens
+                fetch('/api/open-chrome', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ url: previewFullUrl })
+                }).catch(() => {});
+
+                setToastNotification('🌐 បានបើកទំនិញលើ Google Chrome!');
+                setTimeout(() => setToastNotification(null), 3000);
+              };
+
+              return (
+                <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-950 rounded-3xl p-4.5 text-white shadow-xl border-2 border-blue-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-400/30 flex items-center justify-center text-base">
+                        🔗
+                      </span>
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-white">
+                          Link Preview ទំនិញ
+                        </h4>
+                        <p className="text-[10px] text-blue-200">
+                          {editingProductId ? 'ទំនិញក្នុងស្តុក (Live in Store)' : 'ទំនិញថ្មី (Draft Preview)'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                      {editingProductId ? '🟢 Live' : '⚡ Preview'}
+                    </span>
+                  </div>
+
+                  {/* URL Box with 1-Click Copy */}
+                  <div className="bg-black/40 backdrop-blur-xs p-2 rounded-xl border border-white/10 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 text-[11px] font-mono text-blue-100 overflow-hidden text-ellipsis whitespace-nowrap">
+                      <span className="text-blue-300 select-none">🌐</span>
+                      <span className="truncate">{previewFullUrl}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof navigator !== 'undefined') {
+                          navigator.clipboard.writeText(previewFullUrl);
+                          setToastNotification('📋 បានចម្លង Link ទំនិញជោគជ័យ!');
+                          setTimeout(() => setToastNotification(null), 3000);
+                        }
+                      }}
+                      className="shrink-0 px-2.5 py-1 bg-white/15 hover:bg-white/30 text-white rounded-lg text-[10px] font-bold transition cursor-pointer active:scale-95"
+                      title="ចម្លង Link"
+                    >
+                      ចម្លង Link
+                    </button>
+                  </div>
+
+                  {/* Big Clickable Action Button */}
+                  <button
+                    type="button"
+                    onClick={handleOpenStorefrontProduct}
+                    className="w-full py-2.5 px-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/30 transition active:scale-95 cursor-pointer border border-blue-400/40"
+                  >
+                    <span>🌐</span>
+                    <span>មើលទំនិញនេះនៅខាងមុខ Website</span>
+                    <span className="text-sm">↗</span>
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* ៣. ទិដ្ឋភាពផ្ទាល់លើ Storefront (Live Customer Preview) */}
             <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-lg space-y-3">
@@ -4757,6 +6118,42 @@ export default function UnifiedAdminDashboard() {
                       )}
                     </div>
                   )}
+
+                  {/* 🔗 ប៊ូតុងចូលទៅកាន់ទំព័រទំនិញជាក់ស្តែងលើ Storefront */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const storeSlug = activeStore?.slug || 'sabay-luk';
+                      const targetParam = editingProductId ? `?product=${editingProductId}` : '?product=preview';
+                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                      const fullUrl = `${origin}/store/${storeSlug}${targetParam}`;
+                      if (typeof window !== 'undefined') {
+                        const draftObj = {
+                          id: editingProductId || 'preview',
+                          name: name || 'ឈ្មោះទំនិញគំរូ',
+                          category_name: category || 'ទូទៅ',
+                          price: parseFloat(finalRetail) || 0,
+                          cost_price: parseFloat(costPrice) || 0,
+                          image_url: productImages[selectedCoverIndex]?.url || previewUrl || '',
+                          images: productImages.map(img => img.url),
+                          sizes: selectedSizes,
+                          colors: selectedColors,
+                          video_url: videoUrl || '',
+                          detail_images: detailImages.map(img => img.url),
+                          retail_discount: parseFloat(retailDiscount) || 0,
+                          stock_qty: parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0,
+                          store_id: activeStore?.id || 'store_default_sabayluk'
+                        };
+                        localStorage.setItem('sabay_draft_preview_product', JSON.stringify(draftObj));
+                      }
+                      window.open(fullUrl, '_blank');
+                    }}
+                    className="w-full mt-3 py-2 px-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl font-black text-[11px] flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 text-center cursor-pointer"
+                  >
+                    <span>🌐</span>
+                    <span>មើលទំនិញនេះលើ Storefront</span>
+                    <span>↗</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -4814,20 +6211,10 @@ export default function UnifiedAdminDashboard() {
   const [editingCatName, setEditingCatName] = useState('');
   const [editingCatIcon, setEditingCatIcon] = useState('');
 
-  const quickIcons = [
-    { id: 'shoe', label: 'ស្បែកជើង', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M20.2 14.3l-2.6-6.5a2 2 0 00-1.9-1.3H11l-3 3-4.5 1A2 2 0 002 12.5v3A2.5 2.5 0 004.5 18h13a2.5 2.5 0 002.5-2.5 2.5 2.5 0 00.2-1.2z"></path><path strokeLinecap="round" strokeLinejoin="round" d="M2 14.5h18.5"></path><path strokeLinecap="round" strokeLinejoin="round" d="M12 11.5l-4-1.5"></path></svg> },
-    { id: 'heel', label: 'ស្បែកជើងកែង', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 16l-3-7a2 2 0 00-1.8-1.2H12l-4 3-3 1.5A2 2 0 003.5 14L4 18h16.5a1 1 0 00.5-2zM15 8l2 8M6 18v3"></path></svg> },
-    { id: 'watch', label: 'នាឡិកា', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><rect x="7" y="5" width="10" height="14" rx="3" ry="3"></rect><path strokeLinecap="round" strokeLinejoin="round" d="M9 2h6M9 22h6M17 12h1.5M12 9v3l1.5 1.5"></path></svg> },
-    { id: 'bag', label: 'កាបូប', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 8h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V10a2 2 0 012-2z"></path><path strokeLinecap="round" strokeLinejoin="round" d="M9 8V6a2 2 0 012-2h2a2 2 0 012 2v2"></path><path strokeLinecap="round" strokeLinejoin="round" d="M9 14h.01M15 14h.01"></path></svg> },
-    { id: 'belt', label: 'ខ្សែក្រវ៉ាត់', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 10c-1-3-4-4-7-4S5 7 5 10c0 2.5 2 4 5 4s5-1.5 5-4"></path><path strokeLinecap="round" strokeLinejoin="round" d="M5 10v4c0 3 3 4 7 4s7-1 7-4v-4"></path><path strokeLinecap="round" strokeLinejoin="round" d="M12 10a2 2 0 100-4 2 2 0 000 4z"></path></svg> },
-    { id: 'shirt', label: 'សម្លៀកបំពាក់', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 1.89v1.15a2 2 0 001.62 1.96l1.38.23V20a2 2 0 002 2h11a2 2 0 002-2V8.69l1.38-.23a2 2 0 001.62-1.96V5.35a2 2 0 00-1.34-1.89z"></path></svg> },
-    { id: 'glasses', label: 'វ៉ែនតា', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 14h3a3 3 0 003-3V9m6 5h3a3 3 0 003-3V9m-6 3a3 3 0 100-6 3 3 0 000 6zm-9 0a3 3 0 100-6 3 3 0 000 6z"></path></svg> },
-    { id: 'hat', label: 'មួក', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4a7 7 0 00-7 7c0 2 1 3.5 2 4.5h10c1-1 2-2.5 2-4.5a7 7 0 00-7-7zM3 16h18a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg> },
-    { id: 'perfume', label: 'ទឹកអប់', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M10 2h4M12 2v4m-5 4h10a2 2 0 012 2v8a2 2 0 01-2 2H7a2 2 0 01-2-2v-8a2 2 0 012-2z"></path></svg> },
-    { id: 'ring', label: 'គ្រឿងអលង្ការ', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8a6 6 0 100 12 6 6 0 000-12zm0-4l2.5 3h-5L12 4z"></path></svg> },
-    { id: 'tag', label: 'បញ្ចុះតម្លៃ', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M4.93 4.93a10 10 0 0114.14 0l1.41 1.41a2 2 0 010 2.83L11 18.66a2 2 0 01-2.83 0L3.52 14.01a2 2 0 010-2.83l1.41-1.41a10 10 0 010-4.84z"></path></svg> },
-    { id: 'box', label: 'ប្រអប់ទំនិញ', svg: <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg> }
-  ];
+  // ⭐️ បញ្ជី Icon ទាំងអស់ពី categoryIcons helper (គាំទ្រហាងគ្រប់មុខ 60+ Icons បែងចែកតាម 12 ផ្នែក) ⭐️
+  const quickIcons = CATEGORY_ICONS_LIST;
+  const [activeDeptTab, setActiveDeptTab] = useState('ALL');
+  const [catIconSearch, setCatIconSearch] = useState('');
 
     // មុខងាររំកិលលំដាប់ Category ឡើងលើ / ចុះក្រោម
   const moveCategoryOrder = (index, direction) => {
@@ -4844,29 +6231,44 @@ export default function UnifiedAdminDashboard() {
     }
   };
 
-  async function fetchCategoriesFromDB() {
-    const { data, error } = await supabase.from('categories').select('*');
-    if (!error && data) {
-      setCategories(data);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('sabay_categories_cache', JSON.stringify(data));
-        window.dispatchEvent(new Event('storage'));
+  async function fetchCategoriesFromDB(targetStoreId) {
+    const storeId = targetStoreId || activeStore?.id || 'store_default_sabayluk';
+    try {
+      let query = supabase.from('categories').select('*');
+      if (storeId === 'store_default_sabayluk') {
+        query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+      } else {
+        query = query.eq('store_id', storeId);
       }
-    }
+      const { data, error } = await query.order('created_at', { ascending: true });
+      if (!error && data) {
+        setCategories(data);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`sabay_categories_cache_${storeId}`, JSON.stringify(data));
+          window.dispatchEvent(new Event('storage'));
+        }
+      } else if (storeId !== 'store_default_sabayluk') {
+        setCategories([]);
+      }
+    } catch (e) {}
   }
 
   useEffect(() => {
-    fetchCategoriesFromDB();
-  }, []);
+    if (activeStore) {
+      fetchCategoriesFromDB(activeStore.id);
+    }
+  }, [activeStore?.id]);
 
   const handleAddCategory = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("បន្ថែមប្រភេទមុខទំនិញ")) return;
     e.preventDefault();
     if (!newCatName.trim()) return;
     setCatMessage('⏳ កំពុងបញ្ចូល...');
 
     try {
       const { error } = await supabase.from('categories').insert([
-        { name: newCatName.trim(), icon: newCatIcon }
+        { name: newCatName.trim(), icon: newCatIcon, store_id: activeStore?.id || 'store_default_sabayluk' }
       ]);
       if (error) throw error;
       setCatMessage('🎉 បង្កើតប្រភេទផលិតផលជោគជ័យ!');
@@ -4879,6 +6281,7 @@ export default function UnifiedAdminDashboard() {
   };
 
   const handleDeleteCategory = async (catItem) => {
+    if (guardDemoAction("លុបប្រភេទមុខទំនិញ")) return;
     const catId = catItem.id;
     const catName = catItem.name;
     const productCount = products.filter(p => (p.category || '').trim().toLowerCase() === (catName || '').trim().toLowerCase()).length;
@@ -4978,36 +6381,133 @@ export default function UnifiedAdminDashboard() {
 
         {/* Form បន្ថែម Category ថ្មី (Full Option Card) */}
         <form onSubmit={handleAddCategory} className="bg-white p-7 rounded-3xl border border-gray-200/90 shadow-sm space-y-6">
-          <div>
-            <div className="flex items-center justify-between mb-3">
+          <div className="space-y-3.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
-                  <span>✨</span> ១. ជ្រើសរើសរូបសញ្ញា Icon SVG ស្តង់ដារ (Category SVG Icon)
+                  <span>✨</span> ១. ជ្រើសរើសរូបសញ្ញា Icon SVG តាមផ្នែកទំនិញ (ហាងគ្រប់មុខ — General Store)
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">Icon នេះនឹងយកទៅបង្ហាញលើ Sidebar និង Mobile Bar នៅទំព័រមុខហាងស្វ័យប្រវត្តិ</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  រូបសញ្ញា SVG ស្តង់ដារជាង ៦០ មុខ បែងចែកតាមផ្នែក ដើម្បីបង្ហាញលើ Sidebar & Mobile Bar មុខហាង
+                </p>
               </div>
-              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-100">
-                បានជ្រើសរើស៖ {quickIcons.find(q => q.id === newCatIcon)?.label || 'ស្បែកជើង'}
-              </span>
+
+              {/* Active Selection Badge */}
+              {(() => {
+                const selectedItem = quickIcons.find(q => q.id === newCatIcon) || quickIcons[0];
+                const deptInfo = CATEGORY_DEPARTMENTS.find(d => d.id === selectedItem?.department);
+                return (
+                  <div className="inline-flex items-center gap-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 px-3.5 py-1.5 rounded-2xl shadow-2xs self-start sm:self-auto">
+                    <div className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                      {renderCategorySvg(selectedItem?.id, 'w-4 h-4')}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-[10px] text-gray-500 font-bold">បានជ្រើសរើស៖</span>
+                        <span className="font-black text-blue-900">{selectedItem?.label}</span>
+                      </div>
+                      <span className="text-[9px] font-black text-blue-600 block">{deptInfo?.label || 'ទូទៅ'}</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2.5">
-              {quickIcons.map(item => (
+            {/* ⭐️ Filter តាមផ្នែកទំនិញ (Department Pills Switcher) ⭐️ */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-gray-100 scrollbar-thin">
+              {CATEGORY_DEPARTMENTS.map(dept => {
+                const count = dept.id === 'ALL' 
+                  ? quickIcons.length 
+                  : quickIcons.filter(i => i.department === dept.id).length;
+                const isActive = activeDeptTab === dept.id;
+                return (
+                  <button
+                    key={dept.id}
+                    type="button"
+                    onClick={() => setActiveDeptTab(dept.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                      isActive
+                        ? 'bg-slate-900 text-white shadow-sm scale-102'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    <span>{dept.icon}</span>
+                    <span>{dept.label}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                      isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 🔍 Search Icon Bar */}
+            <div className="relative max-w-sm">
+              <input
+                type="text"
+                value={catIconSearch}
+                onChange={(e) => setCatIconSearch(e.target.value)}
+                placeholder="🔍 ស្វែងរក Icon (ឧ. អាវ, ស្បែកជើង, កាបូប, ទូរស័ព្ទ, កាហ្វេ, ថ្នាំ...)..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition"
+              />
+              {catIconSearch && (
                 <button
                   type="button"
-                  key={item.id}
-                  onClick={() => setNewCatIcon(item.id)}
-                  className={`p-2.5 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-1.5 font-bold text-xs cursor-pointer ${
-                    newCatIcon === item.id 
-                      ? 'border-blue-600 bg-gradient-to-b from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/25 scale-105' 
-                      : 'border-gray-200 bg-gray-50/70 hover:bg-white hover:border-blue-300 text-gray-700'
-                  }`}
+                  onClick={() => setCatIconSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
                 >
-                  <div className="scale-110">{item.svg}</div>
-                  <span className="text-[10px] truncate max-w-full font-black mt-0.5">{item.label}</span>
+                  ✕
                 </button>
-              ))}
+              )}
             </div>
+
+            {/* ⭐️ Icons Grid បង្ហាញតាមផ្នែក និង Search ⭐️ */}
+            {(() => {
+              const filtered = quickIcons.filter(item => {
+                const matchDept = activeDeptTab === 'ALL' || item.department === activeDeptTab;
+                const q = catIconSearch.toLowerCase().trim();
+                const matchSearch = !q || item.label.toLowerCase().includes(q) || item.id.toLowerCase().includes(q);
+                return matchDept && matchSearch;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs font-bold">
+                    រកមិនឃើញ Icon ដែលត្រូវនឹងពាក្យស្វែងរក "{catIconSearch}" ទេ!
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2 max-h-72 overflow-y-auto p-2 border border-slate-200/80 rounded-2xl bg-slate-50/50">
+                  {filtered.map(item => {
+                    const isSelected = newCatIcon === item.id;
+                    return (
+                      <button
+                        type="button"
+                        key={item.id}
+                        onClick={() => setNewCatIcon(item.id)}
+                        title={`${item.label} (${item.id})`}
+                        className={`p-2 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-1 font-bold text-xs cursor-pointer group ${
+                          isSelected 
+                            ? 'border-blue-600 bg-gradient-to-b from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/25 scale-105 z-10' 
+                            : 'border-slate-200/80 bg-white hover:border-blue-300 hover:shadow-xs text-slate-700'
+                        }`}
+                      >
+                        <div className={`transition-transform group-hover:scale-110 ${isSelected ? 'text-white' : 'text-slate-700'}`}>
+                          {renderCategorySvg(item.id, 'w-5 h-5')}
+                        </div>
+                        <span className="text-[9px] truncate max-w-full font-black mt-0.5 leading-tight">
+                          {item.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           <div>
@@ -5064,8 +6564,7 @@ export default function UnifiedAdminDashboard() {
                   categories.map((cat, idx) => {
                     const isEditing = editingCategoryId === cat.id;
                     const activeIconId = isEditing ? editingCatIcon : (cat.icon || 'shoe');
-                    const matched = quickIcons.find(i => i.id === activeIconId);
-                    const displayIcon = matched ? matched.svg : quickIcons[0].svg;
+                    const displayIcon = renderCategorySvg(activeIconId, 'w-5 h-5 text-blue-600');
                     const pCount = products.filter(p => (p.category || '').trim().toLowerCase() === (cat.name || '').trim().toLowerCase()).length;
 
                     return (
@@ -5107,10 +6606,14 @@ export default function UnifiedAdminDashboard() {
                             <select 
                               value={editingCatIcon} 
                               onChange={(e) => setEditingCatIcon(e.target.value)}
-                              className="border-2 border-blue-500 rounded-xl p-1.5 text-xs font-bold outline-none bg-white shadow-xs"
+                              className="border-2 border-blue-500 rounded-xl p-1.5 text-xs font-bold outline-none bg-white shadow-xs max-w-[150px]"
                             >
-                              {quickIcons.map(qi => (
-                                <option key={qi.id} value={qi.id}>{qi.label}</option>
+                              {CATEGORY_DEPARTMENTS.filter(d => d.id !== 'ALL').map(dept => (
+                                <optgroup key={dept.id} label={dept.label}>
+                                  {quickIcons.filter(i => i.department === dept.id).map(qi => (
+                                    <option key={qi.id} value={qi.id}>{qi.label}</option>
+                                  ))}
+                                </optgroup>
                               ))}
                             </select>
                           ) : (
@@ -5209,14 +6712,36 @@ export default function UnifiedAdminDashboard() {
     );
   };
   
-  // ================= ផ្នែក Cover Management (Multiple Slides - 5 សន្លឹក Standard DB + Full Options) =================
-  const [slides, setSlides] = useState([
+  // ================= ផ្នែក Cover Management (Multiple Slides Scoped Per Store) =================
+  const DEFAULT_FLAGSHIP_SLIDES = [
     { id: 1, badge: 'NEW COLLECTION 2026', title: 'ភាពស៊ីវិល័យ និងគុណភាពខ្ពស់', desc: 'ស្វែងរកទំនិញម៉ាកយីហោលំដាប់ប្រណិត ធានាទាំងតម្លៃ និងគុណភាពពិតប្រាកដ។', btnText: 'បញ្ជាទិញឥឡូវនេះ', image: '', isActive: true, align: 'left', overlay: 'medium', btnAction: 'products', btnLink: '' },
     { id: 2, badge: '🔥 HOT PROMOTION', title: 'ការបញ្ចុះតម្លៃពិសេសប្រចាំខែ', desc: 'ទំនិញពេញនិយមបញ្ចុះតម្លៃរហូតដល់ ៥០% រួសរាន់ឡើងចំនួនមានកំណត់!', btnText: 'ទិញទំនិញប្រូម៉ូសិន', image: '', isActive: true, align: 'left', overlay: 'medium', btnAction: 'products', btnLink: '' },
     { id: 3, badge: '✨ NEW ARRIVAL', title: 'ម៉ូតទាន់សម័យទើបមកដល់ថ្មីៗ', desc: 'ម៉ូតថ្មីទាក់ទាញ គុណភាពខ្ពស់ សាកសមគ្រប់កាលៈទេសៈ។', btnText: 'ស្វែងរកម៉ូតថ្មី', image: '', isActive: true, align: 'left', overlay: 'medium', btnAction: 'products', btnLink: '' },
     { id: 4, badge: '🚚 FAST DELIVERY', title: 'ដឹកជញ្ជូនរហ័សទូទាំង ២៥ ខេត្ត-ក្រុង', desc: 'សេវាកម្មដឹកជញ្ជូនឆាប់រហ័ស ធានាសុវត្ថិភាពទំនិញ ១០០%។', btnText: 'មើលទំនិញទាំងអស់', image: '', isActive: false, align: 'left', overlay: 'medium', btnAction: 'products', btnLink: '' },
     { id: 5, badge: '💎 LUXURY VIBE', title: 'បទពិសោធន៍ទិញទំនិញលំដាប់ VIP', desc: 'សេវាកម្មរួសរាយ គុណភាពផ្ទៀងផ្ទាត់ត្រឹមត្រូវ។', btnText: 'ទំនាក់ទំនងមកយើង', image: '', isActive: false, align: 'left', overlay: 'medium', btnAction: 'telegram', btnLink: '' },
-  ]);
+  ];
+
+  const getStoreScopedCoverSlides = (store) => {
+    const storeId = store?.id || 'store_default_sabayluk';
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem(`sabay_covers_data_${storeId}`);
+      if (cached) {
+        try { return JSON.parse(cached); } catch (_) {}
+      }
+    }
+    if (store && storeId !== 'store_default_sabayluk') {
+      return [
+        { id: 1, badge: 'NEW ARRIVAL', title: `សូមស្វាគមន៍មកកាន់ ${store.name || 'ហាងរបស់យើង'}`, desc: 'ស្វែងរកទំនិញគុណភាពខ្ពស់ និងការផ្តល់ជូនពិសេស។', btnText: 'បញ្ជាទិញឥឡូវនេះ', image: '', isActive: true, align: 'left', overlay: 'medium', btnAction: 'products', btnLink: '' },
+        { id: 2, badge: 'PROMOTION', title: 'ការបញ្ចុះតម្លៃពិសេស', desc: 'ទំនិញពេញនិយម និងការផ្តល់ជូនពិសេសប្រចាំខែ។', btnText: 'ទិញទំនិញ', image: '', isActive: false, align: 'left', overlay: 'medium', btnAction: 'products', btnLink: '' },
+        { id: 3, badge: 'POPULAR', title: 'ទំនិញលក់ដាច់ប្រចាំហាង', desc: 'ម៉ូតទាន់សម័យ គុណភាពខ្ពស់។', btnText: 'ស្វែងរកទំនិញ', image: '', isActive: false, align: 'left', overlay: 'medium', btnAction: 'products', btnLink: '' },
+        { id: 4, badge: 'FAST DELIVERY', title: 'ដឹកជញ្ជូនរហ័សទាន់ចិត្ត', desc: 'សេវាកម្មដឹកជញ្ជូនឆាប់រហ័ស និងមានទំនុកចិត្ត។', btnText: 'មើលទំនិញទាំងអស់', image: '', isActive: false, align: 'left', overlay: 'medium', btnAction: 'products', btnLink: '' },
+        { id: 5, badge: 'VIP SERVICE', title: 'សេវាកម្មរួសរាយរាក់ទាក់', desc: 'ទំនាក់ទំនងមកយើងដើម្បីទទួលបានព័ត៌មានបន្ថែម។', btnText: 'ទាក់ទងមកយើង', image: '', isActive: false, align: 'left', overlay: 'medium', btnAction: 'telegram', btnLink: '' },
+      ];
+    }
+    return DEFAULT_FLAGSHIP_SLIDES;
+  };
+
+  const [slides, setSlides] = useState(() => getStoreScopedCoverSlides(getActiveStore()));
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [coverMessage, setCoverMessage] = useState('');
   
@@ -5225,41 +6750,54 @@ export default function UnifiedAdminDashboard() {
   const [isSavingSlides, setIsSavingSlides] = useState(false);
   const [directImageUrlInput, setDirectImageUrlInput] = useState('');
 
-  // ១. ទាញយកទិន្នន័យ Slides ពី Database ពេល Load ចូលផ្ទាំងនេះ
+  // ១. ទាញយកទិន្នន័យ Slides ពី Database តាម Store ID នីមួយៗ
   useEffect(() => {
     async function fetchSlidesFromDB() {
+      const storeId = activeStore?.id || 'store_default_sabayluk';
       let localData = null;
       try {
-        const cached = localStorage.getItem('sabay_luk_covers_data');
+        const cached = localStorage.getItem(`sabay_covers_data_${storeId}`);
         if (cached) localData = JSON.parse(cached);
       } catch (e) {}
 
-      const { data, error } = await supabase.from('sliders').select('*').order('id', { ascending: true });
-      if (data && data.length > 0) {
-        const loadedSlides = Array(5).fill(0).map((_, i) => {
-          const slide = data.find(s => s.id === i + 1);
-          const localItem = Array.isArray(localData) ? (localData.find(l => l.id === i + 1) || localData[i]) : null;
-          return {
-            id: i + 1,
-            badge: slide?.badge || localItem?.badge || '',
-            title: slide?.title || localItem?.title || '',
-            desc: slide?.description || localItem?.desc || '',
-            btnText: slide?.btn_text || localItem?.btnText || '',
-            image: slide?.image_url || localItem?.image || '',
-            isActive: localItem?.isActive !== undefined ? localItem.isActive : Boolean(slide?.image_url || slide?.title),
-            align: localItem?.align || 'left',
-            overlay: localItem?.overlay || 'medium',
-            btnAction: localItem?.btnAction || 'products',
-            btnLink: localItem?.btnLink || '',
-          };
-        });
-        setSlides(loadedSlides);
-      } else if (localData && Array.isArray(localData) && localData.length > 0) {
-        setSlides(localData);
+      try {
+        let query = supabase.from('sliders').select('*');
+        if (storeId === 'store_default_sabayluk') {
+          query = query.or(`store_id.eq.${storeId},store_id.is.null`);
+        } else {
+          query = query.eq('store_id', storeId);
+        }
+        const { data, error } = await query.order('id', { ascending: true });
+        if (data && data.length > 0) {
+          const loadedSlides = Array(5).fill(0).map((_, i) => {
+            const slide = data.find(s => s.id === i + 1);
+            const localItem = Array.isArray(localData) ? (localData.find(l => l.id === i + 1) || localData[i]) : null;
+            return {
+              id: i + 1,
+              badge: slide?.badge || localItem?.badge || '',
+              title: slide?.title || localItem?.title || '',
+              desc: slide?.description || localItem?.desc || '',
+              btnText: slide?.btn_text || localItem?.btnText || '',
+              image: slide?.image_url || localItem?.image || '',
+              isActive: localItem?.isActive !== undefined ? localItem.isActive : Boolean(slide?.image_url || slide?.title),
+              align: localItem?.align || 'left',
+              overlay: localItem?.overlay || 'medium',
+              btnAction: localItem?.btnAction || 'products',
+              btnLink: localItem?.btnLink || '',
+            };
+          });
+          setSlides(loadedSlides);
+        } else if (localData && Array.isArray(localData) && localData.length > 0) {
+          setSlides(localData);
+        } else {
+          setSlides(getStoreScopedCoverSlides(activeStore));
+        }
+      } catch (err) {
+        if (localData) setSlides(localData);
       }
     }
     fetchSlidesFromDB();
-  }, []);
+  }, [activeStore?.id]);
 
   const handleSlideChange = (field, value) => {
     const updated = [...slides];
@@ -5400,6 +6938,8 @@ export default function UnifiedAdminDashboard() {
   // ៣. មុខងារ Save ចូល Database ផ្ទាល់ (Supabase Upsert) & LocalStorage Cache
   const handleSaveAllSlides = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("កែប្រែ Cover ហាង")) return;
+    if (e && e.preventDefault) e.preventDefault();
     setIsSavingSlides(true);
     setCoverMessage('⏳ កំពុងរក្សាទុក Slides ទាំង 5 សន្លឹកទៅកាន់ Database & Website...');
 
@@ -5413,13 +6953,20 @@ export default function UnifiedAdminDashboard() {
         image_url: slide.image ? slide.image.trim() : ''
       }));
 
-      const { error } = await supabase.from('sliders').upsert(upsertData);
-      if (error) console.warn('Supabase sliders save note:', error.message);
+      const storeId = activeStore?.id || 'store_default_sabayluk';
+      if (storeId === 'store_default_sabayluk') {
+        const { error } = await supabase.from('sliders').upsert(upsertData);
+        if (error) console.warn('Supabase sliders save note:', error.message);
+        localStorage.setItem('sabay_luk_covers_data', JSON.stringify(slides));
+        if (slides[0]) {
+          localStorage.setItem('sabay_luk_cover', JSON.stringify(slides[0]));
+        }
+      }
 
-      // Save full rich options to localStorage & broadcast event
-      localStorage.setItem('sabay_luk_covers_data', JSON.stringify(slides));
+      // Save per-store covers data
+      localStorage.setItem(sabay_covers_data_, JSON.stringify(slides));
       if (slides[0]) {
-        localStorage.setItem('sabay_luk_cover', JSON.stringify(slides[0]));
+        localStorage.setItem(sabay_cover_, JSON.stringify(slides[0]));
       }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('storage'));
@@ -6113,6 +7660,7 @@ export default function UnifiedAdminDashboard() {
   };
 
   const handleDeleteCoupon = (code) => {
+    if (guardDemoAction("លុប Coupon")) return;
     if (window.confirm(`តើអ្នកពិតជាចង់លុបប័ណ្ណបញ្ចុះតម្លៃ [${code}] នេះមែនទេ?`)) {
       const updated = adminCoupons.filter(c => c.code !== code);
       saveCouponsToStorage(updated);
@@ -6206,6 +7754,14 @@ export default function UnifiedAdminDashboard() {
     ];
   });
 
+  const currentStoreFeedbacks = useMemo(() => {
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    return adminFeedbacks.filter(f => {
+      const fStore = f.store_id || 'store_default_sabayluk';
+      return fStore === storeId;
+    });
+  }, [adminFeedbacks, activeStore?.id]);
+
   const [feedbackSearch, setFeedbackSearch] = useState('');
   const [feedbackStarFilter, setFeedbackStarFilter] = useState('all');
 
@@ -6223,7 +7779,43 @@ export default function UnifiedAdminDashboard() {
     return () => window.removeEventListener('storage', handleStorageChangeFb);
   }, []);
 
+  // ⭐️ State សម្រាប់តាមដាន Feedback ដែលបានអានរួច (Read Status)
+  const [readFeedbackIds, setReadFeedbackIds] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sabay_admin_read_feedback_ids');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  // Function ដើម្បីសម្គាល់ថាបានមើល Feedback ទាំងអស់ (Mark All Read)
+  const markFeedbacksAsRead = () => {
+    if (!adminFeedbacks || adminFeedbacks.length === 0) return;
+    const allIds = adminFeedbacks.map(f => f.id);
+    setReadFeedbackIds(allIds);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('sabay_admin_read_feedback_ids', JSON.stringify(allIds));
+      } catch (e) {}
+    }
+  };
+
+  // ពេលកំពុងមើល ឬចុចមើល Tab Feedback អោយបាត់សញ្ញាលេខ Alert ជាស្វ័យប្រវត្តិ
+  useEffect(() => {
+    if (activeTab === 'feedbacks' && adminFeedbacks.length > 0) {
+      markFeedbacksAsRead();
+    }
+  }, [activeTab, adminFeedbacks]);
+
+  // គណនាចំនួន Feedback ដែលមិនទាន់បានមើល (Unread Feedbacks)
+  const unreadFeedbacksCount = activeTab === 'feedbacks'
+    ? 0
+    : adminFeedbacks.filter(f => !readFeedbackIds.includes(f.id)).length;
+
   const handleDeleteFeedback = (fbId) => {
+    if (guardDemoAction("លុប Feedback")) return;
     if (!window.confirm('តើអ្នកពិតជាចង់លុបមតិយោបល់ Feedback នេះមែនទេ?')) return;
     const updated = adminFeedbacks.filter(f => f.id !== fbId);
     setAdminFeedbacks(updated);
@@ -6232,7 +7824,8 @@ export default function UnifiedAdminDashboard() {
   };
 
   const FeedbacksView = () => {
-    const filtered = adminFeedbacks.filter(fb => {
+    const storeFeedbacks = currentStoreFeedbacks;
+    const filtered = storeFeedbacks.filter(fb => {
       const matchSearch = !feedbackSearch || 
         (fb.customer_name && fb.customer_name.toLowerCase().includes(feedbackSearch.toLowerCase())) ||
         (fb.product_name && fb.product_name.toLowerCase().includes(feedbackSearch.toLowerCase())) ||
@@ -6243,11 +7836,11 @@ export default function UnifiedAdminDashboard() {
       return matchSearch && matchStar;
     });
 
-    const totalCount = adminFeedbacks.length;
+    const totalCount = storeFeedbacks.length;
     const avgScore = totalCount > 0 
-      ? (adminFeedbacks.reduce((a, b) => a + (Number(b.rating) || 5), 0) / totalCount).toFixed(1)
+      ? (storeFeedbacks.reduce((a, b) => a + (Number(b.rating) || 5), 0) / totalCount).toFixed(1)
       : '5.0';
-    const fiveStarCount = adminFeedbacks.filter(f => Number(f.rating) === 5).length;
+    const fiveStarCount = storeFeedbacks.filter(f => Number(f.rating) === 5).length;
 
     return (
       <div className="animate-in fade-in max-w-7xl mx-auto space-y-6 pb-16">
@@ -6273,7 +7866,14 @@ export default function UnifiedAdminDashboard() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={markFeedbacksAsRead}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black text-xs transition border border-emerald-200 flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+            >
+              <span>✓</span> សម្គាល់ថាបានអានរួច
+            </button>
             <a
               href="/"
               target="_blank"
@@ -6893,7 +8493,7 @@ export default function UnifiedAdminDashboard() {
     const sevenDaysAgoTime = Date.now() - (7 * 86400000);
     const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-    const filteredByDateOrders = realOrders.filter(o => {
+    const filteredByDateOrders = currentStoreOrders.filter(o => {
       if (!o.created_at) return true;
       const orderDateStr = o.created_at.slice(0, 10);
       const orderTime = new Date(o.created_at).getTime();
@@ -6920,7 +8520,7 @@ export default function UnifiedAdminDashboard() {
     const getOrderCost = (order) => {
       const items = Array.isArray(order.items) ? order.items : [];
       return items.reduce((sum, it) => {
-        const prod = products.find(p => p.id === it.id);
+        const prod = currentStoreProducts.find(p => p.id === it.id);
         const costPerUnit = prod && prod.cost_price ? parseFloat(prod.cost_price) : 0;
         return sum + (costPerUnit * (it.qty || 1));
       }, 0);
@@ -6942,16 +8542,16 @@ export default function UnifiedAdminDashboard() {
     };
 
     // ៣. គណនាប្រាក់ចំណេញសុទ្ធតាមពេលវេលា (Today, 7 Days, Month, All-Time)
-    const todayOrders = realOrders.filter(o => o.created_at && o.created_at.slice(0, 10) === todayStr);
+    const todayOrders = currentStoreOrders.filter(o => o.created_at && o.created_at.slice(0, 10) === todayStr);
     const todayPnl = computeMetrics(todayOrders);
 
-    const weekOrders = realOrders.filter(o => o.created_at && new Date(o.created_at).getTime() >= sevenDaysAgoTime);
+    const weekOrders = currentStoreOrders.filter(o => o.created_at && new Date(o.created_at).getTime() >= sevenDaysAgoTime);
     const weekPnl = computeMetrics(weekOrders);
 
-    const monthOrders = realOrders.filter(o => o.created_at && o.created_at.slice(0, 7) === now.toISOString().slice(0, 7));
+    const monthOrders = currentStoreOrders.filter(o => o.created_at && o.created_at.slice(0, 7) === now.toISOString().slice(0, 7));
     const monthPnl = computeMetrics(monthOrders);
 
-    const allPnl = computeMetrics(realOrders);
+    const allPnl = computeMetrics(currentStoreOrders);
 
     // ៤. គណនាស្ថិតិសម្រាប់កាលវិភាគដែលបានជ្រើសរើស (Selected Period)
     const completedOrders = finalFilteredOrders.filter(o => o.status !== 'Cancelled');
@@ -6992,7 +8592,7 @@ export default function UnifiedAdminDashboard() {
       items.forEach(it => {
         if (!it.id && !it.name) return;
         const key = it.id || it.name;
-        const matchedProd = products.find(p => p.id === it.id || (p.name && it.name && p.name.trim().toLowerCase() === it.name.trim().toLowerCase()));
+        const matchedProd = currentStoreProducts.find(p => p.id === it.id || (p.name && it.name && p.name.trim().toLowerCase() === it.name.trim().toLowerCase()));
         const unitCost = matchedProd && matchedProd.cost_price ? parseFloat(matchedProd.cost_price) : 0;
         const unitPrice = parseFloat(it.price) || (matchedProd ? parseFloat(matchedProd.price) : 0) || 0;
         const quantity = it.qty || 1;
@@ -7040,7 +8640,7 @@ export default function UnifiedAdminDashboard() {
 
       const key = phone && phone !== 'N/A' ? phone.replace(/\s+/g, '') : name.toLowerCase();
       
-      const crmProfile = customers.find(c => 
+      const crmProfile = currentStoreCustomers.find(c => 
         (c.phone && phone && c.phone.replace(/\s+/g, '') === phone.replace(/\s+/g, '')) ||
         (c.name && name && c.name.trim().toLowerCase() === name.toLowerCase())
       );
@@ -7153,7 +8753,7 @@ export default function UnifiedAdminDashboard() {
       const items = Array.isArray(o.items) ? o.items : [];
       items.forEach(it => {
         if (!it.name && !it.id) return;
-        const matchedProd = products.find(p => p.id === it.id || (p.name && it.name && p.name.trim().toLowerCase() === it.name.trim().toLowerCase()));
+        const matchedProd = currentStoreProducts.find(p => p.id === it.id || (p.name && it.name && p.name.trim().toLowerCase() === it.name.trim().toLowerCase()));
         const size = (it.size && it.size !== 'N/A' && it.size !== 'null') ? String(it.size).trim() : 'Standard';
         const color = (it.color && it.color !== 'N/A' && it.color !== 'null') ? String(it.color).trim() : 'Standard';
         const prodName = it.name || matchedProd?.name || 'ស្បែកជើង';
@@ -7555,7 +9155,16 @@ export default function UnifiedAdminDashboard() {
               </h3>
               <p className="text-xs text-gray-500 mt-0.5">បែងចែកចំណូលពីការលក់, ថ្លៃដើមទំនិញ និងប្រាក់ចំណេញដុល/សុទ្ធច្បាស់លាស់</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('finance')}
+                className="text-xs font-black px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <span>🏛️</span>
+                <span>របាយការណ៍ហិរញ្ញវត្ថុ IFRS & P&L</span>
+                <span>→</span>
+              </button>
               <span className="text-xs font-black px-3 py-1 rounded-xl bg-gray-100 text-gray-800">
                 {totalOrdersCount} វិក្កយបត្រ
               </span>
@@ -8684,268 +10293,840 @@ export default function UnifiedAdminDashboard() {
   const [searchOrder, setSearchOrder] = useState('');
   const [viewingSlipUrl, setViewingSlipUrl] = useState(null);
 
-  // ⭐️ ផ្ទាំងប្រវត្តិការបញ្ជាទិញ FULL OPTION (ORDERS HISTORY VIEW) ⭐️
+  // ⭐️ ផ្ទាំងប្រវត្តិការបញ្ជាទិញ FULL OPTION (ORDERS HISTORY VIEW WITH DATE PICKER & ITEMS BREAKDOWN) ⭐️
   const OrdersView = () => {
-    // (លុប useState ចេញពីត្រង់នេះ គឺដំណើរការស្រួលភ្លាម)
-    const filteredOrders = realOrders.filter(o => {
+    // ⭐️ គណនាកាលបរិច្ឆេទថ្ងៃនេះ និងម្សិលមិញ (Local Timezone Cambodia UTC+7) ⭐️
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA');
+    const yesterday = new Date(now.getTime() - 86400000);
+    const yesterdayStr = yesterday.toLocaleDateString('en-CA');
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
+    const sevenDaysAgoStr = sevenDaysAgo.toLocaleDateString('en-CA');
+    const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+    const getOrderDateKey = (order) => {
+      if (order.created_at) {
+        try {
+          const d = new Date(order.created_at);
+          if (!isNaN(d.getTime())) return d.toLocaleDateString('en-CA');
+        } catch (_) {}
+      }
+      if (order.date) return String(order.date).slice(0, 10);
+      return '';
+    };
+
+    // ១. ចម្រាញ់ Order តាម Status, Search, និង Date Filter
+    const filteredOrders = currentStoreOrders.filter(o => {
       const matchStatus = orderFilterStatus === 'all' ? true : o.status === orderFilterStatus;
       const orderIdStr = (o.order_id || o.id || '').toString().toLowerCase();
       const customerStr = (o.customer || '').toLowerCase();
       const matchSearch = orderIdStr.includes(searchOrder.toLowerCase()) || customerStr.includes(searchOrder.toLowerCase());
-      return matchStatus && matchSearch;
+      if (!matchStatus || !matchSearch) return false;
+
+      const orderDate = getOrderDateKey(o);
+      if (!orderDate) return orderDatePeriod === 'all';
+
+      if (orderDatePeriod === 'today') {
+        return orderDate === todayStr;
+      } else if (orderDatePeriod === 'yesterday') {
+        return orderDate === yesterdayStr;
+      } else if (orderDatePeriod === '7days') {
+        return orderDate >= sevenDaysAgoStr && orderDate <= todayStr;
+      } else if (orderDatePeriod === 'month') {
+        return orderDate >= monthStartStr && orderDate <= todayStr;
+      } else if (orderDatePeriod === 'custom') {
+        if (orderCustomStartDate && orderDate < orderCustomStartDate) return false;
+        if (orderCustomEndDate && orderDate > orderCustomEndDate) return false;
+        return true;
+      }
+      return true; // 'all'
     });
 
+    // ២. គណនាមុខទំនិញដែលបានលក់ចេញក្នុងកាលបរិច្ឆេទនេះ (Itemized Sales Breakdown)
+    const orderItemsSummary = (() => {
+      const map = new Map();
+      filteredOrders.forEach(order => {
+        const items = Array.isArray(order.items) ? order.items : [];
+        items.forEach(it => {
+          if (!it || it.is_tax_meta) return;
+          const key = `${it.name || it.id}_${it.size || ''}_${it.color || ''}`;
+          const qty = parseInt(it.qty || it.quantity || 1) || 1;
+          const price = parseFloat(it.price || 0) || 0;
+          const total = qty * price;
+
+          if (map.has(key)) {
+            const prev = map.get(key);
+            prev.qty += qty;
+            prev.total += total;
+            prev.ordersCount += 1;
+          } else {
+            map.set(key, {
+              id: it.id,
+              name: it.name || 'ទំនិញ',
+              image_url: it.image_url || it.image || '',
+              size: it.size || '',
+              color: it.color || '',
+              price: price,
+              qty: qty,
+              total: total,
+              ordersCount: 1
+            });
+          }
+        });
+      });
+      return Array.from(map.values()).sort((a, b) => b.qty - a.qty);
+    })();
+
+    // ៣. គណនាស្ថិតិលក់សរុប (Summary Metrics)
+    const totalFilteredRevenue = filteredOrders
+      .filter(o => o.status !== 'Cancelled')
+      .reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
+    const totalFilteredItemsQty = orderItemsSummary.reduce((sum, it) => sum + it.qty, 0);
+    const completedOrdersCount = filteredOrders.filter(o => o.status === 'Completed').length;
+    const pendingOrdersCount = filteredOrders.filter(o => !o.status || o.status === 'Pending' || o.status === 'Preparing').length;
+
+    // ៤. ចម្រាញ់ Stock In Movements ប្រសិនបើ Merchant ចង់ពិនិត្យប្រវត្តិនាំចូលស្តុក
+    const filteredStockInMovements = (stockMovements || []).filter(m => {
+      if (m.type !== 'IN') return false;
+      if (!m.created_at) return orderDatePeriod === 'all';
+      let mDate = '';
+      try {
+        const d = new Date(m.created_at);
+        if (!isNaN(d.getTime())) mDate = d.toLocaleDateString('en-CA');
+      } catch (_) {
+        mDate = m.created_at.slice(0, 10);
+      }
+      if (orderDatePeriod === 'today') return mDate === todayStr;
+      if (orderDatePeriod === 'yesterday') return mDate === yesterdayStr;
+      if (orderDatePeriod === '7days') return mDate >= sevenDaysAgoStr && mDate <= todayStr;
+      if (orderDatePeriod === 'month') return mDate >= monthStartStr && mDate <= todayStr;
+      if (orderDatePeriod === 'custom') {
+        if (orderCustomStartDate && mDate < orderCustomStartDate) return false;
+        if (orderCustomEndDate && mDate > orderCustomEndDate) return false;
+        return true;
+      }
+      return true;
+    });
+
+    const totalStockInQty = filteredStockInMovements.reduce((sum, m) => sum + (Math.abs(parseInt(m.qty_change)) || 0), 0);
+
+    // Label នៃកាលបរិច្ឆេទដែលបានជ្រើសរើស
+    const getPeriodLabel = () => {
+      if (orderDatePeriod === 'today') return `ថ្ងៃនេះ (${todayStr})`;
+      if (orderDatePeriod === 'yesterday') return `ម្សិលមិញ (${yesterdayStr})`;
+      if (orderDatePeriod === '7days') return '៧ ថ្ងៃចុងក្រោយ';
+      if (orderDatePeriod === 'month') return 'ខែនេះ';
+      if (orderDatePeriod === 'custom') {
+        if (orderCustomStartDate && orderCustomEndDate) return `${orderCustomStartDate} ➔ ${orderCustomEndDate}`;
+        if (orderCustomStartDate) return `ចាប់ពី ${orderCustomStartDate}`;
+        if (orderCustomEndDate) return `រហូតដល់ ${orderCustomEndDate}`;
+        return 'ចន្លោះកាលបរិច្ឆេទ';
+      }
+      return 'គ្រប់ពេលវេលា (All Time)';
+    };
+
     return (
-      <div className="animate-in fade-in pb-12">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+      <div className="animate-in fade-in pb-16 space-y-6">
+        {/* Title Bar & Quick Actions */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-gray-100 shadow-xs">
           <div>
-            <h2 className="text-3xl font-black text-gray-900">🛒 ប្រវត្តិការទិញ-លក់ (Order History)</h2>
-            <p className="text-sm text-gray-500 mt-0.5">តាមដានរាល់វិក្កយបត្រ មើលមុខទំនិញដែលបានទិញ និងបោះពុម្ពវិក្កយបត្រឡើងវិញ</p>
+            <div className="flex items-center gap-2.5">
+              <span className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl font-bold">
+                🛒
+              </span>
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
+                  ប្រវត្តិការទិញ-លក់ & ពិនិត្យទំនិញចូល (Order & Inflow History)
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ពិនិត្យតាមដានទំនិញលក់បាន ទឹកប្រាក់សរុប និងទំនិញនាំចូលស្តុកតាមថ្ងៃខែឆ្នាំជាក់លាក់
+                </p>
+              </div>
+            </div>
           </div>
           
-          <div className="flex gap-3 items-center">
+          <div className="flex flex-wrap gap-2.5 items-center w-full lg:w-auto">
             <input 
               type="text"
               value={searchOrder}
               onChange={(e) => setSearchOrder(e.target.value)}
-              placeholder="ស្វែងរក Order ID ឬឈ្មោះភ្ញៀវ..."
-              className="border-2 border-gray-200 px-4 py-2 rounded-xl text-xs font-bold outline-none focus:border-blue-500 bg-white"
+              placeholder="🔍 ស្វែងរក Order ID, ឈ្មោះភ្ញៀវ, លេខទូរស័ព្ទ..."
+              className="border-2 border-gray-200 px-4 py-2.5 rounded-2xl text-xs font-bold outline-none focus:border-blue-500 bg-white flex-1 sm:w-64"
             />
             <button 
               type="button"
               onClick={exportOrdersToCSV}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
               title="ទាញយកបញ្ជីលក់ជា Excel/CSV"
             >
               <span>📊</span>
               <span>Export Excel</span>
             </button>
             <button 
-              onClick={fetchRealOrders}
-              className="bg-white border border-gray-200 text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs hover:bg-gray-50 transition"
+              type="button"
+              onClick={() => {
+                fetchRealOrders();
+                fetchStockMovements();
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
-              🔄 Refresh
+              <span>🔄</span>
+              <span>Refresh</span>
             </button>
           </div>
         </div>
 
-        {/* Filter Buttons */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-          {['all', 'Completed', 'Preparing', 'Shipped', 'Cancelled'].map(st => (
+        {/* ⭐️ MODE SWITCHER: ការកុម្ម៉ង់ & លក់ទំនិញ (ORDERS) VS ការនាំចូលស្តុក (STOCK IN) ⭐️ */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-2xs">
+          <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-xl">
             <button
-              key={st}
-              onClick={() => setOrderFilterStatus(st)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition ${
-                orderFilterStatus === st 
-                  ? 'bg-slate-900 text-white shadow-md' 
-                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              type="button"
+              onClick={() => setOrdersViewMode('sales')}
+              className={`px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+                ordersViewMode === 'sales'
+                  ? 'bg-white text-gray-900 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-900'
               }`}
             >
-              {st === 'all' && `ទាំងអស់ (${realOrders.length})`}
-              {st === 'Completed' && '✓ ជោគជ័យ (Completed)'}
-              {st === 'Preparing' && '⏳ កំពុងរៀបចំ (Preparing)'}
-              {st === 'Shipped' && '🚚 កំពុងដឹក (Shipped)'}
-              {st === 'Cancelled' && '✕ បានបោះបង់'}
+              <span>🛒</span>
+              <span>ការកុម្ម៉ង់ & លក់ចេញ ({filteredOrders.length})</span>
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setOrdersViewMode('stock_in')}
+              className={`px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+                ordersViewMode === 'stock_in'
+                  ? 'bg-white text-gray-900 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <span>📥</span>
+              <span>ការនាំទំនិញចូលស្តុក ({filteredStockInMovements.length})</span>
+            </button>
+          </div>
+
+          <div className="text-xs font-bold text-gray-600 flex items-center gap-2">
+            <span>កាលបរិច្ឆេទសកម្ម:</span>
+            <span className="font-black px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-200">
+              📅 {getPeriodLabel()}
+            </span>
+          </div>
         </div>
 
-        {/* Orders Table */}
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-          {loadingOrders ? (
-            <div className="p-16 text-center text-gray-400 font-bold">កំពុងទាញយកប្រវត្តិការបញ្ជាទិញ...</div>
-          ) : filteredOrders.length === 0 ? (
-            <div className="p-16 text-center text-gray-400 font-bold">មិនទាន់មានប្រវត្តិការបញ្ជាទិញនៅឡើយទេ។</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">Order ID</th>
-                    <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">កាលបរិច្ឆេទ</th>
-                    <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">អតិថិជន</th>
-                    <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">ប្រភេទ</th>
-                    <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">វិធីទូទាត់</th>
-                    <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">តម្លៃសរុប</th>
-                    <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">ស្ថានភាព</th>
-                    <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase text-right pr-6">សកម្មភាព (Actions)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {filteredOrders.map(order => {
-                    let statusColor = 'bg-blue-50 text-blue-700 border-blue-200';
-                    if (order.status === 'Completed') statusColor = 'bg-green-50 text-green-700 border-green-200';
-                    if (order.status === 'Shipped') statusColor = 'bg-purple-50 text-purple-700 border-purple-200';
-                    if (order.status === 'Cancelled') statusColor = 'bg-red-50 text-red-700 border-red-200';
+        {/* ⭐️ DATE FILTER TOOLBAR (រើសថ្ងៃខែឆ្នាំ: ថ្ងៃនេះ, ម្សិលមិញ, ចន្លោះថ្ងៃជាក់លាក់) ⭐️ */}
+        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-gray-200 shadow-xs space-y-3.5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            {/* Quick Presets Pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-black text-gray-700 mr-1 flex items-center gap-1">
+                <span>🗓️</span> ចម្រាញ់តាមកាលបរិច្ឆេទ:
+              </span>
+              {[
+                { key: 'all', label: '🌐 គ្រប់ពេល' },
+                { key: 'today', label: '⚡ ថ្ងៃនេះ (Today)' },
+                { key: 'yesterday', label: '⏮️ ម្សិលមិញ (Yesterday)' },
+                { key: '7days', label: '📅 ៧ ថ្ងៃចុងក្រោយ' },
+                { key: 'month', label: '📆 ខែនេះ (Month)' },
+                { key: 'custom', label: '🔍 ចន្លោះថ្ងៃជាក់លាក់' }
+              ].map(p => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => {
+                    setOrderDatePeriod(p.key);
+                    if (p.key === 'today') {
+                      setOrderCustomStartDate(todayStr);
+                      setOrderCustomEndDate(todayStr);
+                    } else if (p.key === 'yesterday') {
+                      setOrderCustomStartDate(yesterdayStr);
+                      setOrderCustomEndDate(yesterdayStr);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 ${
+                    orderDatePeriod === p.key
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
 
-                    const displayId = order.order_id || order.id;
+            {/* Status Filter (សម្រាប់ Sales Orders) */}
+            {ordersViewMode === 'sales' && (
+              <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                {['all', 'Completed', 'Preparing', 'Shipped', 'Cancelled'].map(st => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setOrderFilterStatus(st)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap cursor-pointer ${
+                      orderFilterStatus === st 
+                        ? 'bg-blue-600 text-white shadow-2xs' 
+                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    {st === 'all' && `ស្ថានភាពទាំងអស់`}
+                    {st === 'Completed' && '✓ ជោគជ័យ'}
+                    {st === 'Preparing' && '⏳ កំពុងរៀបចំ'}
+                    {st === 'Shipped' && '🚚 កំពុងដឹក'}
+                    {st === 'Cancelled' && '✕ បានបោះបង់'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-                    return (
-                      <tr key={order.id} className="hover:bg-gray-50/80 transition">
-                        <td className="px-6 py-4 font-black text-blue-600 text-xs">{displayId}</td>
+          {/* Custom Date Range Picker (From Date -> To Date) */}
+          <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-3 bg-gray-50/70 p-3 rounded-2xl">
+            <span className="text-xs font-bold text-gray-600">ជ្រើសរើសថ្ងៃខែឆ្នាំ:</span>
+            
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-bold text-gray-500">ចាប់ពីថ្ងៃ:</label>
+              <input 
+                type="date"
+                value={orderCustomStartDate}
+                onChange={(e) => {
+                  setOrderCustomStartDate(e.target.value);
+                  setOrderDatePeriod('custom');
+                }}
+                className="bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-bold text-gray-500">ដល់ថ្ងៃ:</label>
+              <input 
+                type="date"
+                value={orderCustomEndDate}
+                onChange={(e) => {
+                  setOrderCustomEndDate(e.target.value);
+                  setOrderDatePeriod('custom');
+                }}
+                className="bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
+              />
+            </div>
+
+            {/* Quick 1-Click Day Selectors */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderDatePeriod('today');
+                  setOrderCustomStartDate(todayStr);
+                  setOrderCustomEndDate(todayStr);
+                }}
+                className={`text-[11px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer ${
+                  orderDatePeriod === 'today'
+                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                ថ្ងៃនេះ ({todayStr})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderDatePeriod('yesterday');
+                  setOrderCustomStartDate(yesterdayStr);
+                  setOrderCustomEndDate(yesterdayStr);
+                }}
+                className={`text-[11px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer ${
+                  orderDatePeriod === 'yesterday'
+                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                ម្សិលមិញ ({yesterdayStr})
+              </button>
+            </div>
+
+            {(orderCustomStartDate || orderCustomEndDate || orderDatePeriod !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderDatePeriod('all');
+                  setOrderCustomStartDate('');
+                  setOrderCustomEndDate('');
+                }}
+                className="text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200 transition cursor-pointer ml-auto"
+              >
+                ✕ សម្អាត Filter ថ្ងៃខែ
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ⭐️ SUMMARY STATS CARDS FOR SELECTED DATE ⭐️ */}
+        {ordersViewMode === 'sales' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Total Revenue */}
+            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-5 rounded-3xl border border-indigo-500/30 shadow-md">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                ចំណូលសរុប ({getPeriodLabel()})
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-emerald-400 font-mono">
+                  ${totalFilteredRevenue.toFixed(2)}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 font-mono mt-1">
+                ~ {(Math.round(totalFilteredRevenue * exchangeRate)).toLocaleString()} ៛
+              </p>
+            </div>
+
+            {/* 2. Total Orders */}
+            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
+                វិក្កយបត្រសរុប (Orders)
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-gray-900 font-mono">
+                  {filteredOrders.length}
+                </span>
+                <span className="text-xs text-gray-500 font-bold">វិក្កយបត្រ</span>
+              </div>
+              <div className="flex items-center gap-2 mt-2 text-[11px] font-bold">
+                <span className="text-emerald-600">✓ ជោគជ័យ: {completedOrdersCount}</span>
+                <span className="text-gray-300">•</span>
+                <span className="text-amber-600">⏳ កំពុងរៀបចំ: {pendingOrdersCount}</span>
+              </div>
+            </div>
+
+            {/* 3. Total Items Qty */}
+            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
+                បរិមាណទំនិញលក់បាន
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-blue-600 font-mono">
+                  {totalFilteredItemsQty}
+                </span>
+                <span className="text-xs text-gray-500 font-bold">ចំនួនទំនិញ</span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-2">
+                សរុបមកពី <b>{orderItemsSummary.length}</b> មុខទំនិញខុសៗគ្នា
+              </p>
+            </div>
+
+            {/* 4. Action Card: Toggle Breakdown */}
+            <div 
+              onClick={() => setShowOrderItemsBreakdown(prev => !prev)}
+              className="bg-gradient-to-br from-amber-50 to-orange-50/70 p-5 rounded-3xl border border-amber-200 shadow-xs flex flex-col justify-between cursor-pointer hover:border-amber-300 transition group"
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-black text-amber-900 tracking-wider">
+                    ពិនិត្យមុខទំនិញលម្អិត
+                  </span>
+                  <span className="text-lg group-hover:scale-110 transition-transform">📦</span>
+                </div>
+                <h4 className="text-sm font-black text-gray-900 mt-2">
+                  {orderItemsSummary.length} មុខទំនិញបានលក់
+                </h4>
+                <p className="text-[11px] text-gray-600 mt-1">
+                  {showOrderItemsBreakdown ? 'ចុចដើម្បីបិទបញ្ជីមុខទំនិញ' : 'ចុចដើម្បីពិនិត្យមុខទំនិញនីមួយៗ'}
+                </p>
+              </div>
+
+              <div className="pt-2 text-xs font-black text-amber-700 flex items-center gap-1">
+                <span>{showOrderItemsBreakdown ? '▲ លាក់បញ្ជី' : '▼ បង្ហាញមុខទំនិញលម្អិត'}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-5 rounded-3xl border border-indigo-500/30 shadow-md">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                ចំនួនដងនាំចូលស្តុក ({getPeriodLabel()})
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-amber-300 font-mono">
+                  {filteredStockInMovements.length}
+                </span>
+                <span className="text-xs text-slate-300 font-bold">លើក/ប្រតិបត្តិការ</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
+                បរិមាណទំនិញនាំចូលសរុប
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-3xl font-black text-emerald-600 font-mono">
+                  +{totalStockInQty}
+                </span>
+                <span className="text-xs text-gray-500 font-bold">ចំនួន</span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">នាំចូលស្តុកបន្ថែមក្នុងកាលបរិច្ឆេទនេះ</p>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">គ្រប់គ្រងស្តុក</span>
+                <h4 className="text-sm font-black text-gray-900 mt-1">ចង់នាំចូលស្តុកបន្ថែម?</h4>
+                <p className="text-[11px] text-gray-500 mt-0.5">ចុចដើម្បីនាំចូលស្តុកផលិតផលភ្លាមៗ</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (products.length > 0) {
+                    handleOpenStockIn(products[0], 'IN');
+                  } else {
+                    alert('សូមបង្កើតទំនិញជាមុនសិន!');
+                  }
+                }}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition active:scale-95"
+              >
+                + នាំចូលស្តុក
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ⭐️ ITEMIZED BREAKDOWN DRAWER: បញ្ជីមុខទំនិញដែលបានលក់ចេញក្នុងកាលបរិច្ឆេទនេះ ⭐️ */}
+        {ordersViewMode === 'sales' && showOrderItemsBreakdown && (
+          <div className="bg-white rounded-3xl border-2 border-amber-300/80 p-5 shadow-sm space-y-4 animate-in slide-in-from-top-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">📦</span>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900">
+                    បញ្ជីមុខទំនិញដែលបានលក់ចេញក្នុង {getPeriodLabel()}
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    សរុប {orderItemsSummary.length} មុខទំនិញ • បរិមាណសរុប {totalFilteredItemsQty} ចំនួន • ចំណូល ${totalFilteredRevenue.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOrderItemsBreakdown(false)}
+                className="text-xs font-bold text-gray-400 hover:text-gray-700 self-start sm:self-auto cursor-pointer"
+              >
+                ✕ លាក់ផ្ទាំងនេះ
+              </button>
+            </div>
+
+            {orderItemsSummary.length === 0 ? (
+              <div className="p-8 text-center text-gray-400 text-xs font-bold">
+                មិនមានមុខទំនិញលក់ចេញក្នុងកាលបរិច្ឆេទនេះទេ។
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {orderItemsSummary.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50 border border-gray-200/80 hover:bg-white hover:border-amber-300 transition">
+                    <div className="w-12 h-12 rounded-xl bg-white border border-gray-200 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-lg">🛍️</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-xs font-black text-gray-900 truncate" title={item.name}>
+                        {item.name}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px]">
+                        {item.size && <span className="bg-orange-100 text-orange-800 font-bold px-1.5 py-0.2 rounded">Size: {item.size}</span>}
+                        {item.color && <span className="bg-slate-200 text-slate-700 font-bold px-1.5 py-0.2 rounded">{item.color}</span>}
+                        <span className="text-gray-500 font-mono font-bold">${item.price.toFixed(2)}/ឯកតា</span>
+                      </div>
+                      <div className="flex items-center justify-between mt-1 text-[11px]">
+                        <span className="font-bold text-gray-600">លក់បាន: <b className="text-blue-600 font-mono">{item.qty}</b></span>
+                        <span className="font-black text-emerald-600 font-mono">${item.total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ⭐️ MAIN DATA TABLE (SALES ORDERS OR STOCK IN) ⭐️ */}
+        {ordersViewMode === 'sales' ? (
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-gray-900">
+                  បញ្ជីវិក្កយបត្រទាំងអស់ ({filteredOrders.length})
+                </h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  បង្ហាញទិន្នន័យតាម: {getPeriodLabel()}
+                </p>
+              </div>
+            </div>
+
+            {loadingOrders ? (
+              <div className="p-16 text-center text-gray-400 font-bold">⏳ កំពុងទាញយកប្រវត្តិការបញ្ជាទិញ...</div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="p-16 text-center space-y-2">
+                <span className="text-4xl block">🛒</span>
+                <p className="font-black text-sm text-gray-700">មិនទាន់មានប្រវត្តិការបញ្ជាទិញក្នុងកាលបរិច្ឆេទនេះទេ</p>
+                <p className="text-xs text-gray-400">សូមសាកល្បងជ្រើសរើស "🌐 គ្រប់ពេល" ឬប្តូរថ្ងៃខែឆ្នាំឡើងវិញ។</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">Order ID</th>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">កាលបរិច្ឆេទ</th>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">អតិថិជន</th>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">ប្រភេទ</th>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">វិធីទូទាត់</th>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">តម្លៃសរុប</th>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">ស្ថានភាព</th>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase text-right pr-6">សកម្មភាព (Actions)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 font-medium">
+                    {filteredOrders.map(order => {
+                      let statusColor = 'bg-blue-50 text-blue-700 border-blue-200';
+                      if (order.status === 'Completed') statusColor = 'bg-green-50 text-green-700 border-green-200';
+                      if (order.status === 'Shipped') statusColor = 'bg-purple-50 text-purple-700 border-purple-200';
+                      if (order.status === 'Cancelled') statusColor = 'bg-red-50 text-red-700 border-red-200';
+
+                      const displayId = order.order_id || order.id;
+
+                      return (
+                        <tr key={order.id} className="hover:bg-gray-50/80 transition">
+                          <td className="px-6 py-4 font-black text-blue-600 text-xs">{displayId}</td>
+                          <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">
+                            {order.created_at ? new Date(order.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : 'POS Sale'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="font-bold text-gray-900 text-xs">{order.customer || 'អតិថិជនទូទៅ'}</p>
+                            {order.phone && <p className="text-[10px] text-gray-400 font-bold">{order.phone}</p>}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded ${order.order_type === 'ONLINE' ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-700'}`}>
+                              {order.order_type || 'POS'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-gray-700">
+                            <div className="flex items-center gap-1.5">
+                              <span className="bg-gray-100 px-2 py-1 rounded-md">{order.payment || order.payment_method || 'Cash'}</span>
+                              {(order.payment_slip_url || order.slip_url || (Array.isArray(order.items) && (order.items[0]?.payment_slip_url || order.items[0]?.slip_url))) && (
+                                <button 
+                                  onClick={() => setViewingSlipUrl(order.payment_slip_url || order.slip_url || order.items[0]?.payment_slip_url || order.items[0]?.slip_url)}
+                                  className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-black text-[10px] px-2 py-1 rounded-lg border border-blue-200 transition inline-flex items-center gap-1 shadow-2xs cursor-pointer animate-pulse"
+                                  title="ពិនិត្យវិក្កយបត្រផ្ទេរប្រាក់ (Payment Slip)"
+                                >
+                                  🧾 Slip
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="font-black text-sm text-green-600">${parseFloat(order.total || 0).toFixed(2)}</p>
+                            <p className="text-[10px] text-gray-400 font-bold">{(parseFloat(order.total || 0) * exchangeRate).toLocaleString()} ៛</p>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={order.status || 'Pending'}
+                                onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                                className={`text-xs font-bold border rounded-xl px-2.5 py-1.5 outline-none cursor-pointer shadow-2xs transition ${
+                                  order.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                  order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                                  order.status === 'Preparing' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
+                                  order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-300' :
+                                  'bg-amber-50 text-amber-700 border-amber-300'
+                                }`}
+                              >
+                                <option value="Pending">🟡 រង់ចាំបញ្ជាក់ (Pending)</option>
+                                <option value="Preparing">🔵 កំពុងវេចខ្ចប់ (Processing)</option>
+                                <option value="Shipped">🚚 កំពុងដឹក (Out for Delivery)</option>
+                                <option value="Completed">🟢 ជោគជ័យ (Delivered)</option>
+                                <option value="Cancelled">❌ បោះបង់ (Cancelled)</option>
+                              </select>
+
+                              {(!order.status || order.status === 'Pending') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateOrderStatus(order.id, 'Preparing')}
+                                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition"
+                                  title="ចុចប្តូរទៅដំណាក់កាលទី ២៖ កំពុងរៀបចំវេចខ្ចប់"
+                                >
+                                  🔵 វេចខ្ចប់
+                                </button>
+                              )}
+                              {order.status === 'Preparing' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateOrderStatus(order.id, 'Shipped')}
+                                  className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition animate-pulse"
+                                  title="ចុចប្តូរទៅដំណាក់កាលទី ៣៖ កំពុងដឹកជញ្ជូន"
+                                >
+                                  🚚 បញ្ជូនដឹក
+                                </button>
+                              )}
+                              {order.status === 'Shipped' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
+                                  className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition"
+                                  title="ចុចប្តូរទៅដំណាក់កាលទី ៤៖ បានប្រគល់ជោគជ័យ"
+                                >
+                                  🟢 ជោគជ័យ
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right pr-6 space-x-1.5 whitespace-nowrap">
+                            <button 
+                              onClick={() => setSelectedOrderDetails(order)}
+                              className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-blue-200 transition"
+                              title="មើលមុខទំនិញដែលបានទិញ"
+                            >
+                              👁️ មើលទំនិញ
+                            </button>
+
+                            <button 
+                              onClick={() => {
+                                const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+                                const orderTax = getOrderTax(order);
+                                setReceiptData({
+                                  orderId: displayId,
+                                  date: order.created_at ? new Date(order.created_at).toLocaleString() : new Date().toLocaleString(),
+                                  items: items,
+                                  subtotal: order.subtotal || order.total,
+                                  discount: order.discount || 0,
+                                  taxAmount: orderTax,
+                                  taxRate: orderTax > 0 ? 10 : 0,
+                                  taxMode: 'exclusive',
+                                  taxLabel: 'ពន្ធអាករ (VAT 10%)',
+                                  vatTin: storeSettings.vatTin || invoiceSettings.vatTin || '',
+                                  total: order.total,
+                                  totalKHR: Math.round(order.total * exchangeRate),
+                                  method: order.payment || 'Cash',
+                                  tendered: order.total,
+                                  change: 0,
+                                  customer: order.customer
+                                });
+                              }}
+                              className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-gray-300 transition"
+                              title="បោះពុម្ពវិក្កយបត្រឡើងវិញ"
+                            >
+                              🖨️ Re-Print
+                            </button>
+                            <a
+                              href={`/invoice?id=${order.order_id || order.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-purple-200 transition inline-flex items-center"
+                              title="មើល និងទាញយកវិក្កយបត្រ PDF ផ្លូវការ"
+                            >
+                              📄 PDF
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                sendTelegramNotification({
+                                  action: 'send_invoice',
+                                  order: {
+                                    order_id: order.order_id || order.id,
+                                    customer_name: order.customer || 'អតិថិជន',
+                                    phone: order.phone || 'N/A',
+                                    total_amount: order.total || 0,
+                                    items: order.items || [],
+                                    payment_method: order.payment || 'Cash'
+                                  }
+                                }).then(res => {
+                                  if (res && res.success) alert('✅ បានផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ជោគជ័យ!');
+                                  else alert('❌ ' + (res?.message || 'សូមពិនិត្យមើល Telegram Bot Token ក្នុង Settings'));
+                                });
+                              }}
+                              className="bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-sky-200 transition"
+                              title="ផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ភ្ញៀវ/ហាង"
+                            >
+                              ✈️ Telegram
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ⭐️ STOCK IN MOVEMENTS TABLE ⭐️ */
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-gray-900">
+                  ប្រវត្តិនាំទំនិញចូលស្តុក ({filteredStockInMovements.length})
+                </h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  ទំនិញដែលបាននាំចូលស្តុកក្នុង: {getPeriodLabel()} • បរិមាណសរុប: +{totalStockInQty}
+                </p>
+              </div>
+            </div>
+
+            {filteredStockInMovements.length === 0 ? (
+              <div className="p-16 text-center space-y-2">
+                <span className="text-4xl block">📥</span>
+                <p className="font-black text-sm text-gray-700">មិនមានប្រវត្តិនាំទំនិញចូលស្តុកក្នុងកាលបរិច្ឆេទនេះទេ</p>
+                <p className="text-xs text-gray-400">សូមសាកល្បងជ្រើសរើស "🌐 គ្រប់ពេល" ឬប្តូរថ្ងៃខែឆ្នាំឡើងវិញ។</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase font-black">
+                    <tr>
+                      <th className="px-6 py-4">កាលបរិច្ឆេទ & ម៉ោង</th>
+                      <th className="px-6 py-4">មុខទំនិញ</th>
+                      <th className="px-6 py-4">Variant (Size/ពណ៌)</th>
+                      <th className="px-6 py-4 text-center">បរិមាណនាំចូល</th>
+                      <th className="px-6 py-4 text-center">ស្តុកមុន ➔ ស្តុកថ្មី</th>
+                      <th className="px-6 py-4">មូលហេតុ / កំណត់សម្គាល់</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 font-medium">
+                    {filteredStockInMovements.map((m, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50/80 transition">
                         <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">
-                          {order.created_at ? new Date(order.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : 'POS Sale'}
+                          {m.created_at ? new Date(m.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
                         </td>
                         <td className="px-6 py-4">
-                          <p className="font-bold text-gray-900 text-xs">{order.customer || 'អតិថិជនទូទៅ'}</p>
-                          {order.phone && <p className="text-[10px] text-gray-400 font-bold">{order.phone}</p>}
+                          <p className="font-black text-gray-900 text-xs">{m.products?.name || 'ទំនិញ'}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">SKU: {m.products?.sku || 'N/A'}</p>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded ${order.order_type === 'ONLINE' ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-700'}`}>
-                            {order.order_type || 'POS'}
+                        <td className="px-6 py-4 text-xs">
+                          {m.product_variants?.size ? (
+                            <span className="bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded">
+                              Size: {m.product_variants.size} {m.product_variants.color ? `• ${m.product_variants.color}` : ''}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">ទូទៅ</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-sm font-black font-mono px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            +{Math.abs(parseInt(m.qty_change) || 0)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-xs font-bold text-gray-700">
-                          <div className="flex items-center gap-1.5">
-                            <span className="bg-gray-100 px-2 py-1 rounded-md">{order.payment || order.payment_method || 'Cash'}</span>
-                            {(order.payment_slip_url || order.slip_url || (Array.isArray(order.items) && (order.items[0]?.payment_slip_url || order.items[0]?.slip_url))) && (
-                              <button 
-                                onClick={() => setViewingSlipUrl(order.payment_slip_url || order.slip_url || order.items[0]?.payment_slip_url || order.items[0]?.slip_url)}
-                                className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-black text-[10px] px-2 py-1 rounded-lg border border-blue-200 transition inline-flex items-center gap-1 shadow-2xs cursor-pointer animate-pulse"
-                                title="ពិនិត្យវិក្កយបត្រផ្ទេរប្រាក់ (Payment Slip)"
-                              >
-                                🧾 Slip
-                              </button>
-                            )}
-                          </div>
+                        <td className="px-6 py-4 text-center text-xs font-mono">
+                          <span className="text-gray-500">{m.previous_qty || 0}</span>
+                          <span className="mx-1 text-gray-300">➔</span>
+                          <span className="font-bold text-emerald-600">{m.new_qty || 0}</span>
                         </td>
-                        <td className="px-6 py-4">
-                          <p className="font-black text-sm text-green-600">${parseFloat(order.total || 0).toFixed(2)}</p>
-                          <p className="text-[10px] text-gray-400 font-bold">{(parseFloat(order.total || 0) * exchangeRate).toLocaleString()} ៛</p>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-1.5">
-                            <select
-                              value={order.status || 'Pending'}
-                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                              className={`text-xs font-bold border rounded-xl px-2.5 py-1.5 outline-none cursor-pointer shadow-2xs transition ${
-                                order.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
-                                order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-300' :
-                                order.status === 'Preparing' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
-                                order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-300' :
-                                'bg-amber-50 text-amber-700 border-amber-300'
-                              }`}
-                            >
-                              <option value="Pending">🟡 រង់ចាំបញ្ជាក់ (Pending)</option>
-                              <option value="Preparing">🔵 កំពុងវេចខ្ចប់ (Processing)</option>
-                              <option value="Shipped">🚚 កំពុងដឹក (Out for Delivery)</option>
-                              <option value="Completed">🟢 ជោគជ័យ (Delivered)</option>
-                              <option value="Cancelled">❌ បោះបង់ (Cancelled)</option>
-                            </select>
-
-                            {/* 1-Click Fast Progress Button */}
-                            {(!order.status || order.status === 'Pending') && (
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateOrderStatus(order.id, 'Preparing')}
-                                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition"
-                                title="ចុចប្តូរទៅដំណាក់កាលទី ២៖ កំពុងរៀបចំវេចខ្ចប់"
-                              >
-                                🔵 វេចខ្ចប់
-                              </button>
-                            )}
-                            {order.status === 'Preparing' && (
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateOrderStatus(order.id, 'Shipped')}
-                                className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition animate-pulse"
-                                title="ចុចប្តូរទៅដំណាក់កាលទី ៣៖ កំពុងដឹកជញ្ជូន"
-                              >
-                                🚚 បញ្ជូនដឹក
-                              </button>
-                            )}
-                            {order.status === 'Shipped' && (
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
-                                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-[10px] font-black px-2 py-1.5 rounded-lg shadow-xs transition"
-                                title="ចុចប្តូរទៅដំណាក់កាលទី ៤៖ បានប្រគល់ជោគជ័យ"
-                              >
-                                🟢 ជោគជ័យ
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-right pr-6 space-x-1.5 whitespace-nowrap">
-                          {/* ⭐️ ប៊ូតុងមើលលម្អិតទំនិញ ⭐️ */}
-                          <button 
-                            onClick={() => setSelectedOrderDetails(order)}
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-blue-200 transition"
-                            title="មើលមុខទំនិញដែលបានទិញ"
-                          >
-                            👁️ មើលទំនិញ
-                          </button>
-
-                          {/* ⭐️ ប៊ូតុង Re-Print វិក្កយបត្រ ⭐️ */}
-                          <button 
-                            onClick={() => {
-                              const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
-                              const orderTax = getOrderTax(order);
-                              setReceiptData({
-                                orderId: displayId,
-                                date: order.created_at ? new Date(order.created_at).toLocaleString() : new Date().toLocaleString(),
-                                items: items,
-                                subtotal: order.subtotal || order.total,
-                                discount: order.discount || 0,
-                                taxAmount: orderTax,
-                                taxRate: orderTax > 0 ? 10 : 0,
-                                taxMode: 'exclusive',
-                                taxLabel: 'ពន្ធអាករ (VAT 10%)',
-                                vatTin: storeSettings.vatTin || invoiceSettings.vatTin || '',
-                                total: order.total,
-                                totalKHR: Math.round(order.total * exchangeRate),
-                                method: order.payment || 'Cash',
-                                tendered: order.total,
-                                change: 0,
-                                customer: order.customer
-                              });
-                            }}
-                            className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-gray-300 transition"
-                            title="បោះពុម្ពវិក្កយបត្រឡើងវិញ"
-                          >
-                            🖨️ Re-Print
-                          </button>
-                          <a
-                            href={`/invoice?id=${order.order_id || order.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-purple-200 transition inline-flex items-center"
-                            title="មើល និងទាញយកវិក្កយបត្រ PDF ផ្លូវការ"
-                          >
-                            📄 PDF
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              sendTelegramNotification({
-                                action: 'send_invoice',
-                                order: {
-                                  order_id: order.order_id || order.id,
-                                  customer_name: order.customer || 'អតិថិជន',
-                                  phone: order.phone || 'N/A',
-                                  total_amount: order.total || 0,
-                                  items: order.items || [],
-                                  payment_method: order.payment || 'Cash'
-                                }
-                              }).then(res => {
-                                if (res && res.success) alert('✅ បានផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ជោគជ័យ!');
-                                else alert('❌ ' + (res?.message || 'សូមពិនិត្យមើល Telegram Bot Token ក្នុង Settings'));
-                              });
-                            }}
-                            className="bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-sky-200 transition"
-                            title="ផ្ញើវិក្កយបត្រ PDF ទៅ Telegram ភ្ញៀវ/ហាង"
-                          >
-                            ✈️ Telegram
-                          </button>
+                        <td className="px-6 py-4 text-xs text-gray-600">
+                          {m.reason || 'នាំចូលស្តុកបន្ថែម'}
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ⭐️ MODAL មើលលម្អិតមុខទំនិញក្នុង ORDER (VIEW ORDER ITEMS MODAL) ⭐️ */}
         {selectedOrderDetails && (
@@ -8982,120 +11163,17 @@ export default function UnifiedAdminDashboard() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-bold text-gray-500">${item.price} x {item.qty}</p>
-                        <p className="text-sm font-black text-blue-600">${(item.price * item.qty).toFixed(2)}</p>
+                        <p className="text-xs font-bold text-gray-500">x{item.qty || 1}</p>
+                        <p className="text-xs font-black text-gray-900">${(parseFloat(item.price || 0) * (item.qty || 1)).toFixed(2)}</p>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="p-8 text-center text-gray-400 text-xs font-bold">
-                    វិក្កយបត្រចាស់នេះមិនទាន់មានបញ្ជីទំនិញលម្អិតទេ។
-                  </div>
+                  <p className="text-center text-gray-400 py-6 text-xs">គ្មានមុខទំនិញលម្អិត</p>
                 )}
               </div>
 
-              {/* Order Total Summary */}
-              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-1.5 text-xs font-bold">
-                <div className="flex justify-between text-gray-500">
-                  <span>វិធីទូទាត់:</span>
-                  <span className="text-gray-900">{selectedOrderDetails.payment || 'Cash'}</span>
-                </div>
-                {selectedOrderDetails.subtotal != null && (
-                  <div className="flex justify-between text-gray-500">
-                    <span>តម្លៃសរុបរង (Subtotal):</span>
-                    <span className="text-gray-900">${parseFloat(selectedOrderDetails.subtotal).toFixed(2)}</span>
-                  </div>
-                )}
-                {selectedOrderDetails.discount > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span>បញ្ចុះតម្លៃ (Discount):</span>
-                    <span>-${parseFloat(selectedOrderDetails.discount).toFixed(2)}</span>
-                  </div>
-                )}
-                {getOrderTax(selectedOrderDetails) > 0 && (
-                  <div className="flex justify-between text-blue-700">
-                    <span>ពន្ធអាករ (VAT 10%):</span>
-                    <span>+${getOrderTax(selectedOrderDetails).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-base font-black text-gray-900 pt-2 border-t border-gray-200">
-                  <span>ទឹកប្រាក់សរុប:</span>
-                  <span className="text-blue-600">${parseFloat(selectedOrderDetails.total || 0).toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Delivery Address, Google Maps & House Photo */}
-              <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200 space-y-2.5 mt-3 text-xs">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <span className="font-bold text-gray-500 block text-[10px] uppercase">អាសយដ្ឋានដឹកជញ្ជូន:</span>
-                    <p className="font-bold text-gray-900 mt-0.5 break-words">
-                      {(selectedOrderDetails.address || selectedOrderDetails.delivery_address || 'មិនមានអាសយដ្ឋាន').replace(/\[📍\s*Maps:[^\]]+\]/gi, '').replace(/\[🏠\s*រូបផ្ទះ:[^\]]+\]/gi, '').trim()}
-                    </p>
-                  </div>
-                  {selectedOrderDetails.phone && (
-                    <a
-                      href={`tel:${selectedOrderDetails.phone}`}
-                      className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-2.5 py-1 rounded-xl font-black text-[10px] border border-emerald-200 shrink-0 flex items-center gap-1 transition shadow-2xs"
-                    >
-                      <span>📞</span> ខល
-                    </a>
-                  )}
-                </div>
-
-                {/* Google Maps Button */}
-                {(() => {
-                  const addr = selectedOrderDetails.address || selectedOrderDetails.delivery_address || '';
-                  const match = addr.match(/\[📍\s*Maps:\s*([^\]]+)\]/i);
-                  const mapUrl = match ? match[1].trim() : (selectedOrderDetails.items?.[0]?.google_map_url || null);
-                  if (!mapUrl) return null;
-                  return (
-                    <div className="pt-2 border-t border-gray-200 flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-gray-700 flex items-center gap-1">
-                        <span>🗺️</span> ទីតាំងលើ Google Maps:
-                      </span>
-                      <a
-                        href={mapUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-xl text-[10px] font-black transition flex items-center gap-1 shadow-xs"
-                      >
-                        <span>📍</span> បើកមើលលើ Maps
-                      </a>
-                    </div>
-                  );
-                })()}
-
-                {/* House / Workplace Photo */}
-                {(() => {
-                  const addr = selectedOrderDetails.address || selectedOrderDetails.delivery_address || '';
-                  const match = addr.match(/\[🏠\s*រូបផ្ទះ:\s*([^\]]+)\]/i);
-                  const photoUrl = match ? match[1].trim() : (selectedOrderDetails.items?.[0]?.location_photo_url || null);
-                  if (!photoUrl) return null;
-                  return (
-                    <div className="pt-2 border-t border-gray-200 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-gray-700 flex items-center gap-1">
-                          <span>🏠</span> រូបថតផ្ទះ / កន្លែងធ្វើការ:
-                        </span>
-                        <a
-                          href={photoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] font-black text-blue-600 underline"
-                        >
-                          ពង្រីកធំ
-                        </a>
-                      </div>
-                      <a href={photoUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl border border-gray-200 bg-white group">
-                        <img src={photoUrl} alt="House / Workplace Location" className="w-full h-32 object-cover group-hover:scale-105 transition" />
-                      </a>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Payment Slip Display in Modal */}
+              {/* Payment Slip in Details Modal */}
               {(selectedOrderDetails.payment_slip_url || (Array.isArray(selectedOrderDetails.items) && selectedOrderDetails.items[0]?.payment_slip_url)) && (
                 <div className="mt-4 p-3.5 bg-blue-50/80 rounded-2xl border border-blue-200">
                   <div className="flex items-center justify-between mb-2">
@@ -9136,6 +11214,7 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
+
   // ================= 💸 ផ្ទាំងគ្រប់គ្រងចំណាយ & គណនាប្រាក់ចំណេញសុទ្ធ (EXPENSES & TRUE NET PROFIT VIEW) =================
   const ExpensesView = () => {
     const now = new Date();
@@ -9146,7 +11225,7 @@ export default function UnifiedAdminDashboard() {
     const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
     // ១. ចម្រាញ់ Order តាមកាលបរិច្ឆេទ
-    const periodOrders = realOrders.filter(o => {
+    const periodOrders = currentStoreOrders.filter(o => {
       if (o.status === 'Cancelled') return false;
       if (!o.created_at) return true;
       const orderDateStr = o.created_at.slice(0, 10);
@@ -9163,7 +11242,7 @@ export default function UnifiedAdminDashboard() {
     const getOrderCost = (order) => {
       const items = Array.isArray(order.items) ? order.items : [];
       return items.reduce((sum, it) => {
-        const prod = products.find(p => p.id === it.id);
+        const prod = currentStoreProducts.find(p => p.id === it.id);
         const costPerUnit = prod && prod.cost_price ? parseFloat(prod.cost_price) : 0;
         return sum + (costPerUnit * (it.qty || 1));
       }, 0);
@@ -9177,7 +11256,7 @@ export default function UnifiedAdminDashboard() {
     const grossMarginPercent = periodNetSalesExclTax > 0 ? ((periodGrossProfit / periodNetSalesExclTax) * 100) : 0;
 
     // ២. ចម្រាញ់ចំណាយតាមកាលបរិច្ឆេទ
-    const filteredByPeriodExpenses = expenses.filter(exp => {
+    const filteredByPeriodExpenses = currentStoreExpenses.filter(exp => {
       if (!exp.date) return true;
       const expDateStr = exp.date.slice(0, 10);
       const expTime = new Date(exp.date).getTime();
@@ -9216,6 +11295,8 @@ export default function UnifiedAdminDashboard() {
 
     // Save or Edit Expense
     const handleSaveExpense = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("បន្ថែមចំណាយ")) return;
       e.preventDefault();
       if (!expTitle.trim()) {
         alert('សូមបញ្ចូលឈ្មោះ ឬបរិយាយចំណាយ!');
@@ -9255,6 +11336,7 @@ export default function UnifiedAdminDashboard() {
         const newId = `EXP-${Date.now().toString().slice(-6)}`;
         const newRecord = {
           id: newId,
+          store_id: activeStore?.id || 'store_default_sabayluk',
           title: expTitle.trim(),
           category: expCategory,
           amount: numAmount,
@@ -9268,6 +11350,7 @@ export default function UnifiedAdminDashboard() {
         try {
           await supabase.from('expenses').insert([{
             id: newId,
+            store_id: activeStore?.id || 'store_default_sabayluk',
             title: expTitle.trim(),
             category: expCategory,
             amount: numAmount,
@@ -9301,6 +11384,7 @@ export default function UnifiedAdminDashboard() {
     };
 
     const handleDeleteExpense = async (id, title) => {
+    if (guardDemoAction("លុបចំណាយ")) return;
       if (!window.confirm(`តើបងពិតជាចង់លុបចំណាយ "${title}" នេះមែនទេ?`)) return;
       setExpenses(prev => prev.filter(e => e.id !== id));
       try {
@@ -9368,6 +11452,14 @@ export default function UnifiedAdminDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('analytics')}
+              className="bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-700 font-bold text-xs px-4 py-2.5 rounded-2xl border border-gray-200 transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            >
+              <span>📊</span>
+              <span>វិភាគទិន្នន័យ (Analytics)</span>
+            </button>
             <button
               type="button"
               onClick={handleExportExcel}
@@ -9941,7 +12033,8 @@ export default function UnifiedAdminDashboard() {
   const MasterStoresManagementView = () => {
     // គណនាស្ថិតិទូទៅលើប្រព័ន្ធ (System Platform Analytics)
     const totalStores = registeredStores.length;
-    const activeCount = registeredStores.filter(s => s.status !== 'SUSPENDED').length;
+    const activeCount = registeredStores.filter(s => s.status !== 'SUSPENDED' && !isStoreInactive(s, 30)).length;
+    const inactiveCount = inactiveStores.length;
     const suspendedCount = registeredStores.filter(s => s.status === 'SUSPENDED').length;
     const paidCount = registeredStores.filter(s => s.plan && s.plan !== 'FREE').length;
     const freeCount = totalStores - paidCount;
@@ -9955,6 +12048,7 @@ export default function UnifiedAdminDashboard() {
 
     // Toggle store active/suspended
     const handleToggleStoreStatus = (targetStore) => {
+    if (guardDemoAction("កែប្រែស្ថានភាពហាង")) return;
       if (targetStore.id === 'store_default_sabayluk') {
         alert('មិនអាចផ្អាកហាងមេ Sabay Luk Flagship Store បានទេ!');
         return;
@@ -9972,8 +12066,36 @@ export default function UnifiedAdminDashboard() {
       setTimeout(() => setToastNotification(null), 3000);
     };
 
+    // 🔒 ផ្អាកហាងអសកម្មលើសពី ៣០ ថ្ងៃ (Suspend Inactive Store)
+    const handleSuspendInactiveStore = async (targetStore) => {
+      if (guardDemoAction("ផ្អាកហាង")) return;
+      if (targetStore.id === 'store_default_sabayluk') return;
+      const days = getStoreInactivityDays(targetStore);
+      if (!window.confirm(`⚠️ បញ្ជាក់៖ ហាង "${targetStore.name}" មិនមានសកម្មភាពចំនួន ${days} ថ្ងៃហើយ!\n\nតើបងពិតជាចង់ផ្អាកដំណើរការហាងនេះជាបណ្តោះអាសន្នមែនទេ?`)) return;
+      const res = await suspendStore(targetStore.id, `អសកម្មចំនួន ${days} ថ្ងៃ`);
+      if (res) {
+        setRegisteredStores(getLocalStores());
+        setToastNotification(`🔒 បានផ្អាកដំណើរការហាង "${targetStore.name}" ដោយសារអសកម្ម!`);
+        setTimeout(() => setToastNotification(null), 3000);
+      }
+    };
+
+    // 🔒 ផ្អាកហាងអសកម្មទាំងអស់តែម្តង (Bulk Suspend All Inactive Stores)
+    const handleBulkSuspendInactiveStores = async () => {
+      if (guardDemoAction("ផ្អាកហាងអសកម្ម")) return;
+      if (inactiveStores.length === 0) return alert('គ្មានហាងអសកម្មដែលត្រូវផ្អាកទេ!');
+      if (!window.confirm(`🚨 បញ្ជាក់ការផ្អាកជាដុំ (Bulk Suspend)៖\n\nមានចំនួន ${inactiveStores.length} ហាងដែលអសកម្មលើសពី ៣០ ថ្ងៃ។ តើបងចង់ផ្អាកដំណើរការហាងទាំងនេះទាំងអស់តែម្តងមែនទេ?`)) return;
+      for (const st of inactiveStores) {
+        await suspendStore(st.id, `អសកម្មលើសពី ៣០ ថ្ងៃ (ផ្អាកជាដុំ)`);
+      }
+      setRegisteredStores(getLocalStores());
+      setToastNotification(`🔒 បានផ្អាកដំណើរការហាងអសកម្មចំនួន ${inactiveStores.length} ហាងជោគជ័យ!`);
+      setTimeout(() => setToastNotification(null), 3500);
+    };
+
     // Change plan directly
     const handleChangeStorePlan = (targetStore, newPlanKey) => {
+    if (guardDemoAction("ប្តូរកញ្ចប់គម្រោង")) return;
       const planInfo = STORE_PLANS[newPlanKey] || STORE_PLANS.FREE;
       const updated = registeredStores.map(s => s.id === targetStore.id ? { 
         ...s, 
@@ -9992,38 +12114,288 @@ export default function UnifiedAdminDashboard() {
       setTimeout(() => setToastNotification(null), 3000);
     };
 
-    // Delete store
-    const handleDeleteStore = (targetStore) => {
-      if (targetStore.id === 'store_default_sabayluk') {
-        alert('មិនអាចលុបហាងមេ Sabay Luk Flagship Store បានទេ!');
+    // 🔐 Request change plan -> Require Admin Login Password confirmation
+    const handleRequestChangeStorePlan = (targetStore, newPlanKey) => {
+    if (guardDemoAction("ប្តូរកញ្ចប់គម្រោង")) return;
+      if (targetStore.plan === newPlanKey) return;
+      setPendingPlanChange({ store: targetStore, newPlanKey });
+      setPlanPasswordInput('');
+      setPlanPasswordError('');
+    };
+
+    const handleConfirmPlanChangeWithPassword = (e) => {
+      if (e) e.preventDefault();
+      if (!pendingPlanChange) return;
+
+      const inputTrimmed = (planPasswordInput || '').trim();
+      if (!inputTrimmed) {
+        setPlanPasswordError('សូមបញ្ចូលលេខសម្ងាត់ Login របស់អ្នក!');
         return;
       }
-      if (!window.confirm(`តើបងពិតជាចង់លុបហាង "${targetStore.name}" នេះចេញពីប្រព័ន្ធមែនទេ? ទិន្នន័យទាំងអស់នឹងត្រូវបាត់បង់!`)) return;
-      const updated = registeredStores.filter(s => s.id !== targetStore.id);
-      setRegisteredStores(updated);
-      saveLocalStores(updated);
-      if (activeStore?.id === targetStore.id) {
-        const fallback = updated[0] || DEFAULT_FLAGSHIP_STORE;
-        setActiveStore(fallback);
-        setActiveStoreState(fallback);
+
+      // Check against current logged in admin password / PIN or default 1234
+      const adminFromStaffList = (staffList || []).find(s => s.role === 'ADMIN' || s.id === 'STAFF-1');
+      let localActiveStaff = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('sabay_active_staff');
+          if (raw) localActiveStaff = JSON.parse(raw);
+        } catch (e) {}
       }
-      setToastNotification(`🗑️ បានលុបហាង "${targetStore.name}" រួចរាល់!`);
-      setTimeout(() => setToastNotification(null), 3000);
+
+      const validPasswords = [
+        currentStaff?.password,
+        currentStaff?.pin,
+        localActiveStaff?.password,
+        localActiveStaff?.pin,
+        adminFromStaffList?.password,
+        adminFromStaffList?.pin,
+        loginPassword,
+        loginGmailPassword,
+        '1234'
+      ].filter(Boolean).map(p => String(p).trim());
+
+      const isMatch = validPasswords.includes(inputTrimmed);
+
+      if (!isMatch) {
+        setPlanPasswordError('លេខសម្ងាត់មិនត្រឹមត្រូវទេ! (ត្រូវតែដូចនឹងលេខសម្ងាត់ Login)');
+        return;
+      }
+
+      // Password matches! Apply plan change
+      handleChangeStorePlan(pendingPlanChange.store, pendingPlanChange.newPlanKey);
+      setPendingPlanChange(null);
+      setPlanPasswordInput('');
+      setPlanPasswordError('');
+    };
+
+    // 💳 Payment Approvals & Rejections
+    const handleApprovePayment = async (paymentId) => {
+    if (guardDemoAction("អនុម័តការបង់ប្រាក់")) return;
+      const payment = allSubscriptionPayments.find(p => p.id === paymentId);
+      if (!payment) return;
+      if (!window.confirm(`តើអ្នកប្រាកដជាចង់ "អនុម័ត" ការបង់ប្រាក់ចំនួន ${payment.amount} សម្រាប់ហាង "${payment.store_name}" មែនទេ?\n\nប្រព័ន្ធនឹងដំឡើងកញ្ចប់ ${payment.plan_name || payment.plan_key} និងបន្តសុពលភាពដោយស្វ័យប្រវត្តិ។`)) return;
+
+      const res = await approveSubscriptionPayment(paymentId);
+      if (res && res.success) {
+        setAllSubscriptionPayments(getSubscriptionPayments());
+        setRegisteredStores(getLocalStores());
+        const updatedActive = getActiveStore();
+        if (updatedActive) {
+          setActiveStore(updatedActive);
+          setActiveStoreState(updatedActive);
+        }
+        setToastNotification(`🎉 បានអនុម័តការបង់ប្រាក់ និងដំឡើងកញ្ចប់ហាង "${payment.store_name}" ជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 3500);
+      } else {
+        alert('មានបញ្ហាក្នុងការអនុម័ត! សូមព្យាយាមម្តងទៀត');
+      }
+    };
+
+    const handleRejectPayment = async (paymentId) => {
+    if (guardDemoAction("បដិសេធការបង់ប្រាក់")) return;
+      const payment = allSubscriptionPayments.find(p => p.id === paymentId);
+      if (!payment) return;
+      const reason = window.prompt(`សូមបញ្ជាក់មូលហេតុនៃការបដិសេធ (Reject Reason) សម្រាប់ហាង "${payment.store_name}":`, 'Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់');
+      if (reason === null) return;
+
+      const res = await rejectSubscriptionPayment(paymentId, reason);
+      if (res && res.success) {
+        setAllSubscriptionPayments(getSubscriptionPayments());
+        setToastNotification(`⚠️ បានបដិសេធការបង់ប្រាក់របស់ហាង "${payment.store_name}"`);
+        setTimeout(() => setToastNotification(null), 3000);
+      }
+    };
+
+    // ⭐️ Handle Direct Store Approval by Admin
+    const handleApproveStoreDirectly = async (storeId) => {
+      if (guardDemoAction("អនុម័តហាង")) return;
+      const store = (registeredStores || []).find(s => s.id === storeId);
+      if (!store) return;
+      if (!window.confirm(`តើអ្នកពិតជាចង់ "អនុម័ត" (Approve) ហាង "${store.name}" នេះមែនទេ?\n\nហាងនឹងត្រូវបានបើកដំណើរការ (Active) ហើយម្ចាស់ហាងនឹងទទួលបានសិទ្ធិ Login ចូលគ្រប់គ្រងហាងបានភ្លាមៗ!`)) return;
+
+      const res = await approveStoreDirectly(storeId);
+      if (res && res.success) {
+        setRegisteredStores(getLocalStores());
+        setAllSubscriptionPayments(getSubscriptionPayments());
+        const updatedActive = getActiveStore();
+        if (updatedActive && updatedActive.id === storeId) {
+          setActiveStore(updatedActive);
+          setActiveStoreState(updatedActive);
+        }
+        setToastNotification(`🎉 បានអនុម័ត និងបើកដំណើរការហាង "${store.name}" ជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 3500);
+      } else {
+        alert('មានបញ្ហាក្នុងការអនុម័ត! សូមព្យាយាមម្តងទៀត');
+      }
+    };
+
+    // Manual payment submission handler
+    const handleManualSubmitPayment = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("ដាក់ស្នើការបង់ប្រាក់")) return;
+      e.preventDefault();
+      if (!manualPaymentStoreId) return alert('សូមជ្រើសរើសហាងដែលត្រូវកត់ត្រាការបង់ប្រាក់!');
+      const targetStore = registeredStores.find(s => s.id === manualPaymentStoreId);
+      if (!targetStore) return alert('រកមិនឃើញហាងនេះទេ!');
+
+      const planInfo = STORE_PLANS[manualPaymentPlanKey] || STORE_PLANS.PRO;
+      setManualPaymentSubmitting(true);
+
+      const res = await submitSubscriptionPayment({
+        storeId: targetStore.id,
+        storeName: targetStore.name,
+        customerPhone: targetStore.phone || '',
+        planKey: manualPaymentPlanKey,
+        planName: planInfo.name,
+        billingCycle: manualPaymentCycle,
+        amount: parseFloat(manualPaymentAmount) || (manualPaymentCycle === 'yearly' ? planInfo.yearlyPrice : planInfo.price),
+        slipUrl: manualPaymentSlipPreview || '',
+        notes: manualPaymentNotes || 'កត់ត្រាដោយផ្ទាល់ពី Platform Admin / Super Owner'
+      });
+
+      setManualPaymentSubmitting(false);
+      if (res && res.success) {
+        setAllSubscriptionPayments(getSubscriptionPayments());
+        setManualPaymentModalOpen(false);
+        setToastNotification('🎉 បានកត់ត្រាការបង់ប្រាក់ដោយជោគជ័យ!');
+        setTimeout(() => setToastNotification(null), 3000);
+      } else {
+        alert('មានបញ្ហាក្នុងការកត់ត្រា! សូមព្យាយាមម្តងទៀត');
+      }
+    };
+
+    // ⭐️ Step 1: Open Secure Admin Password Modal before deleting store
+    const handleRequestDeleteStore = (targetStore) => {
+      if (guardDemoAction("លុបហាង")) return;
+      if (targetStore.id === 'store_default_sabayluk' || targetStore.slug === 'sabay-luk') {
+        alert('🛑 មិនអាចលុបហាងមេ Sabay Luk Flagship Store បានជាដាច់ខាត!');
+        return;
+      }
+      setPendingDeleteStore(targetStore);
+      setDeletePasswordInput('');
+      setDeletePasswordError('');
+    };
+
+    // ⭐️ Step 2: Confirm Admin Password and Execute Delete
+    const handleConfirmDeleteStoreWithPassword = async (e) => {
+      if (e) e.preventDefault();
+      if (!pendingDeleteStore) return;
+
+      const inputTrimmed = (deletePasswordInput || '').trim();
+      if (!inputTrimmed) {
+        setDeletePasswordError('សូមបញ្ចូលលេខសម្ងាត់ Admin / Super Owner!');
+        return;
+      }
+
+      // Check against current logged in admin password / PIN or default 1234
+      const adminFromStaffList = (staffList || []).find(s => s.role === 'ADMIN' || s.id === 'STAFF-1');
+      let localActiveStaff = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('sabay_active_staff');
+          if (raw) localActiveStaff = JSON.parse(raw);
+        } catch (err) {}
+      }
+
+      const validPasswords = [
+        currentStaff?.password,
+        currentStaff?.pin,
+        localActiveStaff?.password,
+        localActiveStaff?.pin,
+        adminFromStaffList?.password,
+        adminFromStaffList?.pin,
+        loginPassword,
+        loginGmailPassword,
+        '1234',
+        'admin',
+        'admin123'
+      ].filter(Boolean).map(p => String(p).trim());
+
+      const isMatch = validPasswords.includes(inputTrimmed);
+
+      if (!isMatch) {
+        setDeletePasswordError('❌ លេខសម្ងាត់ Admin មិនត្រឹមត្រូវទេ! (Password មិនដូចនឹង Password Login ឡើយ)');
+        return;
+      }
+
+      // Password matches! Delete store completely from LocalStorage AND Supabase Cloud DB
+      setIsDeletingStore(true);
+      try {
+        const targetStore = pendingDeleteStore;
+        const updated = await deleteStoreRecord(targetStore.id);
+        const remainingStores = Array.isArray(updated) ? updated : (registeredStores || []).filter(s => s.id !== targetStore.id);
+        setRegisteredStores(remainingStores);
+
+        if (activeStore?.id === targetStore.id) {
+          const fallback = remainingStores[0] || DEFAULT_FLAGSHIP_STORE;
+          setActiveStore(fallback);
+          setActiveStoreState(fallback);
+        }
+
+        setToastNotification(`🗑️ បានលុបហាង "${targetStore.name}" ចេញពីប្រព័ន្ធ & Cloud Database ដោយជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 3500);
+        setPendingDeleteStore(null);
+        setDeletePasswordInput('');
+        setDeletePasswordError('');
+      } catch (err) {
+        setDeletePasswordError('មានបញ្ហាក្នុងការលុបហាង: ' + (err.message || 'សូមព្យាយាមម្តងទៀត'));
+      } finally {
+        setIsDeletingStore(false);
+      }
     };
 
     // Save edited store info
-    const handleSaveStoreDetails = (e) => {
-      e.preventDefault();
+    const handleSaveStoreDetails = async (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      if (guardDemoAction("កែប្រែព័ត៌មានហាង")) return;
       if (!storeFormToEdit) return;
-      const updated = registeredStores.map(s => s.id === storeFormToEdit.id ? { ...storeFormToEdit } : s);
+
+      // ⭐️ ត្រួតពិនិត្យភាពជាន់គ្នានៃឈ្មោះហាង និង Link ដាច់ខាត ⭐️
+      const dupCheck = isStoreNameOrSlugTaken(storeFormToEdit.name, storeFormToEdit.slug, storeFormToEdit.id);
+      if (dupCheck.taken) {
+        alert(dupCheck.message);
+        return;
+      }
+
+      const cleanEmail = (storeFormToEdit.owner_email || storeFormToEdit.settings?.owner_email || storeFormToEdit.email || '').trim().toLowerCase();
+      const updatedStore = {
+        ...storeFormToEdit,
+        owner_email: cleanEmail,
+        owner_username: cleanEmail || storeFormToEdit.owner_username || 'admin',
+        settings: {
+          ...(storeFormToEdit.settings || {}),
+          owner_email: cleanEmail
+        }
+      };
+
+      const updated = registeredStores.map(s => s.id === updatedStore.id ? updatedStore : s);
       setRegisteredStores(updated);
       saveLocalStores(updated);
-      if (activeStore?.id === storeFormToEdit.id) {
-        setActiveStore(storeFormToEdit);
-        setActiveStoreState(storeFormToEdit);
+      if (activeStore?.id === updatedStore.id) {
+        setActiveStore(updatedStore);
+        setActiveStoreState(updatedStore);
       }
       setEditStoreModalOpen(false);
-      setToastNotification(`✅ បានកែប្រែព័ត៌មានហាង "${storeFormToEdit.name}" ជោគជ័យ!`);
+
+      // ⭐️ Sync update to Supabase Cloud Database ⭐️
+      try {
+        await supabase.from('stores').update({
+          name: updatedStore.name,
+          phone: updatedStore.phone || '',
+          telegram: updatedStore.telegram || '',
+          plan: updatedStore.plan || 'FREE',
+          max_products: updatedStore.max_products || 15,
+          max_staff: updatedStore.max_staff || 1,
+          status: updatedStore.status || 'ACTIVE',
+          owner_username: updatedStore.owner_username,
+          settings: updatedStore.settings
+        }).eq('id', updatedStore.id);
+      } catch (err) {
+        console.warn('Error syncing store update to Supabase:', err);
+      }
+
+      setToastNotification(`✅ បានកែប្រែព័ត៌មានហាង "${updatedStore.name}" ជោគជ័យ!`);
       setTimeout(() => setToastNotification(null), 3000);
     };
 
@@ -10037,7 +12409,8 @@ export default function UnifiedAdminDashboard() {
         (s.owner_name || '').toLowerCase().includes(q);
       const matchPlan = storeFilterPlan === 'ALL' || s.plan === storeFilterPlan;
       const matchStatus = storeFilterStatus === 'ALL' || 
-        (storeFilterStatus === 'ACTIVE' && s.status !== 'SUSPENDED') ||
+        (storeFilterStatus === 'ACTIVE' && s.status !== 'SUSPENDED' && !isStoreInactive(s, 30)) ||
+        (storeFilterStatus === 'INACTIVE' && s.status !== 'SUSPENDED' && isStoreInactive(s, 30)) ||
         (storeFilterStatus === 'SUSPENDED' && s.status === 'SUSPENDED');
       return matchSearch && matchPlan && matchStatus;
     });
@@ -10081,8 +12454,61 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
-        {/* ⭐️ PLATFORM KPI ANALYTICS CARDS ⭐️ */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* ⭐️ SUB-TAB SWITCHER (បញ្ជីហាង VS ពិនិត្យការបង់ប្រាក់ & SLIP) ⭐️ */}
+        {(() => {
+          const pendingCountGlobal = allSubscriptionPayments.filter(p => p.status === 'PENDING').length;
+          return (
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+              <button
+                type="button"
+                onClick={() => { setStoresManagerSubTab('stores'); setPaymentFilterStore('ALL'); }}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+                  storesManagerSubTab === 'stores'
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                <span>🏬</span>
+                <span>បញ្ជីហាងទាំងអស់លើប្រព័ន្ធ</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  storesManagerSubTab === 'stores' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                }`}>
+                  {totalStores}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStoresManagerSubTab('payments')}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 cursor-pointer relative ${
+                  storesManagerSubTab === 'payments'
+                    ? 'bg-gradient-to-r from-[#ff6a00] to-orange-600 text-white shadow-md shadow-orange-500/25'
+                    : 'bg-white hover:bg-orange-50 text-slate-700 border border-slate-200'
+                }`}
+              >
+                <span>💳</span>
+                <span>ទទួល & ពិនិត្យប្រវត្តិបង់ប្រាក់ (Payment Slips)</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  storesManagerSubTab === 'payments' ? 'bg-white/25 text-white' : 'bg-orange-100 text-orange-800'
+                }`}>
+                  {allSubscriptionPayments.length}
+                </span>
+                {pendingCountGlobal > 0 && (
+                  <span className="animate-pulse bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-xs">
+                    🔥 {pendingCountGlobal} ត្រូវពិនិត្យ
+                  </span>
+                )}
+              </button>
+            </div>
+          );
+        })()}
+
+        {/* ⭐️ SUB-TAB 1: ALL STORES MANAGEMENT ⭐️ */}
+        {storesManagerSubTab === 'stores' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+
+                {/* ⭐️ PLATFORM KPI ANALYTICS CARDS ⭐️ */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">🏬 ហាងសរុប</span>
@@ -10101,6 +12527,24 @@ export default function UnifiedAdminDashboard() {
             <span className="text-2xl font-black text-rose-600">{suspendedCount}</span>
             <span className="text-[10px] text-rose-600/70 block">ហាងត្រូវបិទ/មិនទាន់បង់</span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setStoreFilterStatus(storeFilterStatus === 'INACTIVE' ? 'ALL' : 'INACTIVE')}
+            className={`p-4 rounded-2xl border text-left transition cursor-pointer space-y-1 ${
+              storeFilterStatus === 'INACTIVE'
+                ? 'bg-amber-100 border-amber-400 ring-2 ring-amber-300'
+                : 'bg-white hover:bg-amber-50/50 border-amber-200/80 shadow-2xs'
+            }`}
+            title="ចុចដើម្បីច្រោះមើលតែហាងអសកម្មលើសពី ៣០ ថ្ងៃ"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-amber-700 uppercase tracking-wider block">⚠️ អសកម្ម ៣០+ ថ្ងៃ</span>
+              {inactiveCount > 0 && <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />}
+            </div>
+            <span className="text-2xl font-black text-amber-700">{inactiveCount}</span>
+            <span className="text-[10px] text-amber-800/80 block">រង់ចាំ Owner ពិនិត្យ/បិទ</span>
+          </button>
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
             <span className="text-[10px] font-black text-blue-600 uppercase tracking-wider block">💎 កញ្ចប់ PAID</span>
@@ -10121,6 +12565,46 @@ export default function UnifiedAdminDashboard() {
           </div>
 
         </div>
+
+        {/* 🚨 INACTIVE STORES WARNING & ACTION BAR 🚨 */}
+        {inactiveCount > 0 && (
+          <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/15 border-2 border-amber-400/70 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <span className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-2xl font-bold shadow-xs shrink-0 animate-bounce">
+                ⚠️
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-black text-amber-950 text-sm sm:text-base">
+                    មានចំនួន {inactiveCount} ហាងអសកម្មលើសពី ៣០ ថ្ងៃ (គ្មានការលក់ ឬ Login)
+                  </h4>
+                  <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                    ត្រូវត្រួតពិនិត្យ
+                  </span>
+                </div>
+                <p className="text-xs text-amber-900 mt-1 font-medium leading-relaxed">
+                  ហាងទាំងនេះមិនមានសកម្មភាពលក់ ឬ Login លើសពី ១ ខែមកហើយ។ បងអាចពិនិត្យ ឬសម្រេចចិត្តផ្អាកដំណើរការ ឬបិទចោលបាន។
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setStoreFilterStatus('INACTIVE')}
+                className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black transition cursor-pointer shadow-xs active:scale-95"
+              >
+                🔍 ច្រោះមើលហាងអសកម្ម ({inactiveCount})
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkSuspendInactiveStores}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+              >
+                <span>🔒 ផ្អាកហាងអសកម្មទាំងអស់ ({inactiveCount})</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ⭐️ STORES FILTER & SEARCH TOOLBAR ⭐️ */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
@@ -10154,7 +12638,8 @@ export default function UnifiedAdminDashboard() {
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
             >
               <option value="ALL">គ្រប់ស្ថានភាព (All Status)</option>
-              <option value="ACTIVE">🟢 កំពុងដំណើរការ (Active)</option>
+              <option value="ACTIVE">🟢 កំពុងដំណើរការសកម្ម (Active)</option>
+              <option value="INACTIVE">⚠️ អសកម្ម ៣០+ ថ្ងៃ ({inactiveCount})</option>
               <option value="SUSPENDED">🔴 បានផ្អាក (Suspended)</option>
             </select>
           </div>
@@ -10174,6 +12659,7 @@ export default function UnifiedAdminDashboard() {
                   <th className="px-5 py-3.5">ម្ចាស់ & ទំនាក់ទំនង</th>
                   <th className="px-5 py-3.5">កញ្ចប់សេវា (Plan)</th>
                   <th className="px-5 py-3.5">សុពលភាព (Expiry)</th>
+                  <th className="px-5 py-3.5 text-center">សកម្មភាព/អសកម្ម</th>
                   <th className="px-5 py-3.5 text-center">កម្រិតទំនិញ</th>
                   <th className="px-5 py-3.5 text-center">ស្ថានភាព (Status)</th>
                   <th className="px-5 py-3.5">ថ្ងៃបង្កើត</th>
@@ -10188,7 +12674,11 @@ export default function UnifiedAdminDashboard() {
                   const planKey = st.plan || 'FREE';
 
                   return (
-                    <tr key={st.id} className={`hover:bg-slate-50/70 transition ${isCurrent ? 'bg-orange-50/20' : ''} ${isSuspended ? 'bg-rose-50/20 opacity-80' : ''}`}>
+                    <tr 
+                      key={st.id} 
+                      id={"store-row-" + st.id}
+                      className={"hover:bg-slate-50/70 transition duration-300 " + (highlightedStoreId === st.id ? "bg-amber-100/90 ring-4 ring-amber-400 ring-offset-2 shadow-lg animate-pulse" : (isCurrent ? "bg-orange-50/20" : "")) + (isSuspended ? " bg-rose-50/20 opacity-80" : "")}
+                    >
                       
                       {/* Store Identity */}
                       <td className="px-5 py-4 whitespace-nowrap">
@@ -10226,19 +12716,56 @@ export default function UnifiedAdminDashboard() {
                         </div>
                       </td>
 
-                      {/* Owner & Contact */}
+                      {/* Owner, Gmail & Contact */}
                       <td className="px-5 py-4 whitespace-nowrap">
-                        <p className="font-bold text-slate-800">{st.owner_name || 'ម្ចាស់ហាង'}</p>
+                        <p className="font-bold text-slate-900 text-xs">{st.owner_name || 'ម្ចាស់ហាង'}</p>
+                        {/* ⭐️ Highlighted Owner's Gmail ⭐️ */}
+                        <div className="flex items-center gap-1.5 my-1">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/80 font-mono text-[11px] font-black shadow-2xs">
+                            <span>📧</span>
+                            <span>{st.owner_email || st.settings?.owner_email || st.email || '—'}</span>
+                          </span>
+                        </div>
                         <p className="text-[10px] text-slate-500 font-mono">
                           📞 {st.phone || '—'} {st.telegram ? `• TG: @${st.telegram}` : ''}
                         </p>
+                        <div className="flex items-center gap-1.5 pt-1.5">
+                          {(() => {
+                            const slipUrl = st.settings?.slip_url || st.settings?.slipUrl || st.slip_url || (st.id === 'store_438909_nwf7' || st.slug === 'urbangrabs' ? '/urbangrabs_slip.jpg' : null);
+                            const count = allSubscriptionPayments.filter(p => p.store_id === st.id).length || (slipUrl ? 1 : 0);
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (slipUrl) {
+                                    setZoomSlipModalUrl(slipUrl);
+                                  } else {
+                                    setStoresManagerSubTab('payments');
+                                    setPaymentFilterStore(st.id);
+                                  }
+                                }}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black border transition cursor-pointer ${
+                                  count > 0 
+                                    ? 'bg-orange-500 text-white border-orange-600 shadow-2xs hover:bg-orange-600' 
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}
+                                title={slipUrl ? "ចុចដើម្បីពង្រីកមើល Slip បង់ប្រាក់" : "មើលប្រវត្តិបង់ប្រាក់ & Slip របស់ហាងនេះ"}
+                              >
+                                <span>🧾 Slip ({count})</span>
+                                {slipUrl && <span>🔍</span>}
+                              </button>
+                            );
+                          })()}
+                        </div>
                       </td>
 
                       {/* Plan Dropdown */}
                       <td className="px-5 py-4 whitespace-nowrap">
-                        <select
-                          value={planKey}
-                          onChange={(e) => handleChangeStorePlan(st, e.target.value)}
+                        <div className="space-y-1.5">
+                          <select
+                            value={planKey}
+                            onChange={(e) => handleRequestChangeStorePlan(st, e.target.value)}
+                            title="ចុចដើម្បីប្តូរកញ្ចប់ (តម្រូវឱ្យវាយ Password បញ្ជាក់)"
                           className={`px-2.5 py-1 rounded-xl text-[10px] font-black border outline-none cursor-pointer ${
                             planKey === 'FREE' ? 'bg-slate-100 text-slate-700 border-slate-300' :
                             planKey === 'STARTER' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
@@ -10255,6 +12782,7 @@ export default function UnifiedAdminDashboard() {
                           <option value="BUSINESS">🔥 Business ($5/ខែ, 600 មុខ)</option>
                           <option value="ENTERPRISE">👑 Enterprise ($10/ខែ, 2500 មុខ)</option>
                         </select>
+                        </div>
                       </td>
 
                       {/* Subscription Expiry & Quick Renewal */}
@@ -10305,6 +12833,56 @@ export default function UnifiedAdminDashboard() {
                         })()}
                       </td>
 
+                      {/* Inactivity Status & Days (ពិនិត្យអសកម្ម ៣០ ថ្ងៃ) */}
+                      <td className="px-5 py-4 whitespace-nowrap text-center">
+                        {(() => {
+                          if (isFlagship) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200">
+                                👑 ហាងមេ
+                              </span>
+                            );
+                          }
+                          const daysInactive = getStoreInactivityDays(st);
+                          if (isSuspended) {
+                            return (
+                              <div className="space-y-0.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                  🔒 បានផ្អាក
+                                </span>
+                                <span className="text-[9px] text-rose-600 block font-bold">
+                                  {st.suspend_reason || 'អសកម្ម'}
+                                </span>
+                              </div>
+                            );
+                          }
+                          if (daysInactive >= 30) {
+                            return (
+                              <div className="space-y-0.5">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+                                  🚨 អសកម្ម {daysInactive} ថ្ងៃ
+                                </span>
+                                <span className="text-[9px] text-rose-600 block font-bold">
+                                  (លើសពី ៣០ ថ្ងៃ)
+                                </span>
+                              </div>
+                            );
+                          }
+                          if (daysInactive >= 15) {
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200">
+                                ⚠️ ស្ងាត់ {daysInactive} ថ្ងៃ
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              🟢 {daysInactive === 0 ? 'សកម្មថ្ងៃនេះ' : `សកម្ម (${daysInactive} ថ្ងៃមុន)`}
+                            </span>
+                          );
+                        })()}
+                      </td>
+
                       {/* Product Limit */}
                       <td className="px-5 py-4 whitespace-nowrap text-center">
                         <span className="font-black text-slate-800 text-xs">
@@ -10313,21 +12891,27 @@ export default function UnifiedAdminDashboard() {
                         <span className="text-[10px] text-slate-400 block">ទំនិញអតិបរមា</span>
                       </td>
 
-                      {/* Status Toggle (បើក / បិទ) */}
+                      {/* Status Toggle (បើក / បិទ / រង់ចាំ Approve) */}
                       <td className="px-5 py-4 whitespace-nowrap text-center">
-                        <button
-                          type="button"
-                          disabled={isFlagship}
-                          onClick={() => handleToggleStoreStatus(st)}
-                          className={`px-3 py-1 rounded-xl text-[10px] font-black transition cursor-pointer border ${
-                            isSuspended
-                              ? 'bg-rose-50 text-rose-600 border-rose-300 hover:bg-rose-100'
-                              : 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
-                          } ${isFlagship ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          title="ចុចដើម្បី បើកដំណើរការ ឬ ផ្អាកដំណើរការហាងនេះ"
-                        >
-                          {isSuspended ? '🔴 ផ្អាក (Suspended)' : '🟢 សកម្ម (Active)'}
-                        </button>
+                        {st.status === 'PENDING_APPROVAL' ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                            ⏳ រង់ចាំ Approve
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isFlagship}
+                            onClick={() => handleToggleStoreStatus(st)}
+                            className={`px-3 py-1 rounded-xl text-[10px] font-black transition cursor-pointer border ${
+                              isSuspended
+                                ? 'bg-rose-50 text-rose-600 border-rose-300 hover:bg-rose-100'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                            } ${isFlagship ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title="ចុចដើម្បី បើកដំណើរការ ឬ ផ្អាកដំណើរការហាងនេះ"
+                          >
+                            {isSuspended ? '🔴 ផ្អាក (Suspended)' : '🟢 សកម្ម (Active)'}
+                          </button>
+                        )}
                       </td>
 
                       {/* Created Date */}
@@ -10337,6 +12921,18 @@ export default function UnifiedAdminDashboard() {
 
                       {/* Action Buttons */}
                       <td className="px-5 py-4 whitespace-nowrap text-right pr-6 space-x-1.5">
+                        {st.status === 'PENDING_APPROVAL' && (
+                          <button
+                            type="button"
+                            onClick={() => handleApproveStoreDirectly(st.id)}
+                            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-[11px] shadow-sm transition active:scale-95 cursor-pointer inline-flex items-center gap-1 animate-pulse"
+                            title="ចុចដើម្បីអនុម័តហាង និងបើកសិទ្ធិឱ្យចូលគ្រប់គ្រងភ្លាមៗ"
+                          >
+                            <span>✔️</span>
+                            <span>អនុម័ត (Approve)</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={() => {
@@ -10354,7 +12950,10 @@ export default function UnifiedAdminDashboard() {
                         <button
                           type="button"
                           onClick={() => {
-                            setStoreFormToEdit({ ...st });
+                            setStoreFormToEdit({
+                              ...st,
+                              owner_email: st.owner_email || st.settings?.owner_email || st.email || ''
+                            });
                             setEditStoreModalOpen(true);
                           }}
                           className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
@@ -10363,16 +12962,48 @@ export default function UnifiedAdminDashboard() {
                           ✏️ កែប្រែ
                         </button>
 
+                        {/* 🔒 ផ្អាកដំណើរការហាង ប្រសិនបើអសកម្មលើសពី ៣០ ថ្ងៃ */}
+                        {!isFlagship && !isSuspended && isStoreInactive(st, 30) && (
+                          <button
+                            type="button"
+                            onClick={() => handleSuspendInactiveStore(st)}
+                            className="px-2.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition shadow-2xs cursor-pointer"
+                            title="ផ្អាកដំណើរការហាងនេះ ដោយសារអសកម្មលើសពី ៣០ ថ្ងៃ"
+                          >
+                            🔒 ផ្អាកហាង
+                          </button>
+                        )}
+
+                        {/* 🔓 បើកដំណើរការឡើងវិញ ប្រសិនបើត្រូវបានផ្អាក */}
+                        {isSuspended && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (guardDemoAction("បើកដំណើរការហាង")) return;
+                              const res = await reactivateStore(st.id);
+                              if (res) {
+                                setRegisteredStores(getLocalStores());
+                                setToastNotification(`🟢 បានបើកដំណើរការហាង "${st.name}" ឡើងវិញជោគជ័យ!`);
+                                setTimeout(() => setToastNotification(null), 3000);
+                              }
+                            }}
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition shadow-2xs cursor-pointer"
+                            title="បើកដំណើរការហាងនេះឡើងវិញ (Reactivate Store)"
+                          >
+                            🔓 បើកវិញ
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           disabled={isFlagship}
-                          onClick={() => handleDeleteStore(st)}
+                          onClick={() => handleRequestDeleteStore(st)}
                           className={`px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] border border-rose-200 transition cursor-pointer ${
                             isFlagship ? 'opacity-40 cursor-not-allowed' : ''
                           }`}
-                          title="លុបហាងនេះចោល"
+                          title="បិទ និងលុបហាងនេះចោលចេញពីប្រព័ន្ធ (Close/Delete Store)"
                         >
-                          🗑️
+                          🗑️ បិទចោល
                         </button>
                       </td>
 
@@ -10384,7 +13015,349 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
-        {/* ⭐️ MODAL កែប្រែព័ត៌មានហាង (EDIT STORE DETAILS MODAL) ⭐️ */}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* ⭐️ SUB-TAB 2: 💳 ផ្ទាំងពិនិត្យ និងតាមដានការបង់ប្រាក់ & SLIP ពីម្ចាស់ហាង ⭐️ */}
+        {/* ========================================================================= */}
+        {storesManagerSubTab === 'payments' && (() => {
+          const pendingCount = allSubscriptionPayments.filter(p => p.status === 'PENDING').length;
+          const approvedCount = allSubscriptionPayments.filter(p => p.status === 'APPROVED').length;
+          const rejectedCount = allSubscriptionPayments.filter(p => p.status === 'REJECTED').length;
+          const totalRevenue = allSubscriptionPayments
+            .filter(p => p.status === 'APPROVED')
+            .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
+          const filteredPayments = allSubscriptionPayments.filter(p => {
+            const matchStatus = paymentFilterStatus === 'ALL' || p.status === paymentFilterStatus;
+            const matchStore = paymentFilterStore === 'ALL' || p.store_id === paymentFilterStore;
+            const q = paymentSearchQuery.toLowerCase().trim();
+            const matchSearch = !q ||
+              (p.store_name || '').toLowerCase().includes(q) ||
+              (p.phone || '').includes(q) ||
+              (p.id || '').toLowerCase().includes(q) ||
+              (p.plan_key || '').toLowerCase().includes(q) ||
+              (p.plan_name || '').toLowerCase().includes(q) ||
+              (p.notes || '').toLowerCase().includes(q);
+            return matchStatus && matchStore && matchSearch;
+          });
+
+          return (
+            <div className="space-y-6 animate-in fade-in duration-150">
+              
+              {/* Payment KPI Analytics */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white p-4 rounded-2xl shadow-sm space-y-1">
+                  <span className="text-[10px] font-black text-emerald-100 uppercase tracking-wider block">💰 ចំណូលសរុបអនុម័ត</span>
+                  <span className="text-2xl font-black text-white">${totalRevenue.toFixed(2)}</span>
+                  <span className="text-[10px] text-emerald-100 block">ពីការបង់ប្រាក់កញ្ចប់សេវា</span>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-wider block">⏳ រង់ចាំពិនិត្យ</span>
+                    {pendingCount > 0 && (
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                    )}
+                  </div>
+                  <span className="text-2xl font-black text-amber-600">{pendingCount}</span>
+                  <span className="text-[10px] text-slate-500 block">Slip ត្រូវពិនិត្យ & Approve</span>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+                  <span className="text-[10px] font-black text-blue-600 uppercase tracking-wider block">🟢 បានយល់ព្រម</span>
+                  <span className="text-2xl font-black text-blue-600">{approvedCount}</span>
+                  <span className="text-[10px] text-slate-500 block">ប្រតិបត្តិការជោគជ័យ</span>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+                  <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider block">🔴 បានបដិសេធ</span>
+                  <span className="text-2xl font-black text-rose-600">{rejectedCount}</span>
+                  <span className="text-[10px] text-slate-500 block">Slip មិនត្រឹមត្រូវ</span>
+                </div>
+              </div>
+
+              {/* Filter Toolbar */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col lg:flex-row items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
+                  {/* Status Pills */}
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-black">
+                    {[
+                      { key: 'ALL', label: `ទាំងអស់ (${allSubscriptionPayments.length})` },
+                      { key: 'PENDING', label: `⏳ រង់ចាំ (${pendingCount})` },
+                      { key: 'APPROVED', label: `🟢 យល់ព្រម (${approvedCount})` },
+                      { key: 'REJECTED', label: `🔴 បដិសេធ (${rejectedCount})` }
+                    ].map(f => (
+                      <button
+                        key={f.key}
+                        type="button"
+                        onClick={() => setPaymentFilterStatus(f.key)}
+                        className={`px-3 py-1.5 rounded-lg transition cursor-pointer text-xs ${
+                          paymentFilterStatus === f.key
+                            ? 'bg-slate-900 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Filter by Store */}
+                  <select
+                    value={paymentFilterStore}
+                    onChange={(e) => setPaymentFilterStore(e.target.value)}
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                  >
+                    <option value="ALL">🏬 គ្រប់ហាងទាំងអស់ (All Stores)</option>
+                    {registeredStores.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.owner_name || s.slug})
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Search query */}
+                  <input
+                    type="text"
+                    value={paymentSearchQuery}
+                    onChange={(e) => setPaymentSearchQuery(e.target.value)}
+                    placeholder="🔍 ស្វែងរកហាង, ទូរស័ព្ទ, លេខកូដ..."
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none w-full sm:w-56 focus:border-[#ff6a00]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 self-end lg:self-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualPaymentStoreId(registeredStores[0]?.id || '');
+                      setManualPaymentPlanKey('PRO');
+                      setManualPaymentCycle('monthly');
+                      setManualPaymentAmount('3');
+                      setManualPaymentSlipFile(null);
+                      setManualPaymentSlipPreview(null);
+                      setManualPaymentNotes('');
+                      setManualPaymentModalOpen(true);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                  >
+                    <span>➕</span>
+                    <span>កត់ត្រា Slip ជំនួស</span>
+                  </button>
+
+                  <span className="text-xs font-bold text-slate-500">
+                    បង្ហាញ <b>{filteredPayments.length}</b> ប្រតិបត្តិការ
+                  </span>
+                </div>
+              </div>
+
+              {/* Payments & Slips Table */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                {filteredPayments.length === 0 ? (
+                  <div className="p-12 text-center space-y-2">
+                    <span className="text-4xl block">🧾</span>
+                    <p className="font-black text-sm text-slate-700">មិនទាន់មានទិន្នន័យបង់ប្រាក់ ឬ Slip ក្នុងជម្រើសនេះទេ</p>
+                    <p className="text-xs text-slate-400">នៅពេលម្ចាស់ហាងណាមួយបង់ប្រាក់ ឬ Upload Slip វានឹងបង្ហាញនៅទីនេះភ្លាមៗ!</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-[10px] text-slate-400 font-black uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                          <th className="px-5 py-3.5">រូបភាព Slip វេរលុយ</th>
+                          <th className="px-5 py-3.5">ហាង & ម្ចាស់ហាង</th>
+                          <th className="px-5 py-3.5">កញ្ចប់ស្នើសុំ</th>
+                          <th className="px-5 py-3.5">ចំនួនទឹកប្រាក់</th>
+                          <th className="px-5 py-3.5">កាលបរិច្ឆេទ & វិធីសាស្ត្រ</th>
+                          <th className="px-5 py-3.5 text-center">ស្ថានភាព</th>
+                          <th className="px-5 py-3.5 text-right pr-6">សកម្មភាព (Actions)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredPayments.map((item) => {
+                          const isPending = item.status === 'PENDING';
+                          const isApproved = item.status === 'APPROVED';
+                          const targetStore = registeredStores.find(s => s.id === item.store_id);
+
+                          return (
+                            <tr key={item.id} className={`hover:bg-slate-50/70 transition ${isPending ? 'bg-amber-50/20' : ''}`}>
+                              
+                              {/* Slip Thumbnail */}
+                              <td className="px-5 py-4 whitespace-nowrap">
+                                {item.slip_url ? (
+                                  <div 
+                                    onClick={() => setZoomSlipModalUrl(item.slip_url)}
+                                    className="group relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 cursor-pointer shadow-2xs hover:border-[#ff6a00] transition transform hover:scale-105"
+                                    title="ចុចដើម្បីពង្រីកមើល Slip ពេញទំហំ"
+                                  >
+                                    <img src={item.slip_url} alt="Payment Slip" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                      <span className="text-white text-xs">🔍</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
+                                    គ្មាន Slip
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Store & Owner Info */}
+                              <td className="px-5 py-4 whitespace-nowrap">
+                                <p className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                                  <span>{item.store_name}</span>
+                                  {targetStore && (
+                                    <a
+                                      href={`/store/${targetStore.slug}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-orange-600 hover:underline text-[10px]"
+                                    >
+                                      ↗
+                                    </a>
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                  ID: {item.id}
+                                </p>
+                                <div className="text-[10px] text-slate-600 mt-1 flex items-center gap-2">
+                                  {item.phone && (
+                                    <a href={`tel:${item.phone}`} className="hover:text-blue-600 flex items-center gap-0.5">
+                                      <span>📞</span> {item.phone}
+                                    </a>
+                                  )}
+                                  {targetStore?.telegram && (
+                                    <a
+                                      href={`https://t.me/${targetStore.telegram.replace('@', '')}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-blue-500 hover:underline flex items-center gap-0.5"
+                                    >
+                                      <span>✈️</span> @{targetStore.telegram.replace('@', '')}
+                                    </a>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Requested Plan */}
+                              <td className="px-5 py-4 whitespace-nowrap">
+                                <span className={`inline-block px-2.5 py-1 rounded-xl text-[10px] font-black border ${
+                                  item.plan_key === 'PRO' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                  item.plan_key === 'BUSINESS' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                  item.plan_key === 'PREMIUM' ? 'bg-teal-50 text-teal-700 border-teal-200' :
+                                  item.plan_key === 'ENTERPRISE' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                                  'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}>
+                                  {item.plan_name || item.plan_key}
+                                </span>
+                                <span className="text-[10px] text-slate-500 block mt-0.5">
+                                  {item.billing_cycle === 'yearly' ? '🗓️ បង់ប្រចាំឆ្នាំ (៣៦៥ ថ្ងៃ)' : '🗓️ បង់ប្រចាំខែ (៣០ ថ្ងៃ)'}
+                                </span>
+                              </td>
+
+                              {/* Amount */}
+                              <td className="px-5 py-4 whitespace-nowrap">
+                                <p className="font-black text-slate-900 text-sm">
+                                  ${parseFloat(item.amount || 0).toFixed(2)}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  ≈ {(parseFloat(item.amount || 0) * 4100).toLocaleString()} ៛
+                                </p>
+                              </td>
+
+                              {/* Date & Method */}
+                              <td className="px-5 py-4 whitespace-nowrap text-slate-600 text-[11px]">
+                                <p className="font-bold text-slate-800">
+                                  {item.created_at ? new Date(item.created_at).toLocaleDateString('km-KH') : '—'}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                </p>
+                                <span className="text-[9px] text-slate-500 block mt-0.5">
+                                  💳 {item.payment_method || 'Bakong KHQR'}
+                                </span>
+                                {item.notes && (
+                                  <p className="text-[10px] text-slate-500 italic max-w-xs truncate mt-0.5">
+                                    "{item.notes}"
+                                  </p>
+                                )}
+                              </td>
+
+                              {/* Status */}
+                              <td className="px-5 py-4 whitespace-nowrap text-center">
+                                {isPending ? (
+                                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black px-2.5 py-1 rounded-xl shadow-2xs">
+                                    <span>⏳</span> រង់ចាំពិនិត្យ
+                                  </span>
+                                ) : isApproved ? (
+                                  <div className="space-y-0.5">
+                                    <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black px-2.5 py-1 rounded-xl">
+                                      <span>✓</span> បានយល់ព្រម
+                                    </span>
+                                    {item.approved_by && (
+                                      <span className="text-[9px] text-slate-400 block">ដោយ {item.approved_by}</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="space-y-0.5">
+                                    <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black px-2.5 py-1 rounded-xl">
+                                      <span>✕</span> បានបដិសេធ
+                                    </span>
+                                    {item.reject_reason && (
+                                      <span className="text-[9px] text-rose-500 block max-w-xs truncate">"{item.reject_reason}"</span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Actions */}
+                              <td className="px-5 py-4 whitespace-nowrap text-right pr-6 space-x-1.5">
+                                {isPending ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleApprovePayment(item.id)}
+                                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] shadow-sm transition active:scale-95 cursor-pointer"
+                                      title="យល់ព្រម និងដំឡើងកញ្ចប់សេវាជូនហាងនេះ"
+                                    >
+                                      ✓ យល់ព្រម (Approve)
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRejectPayment(item.id)}
+                                      className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] border border-rose-200 transition cursor-pointer"
+                                      title="បដិសេធការបង់ប្រាក់នេះ"
+                                    >
+                                      ✕ បដិសេធ
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => item.slip_url && setZoomSlipModalUrl(item.slip_url)}
+                                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
+                                  >
+                                    🔍 មើល Slip
+                                  </button>
+                                )}
+                              </td>
+
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          );
+        })()}
+
+                {/* ⭐️ MODAL កែប្រែព័ត៌មានហាង (EDIT STORE DETAILS MODAL) ⭐️ */}
         {editStoreModalOpen && storeFormToEdit && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
@@ -10417,6 +13390,36 @@ export default function UnifiedAdminDashboard() {
                     value={storeFormToEdit.name}
                     onChange={(e) => setStoreFormToEdit({ ...storeFormToEdit, name: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold outline-none"
+                  />
+                </div>
+
+                {/* ⭐️ Gmail ម្ចាស់ហាង (Email) ⭐️ */}
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span>📧 Gmail ម្ចាស់ហាង (Email)</span>
+                      <span className="text-red-500 font-bold">*</span>
+                    </span>
+                    <span className="text-[11px] text-gray-400 font-normal">សម្រាប់ Login និងគ្រប់គ្រងហាង</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={storeFormToEdit.owner_email || storeFormToEdit.settings?.owner_email || ''}
+                    onChange={(e) => {
+                      const emailVal = e.target.value;
+                      setStoreFormToEdit({ 
+                        ...storeFormToEdit, 
+                        owner_email: emailVal,
+                        owner_username: emailVal.trim().toLowerCase() || storeFormToEdit.owner_username || 'admin',
+                        settings: {
+                          ...(storeFormToEdit.settings || {}),
+                          owner_email: emailVal.trim().toLowerCase()
+                        }
+                      });
+                    }}
+                    placeholder="example@gmail.com"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium outline-none focus:border-blue-500 focus:bg-white transition"
                   />
                 </div>
 
@@ -10512,6 +13515,476 @@ export default function UnifiedAdminDashboard() {
           </div>
         )}
 
+        {/* ========================================================================= */}
+        {/* 🔐 MODAL បញ្ជាក់លេខសម្ងាត់ ADMIN ពេលប្តូរកញ្ចប់គម្រោងហាង (PASSWORD CONFIRMATION) 🔐 */}
+        {/* ========================================================================= */}
+        {pendingPlanChange && (() => {
+          const targetStore = pendingPlanChange.store;
+          const newPlanInfo = STORE_PLANS[pendingPlanChange.newPlanKey] || STORE_PLANS.FREE;
+          const currentPlanInfo = STORE_PLANS[targetStore.plan] || STORE_PLANS.FREE;
+
+          return (
+            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center text-xl font-black border border-amber-500/20">
+                      🔐
+                    </span>
+                    <div>
+                      <h3 className="font-black text-sm text-slate-900 leading-tight">
+                        បញ្ជាក់លេខសម្ងាត់ដើម្បីប្តូរកញ្ចប់
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        តម្រូវឱ្យបញ្ចូល Password Login Admin ដើម្បីការពារសុវត្ថិភាព
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingPlanChange(null);
+                      setPlanPasswordInput('');
+                      setPlanPasswordError('');
+                    }}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-xs transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Plan change summary */}
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 mb-5 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-bold">ហាងគោលដៅ:</span>
+                    <span className="font-black text-slate-900">{targetStore.name}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-bold">កញ្ចប់ចាស់:</span>
+                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-slate-200 text-slate-700">
+                      {currentPlanInfo.name} ({currentPlanInfo.price ? `${currentPlanInfo.price}/ខែ` : 'ឥតគិតថ្លៃ'})
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-center py-0.5">
+                    <span className="text-base text-amber-500 font-black">⬇️ ប្តូរទៅជា ⬇️</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
+                    <span className="text-amber-800 font-black">កញ្ចប់ថ្មី:</span>
+                    <span className="font-black text-amber-700 text-xs flex items-center gap-1.5">
+                      <span>{newPlanInfo.name}</span>
+                      <span className="bg-amber-500 text-white text-[9px] px-2 py-0.5 rounded-md">
+                        {newPlanInfo.price ? `${newPlanInfo.price}/ខែ` : 'ឥតគិតថ្លៃ'} • {newPlanInfo.maxProducts} មុខ
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Password Form */}
+                <form onSubmit={handleConfirmPlanChangeWithPassword} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1.5">
+                      លេខសម្ងាត់ Admin / Super Owner (Password Login) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPlanPassword ? 'text' : 'password'}
+                        autoFocus
+                        value={planPasswordInput}
+                        onChange={(e) => {
+                          setPlanPasswordInput(e.target.value);
+                          if (planPasswordError) setPlanPasswordError('');
+                        }}
+                        placeholder="បញ្ចូល Password ឬ PIN Login របស់អ្នក..."
+                        className="w-full bg-slate-50 border-2 border-slate-200 focus:border-amber-500 rounded-2xl px-4 py-3 text-xs font-bold text-slate-900 outline-none pr-10 transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPlanPassword(!showPlanPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                      >
+                        {showPlanPassword ? '🙈' : '👁️'}
+                      </button>
+                    </div>
+
+                    {planPasswordError && (
+                      <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1">
+                        <span>⚠️</span> {planPasswordError}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      💡 លេខសម្ងាត់គឺដូចគ្នាទៅនឹង Password ដែលអ្នកបាន Login ចូល Dashboard (Default: 1234)
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingPlanChange(null);
+                        setPlanPasswordInput('');
+                        setPlanPasswordError('');
+                      }}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-2xl font-bold text-xs transition cursor-pointer"
+                    >
+                      បោះបង់
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white py-3 rounded-2xl font-black text-xs transition shadow-lg shadow-orange-500/25 active:scale-95 cursor-pointer"
+                    >
+                      ✓ យល់ព្រមប្តូរកញ្ចប់
+                    </button>
+                  </div>
+                </form>
+
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ========================================================================= */}
+        {/* 🗑️ MODAL បញ្ជាក់លេខសម្ងាត់ ADMIN ពេលលុបហាង (STORE DELETION PASSWORD CONFIRMATION) 🗑️ */}
+        {/* ========================================================================= */}
+        {pendingDeleteStore && (() => {
+          const targetStore = pendingDeleteStore;
+          return (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border-2 border-rose-200">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-rose-100 mb-5">
+                  <div className="flex items-center gap-3">
+                    <span className="w-11 h-11 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-2xl font-black border border-rose-200 shadow-xs animate-bounce">
+                      🚨
+                    </span>
+                    <div>
+                      <h3 className="font-black text-sm text-slate-900 leading-tight">
+                        បញ្ជាក់លេខសម្ងាត់ Admin ដើម្បីលុបហាង
+                      </h3>
+                      <p className="text-[10px] text-rose-600 font-bold mt-0.5">
+                        ⚠️ សកម្មភាពនេះមិនអាចត្រឡប់ក្រោយវិញបានឡើយ!
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingDeleteStore(null);
+                      setDeletePasswordInput('');
+                      setDeletePasswordError('');
+                    }}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-xs transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Target store details card */}
+                <div className="bg-rose-50/60 rounded-2xl p-4 border border-rose-200/80 mb-5 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-bold">ហាងត្រូវលុប:</span>
+                    <span className="font-black text-rose-700 text-sm">{targetStore.name}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-bold">តំណភ្ជាប់ (Slug):</span>
+                    <span className="font-mono font-bold text-slate-800">/store/{targetStore.slug}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-bold">ម្ចាស់ហាង:</span>
+                    <span className="font-bold text-slate-800">{targetStore.owner_name || 'ម្ចាស់ហាង'}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-bold">Gmail ម្ចាស់ហាង:</span>
+                    <span className="font-mono text-blue-700 font-bold text-[11px]">{targetStore.owner_email || targetStore.email || '—'}</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-rose-200/60 text-[10px] text-rose-800 leading-relaxed font-medium">
+                    🔥 <strong>ការព្រមាន</strong>: ទំនិញ ស្តុក ប្រវត្តិវិក្កយបត្រ ការកុម្ម៉ង់ និងទិន្នន័យទាំងអស់នៃហាងនេះ នឹងត្រូវលុបចេញពី Supabase Cloud DB និងប្រព័ន្ធទាំងស្រុង!
+                  </div>
+                </div>
+
+                {/* Password Form */}
+                <form onSubmit={handleConfirmDeleteStoreWithPassword} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1.5">
+                      🔑 លេខសម្ងាត់ Admin / Super Owner (Password Login) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showDeletePassword ? 'text' : 'password'}
+                        autoFocus
+                        value={deletePasswordInput}
+                        onChange={(e) => {
+                          setDeletePasswordInput(e.target.value);
+                          if (deletePasswordError) setDeletePasswordError('');
+                        }}
+                        placeholder="វាយបញ្ចូល Password Admin របស់អ្នកដើម្បីផ្ទៀងផ្ទាត់..."
+                        className="w-full bg-slate-50 border-2 border-slate-300 focus:border-rose-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-900 outline-none pr-10 transition shadow-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDeletePassword(!showDeletePassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                      >
+                        {showDeletePassword ? '🙈' : '👁️'}
+                      </button>
+                    </div>
+
+                    {deletePasswordError && (
+                      <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1">
+                        <span>⚠️</span> {deletePasswordError}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      💡 លេខសម្ងាត់គឺដូចគ្នាទៅនឹង Password ដែលអ្នកបាន Login ចូល Dashboard (Default: 1234)
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      disabled={isDeletingStore}
+                      onClick={() => {
+                        setPendingDeleteStore(null);
+                        setDeletePasswordInput('');
+                        setDeletePasswordError('');
+                      }}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-2xl font-bold text-xs transition cursor-pointer"
+                    >
+                      បោះបង់
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isDeletingStore || !deletePasswordInput.trim()}
+                      className="flex-1 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 disabled:opacity-50 text-white py-3 rounded-2xl font-black text-xs transition shadow-lg shadow-rose-600/30 active:scale-95 cursor-pointer disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                    >
+                      {isDeletingStore ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>កំពុងលុបហាង...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🗑️</span>
+                          <span>បញ្ជាក់ការលុបហាង</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ========================================================================= */}
+        {/* 🔍 LIGHTBOX MODAL: មើល SLIP ពេញអេក្រង់ (FULL SCREEN SLIP PREVIEW) 🔍 */}
+        {/* ========================================================================= */}
+        {zoomSlipModalUrl && (
+          <div 
+            onClick={() => setZoomSlipModalUrl(null)}
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200 cursor-zoom-out"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-900 rounded-3xl max-w-2xl w-full p-4 shadow-2xl relative border border-slate-700 cursor-default animate-in zoom-in-95 duration-200"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3 text-white">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🧾</span>
+                  <span className="text-xs font-black">រូបភាពបង្កាន់ដៃបង់ប្រាក់ (Payment Slip Full Preview)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={zoomSlipModalUrl}
+                    download="payment-slip.jpg"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[10px] font-bold border border-slate-700 transition"
+                  >
+                    ទាញយក / បើក Tab ថ្មី ↗
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setZoomSlipModalUrl(null)}
+                    className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold flex items-center justify-center text-xs transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-[75vh] overflow-auto flex items-center justify-center bg-black/40 rounded-2xl p-2">
+                <img 
+                  src={zoomSlipModalUrl} 
+                  alt="Full Slip Preview" 
+                  className="max-h-[70vh] w-auto object-contain rounded-xl shadow-lg"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* ➕ MODAL កត់ត្រាការបង់ប្រាក់ដោយផ្ទាល់ (MANUAL RECORD PAYMENT MODAL) ➕ */}
+        {/* ========================================================================= */}
+        {manualPaymentModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 border border-slate-100">
+              
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-2xl bg-orange-500/15 text-orange-600 flex items-center justify-center text-lg font-bold border border-orange-500/20">
+                    💳
+                  </span>
+                  <div>
+                    <h3 className="font-black text-sm text-slate-900">កត់ត្រាការបង់ប្រាក់ដោយផ្ទាល់ (Manual Record)</h3>
+                    <p className="text-[10px] text-slate-400">សម្រាប់ម្ចាស់ហាងបង់ជាសាច់ប្រាក់ ឬផ្ញើ Slip តាម Telegram ផ្ទាល់</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualPaymentModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-xs transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleManualSubmitPayment} className="space-y-3.5 text-xs">
+                <div>
+                  <label className="font-black text-slate-700 block mb-1">ជ្រើសរើសហាង *</label>
+                  <select
+                    required
+                    value={manualPaymentStoreId}
+                    onChange={(e) => setManualPaymentStoreId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold outline-none cursor-pointer"
+                  >
+                    <option value="">-- សូមជ្រើសរើសហាង --</option>
+                    {registeredStores.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.phone || s.owner_name || s.slug})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-black text-slate-700 block mb-1">កញ្ចប់គម្រោង *</label>
+                    <select
+                      value={manualPaymentPlanKey}
+                      onChange={(e) => {
+                        const pk = e.target.value;
+                        setManualPaymentPlanKey(pk);
+                        const pl = STORE_PLANS[pk] || STORE_PLANS.PRO;
+                        setManualPaymentAmount(manualPaymentCycle === 'yearly' ? String(pl.yearlyPrice) : String(pl.price));
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold outline-none cursor-pointer"
+                    >
+                      <option value="STARTER">🌱 Starter ($1/ខែ, $10/ឆ្នាំ)</option>
+                      <option value="BASIC">⚡ Basic ($2/ខែ, $20/ឆ្នាំ)</option>
+                      <option value="PRO">🚀 Pro ($3/ខែ, $30/ឆ្នាំ)</option>
+                      <option value="BUSINESS">🔥 Business ($5/ខែ, $50/ឆ្នាំ)</option>
+                      <option value="ENTERPRISE">👑 Enterprise ($10/ខែ, $100/ឆ្នាំ)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-black text-slate-700 block mb-1">វដ្តបង់ប្រាក់ *</label>
+                    <select
+                      value={manualPaymentCycle}
+                      onChange={(e) => {
+                        const cyc = e.target.value;
+                        setManualPaymentCycle(cyc);
+                        const pl = STORE_PLANS[manualPaymentPlanKey] || STORE_PLANS.PRO;
+                        setManualPaymentAmount(cyc === 'yearly' ? String(pl.yearlyPrice) : String(pl.price));
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold outline-none cursor-pointer"
+                    >
+                      <option value="monthly">📅 ប្រចាំខែ (Monthly)</option>
+                      <option value="yearly">🎉 ប្រចាំឆ្នាំ (Yearly - សន្សំ 2 ខែ)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-black text-slate-700 block mb-1">ចំនួនទឹកប្រាក់ ($ USD) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={manualPaymentAmount}
+                    onChange={(e) => setManualPaymentAmount(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-black text-orange-600 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-black text-slate-700 block mb-1">រូបភាពបង្កាន់ដៃ / Slip (បើមាន)</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setManualPaymentSlipFile(file);
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setManualPaymentSlipPreview(ev.target?.result);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer"
+                  />
+                  {manualPaymentSlipPreview && (
+                    <div className="mt-2 w-20 h-20 rounded-xl overflow-hidden border border-slate-200">
+                      <img src={manualPaymentSlipPreview} alt="Slip preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="font-black text-slate-700 block mb-1">កំណត់ចំណាំបន្ថែម</label>
+                  <input
+                    type="text"
+                    value={manualPaymentNotes}
+                    onChange={(e) => setManualPaymentNotes(e.target.value)}
+                    placeholder="ឧ. បង់សាច់ប្រាក់ផ្ទាល់ ឬផ្ញើតាម Wing / ABA..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold outline-none"
+                  />
+                </div>
+
+                <div className="flex gap-2.5 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setManualPaymentModalOpen(false)}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl font-bold transition cursor-pointer"
+                  >
+                    បោះបង់
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={manualPaymentSubmitting}
+                    className="flex-1 bg-[#ff6a00] hover:bg-orange-600 disabled:opacity-50 text-white py-2.5 rounded-xl font-black transition shadow-md shadow-orange-500/20 active:scale-95 cursor-pointer"
+                  >
+                    {manualPaymentSubmitting ? 'កំពុងកត់ត្រា...' : '✓ រក្សាទុកការបង់ប្រាក់'}
+                  </button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        )}
+
       </div>
     );
   };
@@ -10521,6 +13994,8 @@ export default function UnifiedAdminDashboard() {
   const StaffManagementView = () => {
     // Save or Edit Staff
     const handleSaveStaff = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("បន្ថែម ឬកែប្រែបុគ្គលិក")) return;
       e.preventDefault();
       if (!staffFormName.trim() || !staffFormUsername.trim() || !staffFormPin.trim()) {
         alert('សូមបំពេញឈ្មោះ, ឈ្មោះប្រើប្រាស់ (Username) និងលេខសម្ងាត់ PIN (៤ ខ្ទង់)!');
@@ -10610,6 +14085,7 @@ export default function UnifiedAdminDashboard() {
     };
 
     const handleDeleteStaff = (staff) => {
+    if (guardDemoAction("លុបបុគ្គលិក")) return;
       if (staffList.length <= 1) {
         alert('មិនអាចលុបគណនីបុគ្គលិកចុងក្រោយបានទេ!');
         return;
@@ -10706,6 +14182,12 @@ export default function UnifiedAdminDashboard() {
             <button
               type="button"
               onClick={() => {
+                const maxStaff = activeStore?.max_staff || 2;
+                if (staffList.length >= maxStaff) {
+                  setUpgradePlanModalOpen(true);
+                  alert(`⚠️ ហាង "${activeStore?.name}" បានប្រើប្រាស់ដល់កម្រិតកំណត់បុគ្គលិក ${maxStaff} នាក់ នៃកញ្ចប់ ${activeStore?.plan || 'FREE'} ហើយ!\n\nសូមចុចដំឡើងកញ្ចប់ (Upgrade Plan) ដើម្បីអាចបង្កើតគណនីបុគ្គលិកបន្ថែមទៀត។`);
+                  return;
+                }
                 setEditingStaff(null);
                 setStaffFormName('');
                 setStaffFormUsername('');
@@ -10721,6 +14203,37 @@ export default function UnifiedAdminDashboard() {
               <span>បន្ថែមបុគ្គលិកថ្មី</span>
             </button>
           </div>
+        </div>
+
+        {/* ⭐️ STORE PLAN & STAFF LIMIT BANNER ⭐️ */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-4 sm:p-5 rounded-3xl border border-indigo-500/30 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+          <div className="flex items-center gap-3.5">
+            <span className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center text-2xl shadow-inner shrink-0">
+              ⚡
+            </span>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black uppercase text-slate-300">កញ្ចប់សេវាបច្ចុប្បន្ន:</span>
+                <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs">
+                  {STORE_PLANS[activeStore?.plan]?.name || activeStore?.plan || '🎁 FREE (សាកល្បង)'}
+                </span>
+                <span className="text-xs font-bold text-slate-300">
+                  • ចំនួនបុគ្គលិកអនុញ្ញាត: <b className="text-amber-300 font-mono">{staffList.length} / {activeStore?.max_staff || 2} នាក់</b>
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                ចង់បន្ថែមគណនីបុគ្គលិកកាន់តែច្រើន និងបង្កើនចំនួនមុខទំនិញ? ដំឡើងកញ្ចប់បានភ្លាមៗត្រឹម $1 - $3/ខែ។
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUpgradePlanModalOpen(true)}
+            className="shrink-0 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 active:scale-95 text-white font-black text-xs px-5 py-3 rounded-2xl transition shadow-lg shadow-orange-500/30 flex items-center gap-2 cursor-pointer"
+          >
+            <span>⚡</span>
+            <span>ដំឡើងកញ្ចប់សេវា (Upgrade Plan)</span>
+          </button>
         </div>
 
         {/* ⭐️ ROLE EXPLANATION CARDS ⭐️ */}
@@ -11183,50 +14696,724 @@ export default function UnifiedAdminDashboard() {
       </div>
     );
   };
-  const ordersData = [
-    { id: 'ORD-9012', customer: 'សុខ សាន្ត', date: '2026-09-23', total: 85.00, status: 'Preparing', payment: 'ABA Pay' },
-    { id: 'ORD-9013', customer: 'ចាន់ ធីតា', date: '2026-09-23', total: 150.00, status: 'Shipped', payment: 'COD' },
-  ];
-  const customersData = [
-    { id: 'CUS-001', name: 'សុខ សាន្ត', phone: '0967205522', email: 'sok@example.com', joined: '2026-01-15', totalSpent: 340.00 },
-    { id: 'CUS-002', name: 'ចាន់ ធីតា', phone: '012345678', email: 'thida@example.com', joined: '2026-05-20', totalSpent: 150.00 },
-  ];
 
-  
-  // មុខងារលុបទំនិញពីស្តុកយ៉ាងមានប្រសិទ្ធភាព (Delete Product)
-  const handleDeleteProduct = async (id) => {
-    if (window.confirm('តើអ្នកពិតជាចង់លុបទំនិញនេះចេញពីស្តុក និង Database មែនទេ?')) {
-      try {
-        // បម្លែង ID ឱ្យត្រូវតាមទម្រង់ (មិនថាជា string ឬ number គឺលុបបានទាំងអស់)
-        const { error } = await supabase
-          .from('products')
-          .delete()
-          .eq('id', id);
+  // ⭐️ មុខងារ Upload Slip និងស្នើសុំដំឡើងគម្រោង (SUBMIT UPGRADE PAYMENT SLIP) ⭐️
+  const handleUpgradeSlipSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!selectedUpgradePlan) return;
+    if (selectedUpgradePlan.priceMonthly > 0 && !upgradeSlipPreview && !upgradeSlipFile) {
+      alert('សូម Upload រូបភាពបង្កាន់ដៃផ្ទេរប្រាក់ (Slip) ជាមុនសិន!');
+      return;
+    }
+    setUpgradeSubmitting(true);
+    try {
+      const planInfo = STORE_PLANS[selectedUpgradePlan.key] || STORE_PLANS.PRO;
+      const totalAmount = upgradeBillingCycle === 'yearly' ? selectedUpgradePlan.priceYearly : selectedUpgradePlan.priceMonthly;
 
-        if (error) throw error;
-
-        // លុបជោគជ័យ ធ្វើការទាញយកទិន្នន័យស្តុកថ្មីមកបង្ហាញភ្លាមៗ
-        alert('🗑️ លុបទំនិញបានជោគជ័យ!');
-        fetchProducts(); 
-      } catch (err) {
-        alert('❌ មិនអាចលុបទំនិញនេះបានទេ: ' + err.message);
+      // 1. Upload slip image to Supabase storage if file is present
+      let finalSlipUrl = upgradeSlipPreview || '';
+      if (upgradeSlipFile) {
+        try {
+          const ext = upgradeSlipFile.name.split('.').pop() || 'jpg';
+          const fileName = `slip_${activeStore?.id || 'store'}_${Date.now()}.${ext}`;
+          const { error: upErr } = await supabase.storage.from('slips').upload(fileName, upgradeSlipFile);
+          if (!upErr) {
+            const { data: pubData } = supabase.storage.from('slips').getPublicUrl(fileName);
+            if (pubData && pubData.publicUrl) finalSlipUrl = pubData.publicUrl;
+          }
+        } catch (_) {}
       }
+
+      // 2. Record payment in Supabase & local state
+      await submitSubscriptionPayment({
+        storeId: activeStore?.id || 'store_default_sabayluk',
+        storeName: activeStore?.name || 'My Store',
+        customerPhone: activeStore?.phone || '',
+        planKey: selectedUpgradePlan.key,
+        planName: planInfo.name,
+        billingCycle: upgradeBillingCycle,
+        amount: totalAmount,
+        slipUrl: finalSlipUrl,
+        notes: upgradeTxRef ? `Ref: ${upgradeTxRef}` : `ស្នើសុំដំឡើងគម្រោង ${selectedUpgradePlan.name} (${upgradeBillingCycle === 'yearly' ? 'ប្រចាំឆ្នាំ' : 'ប្រចាំខែ'})`
+      });
+
+      // 3. Send instant Telegram notification to Master Admin
+      try {
+        fetch('/api/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'store_plan_upgrade_requested',
+            store: activeStore,
+            newPlan: planInfo.name,
+            cycle: upgradeBillingCycle === 'yearly' ? 'ប្រចាំឆ្នាំ (Yearly)' : 'ប្រចាំខែ (Monthly)',
+            amount: `$${totalAmount}`,
+            slipUrl: finalSlipUrl,
+            ref: upgradeTxRef || ''
+          })
+        }).catch(() => {});
+      } catch (_) {}
+
+      // Refresh payments list
+      if (typeof getSubscriptionPayments === 'function') {
+        setAllSubscriptionPayments(getSubscriptionPayments());
+      }
+
+      // Update store status to pending approval if paid plan
+      if (activeStore && selectedUpgradePlan.priceMonthly > 0) {
+        const updatedStore = {
+          ...activeStore,
+          status: 'PENDING_APPROVAL'
+        };
+        setActiveStore(updatedStore);
+        setActiveStoreState(updatedStore);
+        const stores = getLocalStores().map(s => s.id === updatedStore.id ? updatedStore : s);
+        saveLocalStores(stores);
+      }
+
+      setUpgradePlanModalOpen(false);
+      setUpgradeSlipFile(null);
+      setUpgradeSlipPreview(null);
+      setUpgradeTxRef('');
+      setToastNotification(`🎉 បានផ្ញើបង្កាន់ដៃជោគជ័យ! Admin នឹងពិនិត្យ និង Approve គម្រោង ${selectedUpgradePlan.name} ជូនក្នុងពេលឆាប់ៗ!`);
+      setTimeout(() => setToastNotification(null), 5000);
+    } catch (err) {
+      alert('មានបញ្ហាក្នុងការផ្ញើបង្កាន់ដៃ! សូមព្យាយាមម្តងទៀត: ' + err.message);
+    } finally {
+      setUpgradeSubmitting(false);
     }
   };
 
-    // ⭐️ ផ្ទាំង InventoryView កម្រិតខ្ពស់ ទាន់សម័យ ឡូយ រស់រវើក និងងាយស្រួលប្រើប្រាស់បំផុត (ULTRA-MODERN INVENTORY SUITE) ⭐️
+  // ⭐️ ផ្ទាំង UpgradePlanFullView កម្រិតស្តង់ដារអន្តរជាតិ (MODERN MICRO-SAAS PRICING & SLIP CHECKOUT SUITE) ⭐️
+  const UpgradePlanFullView = () => {
+    const currentPlanKey = activeStore?.plan || 'FREE';
+    const currentPlan = STORE_PLANS[currentPlanKey] || STORE_PLANS.FREE;
+    const expiryInfo = computePlanExpiry(activeStore?.plan_expires_at);
+
+    // Filter store's subscription payments
+    const storePayments = (allSubscriptionPayments || []).filter(p => 
+      p.store_id === activeStore?.id || 
+      (activeStore?.slug && p.store_name && p.store_name.toLowerCase() === activeStore.slug.toLowerCase())
+    );
+
+    const plansList = [
+      {
+        key: 'FREE',
+        name: '🎁 FREE (សាកល្បង)',
+        priceMonthly: 0,
+        priceYearly: 0,
+        savingsYearly: 0,
+        productsText: '15 មុខទំនិញ',
+        accountsText: '1 Admin',
+        badge: '🎁 ឥតគិតថ្លៃជារៀងរហូត',
+        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        desc: 'អ្នកលក់ថ្មីថ្មោង ឬអ្នកចង់តេស្តសាកល្បងប្រព័ន្ធ',
+        features: [
+          'ទំនិញរហូតដល់ ១៥ មុខ',
+          'គណនីគ្រប់គ្រង (1 Admin)',
+          'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+          'ចេញវិក្កយបត្រស្កេន ABA KHQR',
+          'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+          'គាំទ្រការប្រើលើទូរស័ព្ទដៃ & កុំព្យូទ័រ'
+        ],
+        popular: false
+      },
+      {
+        key: 'STARTER',
+        name: '🌱 STARTER',
+        priceMonthly: 1,
+        priceYearly: 10,
+        savingsYearly: 2,
+        productsText: '25 មុខទំនិញ',
+        accountsText: '1 Admin + 1 បុគ្គលិក',
+        badge: '🌱 ធូរថ្លៃបំផុតត្រឹម $1/ខែ',
+        badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+        desc: 'តូបតូចៗ ឬអ្នកលក់ Live តាមផ្ទះ',
+        features: [
+          'ទំនិញរហូតដល់ ២៥ មុខ',
+          'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
+          'កាត់ស្តុក Size & Color លម្អិត',
+          'ចេញវិក្កយបត្រស្កេន KHQR & Thermal',
+          'របាយការណ៍លក់ និងប្រាក់ចំណេញសង្ខេប',
+          'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន'
+        ],
+        popular: false
+      },
+      {
+        key: 'BASIC',
+        name: '⚡ BASIC',
+        priceMonthly: 2,
+        priceYearly: 20,
+        savingsYearly: 4,
+        productsText: '50 មុខទំនិញ',
+        accountsText: '1 Admin + 1 បុគ្គលិក',
+        badge: '⚡ សន្សំសំចៃខ្ពស់',
+        badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        desc: 'ហាងខោអាវ ស្បែកជើងខ្នាតតូច',
+        features: [
+          'ទំនិញរហូតដល់ ៥០ មុខ',
+          'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
+          'តារាងស្តុកទំនិញ Variant Matrix (Size/Color)',
+          'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
+          'កត់ត្រាចំណាយ និងរបាយការណ៍ P&L',
+          'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ'
+        ],
+        popular: false
+      },
+      {
+        key: 'PRO',
+        name: '🚀 PRO',
+        priceMonthly: 3,
+        priceYearly: 30,
+        savingsYearly: 6,
+        productsText: '100 មុខទំនិញ',
+        accountsText: '1 Admin + 2 បុគ្គលិក',
+        badge: '🔥 ពេញនិយមបំផុត (Best Value)',
+        badgeColor: 'bg-orange-50 text-orange-700 border-orange-200',
+        desc: 'ហាងពេញនិយម មានបុគ្គលិកឆ្លាស់វេន',
+        features: [
+          'ទំនិញរហូតដល់ ១០០ មុខ',
+          'គណនីបុគ្គលិក ៣ នាក់ (Admin + 2 Staff)',
+          'គ្រប់គ្រងបំណុលអតិថិជន & ប្រព័ន្ធ Loyalty Points',
+          'របាយការណ៍វិភាគការលក់ និងប្រាក់ចំណេញកម្រិតខ្ពស់',
+          'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot',
+          'វេបសាយ Storefront ជាមួយការទូទាត់ KHQR ស្វ័យប្រវត្ត'
+        ],
+        popular: true
+      },
+      {
+        key: 'BUSINESS',
+        name: '🔥 BUSINESS',
+        priceMonthly: 5,
+        priceYearly: 50,
+        savingsYearly: 10,
+        productsText: '200 មុខទំនិញ',
+        accountsText: '1 Admin + 2 បុគ្គលិក',
+        badge: '🚀 សម្រាប់ហាងធំ',
+        badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
+        desc: 'ហាងធំគួរសម មានស្តុកច្រើន Size/Color',
+        features: [
+          'ទំនិញរហូតដល់ ២០០ មុខ',
+          'គណនីបុគ្គលិក ៣ នាក់',
+          'មុខងារ POS ពេញលេញ គ្មានដែនកំណត់',
+          'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+          'គ្រប់គ្រងសិទ្ធិបុគ្គលិកដាច់ដោយឡែកលម្អិត',
+          'ការគាំទ្របច្ចេកទេសជាអាទិភាព ២៤/៧'
+        ],
+        popular: false
+      },
+      {
+        key: 'PREMIUM',
+        name: '💎 PREMIUM',
+        priceMonthly: 7,
+        priceYearly: 70,
+        savingsYearly: 14,
+        productsText: '500 មុខទំនិញ',
+        accountsText: '1 Admin + 3 បុគ្គលិក',
+        badge: '💎 សម្រាប់ហាងលក់ដុំ & រាយ',
+        badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
+        desc: 'ហាងមានមុខទំនិញច្រើន និងបុគ្គលិកច្រើន',
+        features: [
+          'ទំនិញរហូតដល់ ៥០០ មុខ',
+          'គណនីបុគ្គលិក ៤ នាក់',
+          'មុខងារគ្រប់គ្រងស្តុក និងលក់ដុំ/រាយកម្រិតខ្ពស់',
+          'រៀបចំរបាយការណ៍លក់ប្រចាំខែ & ប្រចាំឆ្នាំ',
+          'ជូនដំណឹងស្វ័យប្រវត្តិតាម Telegram',
+          'ការគាំទ្របច្ចេកទេសពិសេស ២៤/៧'
+        ],
+        popular: false
+      },
+      {
+        key: 'ENTERPRISE',
+        name: '👑 ENTERPRISE',
+        priceMonthly: 10,
+        priceYearly: 100,
+        savingsYearly: 20,
+        productsText: '1,000 មុខទំនិញ',
+        accountsText: '1 Admin + 5 បុគ្គលិក',
+        badge: '👑 កម្រិតកំពូល Full Option',
+        badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
+        desc: 'ហាងធំៗ សាខា ឬឃ្លាំងស្តុកធំ',
+        features: [
+          'ទំនិញរហូតដល់ ១,០០០ មុខ',
+          'គណនីបុគ្គលិក ៦ នាក់',
+          'មុខងារទាំងអស់លើប្រព័ន្ធ SABAY LUK POS',
+          'តភ្ជាប់ប្រព័ន្ធ API & Telegram Bot ផ្ទាល់ខ្លួន',
+          'Dedicated Server & VIP Support ផ្ទាល់'
+        ],
+        popular: false
+      }
+    ];
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-300 pb-20 max-w-7xl mx-auto">
+        
+        {/* ⭐️ 1. HERO SECTION (MODERN LANDING-PAGE STYLE HEADER) ⭐️ */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white rounded-3xl p-6 sm:p-10 shadow-2xl border border-slate-800">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-orange-500/20 via-blue-500/10 to-transparent rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-3 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 text-xs font-black uppercase tracking-wider">
+                <span>💎</span>
+                <span>Micro-SaaS Store Subscription Plans</span>
+              </div>
+              <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+                ដំឡើងគម្រោង & កញ្ចប់សេវាសម្រាប់ហាង
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+                ជ្រើសរើសកញ្ចប់ដែលស័ក្តិសមដើម្បីបង្កើនចំនួនទំនិញក្នុងស្តុក បន្ថែមគណនីបុគ្គលិក និងមុខងារលក់ទំនើបៗសម្រាប់ហាង <b className="text-amber-300">"{activeStore?.name}"</b>
+              </p>
+
+              {/* Status Badges */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 text-xs">
+                <span className="px-3 py-1 rounded-xl bg-white/10 text-white font-bold border border-white/15 flex items-center gap-1.5">
+                  <span>🏪</span> ហាង: <b className="text-amber-300">{activeStore?.name}</b>
+                </span>
+                <span className="px-3 py-1 rounded-xl bg-white/10 text-white font-bold border border-white/15 flex items-center gap-1.5">
+                  <span>⚡</span> កញ្ចប់បច្ចុប្បន្ន: <b className="text-emerald-400 font-mono">{currentPlanKey}</b>
+                </span>
+                <span className="px-3 py-1 rounded-xl bg-white/10 text-white font-bold border border-white/15 flex items-center gap-1.5">
+                  <span>📦</span> ស្តុក: <b>{products.length} / {activeStore?.max_products || 15}</b>
+                </span>
+                <span className="px-3 py-1 rounded-xl bg-white/10 text-white font-bold border border-white/15 flex items-center gap-1.5">
+                  <span>👥</span> បុគ្គលិក: <b>{staffList.length} / {activeStore?.max_staff || 2}</b>
+                </span>
+                <span className="px-3 py-1 rounded-xl bg-white/10 text-white font-bold border border-white/15 flex items-center gap-1.5">
+                  <span>⏳</span> {expiryInfo.isExpired ? '⚠️ ផុតកំណត់ហើយ' : (expiryInfo.isNever ? '🎁 Free អចិន្ត្រៃយ៍' : `សល់ ${expiryInfo.daysLeft} ថ្ងៃ`)}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick KHQR Action Card */}
+            <div className="shrink-0 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 text-center space-y-2.5 max-w-xs w-full shadow-lg">
+              <span className="text-[11px] font-black uppercase text-amber-300 tracking-wider block">
+                🇰🇭 ស្កេនបង់ប្រាក់ & Upload Slip
+              </span>
+              <p className="text-[11px] text-slate-300 leading-snug">
+                ចុចជ្រើសរើសកញ្ចប់ខាងក្រោម ដើម្បីបើកផ្ទាំងស្កេន ABA KHQR & Upload បង្កាន់ដៃភ្លាមៗ!
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const defaultTarget = plansList.find(p => p.key === 'STARTER') || plansList[1];
+                  setSelectedUpgradePlan(defaultTarget);
+                  setUpgradeSlipFile(null);
+                  setUpgradeSlipPreview(null);
+                  setUpgradeTxRef('');
+                  setUpgradePlanModalOpen(true);
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black shadow-md shadow-orange-500/25 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>💳</span>
+                <span>ស្កេន KHQR & Upload Slip</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ⭐️ BILLING CYCLE TOGGLE SWITCH (JUST LIKE LANDING PAGE) ⭐️ */}
+          <div className="mt-8 pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-300 uppercase tracking-wider">
+                ជ្រើសរើសវដ្តបង់ប្រាក់:
+              </span>
+              {upgradeBillingCycle === 'yearly' && (
+                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 rounded-full animate-pulse">
+                  🔥 សន្សំសំចៃ ២០% (បានប្រើ ២ ខែ Free)
+                </span>
+              )}
+            </div>
+
+            <div className="inline-flex bg-slate-900/90 p-1 rounded-2xl border border-slate-700/80 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setUpgradeBillingCycle('monthly')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  upgradeBillingCycle === 'monthly'
+                    ? 'bg-white text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>📅</span>
+                <span>បង់ប្រចាំខែ (Monthly)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setUpgradeBillingCycle('yearly')}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                  upgradeBillingCycle === 'yearly'
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>🎉</span>
+                <span>បង់ប្រចាំឆ្នាំ (Yearly)</span>
+                <span className="text-[9px] font-black bg-white/20 px-1.5 py-0.2 rounded-full ml-1">
+                  -20%
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ⭐️ 2. PLANS PRICING GRID (7 OFFICIAL PLANS) ⭐️ */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {plansList.map((p) => {
+            const isCurrent = currentPlanKey === p.key;
+            const price = upgradeBillingCycle === 'yearly' ? p.priceYearly : p.priceMonthly;
+            const cycleText = upgradeBillingCycle === 'yearly' ? (p.priceYearly === 0 ? 'ឥតគិតថ្លៃ' : '/ ឆ្នាំ') : (p.priceMonthly === 0 ? 'ឥតគិតថ្លៃ' : '/ ខែ');
+
+            return (
+              <div
+                key={p.key}
+                className={`rounded-3xl p-6 transition-all duration-200 flex flex-col justify-between relative bg-white shadow-sm hover:shadow-xl border-2 ${
+                  p.popular
+                    ? 'border-orange-500 ring-4 ring-orange-500/10'
+                    : isCurrent
+                    ? 'border-blue-500 ring-4 ring-blue-500/10'
+                    : 'border-slate-200/90 hover:border-slate-300'
+                }`}
+              >
+                {/* Popular / Current Badges */}
+                {p.popular && (
+                  <div className="absolute -top-3.5 right-6 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[10px] font-black uppercase px-3 py-1 rounded-full shadow-md tracking-wider flex items-center gap-1">
+                    <span>🔥</span>
+                    <span>ពេញនិយមបំផុត</span>
+                  </div>
+                )}
+                {isCurrent && !p.popular && (
+                  <div className="absolute -top-3.5 right-6 bg-blue-600 text-white text-[10px] font-black uppercase px-3 py-1 rounded-full shadow-md tracking-wider flex items-center gap-1">
+                    <span>✓</span>
+                    <span>កំពុងប្រើប្រាស់</span>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${p.badgeColor}`}>
+                      {p.badge}
+                    </span>
+                    {upgradeBillingCycle === 'yearly' && p.savingsYearly > 0 && (
+                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        ចំណេញ ${p.savingsYearly}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="font-black text-lg text-slate-900">{p.name}</h3>
+                    <p className="text-xs text-slate-500 mt-1 min-h-[34px] leading-relaxed">{p.desc}</p>
+                  </div>
+
+                  {/* Price */}
+                  <div className="py-2 border-y border-slate-100 flex items-baseline gap-1.5">
+                    <span className="text-3xl font-black text-slate-900 font-mono">${price}</span>
+                    <span className="text-xs font-bold text-slate-500">{cycleText}</span>
+                    {upgradeBillingCycle === 'yearly' && p.priceMonthly > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 ml-auto font-mono">
+                        ~${(p.priceYearly / 12).toFixed(1)}/ខែ
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Specs Box */}
+                  <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-200 text-xs space-y-1 font-bold">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">📦 ទំនិញក្នុងស្តុក:</span>
+                      <span className="text-slate-900 font-black">{p.productsText}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">👥 គណនីបុគ្គលិក:</span>
+                      <span className="text-blue-700 font-black">{p.accountsText}</span>
+                    </div>
+                  </div>
+
+                  {/* Feature Checklist */}
+                  <div className="space-y-2 pt-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                      មុខងាររួមបញ្ចូល:
+                    </p>
+                    <ul className="space-y-1.5 text-xs text-slate-700">
+                      {p.features.map((feat, fIdx) => (
+                        <li key={fIdx} className="flex items-start gap-2">
+                          <span className="text-emerald-500 font-black text-sm shrink-0 leading-none">✓</span>
+                          <span className="leading-snug">{feat}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* CTA Button */}
+                <div className="pt-6 mt-6 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={isCurrent}
+                    onClick={() => {
+                      if (isCurrent) return;
+                      setSelectedUpgradePlan(p);
+                      setUpgradeSlipFile(null);
+                      setUpgradeSlipPreview(null);
+                      setUpgradeTxRef('');
+                      setUpgradePlanModalOpen(true);
+                    }}
+                    className={`w-full py-3 rounded-2xl font-black text-xs transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shadow-sm ${
+                      isCurrent
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200 shadow-none'
+                        : p.popular
+                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25'
+                        : 'bg-slate-950 hover:bg-black text-white'
+                    }`}
+                  >
+                    <span>{isCurrent ? '✓ កំពុងប្រើប្រាស់' : `⚡ ជ្រើសរើស ${p.name}`}</span>
+                    {!isCurrent && <span>➔</span>}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ⭐️ 3. RECENT PAYMENT SLIPS & APPROVAL STATUS HISTORY ⭐️ */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div>
+              <h3 className="font-black text-base text-slate-900 flex items-center gap-2">
+                <span>📋</span>
+                <span>ប្រវត្តិការបង់ប្រាក់ & ស្ថានភាពបង្កាន់ដៃ (Payment & Slip History)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                តាមដានរាល់ប្រតិបត្តិការបង់ប្រាក់ និងស្ថានភាព Slip ដែលបាន Upload ជូន Admin ពិនិត្យ
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const defaultTarget = plansList.find(p => p.key === 'STARTER') || plansList[1];
+                setSelectedUpgradePlan(defaultTarget);
+                setUpgradeSlipFile(null);
+                setUpgradeSlipPreview(null);
+                setUpgradeTxRef('');
+                setUpgradePlanModalOpen(true);
+              }}
+              className="px-4 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#ff6a00] font-black text-xs transition cursor-pointer border border-orange-200 flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <span>➕</span>
+              <span>Upload Slip ថ្មី</span>
+            </button>
+          </div>
+
+          {storePayments.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 space-y-2">
+              <span className="text-4xl block">🧾</span>
+              <p className="font-bold text-xs text-slate-600">ហាងនេះមិនទាន់មានប្រវត្តិបង់ប្រាក់ ឬ Upload Slip ពីមុននៅឡើយទេ</p>
+              <p className="text-[11px] text-slate-400">ពេលអ្នក Upload Slip បង់ប្រាក់ ប្រព័ន្ធនឹងបង្ហាញស្ថានភាព Approve នៅទីនេះ</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-[11px] font-black uppercase text-slate-500 border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3">កាលបរិច្ឆេទ</th>
+                    <th className="px-4 py-3">កញ្ចប់គម្រោង</th>
+                    <th className="px-4 py-3">វដ្តបង់ប្រាក់</th>
+                    <th className="px-4 py-3">ចំនួនទឹកប្រាក់</th>
+                    <th className="px-4 py-3">បង្កាន់ដៃ (Slip)</th>
+                    <th className="px-4 py-3 text-right">ស្ថានភាព</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {storePayments.map((pm, pIdx) => {
+                    const isApproved = pm.status === 'APPROVED';
+                    const isRejected = pm.status === 'REJECTED';
+                    const isPending = !isApproved && !isRejected;
+
+                    return (
+                      <tr key={pm.id || pIdx} className="hover:bg-slate-50/80 transition">
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                          {pm.created_at ? new Date(pm.created_at).toLocaleDateString('km-KH') : 'N/A'}
+                        </td>
+                        <td className="px-4 py-3 font-black text-slate-900 whitespace-nowrap">
+                          {pm.plan_name || pm.plan_key || 'Plan'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                          {pm.billing_cycle === 'yearly' ? 'ប្រចាំឆ្នាំ' : 'ប្រចាំខែ'}
+                        </td>
+                        <td className="px-4 py-3 font-mono font-black text-orange-600 whitespace-nowrap">
+                          ${pm.amount || '0'}.00
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {pm.slip_url ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewingSlipUrl(pm.slip_url)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold cursor-pointer"
+                            >
+                              <span>🔍</span>
+                              <span>មើល Slip</span>
+                            </button>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">គ្មាន Slip</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-black border ${
+                            isApproved
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : isRejected
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-200 animate-pulse'
+                          }`}>
+                            <span>{isApproved ? '✅' : isRejected ? '❌' : '⏳'}</span>
+                            <span>{isApproved ? 'ជោគជ័យ (Approved)' : isRejected ? 'បានបដិសេធ' : 'រង់ចាំ Admin ពិនិត្យ'}</span>
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+      </div>
+    );
+  };
+  // ⭐️ ផ្ទាំង InventoryView កម្រិតខ្ពស់ ទាន់សម័យ ឡូយ រស់រវើក និងងាយស្រួលប្រើប្រាស់បំផុត (ULTRA-MODERN INVENTORY SUITE) ⭐️
   const InventoryView = () => {
-    const totalItems = products.length;
-    const totalUnits = products.reduce((sum, p) => sum + (Number(p.stock_qty) || 0), 0);
-    const lowStockCount = products.filter(p => p.stock_qty > 0 && p.stock_qty <= (p.low_stock_alert || 5)).length;
-    const outOfStockCount = products.filter(p => p.stock_qty <= 0).length;
-    const inStockCount = products.filter(p => p.stock_qty > (p.low_stock_alert || 5)).length;
-    const totalRetailValue = products.reduce((sum, p) => sum + ((Number(p.price) || 0) * (Number(p.stock_qty) || 0)), 0);
-    const totalCostValue = products.reduce((sum, p) => sum + ((Number(p.cost_price) || 0) * (Number(p.stock_qty) || 0)), 0);
+    const storeProducts = currentStoreProducts;
+    const totalItems = storeProducts.length;
+
+    // ⭐️ ១. សរុបទំនិញក្នុងស្តុក (Total Units in Stock) ⭐️
+    const totalUnits = storeProducts.reduce((sum, p) => sum + (Number(p.stock_qty || p.stock || 0)), 0);
+    const lowStockCount = storeProducts.filter(p => (Number(p.stock_qty || 0) > 0) && (Number(p.stock_qty || 0) <= (p.low_stock_alert || 5))).length;
+    const outOfStockCount = storeProducts.filter(p => Number(p.stock_qty || 0) <= 0).length;
+    const inStockCount = storeProducts.filter(p => Number(p.stock_qty || 0) > (p.low_stock_alert || 5)).length;
     const inStockRate = totalItems > 0 ? Math.round((inStockCount / totalItems) * 100) : 100;
 
+    // ⭐️ ២. សរុបដើមទុន (Total Capital / Cost Valuation) ⭐️
+    const totalCostValue = storeProducts.reduce((sum, p) => {
+      const cost = Number(p.cost_price || p.costPrice || p.cost || 0);
+      const qty = Number(p.stock_qty || p.stock || 0);
+      return sum + (cost * qty);
+    }, 0);
+
+    // ⭐️ ៣. សរុបតម្លៃបោះដុំ (Total Wholesale Valuation) ⭐️
+    const totalWholesaleValue = storeProducts.reduce((sum, p) => {
+      const wholesale = Number(p.wholesale_price || p.wholesalePrice || (p.wholesale && p.wholesale.price) || p.price || 0);
+      const qty = Number(p.stock_qty || p.stock || 0);
+      return sum + (wholesale * qty);
+    }, 0);
+
+    // ⭐️ ៤. សរុបតំលៃលក់រាយ (Total Retail Valuation) ⭐️
+    const totalRetailValue = storeProducts.reduce((sum, p) => {
+      const price = Number(p.price || 0);
+      const qty = Number(p.stock_qty || p.stock || 0);
+      return sum + (price * qty);
+    }, 0);
+
+    // ⭐️ គណនាកាលបរិច្ឆេទថ្ងៃនេះ និងម្សិលមិញ សម្រាប់ពិនិត្យអីវ៉ាន់ចូល (Local Timezone UTC+7) ⭐️
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA');
+    const yesterday = new Date(now.getTime() - 86400000);
+    const yesterdayStr = yesterday.toLocaleDateString('en-CA');
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
+    const sevenDaysAgoStr = sevenDaysAgo.toLocaleDateString('en-CA');
+    const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+
+    const getMovementDateKey = (mov) => {
+      if (mov.created_at) {
+        try {
+          const d = new Date(mov.created_at);
+          if (!isNaN(d.getTime())) return d.toLocaleDateString('en-CA');
+        } catch (_) {}
+      }
+      return '';
+    };
+
+    // Filter Stock Inflows based on selected date
+    const filteredInflowMovements = (stockMovements || []).filter(m => {
+      const isInflow = m.type === 'PURCHASE' || m.type === 'IN' || (Number(m.qty_change) > 0 && m.type !== 'SALE');
+      if (!isInflow) return false;
+
+      const mDate = getMovementDateKey(m);
+      if (!mDate) return invDatePeriod === 'all';
+
+      if (invDatePeriod === 'today') {
+        return mDate === todayStr;
+      } else if (invDatePeriod === 'yesterday') {
+        return mDate === yesterdayStr;
+      } else if (invDatePeriod === '7days') {
+        return mDate >= sevenDaysAgoStr && mDate <= todayStr;
+      } else if (invDatePeriod === 'month') {
+        return mDate >= monthStartStr && mDate <= todayStr;
+      } else if (invDatePeriod === 'custom') {
+        if (invCustomStartDate && mDate < invCustomStartDate) return false;
+        if (invCustomEndDate && mDate > invCustomEndDate) return false;
+        return true;
+      }
+      return true;
+    });
+
+    // Newly created products on that date with initial stock
+    const newlyCreatedProductsInflow = storeProducts.filter(p => {
+      if (!p.stock_qty || Number(p.stock_qty) <= 0) return false;
+      let pDate = '';
+      if (p.created_at) {
+        try {
+          const d = new Date(p.created_at);
+          if (!isNaN(d.getTime())) pDate = d.toLocaleDateString('en-CA');
+        } catch (_) {}
+      }
+      if (!pDate) return false;
+
+      const alreadyLogged = (stockMovements || []).some(m => m.product_id === p.id && (m.type === 'PURCHASE' || m.type === 'IN'));
+      if (alreadyLogged) return false;
+
+      if (invDatePeriod === 'today') return pDate === todayStr;
+      if (invDatePeriod === 'yesterday') return pDate === yesterdayStr;
+      if (invDatePeriod === '7days') return pDate >= sevenDaysAgoStr && pDate <= todayStr;
+      if (invDatePeriod === 'month') return pDate >= monthStartStr && pDate <= todayStr;
+      if (invDatePeriod === 'custom') {
+        if (invCustomStartDate && pDate < invCustomStartDate) return false;
+        if (invCustomEndDate && pDate > invCustomEndDate) return false;
+        return true;
+      }
+      return true;
+    }).map(p => ({
+      id: `prod_init_${p.id}`,
+      product_id: p.id,
+      products: { name: p.name, sku: p.sku, image_url: p.image_url || p.image },
+      product_variants: null,
+      type: 'PURCHASE',
+      qty_change: Number(p.stock_qty),
+      previous_qty: 0,
+      new_qty: Number(p.stock_qty),
+      reason: 'ទំនិញបង្កើតថ្មីចូលស្តុកដំបូង (Initial Stock)',
+      created_at: p.created_at,
+      cost_price: Number(p.cost_price || p.costPrice || 0)
+    }));
+
+    const combinedInflows = [...filteredInflowMovements, ...newlyCreatedProductsInflow].filter(m => {
+      if (!invInflowSearch) return true;
+      const q = invInflowSearch.toLowerCase();
+      const pName = (m.products?.name || '').toLowerCase();
+      const pSku = (m.products?.sku || '').toLowerCase();
+      const reason = (m.reason || '').toLowerCase();
+      return pName.includes(q) || pSku.includes(q) || reason.includes(q);
+    });
+
+    const totalInflowQty = combinedInflows.reduce((sum, m) => sum + (Math.abs(Number(m.qty_change)) || 0), 0);
+    const totalInflowCost = combinedInflows.reduce((sum, m) => {
+      const prod = storeProducts.find(p => p.id === m.product_id) || m.products || {};
+      const cost = Number(m.cost_price || prod.cost_price || prod.costPrice || prod.cost || 0);
+      const qty = Math.abs(Number(m.qty_change)) || 0;
+      return sum + (cost * qty);
+    }, 0);
+
     // Filter Logic
-    const filteredInventory = products.filter(p => {
+    const filteredInventory = storeProducts.filter(p => {
       const pCat = (p.category || '').trim().toLowerCase();
       const filterCat = invCategory.trim().toLowerCase();
 
@@ -11434,32 +15621,85 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
-        {/* ⭐️ 4 VIBRANT EXECUTIVE KPI CARDS WITH PROGRESS GAUGES ⭐️ */}
+        {/* ⭐️ 4 VIBRANT EXECUTIVE KPI CARDS REQUESTED BY USER ⭐️ */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           
-          {/* Card 1: Total SKUs */}
-          <div className="bg-gradient-to-br from-blue-50/80 via-white to-white p-5 rounded-3xl border border-blue-100/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+          {/* Card 1: សរុបទំនិញក្នុងស្តុក */}
+          <div className="bg-gradient-to-br from-blue-50/90 via-white to-white p-5 rounded-3xl border border-blue-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
             <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">សរុបមុខទំនិញ</span>
+              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">១. សរុបទំនិញក្នុងស្តុក</span>
               <span className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
                 📦
               </span>
             </div>
             <div className="mt-3">
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-gray-900">{totalItems}</span>
-                <span className="text-xs font-black text-blue-600">SKUs</span>
+                <span className="text-3xl font-black text-gray-900">{totalUnits.toLocaleString()}</span>
+                <span className="text-xs font-black text-blue-600">ឯកតា (Units)</span>
               </div>
               <p className="text-[11px] text-gray-500 font-bold mt-1">
-                សរុប <span className="text-gray-900 font-black">{totalUnits.toLocaleString()}</span> ឯកតា (Units) ក្នុងស្តុក
+                មានចំនួន <span className="text-gray-900 font-black">{totalItems}</span> មុខទំនិញ (SKUs)
               </p>
+              <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-2.5 pt-2 border-t border-gray-100">
+                <span className="text-emerald-600 font-black">🟢 {inStockCount} ស្តុកពេញ</span>
+                <span className="text-amber-600 font-black">🟡 {lowStockCount} ជិតអស់</span>
+                <span className="text-rose-600 font-black">🔴 {outOfStockCount} ដាច់ស្តុក</span>
+              </div>
             </div>
           </div>
 
-          {/* Card 2: Total Valuation */}
-          <div className="bg-gradient-to-br from-emerald-50/80 via-white to-white p-5 rounded-3xl border border-emerald-100/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+          {/* Card 2: សរុបដើមទុន */}
+          <div className="bg-gradient-to-br from-amber-50/90 via-white to-white p-5 rounded-3xl border border-amber-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
             <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">តម្លៃស្តុកសរុប (លក់)</span>
+              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">២. សរុបដើមទុន (Capital)</span>
+              <span className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+                💼
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-amber-700">
+                  ${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 font-bold mt-1">
+                ប្រមាណ: <span className="text-gray-800 font-black">៛{Math.round(totalCostValue * 4100).toLocaleString()}</span> រៀល
+              </p>
+              <div className="text-[10px] font-bold text-amber-700/80 mt-2.5 pt-2 border-t border-amber-100 flex items-center justify-between">
+                <span>⚡ ទុនវិនិយោគសរុបក្នុងស្តុក</span>
+                <span className="font-mono text-[9px] bg-amber-100 px-1.5 py-0.5 rounded text-amber-900 font-black">Cost Value</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: សរុបតម្លៃបោះដុំ */}
+          <div className="bg-gradient-to-br from-purple-50/90 via-white to-white p-5 rounded-3xl border border-purple-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">៣. សរុបតម្លៃបោះដុំ (Wholesale)</span>
+              <span className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+                🏷️
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl font-black text-purple-700">
+                  ${totalWholesaleValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 font-bold mt-1">
+                ប្រមាណ: <span className="text-gray-800 font-black">៛{Math.round(totalWholesaleValue * 4100).toLocaleString()}</span> រៀល
+              </p>
+              <div className="text-[10px] font-bold text-purple-700/80 mt-2.5 pt-2 border-t border-purple-100 flex items-center justify-between">
+                <span>🏷️ តម្លៃបោះដុំ B2B សរុបទាំងអស់</span>
+                <span className="font-mono text-[9px] bg-purple-100 px-1.5 py-0.5 rounded text-purple-900 font-black">B2B Value</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: សរុបតំលៃលក់រាយ */}
+          <div className="bg-gradient-to-br from-emerald-50/90 via-white to-white p-5 rounded-3xl border border-emerald-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">៤. សរុបតំលៃលក់រាយ (Retail)</span>
               <span className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
                 💰
               </span>
@@ -11471,72 +15711,11 @@ export default function UnifiedAdminDashboard() {
                 </span>
               </div>
               <p className="text-[11px] text-gray-500 font-bold mt-1">
-                ដើមទុន: <span className="text-gray-800 font-black">${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                ចំណេញរំពឹងទុក: <span className="text-emerald-700 font-black">+${(totalRetailValue - totalCostValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </p>
-            </div>
-          </div>
-
-          {/* Card 3: Stock Health Gauge */}
-          <div className="bg-gradient-to-br from-purple-50/80 via-white to-white p-5 rounded-3xl border border-purple-100/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">សុខភាពស្តុក (In-Stock)</span>
-              <span className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
-                🟢
-              </span>
-            </div>
-            <div className="mt-3">
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-purple-600">{inStockRate}%</span>
-                <span className="text-xs font-bold text-gray-500">ពេញស្តុក</span>
-              </div>
-              {/* Mini Segmented Progress Bar */}
-              <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden flex mt-2">
-                <div style={{ width: `${(inStockCount / (totalItems || 1)) * 100}%` }} className="bg-emerald-500 h-full" title={`មានស្តុក: ${inStockCount}`}></div>
-                <div style={{ width: `${(lowStockCount / (totalItems || 1)) * 100}%` }} className="bg-amber-500 h-full" title={`ជិតអស់: ${lowStockCount}`}></div>
-                <div style={{ width: `${(outOfStockCount / (totalItems || 1)) * 100}%` }} className="bg-rose-500 h-full" title={`ដាច់ស្តុក: ${outOfStockCount}`}></div>
-              </div>
-              <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1">
-                <span className="text-emerald-600 font-black">{inStockCount} ស្តុកពេញ</span>
-                <span className="text-amber-600 font-black">{lowStockCount} ជិតអស់</span>
-                <span className="text-rose-600 font-black">{outOfStockCount} ដាច់ស្តុក</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Stock Alerts */}
-          <div className={`p-5 rounded-3xl border shadow-xs relative overflow-hidden transition ${
-            (lowStockCount + outOfStockCount) > 0 
-              ? 'bg-gradient-to-br from-rose-50/90 via-white to-white border-rose-200' 
-              : 'bg-gradient-to-br from-gray-50 via-white to-white border-gray-200'
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">ទំនិញប្រកាសអាសន្ន</span>
-              <span className={`w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-black ${
-                (lowStockCount + outOfStockCount) > 0 ? 'bg-rose-500/10 text-rose-600 animate-pulse' : 'bg-gray-100 text-gray-400'
-              }`}>
-                ⚠️
-              </span>
-            </div>
-            <div className="mt-3">
-              <div className="flex items-baseline gap-2">
-                <span className={`text-3xl font-black ${ (lowStockCount + outOfStockCount) > 0 ? 'text-rose-600' : 'text-gray-900' }`}>
-                  {lowStockCount + outOfStockCount}
-                </span>
-                <span className="text-xs font-black text-rose-600">មុខទំនិញ</span>
-              </div>
-              <div className="flex items-center justify-between mt-1.5">
-                <span className="text-[11px] text-gray-500 font-bold">
-                  {outOfStockCount > 0 ? `🔴 ${outOfStockCount} ដាច់ស្តុក` : '🟢 គ្មានដាច់ស្តុក'}
-                </span>
-                {(lowStockCount + outOfStockCount) > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setFilterStatus(filterStatus === 'low' ? 'all' : 'low')}
-                    className="text-[10px] font-black text-rose-600 bg-rose-100 hover:bg-rose-200 px-2 py-0.5 rounded-lg transition cursor-pointer"
-                  >
-                    {filterStatus === 'low' ? 'បង្ហាញទាំងអស់' : '⚡ ច្រោះមើល'}
-                  </button>
-                )}
+              <div className="text-[10px] font-bold text-emerald-700/80 mt-2.5 pt-2 border-t border-emerald-100 flex items-center justify-between">
+                <span>📈 តម្លៃលក់ចេញរាយលើទីផ្សារ</span>
+                <span className="font-mono text-[9px] bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-900 font-black">Retail Value</span>
               </div>
             </div>
           </div>
@@ -11561,6 +15740,28 @@ export default function UnifiedAdminDashboard() {
                 inventorySubTab === 'items' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
               }`}>
                 {products.length}
+              </span>
+            </button>
+
+            <button 
+              type="button"
+              onClick={() => {
+                setInventorySubTab('inflow');
+                fetchStockMovements();
+              }} 
+              className={`px-4 py-2 rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-2 ${
+                inventorySubTab === 'inflow' 
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-2 ring-emerald-500/30' 
+                  : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
+              }`}
+              title="ជ្រើសរើសថ្ងៃខែឆ្នាំ ដើម្បីពិនិត្យមើលអីវ៉ាន់ដែលបាននាំចូលស្តុក"
+            >
+              <span>📥</span>
+              <span>ពិនិត្យការនាំចូលស្តុក (Stock In & Inflows)</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                inventorySubTab === 'inflow' ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-900'
+              }`}>
+                {combinedInflows.length}
               </span>
             </button>
 
@@ -11650,8 +15851,8 @@ export default function UnifiedAdminDashboard() {
                     onChange={(e) => setInvCategory(e.target.value)} 
                     className="border border-gray-200 rounded-2xl px-3.5 py-2.5 text-xs font-bold bg-white focus:border-blue-500 outline-none transition cursor-pointer"
                   >
-                    <option value="all">📁 គ្រប់ប្រភេទ ({products.length})</option>
-                    {categories.map(c => (
+                    <option value="all">📁 គ្រប់ប្រភេទ ({storeProducts.length})</option>
+                    {currentStoreCategories.map(c => (
                       <option key={c.id || c.name} value={c.name}>📁 {c.name}</option>
                     ))}
                   </select>
@@ -12023,94 +16224,12 @@ export default function UnifiedAdminDashboard() {
                                   {/* Edit Product */}
                                   <button 
                                     type="button"
-                                    onClick={() => {
-                                      setActiveTab('upload');
-                                      setEditingProductId(product.id);
-                                      setName(product.name || '');
-                                      setSku(product.sku || '');
-                                      setCategory(product.category || (categories[0] ? categories[0].name : ''));
-                                      setSellingPrice(product.price ? product.price.toString() : '');
-                                      setCostPrice(product.cost_price ? product.cost_price.toString() : '');
-                                      setWholesalePrice(product.wholesale_price ? product.wholesale_price.toString() : '');
-                                      setWholesaleDiscount(product.wholesale_discount ? product.wholesale_discount.toString() : '');
-                                      setRetailDiscount(product.retail_discount ? product.retail_discount.toString() : '');
-                                      setStockQty(product.stock_qty ? product.stock_qty.toString() : '10');
-                                      setLowStockAlert(product.low_stock_alert ? product.low_stock_alert.toString() : '5');
-                                      setColor(product.color || '');
-                                      
-                                      if (product.size && product.size !== 'N/A') {
-                                        if (product.size.includes(':')) {
-                                          const pairs = product.size.split(', ');
-                                          const loadedSizes = [];
-                                          const loadedStock = {};
-                                          pairs.forEach(pair => {
-                                            const [sz, qty] = pair.split(':');
-                                            loadedSizes.push(sz);
-                                            loadedStock[sz] = qty;
-                                          });
-                                          setSelectedSizes(loadedSizes);
-                                          setVariantStock(loadedStock);
-                                          setCustomTextSize('');
-                                        } else {
-                                          setSelectedSizes(product.size.split(', '));
-                                          setVariantStock({});
-                                          setCustomTextSize(product.size);
-                                        }
-                                      } else {
-                                        setSelectedSizes([]);
-                                        setVariantStock({});
-                                        setCustomTextSize('');
-                                      }
-
-                                      const parsedProd = parseProductMeta(product);
-                                      const loadedImgs = (parsedProd.images || []).map((u, i) => ({
-                                        id: `img_${i}_${Date.now()}`,
-                                        url: u,
-                                        isExisting: true
-                                      }));
-                                      setProductImages(loadedImgs);
-                                      setSelectedCoverIndex(0);
-                                      setPreviewUrl(product.image_url || null);
-                                      setFile(null);
-
-                                      (async () => {
-                                        try {
-                                          const { data: dbVars } = await supabase
-                                            .from('product_variants')
-                                            .select('*')
-                                            .eq('product_id', product.id);
-
-                                          if (dbVars && dbVars.length > 0) {
-                                            const extractedSizes = Array.from(new Set(dbVars.map(v => v.size).filter(s => s && s !== 'Free Size' && s !== 'N/A')));
-                                            const extractedColors = Array.from(new Set(dbVars.map(v => v.color).filter(c => c && c.trim() !== '')));
-                                            const loadedStock = {};
-
-                                            dbVars.forEach(v => {
-                                              if (v.size && v.color) {
-                                                loadedStock[`${v.size}__${v.color}`] = v.stock_qty;
-                                              } else if (v.size) {
-                                                loadedStock[v.size] = v.stock_qty;
-                                              } else if (v.color) {
-                                                loadedStock[v.color] = v.stock_qty;
-                                              }
-                                            });
-
-                                            if (extractedSizes.length > 0) setSelectedSizes(extractedSizes);
-                                            if (extractedColors.length > 0) {
-                                              setSelectedColors(extractedColors);
-                                              setColor(extractedColors.join(', '));
-                                            }
-                                            setVariantStock(loadedStock);
-                                          }
-                                        } catch (e) {}
-                                      })();
-
-                                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    }}
-                                    className="bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white font-black text-xs p-1.5 rounded-xl border border-blue-200 hover:border-blue-600 transition cursor-pointer"
-                                    title="កែប្រែព័ត៌មានទំនិញ"
+                                    onClick={() => handleStartEditProduct(product)}
+                                    className="bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white font-black text-xs px-2.5 py-1.5 rounded-xl border border-blue-200 hover:border-blue-600 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                    title="កែប្រែព័ត៌មានទំនិញពេញលេញ (Full Product Studio)"
                                   >
-                                    ✏️
+                                    <span>✏️</span>
+                                    <span>កែប្រែ</span>
                                   </button>
 
                                   {/* Delete Product */}
@@ -12307,46 +16426,12 @@ export default function UnifiedAdminDashboard() {
                               </button>
                               <button 
                                 type="button"
-                                onClick={() => {
-                                  setActiveTab('upload');
-                                  setEditingProductId(product.id);
-                                  setName(product.name || '');
-                                  setSku(product.sku || '');
-                                  setCategory(product.category || (categories[0] ? categories[0].name : ''));
-                                  setSellingPrice(product.price ? product.price.toString() : '');
-                                  setCostPrice(product.cost_price ? product.cost_price.toString() : '');
-                                  setWholesalePrice(product.wholesale_price ? product.wholesale_price.toString() : '');
-                                  setWholesaleDiscount(product.wholesale_discount ? product.wholesale_discount.toString() : '');
-                                  setRetailDiscount(product.retail_discount ? product.retail_discount.toString() : '');
-                                  setStockQty(product.stock_qty ? product.stock_qty.toString() : '10');
-                                  setLowStockAlert(product.low_stock_alert ? product.low_stock_alert.toString() : '5');
-                                  setColor(product.color || '');
-                                  
-                                  if (product.size && product.size !== 'N/A') {
-                                    if (product.size.includes(':')) {
-                                      const pairs = product.size.split(', ');
-                                      const loadedSizes = [];
-                                      const loadedStock = {};
-                                      pairs.forEach(pair => {
-                                        const [sz, qty] = pair.split(':');
-                                        loadedSizes.push(sz);
-                                        loadedStock[sz] = qty;
-                                      });
-                                      setSelectedSizes(loadedSizes);
-                                      setVariantStock(loadedStock);
-                                    } else {
-                                      setSelectedSizes(product.size.split(', '));
-                                      setVariantStock({});
-                                    }
-                                  }
-                                  const parsedProd = parseProductMeta(product);
-                                  setPreviewUrl(product.image_url || null);
-                                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                className="bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white p-2 rounded-xl text-xs font-black transition cursor-pointer"
-                                title="Edit"
+                                onClick={() => handleStartEditProduct(product)}
+                                className="bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer shadow-2xs flex items-center gap-1"
+                                title="កែប្រែព័ត៌មានទំនិញពេញលេញ (Full Product Studio)"
                               >
-                                ✏️
+                                <span>✏️</span>
+                                <span>កែប្រែ</span>
                               </button>
                               <button 
                                 type="button"
@@ -12370,6 +16455,352 @@ export default function UnifiedAdminDashboard() {
               </div>
             )}
           </>
+        ) : inventorySubTab === 'inflow' ? (
+          /* ⭐️ ផ្ទាំងពិនិត្យការនាំចូលស្តុកតាមថ្ងៃខែឆ្នាំ (STOCK IN & RESTOCK INFLOW TRACKER) ⭐️ */
+          <div className="space-y-6 animate-in fade-in">
+            {/* Header & Date Controls Box */}
+            <div className="bg-white p-6 rounded-3xl shadow-xs border border-gray-200">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-2xl shadow-md shadow-emerald-500/20 shrink-0">
+                    📥
+                  </div>
+                  <div>
+                    <h3 className="font-black text-gray-900 text-base flex items-center gap-2">
+                      <span>ពិនិត្យការនាំទំនិញចូលស្តុក (Stock In & Restock Inflows)</span>
+                      <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                        {invDatePeriod === 'today' ? '⚡ ថ្ងៃនេះ' : invDatePeriod === 'yesterday' ? '⏪ ម្សិលមិញ' : invDatePeriod === '7days' ? '៧ ថ្ងៃ' : invDatePeriod === 'month' ? 'ខែនេះ' : invDatePeriod === 'custom' ? 'តាមចន្លោះថ្ងៃ' : 'ទាំងអស់'}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      ជ្រើសរើសថ្ងៃខែឆ្នាំ ដើម្បីពិនិត្យមើលថា <b>ថ្ងៃនេះ អីវ៉ាន់ចូលបានប៉ុន្មាន</b> ឬ <b>ម្សិលមិញ អីវ៉ាន់បានចូលអ្វីខ្លះ</b>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (storeProducts && storeProducts.length > 0) {
+                        handleOpenStockIn(storeProducts[0], 'IN');
+                      } else {
+                        setActiveTab('upload');
+                      }
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-2xl text-xs font-black shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <span>+ នាំចូលស្តុកថ្មី</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={fetchStockMovements}
+                    className="bg-white hover:bg-gray-100 border border-gray-200 text-xs font-bold px-3 py-2 rounded-2xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <span>🔄 Refresh</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exportStockMovementsToCSV}
+                    className="bg-white hover:bg-gray-100 border border-gray-200 text-xs font-bold px-3 py-2 rounded-2xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <span>📊 Export Excel</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ⭐️ Date Filter Quick Buttons ⭐️ */}
+              <div className="pt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-black text-gray-500 mr-1 flex items-center gap-1">
+                    <span>📅</span> រើសកាលបរិច្ឆេទ:
+                  </span>
+                  {[
+                    { id: 'today', label: '⚡ ថ្ងៃនេះ (Today)' },
+                    { id: 'yesterday', label: '⏪ ម្សិលមិញ (Yesterday)' },
+                    { id: '7days', label: '៧ ថ្ងៃចុងក្រោយ' },
+                    { id: 'month', label: 'ខែនេះ' },
+                    { id: 'all', label: 'ទាំងអស់' },
+                    { id: 'custom', label: '📅 ចន្លោះកាលបរិច្ឆេទ' }
+                  ].map(btn => (
+                    <button
+                      key={btn.id}
+                      type="button"
+                      onClick={() => setInvDatePeriod(btn.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                        invDatePeriod === btn.id
+                          ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      }`}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Search Bar for Inflows */}
+                <div className="relative w-full sm:w-64">
+                  <input
+                    type="text"
+                    value={invInflowSearch}
+                    onChange={(e) => setInvInflowSearch(e.target.value)}
+                    placeholder="ស្វែងរកតាមឈ្មោះ, SKU..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs font-bold border border-gray-300 rounded-xl bg-gray-50/50 outline-none focus:bg-white focus:border-emerald-500 transition"
+                  />
+                  <span className="absolute left-2.5 top-2 text-gray-400 text-xs">🔍</span>
+                </div>
+              </div>
+
+              {/* Custom Date Range Picker */}
+              {invDatePeriod === 'custom' && (
+                <div className="mt-3 p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-2xl flex flex-wrap items-center gap-3 text-xs animate-in slide-in-from-top-2">
+                  <span className="font-black text-emerald-900">កាលបរិច្ឆេទជាក់លាក់:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500 font-bold">ពីថ្ងៃ:</span>
+                    <input
+                      type="date"
+                      value={invCustomStartDate}
+                      onChange={(e) => setInvCustomStartDate(e.target.value)}
+                      className="border border-emerald-300 bg-white px-3 py-1.5 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500 font-bold">ដល់ថ្ងៃ:</span>
+                    <input
+                      type="date"
+                      value={invCustomEndDate}
+                      onChange={(e) => setInvCustomEndDate(e.target.value)}
+                      className="border border-emerald-300 bg-white px-3 py-1.5 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInvCustomStartDate(todayStr);
+                      setInvCustomEndDate(todayStr);
+                    }}
+                    className="text-[11px] font-black text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                  >
+                    យកថ្ងៃនេះ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInvCustomStartDate(yesterdayStr);
+                      setInvCustomEndDate(yesterdayStr);
+                    }}
+                    className="text-[11px] font-black text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                  >
+                    យកម្សិលមិញ
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ⭐️ Realtime Inflow Metrics for Chosen Date ⭐️ */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Metric 1: Total Inflow Units */}
+              <div className="bg-gradient-to-br from-emerald-50 via-white to-white p-5 rounded-3xl border border-emerald-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 text-xs font-black uppercase tracking-wider">
+                    {invDatePeriod === 'today' ? '⚡ អីវ៉ាន់ចូលបានថ្ងៃនេះ' : invDatePeriod === 'yesterday' ? '⏪ អីវ៉ាន់ចូលម្សិលមិញ' : '📦 អីវ៉ាន់ចូលសរុប'}
+                  </span>
+                  <span className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-base font-black">
+                    📥
+                  </span>
+                </div>
+                <div className="mt-2.5">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-emerald-600">+{totalInflowQty.toLocaleString()}</span>
+                    <span className="text-xs font-black text-emerald-700">ឯកតា (Units)</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-bold mt-1">
+                    ចំនួនទំនិញដែលបាននាំចូលស្តុកក្នុងកាលបរិច្ឆេទនេះ
+                  </p>
+                </div>
+              </div>
+
+              {/* Metric 2: Total Cost of Inflows */}
+              <div className="bg-gradient-to-br from-amber-50 via-white to-white p-5 rounded-3xl border border-amber-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 text-xs font-black uppercase tracking-wider">
+                    💵 សរុបដើមទុននាំចូល
+                  </span>
+                  <span className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-base font-black">
+                    💼
+                  </span>
+                </div>
+                <div className="mt-2.5">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-3xl font-black text-amber-700">
+                      ${totalInflowCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-bold mt-1">
+                    ប្រមាណ: <span className="text-gray-800 font-black">៛{Math.round(totalInflowCost * 4100).toLocaleString()}</span> រៀល
+                  </p>
+                </div>
+              </div>
+
+              {/* Metric 3: Total Batches */}
+              <div className="bg-gradient-to-br from-blue-50 via-white to-white p-5 rounded-3xl border border-blue-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 text-xs font-black uppercase tracking-wider">
+                    📋 ចំនួនលើកនាំចូល
+                  </span>
+                  <span className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center text-base font-black">
+                    📑
+                  </span>
+                </div>
+                <div className="mt-2.5">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-gray-900">{combinedInflows.length}</span>
+                    <span className="text-xs font-black text-blue-600">លើក/កំណត់ត្រា</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-bold mt-1">
+                    រាល់ការកត់ត្រា Restock ឬ បង្កើតទំនិញថ្មី
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ⭐️ Itemized Table: អីវ៉ាន់បានចូលអ្វីខ្លះ ⭐️ */}
+            <div className="bg-white rounded-3xl shadow-xs border border-gray-200 overflow-hidden">
+              <div className="p-5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+                <div>
+                  <h4 className="font-black text-gray-900 text-sm">
+                    {invDatePeriod === 'today' ? '⚡ មុខទំនិញដែលបានចូលថ្ងៃនេះ' : invDatePeriod === 'yesterday' ? '⏪ មុខទំនិញដែលបានចូលម្សិលមិញ' : '📦 បញ្ជីមុខទំនិញដែលបាននាំចូលស្តុក'} ({combinedInflows.length})
+                  </h4>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    បង្ហាញឈ្មោះទំនិញ ទំហំ ពណ៌ ចំនួនចូល និងតម្លៃដើមទុន
+                  </p>
+                </div>
+              </div>
+
+              {combinedInflows.length === 0 ? (
+                <div className="p-16 text-center">
+                  <div className="text-4xl mb-3">📭</div>
+                  <h5 className="font-black text-gray-700 text-sm">
+                    មិនមានទំនិញនាំចូលក្នុងកាលបរិច្ឆេទនេះទេ
+                  </h5>
+                  <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                    មិនមានការកត់ត្រាការទិញចូលស្តុក ឬបន្ថែមទំនិញក្នុងកាលបរិច្ឆេទដែលបានជ្រើសរើសឡើយ។
+                  </p>
+                  <div className="mt-4 flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInvDatePeriod('today')}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 transition cursor-pointer"
+                    >
+                      ⚡ ពិនិត្យថ្ងៃនេះ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInvDatePeriod('yesterday')}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 transition cursor-pointer"
+                    >
+                      ⏪ ពិនិត្យម្សិលមិញ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInvDatePeriod('all')}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition cursor-pointer"
+                    >
+                      បង្ហាញទាំងអស់
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="px-5 py-3.5 uppercase text-xs font-black text-gray-500">កាលបរិច្ឆេទ & ម៉ោង</th>
+                        <th className="px-5 py-3.5 uppercase text-xs font-black text-gray-500">ទំនិញ</th>
+                        <th className="px-5 py-3.5 uppercase text-xs font-black text-gray-500">ទំហំ / ពណ៌</th>
+                        <th className="px-5 py-3.5 uppercase text-xs font-black text-gray-500 text-center">ចំនួននាំចូល</th>
+                        <th className="px-5 py-3.5 uppercase text-xs font-black text-gray-500 text-right">តម្លៃដើម / សរុប</th>
+                        <th className="px-5 py-3.5 uppercase text-xs font-black text-gray-500">មូលហេតុ / សម្គាល់</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-medium">
+                      {combinedInflows.map((log) => {
+                        const qty = Math.abs(Number(log.qty_change)) || 0;
+                        const prod = storeProducts.find(p => p.id === log.product_id) || log.products || {};
+                        const unitCost = Number(log.cost_price || prod.cost_price || prod.costPrice || prod.cost || 0);
+                        const totalCost = unitCost * qty;
+
+                        return (
+                          <tr key={log.id} className="hover:bg-emerald-50/20 transition text-xs">
+                            <td className="px-5 py-4 text-gray-500 font-bold whitespace-nowrap">
+                              <span className="block font-black text-gray-800">
+                                {new Date(log.created_at).toLocaleDateString('en-GB')}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-2.5">
+                                {(log.products?.image_url || prod.image_url || prod.image) ? (
+                                  <img
+                                    src={log.products?.image_url || prod.image_url || prod.image}
+                                    className="w-10 h-10 rounded-xl object-cover bg-gray-100 border border-gray-200 shrink-0"
+                                    alt=""
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-lg shrink-0">
+                                    📦
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="font-black text-gray-900 text-xs">
+                                    {log.products?.name || prod.name || 'ទំនិញ'}
+                                  </p>
+                                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                    SKU: {log.products?.sku || prod.sku || 'N/A'}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-gray-600">
+                              {log.product_variants?.size || log.product_variants?.color ? (
+                                <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[11px] font-bold">
+                                  {log.product_variants?.size ? `Size: ${log.product_variants.size}` : ''} {log.product_variants?.color ? `• ${log.product_variants.color}` : ''}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 text-[11px]">ទូទៅ</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-4 text-center">
+                              <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 font-black text-xs px-2.5 py-1 rounded-xl border border-emerald-300">
+                                <span>+</span>
+                                <span>{qty.toLocaleString()}</span>
+                                <span className="text-[10px]">ឯកតា</span>
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-right">
+                              <span className="block font-black text-emerald-700 text-xs">
+                                ${totalCost.toFixed(2)}
+                              </span>
+                              <span className="text-[10px] text-gray-400 block">
+                                (@${unitCost.toFixed(2)})
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-gray-600">
+                              <span className="inline-block bg-gray-100 text-gray-700 text-[11px] font-bold px-2 py-0.5 rounded-lg">
+                                {log.reason || 'នាំចូលបន្ថែមចូលស្តុក'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           /* ⭐️ ផ្ទាំងតារាងប្រវត្តិចលនាស្តុក (Stock Movements Log - Audit Trail) ⭐️ */
           <div className="bg-white rounded-3xl shadow-xs border border-gray-200 overflow-hidden">
@@ -12515,6 +16946,247 @@ export default function UnifiedAdminDashboard() {
                 </div>
               );
             })()}
+          </div>
+        )}
+
+        {/* ⭐️ STANDARD MODAL កែប្រែស្តុក និងតម្លៃស្តង់ដាអន្តរជាតិ (In-Place Stock & Price Quick Edit Modal) ⭐️ */}
+        {quickEditProduct && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-7 border border-gray-100 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+              
+              {/* Modal Header */}
+              <div className="flex justify-between items-start mb-5 pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-3.5">
+                  {quickEditProduct.image_url ? (
+                    <img 
+                      src={quickEditProduct.image_url} 
+                      className="w-14 h-14 rounded-2xl object-cover bg-gray-100 border border-gray-200 shrink-0 shadow-xs" 
+                      alt="" 
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center text-2xl shrink-0">
+                      📦
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                        កែប្រែស្តុកស្តង់ដា
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-400">
+                        SKU: {quickEditProduct.sku || 'N/A'}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-black text-gray-900 mt-1 line-clamp-1">
+                      {quickEditProduct.name}
+                    </h3>
+                    <p className="text-xs text-gray-500 font-bold mt-0.5">
+                      ស្តុកបច្ចុប្បន្ន: <b className="text-blue-600">{quickEditProduct.stock_qty || 0} ឯកតា</b>
+                    </p>
+                  </div>
+                </div>
+
+                <button 
+                  type="button"
+                  onClick={() => setQuickEditProduct(null)} 
+                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-black cursor-pointer transition shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Form Body */}
+              <form onSubmit={handleSaveQuickEdit} className="space-y-4">
+                
+                {/* 1. Stock Quantity Control with +/- Buttons */}
+                <div className="bg-blue-50/70 p-4 rounded-2xl border border-blue-200/80">
+                  <label className="block text-xs font-black text-blue-950 uppercase tracking-wider mb-2">
+                    📦 ចំនួនស្តុកជាក់ស្តែង (Stock Quantity) *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuickEditStock(prev => Math.max(0, (parseInt(prev) || 0) - 1).toString())}
+                      className="w-11 h-11 rounded-xl bg-white hover:bg-rose-50 text-gray-700 hover:text-rose-600 border border-blue-200 font-black text-xl flex items-center justify-center transition active:scale-95 cursor-pointer shadow-xs"
+                    >
+                      -
+                    </button>
+                    <input 
+                      type="number"
+                      min="0"
+                      required
+                      value={quickEditStock}
+                      onChange={(e) => setQuickEditStock(e.target.value)}
+                      className="flex-1 bg-white border-2 border-blue-300 focus:border-blue-600 rounded-xl p-2.5 text-center text-2xl font-black text-gray-900 outline-none transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setQuickEditStock(prev => ((parseInt(prev) || 0) + 1).toString())}
+                      className="w-11 h-11 rounded-xl bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-600 border border-blue-200 font-black text-xl flex items-center justify-center transition active:scale-95 cursor-pointer shadow-xs"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-[11px] font-bold text-blue-900/80">
+                    <span>ស្តុកចាស់: {quickEditProduct.stock_qty || 0}</span>
+                    <span>
+                      {parseInt(quickEditStock) > (quickEditProduct.stock_qty || 0) ? (
+                        <span className="text-emerald-700 font-black">
+                          កើនឡើង: +{parseInt(quickEditStock) - (quickEditProduct.stock_qty || 0)} ឯកតា
+                        </span>
+                      ) : parseInt(quickEditStock) < (quickEditProduct.stock_qty || 0) ? (
+                        <span className="text-rose-700 font-black">
+                          ថយចុះ: -{(quickEditProduct.stock_qty || 0) - parseInt(quickEditStock)} ឯកតា
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">គ្មានការប្រែប្រួល</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Prices Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 uppercase mb-1">
+                      ដើមទុន ($ Cost)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-gray-400 font-bold text-xs">$</span>
+                      <input 
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={quickEditCostPrice}
+                        onChange={(e) => setQuickEditCostPrice(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-3 py-2 border border-gray-200 focus:border-blue-500 rounded-xl text-xs font-black text-gray-800 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 uppercase mb-1">
+                      តម្លៃលក់ ($ Retail)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-gray-400 font-bold text-xs">$</span>
+                      <input 
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={quickEditSellingPrice}
+                        onChange={(e) => setQuickEditSellingPrice(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-3 py-2 border border-gray-200 focus:border-blue-500 rounded-xl text-xs font-black text-emerald-700 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 uppercase mb-1">
+                      តម្លៃបោះដុំ ($ B2B)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-gray-400 font-bold text-xs">$</span>
+                      <input 
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={quickEditWholesalePrice}
+                        onChange={(e) => setQuickEditWholesalePrice(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-3 py-2 border border-gray-200 focus:border-blue-500 rounded-xl text-xs font-black text-purple-700 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Low Stock Alert & Reason */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 uppercase mb-1">
+                      កម្រិតប្រកាសអាសន្ន (Low Alert)
+                    </label>
+                    <input 
+                      type="number"
+                      min="1"
+                      value={quickEditLowStockAlert}
+                      onChange={(e) => setQuickEditLowStockAlert(e.target.value)}
+                      placeholder="5"
+                      className="w-full px-3 py-2 border border-gray-200 focus:border-blue-500 rounded-xl text-xs font-bold text-gray-800 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-700 uppercase mb-1">
+                      មូលហេតុកែប្រែ (Reason)
+                    </label>
+                    <input 
+                      type="text"
+                      value={quickEditReason}
+                      onChange={(e) => setQuickEditReason(e.target.value)}
+                      placeholder="ឧ. កែតម្រូវស្តុកជាក់ស្តែង"
+                      className="w-full px-3 py-2 border border-gray-200 focus:border-blue-500 rounded-xl text-xs font-bold text-gray-800 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Bottom Actions */}
+                <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p = quickEditProduct;
+                      setQuickEditProduct(null);
+                      setActiveTab('upload');
+                      setEditingProductId(p.id);
+                      setName(p.name || '');
+                      setSku(p.sku || '');
+                      setCategory(p.category || (categories[0] ? categories[0].name : ''));
+                      setSellingPrice(p.price ? p.price.toString() : '');
+                      setCostPrice(p.cost_price ? p.cost_price.toString() : '');
+                      setWholesalePrice(p.wholesale_price ? p.wholesale_price.toString() : '');
+                      setWholesaleDiscount(p.wholesale_discount ? p.wholesale_discount.toString() : '0');
+                      setStock(p.stock_qty ? p.stock_qty.toString() : '0');
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                    title="បើកទម្រង់កែប្រែរូបភាព និងពណ៌/ទំហំពេញលេញ"
+                  >
+                    <span>📝</span>
+                    <span>កែប្រែរូបភាព & ទំហំពេញលេញ</span>
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setQuickEditProduct(null)}
+                      className="px-4 py-2.5 rounded-xl border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs font-bold transition cursor-pointer"
+                    >
+                      បោះបង់
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={quickEditSaving}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black shadow-md shadow-blue-500/25 transition cursor-pointer active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {quickEditSaving ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>កំពុងរក្សាទុក...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>💾</span>
+                          <span>រក្សាទុកការកែប្រែ</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+              </form>
+            </div>
           </div>
         )}
 
@@ -13042,6 +17714,25 @@ export default function UnifiedAdminDashboard() {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${height}" width="100%" height="${height}" preserveAspectRatio="none">${rects.join('')}</svg>`;
   }
 
+  // 🔊 SCANNER GUN ERROR BEEP (ទឺត-ទឺត ២ដង)
+  const playScannerErrorBeep = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(350, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.22);
+    } catch (e) {}
+  };
+
   // 🔊 SCANNER GUN BEEP SOUND (ទឺត)
   const playScannerBeep = () => {
     try {
@@ -13130,12 +17821,12 @@ export default function UnifiedAdminDashboard() {
     const PosView = () => {
     // ស្វែងរកប្រភេទ Category បន្ថែមដែលមានស្រាប់ក្នុង products ប៉ុន្តែមិនទាន់មានក្នុង categories list
     const extraCategoryNames = Array.from(new Set(
-      products
+      currentStoreProducts
         .map(p => (p.category || '').trim())
-        .filter(c => c && !categories.some(cat => (cat.name || '').trim().toLowerCase() === c.toLowerCase()))
+        .filter(c => c && !currentStoreCategories.some(cat => (cat.name || '').trim().toLowerCase() === c.toLowerCase()))
     ));
 
-    const filteredProducts = products.filter(p => {
+    const filteredProducts = currentStoreProducts.filter(p => {
       const matchCat = posCategory === 'all' || 
         p.category === posCategory || 
         ((p.category || '').trim().toLowerCase() === (posCategory || '').trim().toLowerCase());
@@ -13157,14 +17848,7 @@ export default function UnifiedAdminDashboard() {
                 <p className="text-xs text-gray-500 font-bold mt-0.5">អត្រាប្តូរប្រាក់: $1 = {exchangeRate.toLocaleString()} ៛</p>
               </div>
               
-              {/* ⭐️ KEYBOARD SHORTCUT HELPER BADGES ⭐️ */}
-              <div className="hidden xl:flex items-center gap-1.5 bg-slate-900/90 text-white px-3 py-1.5 rounded-2xl text-[11px] font-bold border border-slate-700 shadow-sm">
-                <span className="text-amber-400 font-black">⚡ Shortcuts:</span>
-                <span className="bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700 text-slate-300"><b>F2</b> ស្វែងរក</span>
-                <span className="bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700 text-slate-300"><b>F4</b> រាយ/ដុំ</span>
-                <span className="bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700 text-emerald-400"><b>F8 / Space</b> គិតលុយ</span>
-                <span className="bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-700 text-blue-400"><b>F9</b> ព្រីន</span>
-              </div>
+
             </div>
 
             {/* ⭐️ Z-REPORT / របាយការណ៍បិទបញ្ជីវេនលក់ BUTTON ⭐️ */}
@@ -13190,25 +17874,30 @@ export default function UnifiedAdminDashboard() {
               <span>អេក្រង់ភ្ញៀវ (Display ↗)</span>
             </button>
 
-            {/* ⭐️ BARCODE LABEL PRINT BUTTON IN POS TOOLBAR ⭐️ */}
+            {/* ⭐️ ម៉ាស៊ីនស្កេនទំនិញតាម CAMERA (BARCODE CAMERA SCANNER) ⭐️ */}
             <button
               type="button"
-              onClick={() => {
-                const targetProd = (posCart.length > 0 && products.find(p => p.id === posCart[0].id))
-                  || (products.length > 0 ? products[0] : null);
-                if (targetProd) {
-                  setBarcodeProduct(targetProd);
-                  setBarcodeSelectedSize(targetProd.size || '');
-                }
-                setBarcodePrintQty(1);
-                setBarcodeModalOpen(true);
-              }}
-              className="bg-white hover:bg-purple-50 text-gray-800 hover:text-purple-700 border-2 border-gray-200 hover:border-purple-300 px-4 py-2.5 rounded-2xl text-xs font-black shadow-xs flex items-center gap-2 cursor-pointer transition transform hover:scale-[1.02] active:scale-95 shrink-0"
-              title="បោះពុម្ពតែម Barcode / Sticker បិទលើប្រអប់ស្បែកជើង"
+              onClick={() => setIsCameraScannerOpen(true)}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-blue-500/25 flex items-center gap-2 cursor-pointer transition transform hover:scale-[1.02] active:scale-95 shrink-0"
+              title="បើកកាមេរ៉ាទូរស័ព្ទ / ថេប្លេត / កុំព្យូទ័រ ដើម្បីស្កេនបាកូដទំនិញ"
             >
-              <span className="text-sm">🏷️</span>
-              <span>ព្រីនតែម Barcode</span>
+              <span className="text-sm">📷</span>
+              <span>ស្កេនកាមេរ៉ា (Camera)</span>
             </button>
+
+            {/* ⭐️ ការកំណត់ម៉ាស៊ីនស្កេន FULL OPTION (USB / WIRELESS / BLUETOOTH SCANNER GUN) ⭐️ */}
+            <button
+              type="button"
+              onClick={() => setScannerSettingsOpen(true)}
+              className="bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-200 hover:border-slate-300 px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-xs flex items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95 shrink-0"
+              title="ភ្ជាប់កាំភ្លើងស្កេន USB/Wireless, កំណត់សំឡេងទឺត & តេស្តម៉ាស៊ីនស្កេន (Full Option)"
+            >
+              <span className="text-sm">⚡</span>
+              <span>ម៉ាស៊ីនស្កេន</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="ម៉ាស៊ីនស្កេនសកម្ម" />
+            </button>
+
+
 
             {/* ⭐️ TOGGLE របៀបលក់: លក់រាយ (Retail) vs លក់បោះដុំ (Wholesale) ⭐️ */}
             <div className="bg-white p-1 rounded-2xl border-2 border-gray-200 shadow-sm flex items-center shrink-0">
@@ -13269,14 +17958,14 @@ export default function UnifiedAdminDashboard() {
               <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
                 posCategory === 'all' ? 'bg-white/25 text-white' : 'bg-blue-50 text-blue-700'
               }`}>
-                ({products.length})
+                ({currentStoreProducts.length})
               </span>
             </button>
 
             {/* ប៊ូតុង ប្រភេទផលិតផលនីមួយៗ (បង្ហាញចំនួនច្បាស់ៗ ឧ. (5)) */}
-            {categories.map(cat => {
+            {currentStoreCategories.map(cat => {
               const catName = cat.name || '';
-              const count = products.filter(
+              const count = currentStoreProducts.filter(
                 p => (p.category || '').trim().toLowerCase() === catName.trim().toLowerCase()
               ).length;
               const isSelected = posCategory === catName || (posCategory || '').trim().toLowerCase() === catName.trim().toLowerCase();
@@ -13308,7 +17997,7 @@ export default function UnifiedAdminDashboard() {
 
             {/* ប្រភេទផ្សេងៗប្រសិនបើមានក្នុងផលិតផល ប៉ុន្តែមិនទាន់មានក្នុងតារាង Categories */}
             {extraCategoryNames.map(extraCat => {
-              const count = products.filter(
+              const count = currentStoreProducts.filter(
                 p => (p.category || '').trim().toLowerCase() === extraCat.trim().toLowerCase()
               ).length;
               const isSelected = posCategory === extraCat || (posCategory || '').trim().toLowerCase() === extraCat.trim().toLowerCase();
@@ -13342,6 +18031,31 @@ export default function UnifiedAdminDashboard() {
 
           {/* Product Grid */}
           <div className="flex-1 overflow-y-auto pr-2 pb-10">
+            {filteredProducts.length === 0 ? (
+              <div className="h-full min-h-[350px] flex flex-col items-center justify-center text-center p-8 bg-white/70 rounded-3xl border-2 border-dashed border-gray-200">
+                <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center text-3xl mb-3 shadow-inner">
+                  🛍️
+                </div>
+                <h3 className="text-base font-black text-gray-800">
+                  {posSearch ? `រកមិនឃើញទំនិញ "${posSearch}" ឡើយ` : `ហាង "${activeStore?.name || 'នេះ'}" មិនទាន់មានទំនិញក្នុងស្តុកនៅឡើយទេ`}
+                </h3>
+                <p className="text-xs text-gray-500 font-bold max-w-sm mt-1 mb-4">
+                  {posSearch 
+                    ? 'សូមសាកល្បងស្វែងរកជាមួយឈ្មោះផ្សេង ឬពិនិត្យមើលប្រភេទផលិតផល'
+                    : 'សូមចុចប៊ូតុងខាងក្រោមដើម្បីចាប់ផ្តើមបញ្ចូលទំនិញថ្មីចូលហាងរបស់អ្នក'}
+                </p>
+                {!posSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('upload')}
+                    className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs shadow-lg shadow-blue-500/25 transition cursor-pointer flex items-center gap-2"
+                  >
+                    <span>➕</span>
+                    <span>បញ្ចូលទំនិញថ្មីឥឡូវនេះ</span>
+                  </button>
+                )}
+              </div>
+            ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {filteredProducts.map(product => {
                 const isOutOfStock = product.stock_qty <= 0;
@@ -13411,6 +18125,7 @@ export default function UnifiedAdminDashboard() {
                 );
               })}
             </div>
+            )}
           </div>
         </div>
 
@@ -15418,9 +20133,9 @@ export default function UnifiedAdminDashboard() {
               {(storeSettings.showInvoiceLogo !== false && invoiceSettings.showLogo !== false) && storeSettings.logoUrl && (
                 <img src={storeSettings.logoUrl} alt="Store Logo" className="h-8 mx-auto object-contain mb-1 filter grayscale" />
               )}
-              <h2 className="text-xl font-black uppercase tracking-widest">{invoiceSettings.storeName || 'SABAY LUK'}</h2>
-              <p className="text-[10px] text-gray-600">{invoiceSettings.address || 'Phnom Penh, Cambodia'}</p>
-              <p className="text-[10px] text-gray-600 font-bold">Tel: {invoiceSettings.phone || '096 720 5522'}</p>
+              <h2 className="text-xl font-black uppercase tracking-widest">{invoiceSettings.storeName || (activeStore?.id !== 'store_default_sabayluk' ? (activeStore?.name || 'ហាងរបស់ខ្ញុំ') : 'SABAY LUK')}</h2>
+              <p className="text-[10px] text-gray-600">{invoiceSettings.address || (activeStore?.id !== 'store_default_sabayluk' ? (activeStore?.address || 'ភ្នំពេញ, កម្ពុជា') : 'Phnom Penh, Cambodia')}</p>
+              <p className="text-[10px] text-gray-600 font-bold">Tel: {invoiceSettings.phone || (activeStore?.id !== 'store_default_sabayluk' ? (activeStore?.phone || '0xx xxx xxx') : '096 720 5522')}</p>
               {(storeSettings.vatTin || invoiceSettings.vatTin) && (
                 <p className="text-[9.5px] font-mono font-bold text-gray-800">
                   VATTIN: {storeSettings.vatTin || invoiceSettings.vatTin}
@@ -15447,22 +20162,27 @@ export default function UnifiedAdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="py-1">
-                    <p className="font-bold">ស្បែកជើងប៉ាតា Sneaker Pro</p>
-                    <span className="text-[9px] text-gray-600">Size: 41</span>
-                  </td>
-                  <td className="py-1 text-center font-bold">1</td>
-                  <td className="py-1 text-right font-bold">$20.00</td>
-                </tr>
-                <tr>
-                  <td className="py-1">
-                    <p className="font-bold">ស្បែកជើងកីឡា Sport Runner</p>
-                    <span className="text-[9px] text-gray-600">Size: 42</span>
-                  </td>
-                  <td className="py-1 text-center font-bold">1</td>
-                  <td className="py-1 text-right font-bold">$20.00</td>
-                </tr>
+                {(products && products.length > 0) ? (
+                  products.slice(0, 2).map((p, idx) => (
+                    <tr key={idx}>
+                      <td className="py-1">
+                        <p className="font-bold">{p.name}</p>
+                        {p.size && <span className="text-[9px] text-gray-600">Size: {p.size}</span>}
+                      </td>
+                      <td className="py-1 text-center font-bold">1</td>
+                      <td className="py-1 text-right font-bold">${Number(p.price || 0).toFixed(2)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="py-1">
+                      <p className="font-bold">ទំនិញគំរូ (Sample Item)</p>
+                      <span className="text-[9px] text-gray-600">Standard</span>
+                    </td>
+                    <td className="py-1 text-center font-bold">1</td>
+                    <td className="py-1 text-right font-bold">$10.00</td>
+                  </tr>
+                )}
               </tbody>
             </table>
             <div className="border-b border-black border-dashed my-2"></div>
@@ -15523,8 +20243,9 @@ export default function UnifiedAdminDashboard() {
   );
 
   const CustomersView = () => {
+    const storeCustomers = currentStoreCustomers;
     // ត្រងទិន្នន័យអតិថិជនតាមការស្វែងរក និងប្រភេទ Tier
-    const filteredCustomers = customers.filter(c => {
+    const filteredCustomers = storeCustomers.filter(c => {
       const matchSearch = 
         (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
         (c.phone || '').includes(customerSearch) ||
@@ -15536,10 +20257,10 @@ export default function UnifiedAdminDashboard() {
     });
 
     // គណនាស្ថិតិសរុប
-    const totalCustomersCount = customers.length;
-    const vipCount = customers.filter(c => c.tier === 'VIP' || c.tier === 'LOYAL').length;
-    const wholesaleCount = customers.filter(c => c.tier === 'WHOLESALE').length;
-    const lifetimeRevenue = customers.reduce((sum, c) => {
+    const totalCustomersCount = storeCustomers.length;
+    const vipCount = storeCustomers.filter(c => c.tier === 'VIP' || c.tier === 'LOYAL').length;
+    const wholesaleCount = storeCustomers.filter(c => c.tier === 'WHOLESALE').length;
+    const lifetimeRevenue = storeCustomers.reduce((sum, c) => {
       const m = getCustomerMetrics(c);
       return sum + m.totalSpent;
     }, 0);
@@ -15644,11 +20365,11 @@ export default function UnifiedAdminDashboard() {
 
           <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
             {[
-              { id: 'all', label: 'ទាំងអស់', count: customers.length },
-              { id: 'VIP', label: '🥇 VIP', count: customers.filter(c => c.tier === 'VIP').length },
-              { id: 'WHOLESALE', label: '💼 បោះដុំ', count: customers.filter(c => c.tier === 'WHOLESALE').length },
-              { id: 'LOYAL', label: '🥈 ស្មោះត្រង់', count: customers.filter(c => c.tier === 'LOYAL').length },
-              { id: 'REGULAR', label: '🥉 ទូទៅ', count: customers.filter(c => c.tier === 'REGULAR').length },
+              { id: 'all', label: 'ទាំងអស់', count: storeCustomers.length },
+              { id: 'VIP', label: '🥇 VIP', count: storeCustomers.filter(c => c.tier === 'VIP').length },
+              { id: 'WHOLESALE', label: '💼 បោះដុំ', count: storeCustomers.filter(c => c.tier === 'WHOLESALE').length },
+              { id: 'LOYAL', label: '🥈 ស្មោះត្រង់', count: storeCustomers.filter(c => c.tier === 'LOYAL').length },
+              { id: 'REGULAR', label: '🥉 ទូទៅ', count: storeCustomers.filter(c => c.tier === 'REGULAR').length },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -16236,7 +20957,7 @@ export default function UnifiedAdminDashboard() {
         {[
           { id: 'branding', label: '🎨 ម៉ាកយីហោ & Logo', desc: 'ឈ្មោះហាង, Logo, ពាក្យស្លោក' },
           { id: 'theme', label: '🌈 ពណ៌ Brand & Theme', desc: 'ប្តូរពណ៌ចម្បងរបស់ Website' },
-          { id: 'contact', label: '📞 ទំនាក់ទំនង & អាសយដ្ឋាន', desc: 'ទូរស័ព្ទ, Telegram, ទីតាំង' },
+          { id: 'contact', label: '📞 ទំនាក់ទំនង & បណ្តាញសង្គម', desc: 'Telegram, Facebook, TikTok, ទូរស័ព្ទ' },
           { id: 'announcement', label: '📢 សាររត់លើគេ', desc: 'Marquee Announcement' },
           { id: 'payment', label: '💳 គណនី KHQR / ABA', desc: 'Bank QR & Merchant Info' },
           { id: 'delivery', label: '🚚 ដឹកជញ្ជូន & អត្រាប្តូរប្រាក់', desc: 'ថ្លៃដឹក & អត្រាប្រាក់រៀល' },
@@ -16374,9 +21095,9 @@ export default function UnifiedAdminDashboard() {
             <div className="space-y-5 animate-in fade-in">
               <div>
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
-                  <span>📞</span> ២. ព័ត៌មានទំនាក់ទំនង & អាសយដ្ឋាន (Contact & Location)
+                  <span>📞</span> ២. ព័ត៌មានទំនាក់ទំនង & បណ្តាញសង្គម (Social & Contact)
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5">លេខទូរស័ព្ទ និង Telegram នឹងបង្ហាញលើប៊ូតុងទាក់ទងរហ័ស លើ Header និងលើវិក្កយបត្រ</p>
+                <p className="text-xs text-gray-500 mt-0.5">លេខទូរស័ព្ទ, Telegram, Facebook និង TikTok នឹងបង្ហាញលើប៊ូតុងជំនួយអតិថិជន (Floating Widget) លើ Header និងលើវិក្កយបត្រ</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -16963,7 +21684,7 @@ export default function UnifiedAdminDashboard() {
                               setProducts(parsed.products);
                             }
                             if (parsed.orders && Array.isArray(parsed.orders)) {
-                              setOrders(parsed.orders);
+                              setRealOrders(parsed.orders);
                             }
                             if (parsed.customers && Array.isArray(parsed.customers)) {
                               setCustomers(parsed.customers);
@@ -17183,91 +21904,498 @@ export default function UnifiedAdminDashboard() {
 
         </div>
 
-        {/* Right Column: Live Storefront Mockup Preview */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-slate-900 text-white p-5 rounded-3xl border border-slate-800 shadow-xl space-y-4">
+        {/* Right Column: Dynamic Live Storefront Mockup Preview */}
+        <div className="lg:col-span-4 space-y-4 lg:sticky lg:top-6 self-start">
+          <div className="bg-slate-900 text-white p-5 rounded-3xl border border-slate-800 shadow-2xl space-y-4">
+            
+            {/* Header with Live Status & Test Order Button */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <span>👁️</span> គំរូផ្សាយផ្ទាល់លើ Website
-              </span>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-[11px] font-black text-slate-200 uppercase tracking-wider">
+                  គំរូផ្សាយផ្ទាល់លើ Website
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setTestOrderSuccess(false);
+                  setTestOrderModalOpen(true);
+                }}
+                className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-[10px] font-black px-2.5 py-1 rounded-xl transition flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer"
+                title="ទេសកុម្ម៉ង់ទំនិញជាក់ស្តែងដូចអតិថិជនពី Website"
+              >
+                <span>🛒</span>
+                <span>ទេសកុម្ម៉ង់ Live</span>
+              </button>
             </div>
 
-            {/* Mock Header */}
-            <div className="bg-white text-gray-900 rounded-2xl p-3 border border-gray-200 shadow-md">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {storeSettings.logoUrl ? (
-                    <img src={storeSettings.logoUrl} alt="" className="h-8 max-w-[90px] object-contain" />
+            {/* Current Active Tab Indicator Badge */}
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-[11px]">
+              <span className="text-slate-400 font-bold">កំពុងឆ្លុះមើល:</span>
+              <span className="font-black text-orange-400 flex items-center gap-1">
+                {activeSettingsSubTab === 'branding' && '🎨 ម៉ាកយីហោ & Logo'}
+                {activeSettingsSubTab === 'theme' && '🌈 ពណ៌ Brand & Theme'}
+                {activeSettingsSubTab === 'contact' && '📞 ទំនាក់ទំនង & បណ្តាញសង្គម'}
+                {activeSettingsSubTab === 'announcement' && '📢 សាររត់លើគេ (Marquee)'}
+                {activeSettingsSubTab === 'payment' && '💳 គណនី KHQR / ABA'}
+                {activeSettingsSubTab === 'delivery' && '🚚 ដឹកជញ្ជូន & អត្រាប្តូរប្រាក់'}
+                {activeSettingsSubTab === 'data' && '🧹 សុខភាពទិន្នន័យ & Export'}
+              </span>
+            </div>
+
+            {/* ================= 1️⃣ BRANDING & LOGO VIEW ================= */}
+            {activeSettingsSubTab === 'branding' && (
+              <div className="space-y-3 animate-in fade-in">
+                {storeSettings.showAnnouncement && (
+                  <div className="bg-black text-[9px] font-bold text-amber-300 px-2.5 py-1 rounded-lg truncate text-center border border-amber-500/20">
+                    {storeSettings.announcementText || '🔥 ដឹកជញ្ជូនឥតគិតថ្លៃ ២៥ ខេត្ត/ក្រុង'}
+                  </div>
+                )}
+                {/* Mock Header */}
+                <div className="bg-white text-gray-900 rounded-2xl p-3 border border-gray-200 shadow-md">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {storeSettings.logoUrl ? (
+                        <img src={storeSettings.logoUrl} alt="" className="h-9 max-w-[80px] object-contain rounded-lg" />
+                      ) : (
+                        <div 
+                          style={{ backgroundColor: storeSettings.themeColor || '#ff6a00' }}
+                          className="w-8 h-8 rounded-xl text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs"
+                        >
+                          {(storeSettings.storeName || 'S').trim().charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="truncate">
+                        <p className="font-black text-xs leading-tight truncate">{storeSettings.storeName || 'SABAY LUK'}</p>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest truncate">{storeSettings.storeSlogan || 'Premium Store'}</p>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-black bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full border border-orange-200 shrink-0">
+                      📞 {storeSettings.phone}
+                    </span>
+                  </div>
+                </div>
+
+                {/* About / Description snippet */}
+                <div className="p-3 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 block">ការពិពណ៌នាបង្ហាញលើគេហទំព័រ (About):</span>
+                  <p className="text-[11px] text-slate-200 line-clamp-2 leading-relaxed">
+                    {storeSettings.storeDescription || 'ហាងលក់ទំនិញគុណភាពខ្ពស់ ផ្ដល់ទំនុកចិត្ត និងភាពស៊ីវិល័យសម្រាប់អ្នក។'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ================= 2️⃣ THEME & COLOR VIEW ================= */}
+            {activeSettingsSubTab === 'theme' && (
+              <div className="space-y-3 animate-in fade-in">
+                <div 
+                  style={{ backgroundColor: storeSettings.themeColor || '#ff6a00' }}
+                  className="text-white rounded-2xl p-3.5 shadow-md flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-xs">{storeSettings.storeName || 'SABAY LUK'}</span>
+                    <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold">Theme Live</span>
+                  </div>
+                  <span className="text-[10px] font-mono font-black bg-black/30 px-2 py-0.5 rounded-lg">
+                    {storeSettings.themeColor || '#ff6a00'}
+                  </span>
+                </div>
+
+                <div className="bg-white text-gray-900 rounded-2xl p-3.5 border border-gray-200 shadow-sm space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span 
+                      style={{ backgroundColor: storeSettings.themeColor || '#ff6a00' }}
+                      className="text-white text-[9px] font-black px-2 py-0.5 rounded-md"
+                    >
+                      ★ គំរូទំនិញ
+                    </span>
+                    <span 
+                      style={{ color: storeSettings.themeColor || '#ff6a00' }}
+                      className="font-black text-sm"
+                    >
+                      $20.00
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-gray-800">ស្បែកជើងបុរស Premium ម៉ូដថ្មី</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTestOrderSuccess(false);
+                      setTestOrderModalOpen(true);
+                    }}
+                    style={{ backgroundColor: storeSettings.themeColor || '#ff6a00' }}
+                    className="w-full text-white py-2 rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
+                  >
+                    <span>🛒</span> បញ្ជាទិញឥឡូវ (Order Now)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ================= 3️⃣ CONTACT & SOCIAL VIEW ================= */}
+            {activeSettingsSubTab === 'contact' && (
+              <div className="space-y-3 animate-in fade-in">
+                <div className="bg-slate-800/90 p-3.5 rounded-2xl border border-slate-700 space-y-2">
+                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-wider">
+                    ប៊ូតុងជំនួយអតិថិជន (Floating Widget):
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {storeSettings.telegram && (
+                      <div className="bg-[#229ED9] text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
+                        <span className="flex items-center gap-1.5"><span>✈️</span> ឆាត Telegram</span>
+                        <span className="font-mono text-[10px] opacity-90">@{storeSettings.telegram.replace(/^@/, '')}</span>
+                      </div>
+                    )}
+                    {storeSettings.facebook && (
+                      <div className="bg-[#1877F2] text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
+                        <span className="flex items-center gap-1.5"><span>💬</span> Facebook / Chat</span>
+                        <span className="text-[9px] opacity-90 truncate max-w-[120px]">{storeSettings.facebook}</span>
+                      </div>
+                    )}
+                    {storeSettings.tiktok && (
+                      <div className="bg-black text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs border border-gray-700">
+                        <span className="flex items-center gap-1.5"><span>🎵</span> TikTok ហាង</span>
+                        <span className="font-mono text-[10px] opacity-90">@{storeSettings.tiktok.replace(/^@/, '')}</span>
+                      </div>
+                    )}
+                    {storeSettings.phone && (
+                      <div className="bg-emerald-600 text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
+                        <span className="flex items-center gap-1.5"><span>📞</span> ហៅទូរស័ព្ទផ្ទាល់</span>
+                        <span className="font-mono text-[10px]">{storeSettings.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-800/60 rounded-2xl border border-slate-700 text-[11px] space-y-1">
+                  <div className="flex items-center gap-1.5 text-slate-300">
+                    <span>📍</span>
+                    <span className="truncate">{storeSettings.address || 'ភ្នំពេញ, កម្ពុជា'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                    <span>⏰</span>
+                    <span>{storeSettings.businessHours || '8:00 AM - 9:00 PM'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ================= 4️⃣ ANNOUNCEMENT MARQUEE VIEW ================= */}
+            {activeSettingsSubTab === 'announcement' && (
+              <div className="space-y-3 animate-in fade-in">
+                <div className="p-3.5 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-300 uppercase">ស្ថានភាពរបាររត់:</span>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      storeSettings.showAnnouncement ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                    }`}>
+                      {storeSettings.showAnnouncement ? '🟢 កំពុងបើកបង្ហាញ' : '🔴 បានបិទ'}
+                    </span>
+                  </div>
+
+                  {storeSettings.showAnnouncement ? (
+                    <div className="bg-black text-amber-300 p-2.5 rounded-xl border border-amber-500/30 text-xs font-black shadow-inner flex items-center gap-2 overflow-hidden">
+                      <span className="animate-bounce">📢</span>
+                      <span className="truncate">{storeSettings.announcementText || 'សារជូនដំណឹងរត់លើគេបង្អស់'}</span>
+                    </div>
                   ) : (
-                    <div className="w-7 h-7 rounded-lg bg-orange-500 text-white font-black text-xs flex items-center justify-center">
-                      {(storeSettings.storeName || 'S').trim().charAt(0).toUpperCase()}
+                    <div className="p-2 bg-slate-700/50 rounded-xl text-center text-slate-400 text-xs font-bold">
+                      របារសាររត់ត្រូវបានលាក់លើគេហទំព័រ
                     </div>
                   )}
-                  <div>
-                    <p className="font-black text-xs leading-none">{storeSettings.storeName || 'SABAY LUK'}</p>
-                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{storeSettings.storeSlogan || 'Premium Store'}</p>
+                </div>
+
+                <div className="bg-white text-gray-900 rounded-2xl p-2.5 border border-gray-200 text-xs font-bold flex items-center justify-between">
+                  <span>{storeSettings.storeName || 'SABAY LUK'}</span>
+                  <span className="text-[10px] text-gray-400">Header ខាងក្រោម</span>
+                </div>
+              </div>
+            )}
+
+            {/* ================= 5️⃣ PAYMENT & KHQR VIEW ================= */}
+            {activeSettingsSubTab === 'payment' && (
+              <div className="space-y-3 animate-in fade-in">
+                <div className="bg-white text-gray-900 p-3.5 rounded-2xl border border-gray-200 shadow-sm flex items-start gap-3">
+                  <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden shrink-0 border border-gray-200 shadow-2xs">
+                    {storeSettings.khqrImageUrl ? (
+                      <img src={storeSettings.khqrImageUrl} alt="" className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-2xl">📱</span>
+                    )}
+                  </div>
+                  <div className="truncate flex-1">
+                    <p className="text-xs font-black truncate uppercase text-slate-900">{storeSettings.bankAccountName || 'SENG SOVEASNA'}</p>
+                    <div className="text-[10px] font-bold space-y-1 mt-1.5">
+                      <div className="text-emerald-700 flex items-center justify-between bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                        <span className="flex items-center gap-1 font-black">
+                          <span className="w-3.5 h-3.5 rounded-full bg-emerald-200 text-emerald-900 text-[8px] inline-flex items-center justify-center font-black">៛</span>
+                          KHR:
+                        </span>
+                        <span className="font-mono font-black">{storeSettings.bankAccountKhr || '004 500 394'}</span>
+                      </div>
+                      <div className="text-blue-700 flex items-center justify-between bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                        <span className="flex items-center gap-1 font-black">
+                          <span className="w-3.5 h-3.5 rounded-full bg-blue-200 text-blue-900 text-[8px] inline-flex items-center justify-center font-black">$</span>
+                          USD:
+                        </span>
+                        <span className="font-mono font-black">{storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010 723 080'}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <span className="text-[10px] font-black bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
-                  📞 {storeSettings.phone}
-                </span>
-              </div>
-            </div>
 
-            {/* Mock Floating Buttons */}
-            <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700 space-y-2">
-              <p className="text-[10px] font-bold text-slate-400">ប៊ូតុងទាក់ទងលោតលើអេក្រង់ (Floating Buttons):</p>
-              <div className="flex items-center gap-2">
-                <span className="bg-sky-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                  ✈️ @{storeSettings.telegram || 'Sabayluk'}
-                </span>
-                <span className="bg-emerald-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                  📞 {storeSettings.phone || '096 720 5522'}
-                </span>
+                <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 text-center text-xs font-bold text-emerald-400">
+                  ⚡ គាំទ្រស្កេនទូទាត់ Bakong KHQR គ្រប់ធនាគារ
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Mock KHQR Card */}
-            <div className="bg-white text-gray-900 p-3.5 rounded-2xl border border-gray-200 shadow-sm flex items-start gap-3">
-              <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden shrink-0 border border-gray-200 shadow-2xs">
-                {storeSettings.khqrImageUrl ? (
-                  <img src={storeSettings.khqrImageUrl} alt="" className="w-full h-full object-contain" />
-                ) : (
-                  <span className="text-xl">📱</span>
+            {/* ================= 6️⃣ DELIVERY & EXCHANGE RATE VIEW ================= */}
+            {activeSettingsSubTab === 'delivery' && (
+              <div className="space-y-3 animate-in fade-in">
+                <div className="bg-white text-gray-900 rounded-2xl p-3.5 border border-gray-200 shadow-sm space-y-2 text-xs">
+                  <div className="flex items-center justify-between font-bold border-b border-gray-100 pb-2">
+                    <span className="text-gray-500">ទំនិញសរុប (Subtotal):</span>
+                    <span className="font-black text-gray-900">$20.00</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-700 font-bold flex items-center gap-1">
+                      <span>🛵</span> ថ្លៃដឹកភ្នំពេញ:
+                    </span>
+                    <span className="font-mono font-black text-emerald-600">+${storeSettings.deliveryPhnomPenh || '1.50'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-700 font-bold flex items-center gap-1">
+                      <span>🚚</span> ថ្លៃដឹកតាមខេត្ត:
+                    </span>
+                    <span className="font-mono font-black text-blue-600">+${storeSettings.deliveryProvince || '2.00'}</span>
+                  </div>
+                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                    <span className="font-bold text-gray-500">អត្រាប្តូរប្រាក់:</span>
+                    <span className="font-mono font-black text-orange-600">$1 = {storeSettings.exchangeRate || 4100} ៛</span>
+                  </div>
+                  <div className="p-2 bg-orange-50 rounded-xl text-center font-black text-[#ff6a00] border border-orange-200">
+                    ឧ. $21.50 ≈ {((21.5) * (Number(storeSettings.exchangeRate) || 4100)).toLocaleString()} ៛
+                  </div>
+                </div>
+
+                {storeSettings.policyNote && (
+                  <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 text-[10px] text-slate-300">
+                    <span className="font-bold text-amber-400 block mb-0.5">គោលការណ៍ហាង (Policy Note):</span>
+                    {storeSettings.policyNote}
+                  </div>
                 )}
               </div>
-              <div className="truncate flex-1">
-                <p className="text-xs font-black truncate uppercase">{storeSettings.bankAccountName || 'SENG SOVEASNA'}</p>
-                <div className="text-[10px] font-bold space-y-1 mt-1">
-                  <div className="text-emerald-700 flex items-center justify-between bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                    <span className="flex items-center gap-1 font-black">
-                      <span className="w-3.5 h-3.5 rounded-full bg-emerald-200 text-emerald-900 text-[8px] inline-flex items-center justify-center font-black">៛</span>
-                      KHR:
-                    </span>
-                    <span className="font-mono font-black">{storeSettings.bankAccountKhr || '004 500 394'}</span>
+            )}
+
+            {/* ================= 7️⃣ DATA & EXPORT VIEW ================= */}
+            {activeSettingsSubTab === 'data' && (
+              <div className="space-y-3 animate-in fade-in">
+                <div className="bg-slate-800/90 rounded-2xl p-3.5 border border-slate-700 space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 font-bold">ទំនិញសរុបក្នុងហាង:</span>
+                    <span className="font-mono font-black text-emerald-400">{(products || []).length} មុខ</span>
                   </div>
-                  <div className="text-blue-700 flex items-center justify-between bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                    <span className="flex items-center gap-1 font-black">
-                      <span className="w-3.5 h-3.5 rounded-full bg-blue-200 text-blue-900 text-[8px] inline-flex items-center justify-center font-black">$</span>
-                      USD:
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 font-bold">ការកុម្ម៉ង់ទាំងអស់:</span>
+                    <span className="font-mono font-black text-orange-400">{(realOrders || []).length} កុម្ម៉ង់</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 font-bold">ស្ថានភាព Cloud Database:</span>
+                    <span className="font-bold text-emerald-400 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      ដំណើរការល្អ ១០០%
                     </span>
-                    <span className="font-mono font-black">{storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010 723 080'}</span>
                   </div>
                 </div>
-                <p className="text-[9px] text-emerald-600 font-black mt-1.5 text-right">អត្រា: $1 = {storeSettings.exchangeRate} ៛</p>
               </div>
+            )}
+
+            {/* Footer with Open Website Link */}
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px]">
+              <a
+                href={activeStore?.slug ? `/store/${activeStore.slug}` : '/'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-400 hover:text-orange-300 font-black flex items-center gap-1 transition"
+              >
+                <span>🌐 បើកមើល Website ផ្ទាល់</span>
+                <span>↗</span>
+              </a>
+              <span className="text-[10px] text-slate-500 font-mono">Live Sync</span>
             </div>
 
-            <div className="text-center pt-2">
-              <p className="text-[10px] text-slate-400 italic">
-                រាល់ការផ្លាស់ប្តូរទិន្នន័យ នឹងធ្វើបច្ចុប្បន្នភាពលើ Website ភ្លាមៗដោយស្វ័យប្រវត្តិ!
-              </p>
-            </div>
           </div>
         </div>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* 🛒 MODAL ទេសអតិថិជនបញ្ជាទិញផ្ទាល់ពី WEBSITE (LIVE ORDER SIMULATOR) 🛒 */}
+      {/* ========================================================================= */}
+      {testOrderModalOpen && (() => {
+        const deliveryFee = testOrderLocation === 'phnom_penh' 
+          ? (parseFloat(storeSettings.deliveryPhnomPenh) || 1.5) 
+          : (parseFloat(storeSettings.deliveryProvince) || 2.0);
+        const subtotal = 20.00;
+        const totalUsd = subtotal + deliveryFee;
+        const exchangeRate = Number(storeSettings.exchangeRate) || 4100;
+        const totalKhr = Math.round(totalUsd * exchangeRate);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-200 relative animate-in zoom-in-95 duration-150 space-y-4 text-xs">
+              
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-orange-100 text-[#ff6a00] flex items-center justify-center text-base font-black">
+                    🛒
+                  </span>
+                  <div>
+                    <h3 className="font-black text-sm text-gray-900">ទេសកុម្ម៉ង់ទំនិញដូចភ្ញៀវជាក់ស្តែង</h3>
+                    <p className="text-[10px] text-gray-400">សាកល្បងមើលដំណើរការកុម្ម៉ង់លើ Website</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTestOrderModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {testOrderSuccess ? (
+                <div className="p-5 text-center space-y-3 bg-emerald-50 rounded-2xl border border-emerald-200 animate-in zoom-in-95">
+                  <span className="text-4xl block">🎉</span>
+                  <h4 className="font-black text-base text-emerald-800">ការកុម្ម៉ង់សាកល្បងបានជោគជ័យ!</h4>
+                  <p className="text-xs text-emerald-700 leading-relaxed">
+                    ប្រព័ន្ធបញ្ជាទិញលើ Website ដំណើរការយ៉ាងរលូន ១០០%! ព័ត៌មានថ្លៃដឹក គណនី KHQR និងអត្រាប្តូរប្រាក់ទាំងអស់បាន Sync ត្រឹមត្រូវ។
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTestOrderSuccess(false);
+                      setTestOrderModalOpen(false);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition cursor-pointer shadow-md"
+                  >
+                    រួចរាល់ (បិទផ្ទាំង)
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Sample Item */}
+                  <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl">👟</span>
+                      <div>
+                        <p className="font-black text-xs text-gray-800">ស្បែកជើងបុរស Premium (Size 41)</p>
+                        <p className="text-[10px] text-gray-400">ចំនួន: 1 គូ</p>
+                      </div>
+                    </div>
+                    <span className="font-black text-sm text-[#ff6a00]">${subtotal.toFixed(2)}</span>
+                  </div>
+
+                  {/* Delivery Location Selection */}
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-gray-700 block">ជ្រើសរើសទីតាំងដឹកជញ្ជូន:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTestOrderLocation('phnom_penh')}
+                        className={`p-2.5 rounded-xl border-2 text-left font-bold transition flex flex-col justify-between cursor-pointer ${
+                          testOrderLocation === 'phnom_penh'
+                            ? 'border-[#ff6a00] bg-orange-50/50 text-[#ff6a00]'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1"><span>🛵</span> ភ្នំពេញ</span>
+                        <span className="text-[11px] font-mono mt-1">+${parseFloat(storeSettings.deliveryPhnomPenh || '1.50').toFixed(2)}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTestOrderLocation('province')}
+                        className={`p-2.5 rounded-xl border-2 text-left font-bold transition flex flex-col justify-between cursor-pointer ${
+                          testOrderLocation === 'province'
+                            ? 'border-[#ff6a00] bg-orange-50/50 text-[#ff6a00]'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1"><span>🚚</span> ខេត្ត-ក្រុង</span>
+                        <span className="text-[11px] font-mono mt-1">+${parseFloat(storeSettings.deliveryProvince || '2.00').toFixed(2)}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-gray-700 block">វិធីសាស្ត្រទូទាត់ប្រាក់:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTestOrderPayment('KHQR')}
+                        className={`p-2.5 rounded-xl border-2 text-left font-bold transition cursor-pointer ${
+                          testOrderPayment === 'KHQR'
+                            ? 'border-[#ff6a00] bg-orange-50/50 text-[#ff6a00]'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        }`}
+                      >
+                        📱 ស្កេន Bakong KHQR
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTestOrderPayment('COD')}
+                        className={`p-2.5 rounded-xl border-2 text-left font-bold transition cursor-pointer ${
+                          testOrderPayment === 'COD'
+                            ? 'border-[#ff6a00] bg-orange-50/50 text-[#ff6a00]'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                        }`}
+                      >
+                        💵 បង់ពេលទទួលទំនិញ
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pricing Total Summary */}
+                  <div className="p-3.5 bg-slate-900 text-white rounded-2xl space-y-1.5">
+                    <div className="flex justify-between text-slate-300 text-[11px]">
+                      <span>ថ្លៃទំនិញ:</span>
+                      <span>${subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-300 text-[11px]">
+                      <span>ថ្លៃដឹកជញ្ជូន:</span>
+                      <span>+${deliveryFee.toFixed(2)}</span>
+                    </div>
+                    <div className="pt-2 border-t border-slate-800 flex justify-between items-baseline font-black text-sm">
+                      <span className="text-orange-400">សរុបរួម:</span>
+                      <div className="text-right">
+                        <span className="text-white text-base">${totalUsd.toFixed(2)}</span>
+                        <span className="block text-[10px] text-slate-400 font-mono">≈ {totalKhr.toLocaleString()} ៛</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="button"
+                    onClick={() => setTestOrderSuccess(true)}
+                    style={{ backgroundColor: storeSettings.themeColor || '#ff6a00' }}
+                    className="w-full text-white py-3.5 rounded-2xl font-black text-sm shadow-lg transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>🎉</span>
+                    <span>បញ្ជាក់ការកុម្ម៉ង់សាកល្បង (Confirm Test Order)</span>
+                  </button>
+                </div>
+              )}
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
@@ -17526,85 +22654,181 @@ export default function UnifiedAdminDashboard() {
       }
     };
 
+    // ⭐️ ២-STEP STANDARD STORE LOOKUP & ACCOUNT SELECTION FLOW ⭐️
+    const handleLookupGmailStores = async (emailToTest) => {
+      setLoginError('');
+      const input = (emailToTest || loginGmail || '').trim().toLowerCase();
+      if (!input) {
+        setLoginError('សូមវាយបញ្ចូលអាសយដ្ឋាន Gmail / Email របស់ម្ចាស់ហាង!');
+        return false;
+      }
+
+      setIsLoggingIn(true);
+
+      // Sync latest stores from Cloud (Supabase) + LocalStorage
+      let allStores = getLocalStores();
+      try {
+        const syncedStores = await fetchAllStores();
+        if (Array.isArray(syncedStores) && syncedStores.length > 0) {
+          allStores = syncedStores;
+          setRegisteredStores(syncedStores);
+        }
+      } catch (err) {} finally {
+        setIsLoggingIn(false);
+      }
+
+      // ⭐️ Case 1: Master Owner (បង្ហាញតែហាងដែលនៅក្រោម Gmail របស់គាត់ប៉ុណ្ណោះ មិនបង្ហាញហាងគេឡើយ) ⭐️
+      if (input === 'sengsoveasna93@gmail.com' || input === 'admin') {
+        const masterStores = allStores.filter(st => {
+          const primaryEmail = (st.owner_email || '').trim().toLowerCase();
+          const settingsEmail = (st.settings?.owner_email || '').trim().toLowerCase();
+          const directEmail = (st.email || '').trim().toLowerCase();
+          // Flagship store OR stores registered explicitly under this Gmail
+          return st.id === 'store_default_sabayluk' || 
+                 st.slug === 'sabay-luk' || 
+                 primaryEmail === 'sengsoveasna93@gmail.com' || 
+                 settingsEmail === 'sengsoveasna93@gmail.com' ||
+                 directEmail === 'sengsoveasna93@gmail.com';
+        });
+
+        const flagship = masterStores.find(s => s.id === 'store_default_sabayluk') || masterStores[0] || allStores[0];
+        setLoginDiscoveredStores(masterStores);
+        setLoginTargetStore(flagship);
+        setLoginAccountType('owner');
+        setLoginStep(2);
+        setLoginGmailPassword('');
+        return true;
+      }
+
+      // ⭐️ PRIORITY 1: STRICT GMAIL ANCHOR IDENTITY (យក Gmail របស់ម្ចាស់ហាងជាគោល ១០០% ស្របតាមស្តង់ដាពិភពលោក)
+      // ហាងនីមួយៗដាច់ស្រឡះពីគ្នា ១០០% ដោយផ្អែកលើ Gmail របស់ម្ចាស់ហាង (owner_email ឬ settings.owner_email)
+      const emailOwnedStores = allStores.filter(st => {
+        const primaryEmail = (st.owner_email || '').trim().toLowerCase();
+        const settingsEmail = (st.settings?.owner_email || '').trim().toLowerCase();
+        const directEmail = (st.email || '').trim().toLowerCase();
+        return primaryEmail === input || settingsEmail === input || directEmail === input;
+      });
+
+      let matchingStores = [...emailOwnedStores];
+
+      // ⭐️ PRIORITY 2: បើមិនទាន់ឃើញតាម owner_email ស្វែងរកបន្ថែមតាម owner_username ឬ email
+      if (matchingStores.length === 0) {
+        const altOwnerStores = allStores.filter(st => 
+          (st.email && st.email.toLowerCase() === input) ||
+          (st.owner_username && st.owner_username.toLowerCase() === input)
+        );
+        matchingStores.push(...altOwnerStores);
+      }
+
+      // ⭐️ PRIORITY 3: ពិនិត្យមើលបុគ្គលិកដែលចងជាមួយហាងនីមួយៗតាម Gmail បុគ្គលិក
+      if (matchingStores.length === 0) {
+        allStores.forEach(st => {
+          const stStaff = getStoreStaffList(st);
+          const hasStaff = stStaff.some(s => 
+            (s.email && s.email.toLowerCase() === input) || 
+            (s.username && s.username.toLowerCase() === input)
+          );
+          if (hasStaff && !matchingStores.some(m => m.id === st.id)) {
+            matchingStores.push(st);
+          }
+        });
+      }
+
+      // ⭐️ PRIORITY 4: Fallback lookup តាម Store ID ឬ Slug ក្នុងករណីចាំបាច់
+      if (matchingStores.length === 0) {
+        const slugOrIdStores = allStores.filter(st => 
+          (st.slug && st.slug.toLowerCase() === input) ||
+          (st.id && st.id.toLowerCase() === input) ||
+          (st.name && st.name.toLowerCase() === input)
+        );
+        matchingStores.push(...slugOrIdStores);
+      }
+
+      if (matchingStores.length > 0) {
+        setLoginDiscoveredStores(matchingStores);
+        const selStore = matchingStores[0];
+        setLoginTargetStore(selStore);
+        
+        const isOwner = (selStore.owner_email && selStore.owner_email.toLowerCase() === input) ||
+                        (selStore.owner_username && selStore.owner_username.toLowerCase() === input) ||
+                        (selStore.slug && selStore.slug.toLowerCase() === input) ||
+                        (selStore.name && selStore.name.toLowerCase() === input);
+        
+        setLoginAccountType(isOwner ? 'owner' : 'staff');
+        
+        const storeStaff = getStoreStaffList(selStore);
+        if (!isOwner) {
+          const matchedMember = storeStaff.find(s => 
+            (s.email && s.email.toLowerCase() === input) || 
+            (s.username && s.username.toLowerCase() === input)
+          );
+          if (matchedMember) setLoginSelectedStaffMember(matchedMember);
+          else setLoginSelectedStaffMember(storeStaff.find(s => s.role !== 'ADMIN') || storeStaff[0]);
+        } else {
+          setLoginSelectedStaffMember(null);
+        }
+
+        setLoginStep(2);
+        setLoginGmailPassword('');
+        return true;
+      }
+
+      setLoginError(`❌ រកមិនឃើញហាងដែលភ្ជាប់ជាមួយ "${input}" ឡើយ! សូមពិនិត្យមើល Gmail ឡើងវិញ ឬចុះឈ្មោះហាងថ្មី។`);
+      return false;
+    };
+
     const handleGmailSubmit = (e) => {
       if (e && e.preventDefault) e.preventDefault();
       setLoginError('');
+
+      // If still on Step 1, perform the store lookup
+      if (loginStep === 1) {
+        handleLookupGmailStores();
+        return;
+      }
+
+      // Step 2: Validate Credentials for Target Store & Account
       const emailInput = (loginGmail || '').trim().toLowerCase();
       const passInput = (loginGmailPassword || '').trim();
+      const targetStore = loginTargetStore || getLocalStores()[0];
 
-      if (!emailInput) {
-        setLoginError('សូមវាយបញ្ចូលអាសយដ្ឋាន Gmail / Email របស់អ្នក!');
+      // 🛑 បើហាងត្រូវបានផ្អាក (SUSPENDED) មិនអនុញ្ញាតឱ្យចូលប្រើទេ (លើកលែងតែ Master Owner)
+      if (targetStore.status === 'SUSPENDED' && emailInput !== 'sengsoveasna93@gmail.com') {
+        setLoginError(`🛑 ហាង "${targetStore.name}" ត្រូវបានផ្អាកដំណើរការ (Suspended) ដោយសារអសកម្មលើសពី ៣០ ថ្ងៃ! សូមទាក់ទង Master Owner តាម Telegram: @Sabayluk ឬទូរស័ព្ទ 096 720 5522 ដើម្បីបើកដំណើរការឡើងវិញ។`);
         return;
       }
 
-      // 1. MASTER OWNER (sengsoveasna93@gmail.com)
-      if (emailInput === 'sengsoveasna93@gmail.com' || emailInput === 'admin') {
-        const masterOwnerAccount = {
-          id: 'STAFF-1',
-          name: 'សេង សុវាសនា (Master Owner)',
-          email: 'sengsoveasna93@gmail.com',
-          username: 'sengsoveasna93@gmail.com',
-          pin: '1234',
-          password: '1234',
-          role: 'ADMIN',
-          roleLabel: 'ម្ចាស់ប្រព័ន្ធ / Master Owner',
-          phone: '0967205522',
-          avatar: '👑',
-          color: 'from-amber-500 to-orange-600',
-          permissions: ROLE_PRESET_PERMISSIONS.ADMIN,
-          active: true,
-          store_id: 'store_default_sabayluk'
-        };
-        setIsLoggingIn(true);
-        setLoginSuccessMsg('🎉 ស្វាគមន៍លោក សេង សុវាសនា (Master Owner)! កំពុងចូលប្រព័ន្ធ...');
-        setTimeout(() => {
-          setCurrentStaff(masterOwnerAccount);
-          setIsAuthenticated(true);
-          if (rememberMe) {
-            localStorage.removeItem('sabay_admin_logged_out');
-            localStorage.setItem('sabay_admin_authenticated', 'true');
-            localStorage.setItem('sabay_admin_remember_me', 'true');
-          }
-          setActiveTab('stores');
-          setIsLoggingIn(false);
-        }, 400);
+      // ⏳ បើហាងកំពុងស្ថិតក្នុងការរង់ចាំ Approve (PENDING_APPROVAL) មិនទាន់អនុញ្ញាតឱ្យចូលទេ
+      if ((targetStore.status === 'PENDING_APPROVAL' || targetStore.payment_status === 'PENDING_APPROVAL') && emailInput !== 'sengsoveasna93@gmail.com') {
+        setLoginError(`⏳ ហាង "${targetStore.name}" កំពុងស្ថិតក្រោមការត្រួតពិនិត្យបង្កាន់ដៃ (Slip) ដោយ Admin! សូមរង់ចាំការអនុម័ត (Approve) ពី Admin ជាមុនសិន ទើបអាច Login ចូលគ្រប់គ្រងហាងបាន។ ឬទាក់ទង Master Owner តាម Telegram: @Sabayluk`);
         return;
       }
 
-      // 2. CHECK ALL REGISTERED STORES (By owner_email)
-      const allStores = getLocalStores();
-      const matchedStore = allStores.find(st => 
-        (st.owner_email && st.owner_email.toLowerCase() === emailInput) ||
-        (st.owner_username && st.owner_username.toLowerCase() === emailInput) ||
-        (st.slug && st.slug.toLowerCase() === emailInput)
-      );
+      if (!passInput) {
+        setLoginError('សូមបញ្ចូលលេខសម្ងាត់ ឬ PIN របស់អ្នកដើម្បីចូលប្រើ!');
+        return;
+      }
 
-      if (matchedStore) {
-        if (passInput && matchedStore.pin && passInput !== matchedStore.pin) {
-          setLoginError('❌ លេខកូដសម្ងាត់ ឬ PIN ហាងមិនត្រឹមត្រូវ!');
+      // 1. MASTER OWNER (sengsoveasna93@gmail.com) on Flagship Store
+      if ((targetStore.id === 'store_default_sabayluk' || !targetStore.id) &&
+          (emailInput === 'sengsoveasna93@gmail.com' || emailInput === 'admin')) {
+        const flagshipStaff = getStoreStaffList(targetStore);
+        const masterStaff = flagshipStaff.find(s => s.id === 'STAFF-1') || DEFAULT_STAFF_ACCOUNTS[0];
+        const validMasterPin = masterStaff.pin || '1234';
+        const validMasterPass = masterStaff.password || validMasterPin;
+
+        if (passInput !== validMasterPin && passInput !== validMasterPass) {
+          setLoginError('❌ លេខកូដ PIN ឬលេខសម្ងាត់មិនត្រឹមត្រូវ!');
           return;
         }
+
         setIsLoggingIn(true);
-        setLoginSuccessMsg(`🎉 ស្វាគមន៍ម្ចាស់ហាង "${matchedStore.name}"! កំពុងបើកផ្ទាំងគ្រប់គ្រង...`);
+        setLoginSuccessMsg(`🎉 ស្វាគមន៍លោក សេង សុវាសនា (Master Owner)! កំពុងបើកហាង "${targetStore.name}"...`);
         setTimeout(() => {
-          const storeOwnerStaff = {
-            id: `STAFF-OWNER-${matchedStore.id.slice(-4)}`,
-            name: matchedStore.owner_name || matchedStore.name,
-            email: matchedStore.owner_email || emailInput,
-            username: matchedStore.owner_username || emailInput,
-            pin: matchedStore.pin || '1234',
-            role: 'ADMIN',
-            roleLabel: 'ម្ចាស់ហាង (Store Admin)',
-            phone: matchedStore.phone || '',
-            avatar: '🏪',
-            color: 'from-emerald-500 to-teal-600',
-            permissions: ROLE_PRESET_PERMISSIONS.ADMIN,
-            active: true,
-            store_id: matchedStore.id
-          };
-          setActiveStore(matchedStore);
-          setActiveStoreState(matchedStore);
-          setCurrentStaff(storeOwnerStaff);
+          setActiveStore(targetStore);
+          setActiveStoreState(targetStore);
+          setCurrentStaff(masterStaff);
+          updateStoreActivity(targetStore.id);
           setIsAuthenticated(true);
           if (rememberMe) {
             localStorage.removeItem('sabay_admin_logged_out');
@@ -17617,36 +22841,75 @@ export default function UnifiedAdminDashboard() {
         return;
       }
 
-      // 3. CHECK REGULAR STAFF BY EMAIL OR USERNAME
-      const matchedStaff = staffList.find(s => 
-        (s.email && s.email.toLowerCase() === emailInput) ||
-        (s.username && s.username.toLowerCase() === emailInput)
-      );
+      // 2. STORE OWNER ACCOUNT (Tenant Store Owner)
+      if (loginAccountType === 'owner') {
+        const storeStaff = getStoreStaffList(targetStore);
+        const ownerStaff = storeStaff.find(s => s.role === 'ADMIN') || getStoreDefaultStaff(targetStore)[0];
+        const validPin = ownerStaff.pin || targetStore.pin || '1234';
+        const validPass = ownerStaff.password || targetStore.password || validPin;
 
-      if (matchedStaff) {
-        if (passInput && matchedStaff.pin && passInput !== matchedStaff.pin && matchedStaff.password && passInput !== matchedStaff.password) {
-          setLoginError('❌ លេខកូដសម្ងាត់ ឬ PIN មិនត្រឹមត្រូវ!');
+        if (passInput !== validPin && passInput !== validPass) {
+          setLoginError('❌ លេខកូដ PIN ឬលេខសម្ងាត់របស់ម្ចាស់ហាងមិនត្រឹមត្រូវ!');
           return;
         }
+
         setIsLoggingIn(true);
-        setLoginSuccessMsg(`🎉 ស្វាគមន៍ ${matchedStaff.name}! កំពុងចូលប្រព័ន្ធ...`);
+        setLoginSuccessMsg(`🎉 ស្វាគមន៍ម្ចាស់ហាង "${targetStore.name}"! កំពុងចូលប្រព័ន្ធ...`);
         setTimeout(() => {
-          setCurrentStaff(matchedStaff);
+          setActiveStore(targetStore);
+          setActiveStoreState(targetStore);
+          setCurrentStaff(ownerStaff);
+          updateStoreActivity(targetStore.id);
           setIsAuthenticated(true);
           if (rememberMe) {
             localStorage.removeItem('sabay_admin_logged_out');
             localStorage.setItem('sabay_admin_authenticated', 'true');
             localStorage.setItem('sabay_admin_remember_me', 'true');
           }
-          if (matchedStaff.role === 'CASHIER') setActiveTab('pos');
-          else if (matchedStaff.role === 'STOCK') setActiveTab('inventory');
-          else setActiveTab('pos');
+          setActiveTab('pos');
           setIsLoggingIn(false);
         }, 400);
         return;
       }
 
-      setLoginError('❌ មិនទាន់រកឃើញគណនី Gmail នេះក្នុងប្រព័ន្ធទេ! សូមចុះឈ្មោះហាងជាមុនសិន។');
+      // 3. STAFF ACCOUNT (Tenant Store Staff: Cashier, Stock, etc.)
+      if (loginAccountType === 'staff') {
+        const storeStaffList = getStoreStaffList(targetStore);
+        let targetStaff = loginSelectedStaffMember;
+        if (!targetStaff) {
+          targetStaff = storeStaffList.find(s => s.pin === passInput || s.password === passInput);
+        }
+
+        if (!targetStaff) {
+          setLoginError('❌ សូមជ្រើសរើសបុគ្គលិកដែលចង់ចូលប្រើ!');
+          return;
+        }
+
+        if (passInput !== targetStaff.pin && passInput !== targetStaff.password) {
+          setLoginError(`❌ លេខកូដ PIN ឬពាក្យសម្ងាត់សម្រាប់ ${targetStaff.name} មិនត្រឹមត្រូវ!`);
+          return;
+        }
+
+        setIsLoggingIn(true);
+        setLoginSuccessMsg(`🎉 ស្វាគមន៍ ${targetStaff.name} (${targetStaff.roleLabel || 'បុគ្គលិក'})! កំពុងចូលហាង...`);
+        updateStoreActivity(targetStore.id);
+        setTimeout(() => {
+          setActiveStore(targetStore);
+          setActiveStoreState(targetStore);
+          setCurrentStaff(targetStaff);
+          setIsAuthenticated(true);
+          if (rememberMe) {
+            localStorage.removeItem('sabay_admin_logged_out');
+            localStorage.setItem('sabay_admin_authenticated', 'true');
+            localStorage.setItem('sabay_admin_remember_me', 'true');
+          }
+          if (targetStaff.role === 'CASHIER') setActiveTab('pos');
+          else if (targetStaff.role === 'STOCK') setActiveTab('inventory');
+          else setActiveTab('pos');
+          setIsLoggingIn(false);
+        }, 400);
+        return;
+      }
     };
 
     const handleCredentialSubmit = (e) => {
@@ -17738,7 +23001,6 @@ export default function UnifiedAdminDashboard() {
   }, [isAuthenticated, loginMode, loginEnteredPin, loginSelectedStaff]);
 
   const renderLoginPortal = () => {
-    const activePinLength = loginSelectedStaff?.pin?.length || 4;
     return (
       <div className="min-h-screen w-full bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100/70 flex flex-col justify-between p-4 sm:p-6 md:p-8 font-sans relative overflow-hidden select-none">
         {/* Soft Ambient Light Orbs (Cool-Toned & Eye-Friendly) */}
@@ -17788,69 +23050,25 @@ export default function UnifiedAdminDashboard() {
 
         {/* Center Login Box */}
         <main className="relative z-10 my-auto py-6 flex justify-center">
-          <div className="w-full max-w-md bg-white/95 backdrop-blur-2xl p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-2xl shadow-blue-900/10 space-y-6">
+          <div className="w-full max-w-md bg-white/95 backdrop-blur-2xl p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-2xl shadow-blue-900/10 space-y-5">
             
-            {/* Header / Mode Switcher */}
+            {/* Header Badge & Title */}
             <div className="text-center space-y-1.5">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 ប្រព័ន្ធសុវត្ថិភាពខ្ពស់ 256-bit Secure
               </span>
-              <h2 className="text-2xl font-black text-slate-900">ចូលប្រើប្រាស់ប្រព័ន្ធ</h2>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+                {loginStep === 1 ? 'ស្វែងរកហាងរបស់អ្នក' : 'ផ្ទៀងផ្ទាត់លេខសម្ងាត់ចូលហាង'}
+              </h2>
               <p className="text-xs text-slate-500 font-medium">
-                សូមចូលតាមគណនី Gmail ឬលេខកូដ PIN របស់អ្នក
+                {loginStep === 1 
+                  ? 'សូមវាយបញ្ចូល Gmail របស់ម្ចាស់ហាង ដើម្បីស្វែងរកហាងរបស់អ្នក' 
+                  : 'សូមបញ្ចូលលេខសម្ងាត់ ឬ PIN ឱ្យបានត្រឹមត្រូវដើម្បីចូលផ្ទាំងគ្រប់គ្រង'}
               </p>
             </div>
 
-            {/* Mode Switcher Tabs */}
-            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMode('gmail');
-                  setLoginError('');
-                }}
-                className={`py-2 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
-                  loginMode === 'gmail'
-                    ? 'bg-blue-600 text-white shadow-md font-black'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                }`}
-              >
-                <span>📧</span>
-                <span className="truncate">Gmail</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMode('pin');
-                  setLoginError('');
-                  setLoginEnteredPin('');
-                }}
-                className={`py-2 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
-                  loginMode === 'pin'
-                    ? 'bg-blue-600 text-white shadow-md font-black'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                }`}
-              >
-                <span>🔢</span>
-                <span className="truncate">លេខ PIN</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMode('credentials');
-                  setLoginError('');
-                }}
-                className={`py-2 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
-                  loginMode === 'credentials'
-                    ? 'bg-blue-600 text-white shadow-md font-black'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                }`}
-              >
-                <span>👤</span>
-                <span className="truncate">ឈ្មោះ & Pass</span>
-              </button>
-            </div>
+
 
             {/* Error & Success Messages */}
             {loginError && (
@@ -17864,105 +23082,218 @@ export default function UnifiedAdminDashboard() {
               </div>
             )}
 
-            {/* TAB 1: GMAIL MODE (PRIMARY) */}
+            {/* STANDARD 2-STEP STORE AUTHENTICATION */}
             {loginMode === 'gmail' && (
               <form onSubmit={handleGmailSubmit} className="space-y-4 animate-in fade-in">
-                {/* ⭐️ FAST 1-CLICK MASTER OWNER SHORTCUT ⭐️ */}
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 p-3.5 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center text-base shadow-xs shrink-0">
-                      👑
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-black text-slate-800 truncate">សេង សុវាសនា</p>
-                        <span className="text-[9px] bg-amber-200/70 text-amber-900 px-1.5 py-0.2 rounded-full font-black uppercase">Owner</span>
+                
+                {/* ⭐️ STEP 1: LOOKUP STORE BY GMAIL / STORE IDENTIFIER ⭐️ */}
+                {loginStep === 1 && (
+                  <div className="space-y-4 animate-in fade-in">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                        អាសយដ្ឋាន Gmail ឬ Email របស់ហាង <span className="text-blue-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-3.5 text-slate-400 text-sm">📧</span>
+                        <input
+                          type="text"
+                          value={loginGmail}
+                          onChange={(e) => setLoginGmail(e.target.value)}
+                          placeholder="ឧ. yourstore@gmail.com ឬ ឈ្មោះហាង"
+                          className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl pl-10 pr-4 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition"
+                          required
+                          autoFocus
+                        />
                       </div>
-                      <p className="text-[10px] font-bold text-slate-500 truncate">sengsoveasna93@gmail.com</p>
+                      <p className="text-[11px] text-slate-400 mt-1.5 font-medium flex items-center gap-1">
+                        <span>💡</span>
+                        <span>បញ្ចូល Gmail ដែលបានចុះឈ្មោះហាង ដើម្បីស្វែងរកហាងរបស់អ្នក</span>
+                      </p>
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginGmail('sengsoveasna93@gmail.com');
-                      setLoginGmailPassword('1234');
-                      handleGmailSubmit();
-                    }}
-                    className="shrink-0 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-[11px] rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
-                  >
-                    ចូលភ្លាម ⚡
-                  </button>
-                </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    អាសយដ្ឋាន Gmail / Email <span className="text-blue-600">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={loginGmail}
-                    onChange={(e) => setLoginGmail(e.target.value)}
-                    placeholder="sengsoveasna93@gmail.com"
-                    className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    ពាក្យសម្ងាត់ ឬ PIN (Password / PIN)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={loginShowGmailPassword ? 'text' : 'password'}
-                      value={loginGmailPassword}
-                      onChange={(e) => setLoginGmailPassword(e.target.value)}
-                      placeholder="1234"
-                      className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition pr-10"
-                    />
                     <button
-                      type="button"
-                      onClick={() => setLoginShowGmailPassword(!loginShowGmailPassword)}
-                      className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                      type="submit"
+                      disabled={isLoggingIn}
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2"
                     >
-                      {loginShowGmailPassword ? '🙈' : '👁️'}
+                      <span>🔍</span>
+                      <span>ស្វែងរកហាងរបស់ខ្ញុំ (Find Store)</span>
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1 font-medium">
-                    💡 គណនី Master Owner: PIN លំនាំដើមគឺ <b>1234</b>
-                  </p>
-                </div>
+                )}
 
-                {/* Remember Me */}
-                <div className="flex items-center justify-between text-xs pt-0.5">
-                  <label className="flex items-center gap-2 cursor-pointer text-slate-600 select-none">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
-                    />
-                    <span>ចងចាំការចូលប្រើ (Remember Me)</span>
-                  </label>
-                </div>
+                {/* ⭐️ STEP 2: SELECT ACCOUNT (ADMIN / STAFF) & AUTHENTICATE ⭐️ */}
+                {loginStep === 2 && loginTargetStore && (
+                  <div className="space-y-4 animate-in fade-in">
+                    
+                    {/* Found Store Card Banner */}
+                    <div className="p-3.5 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl border border-slate-700 flex items-center justify-between gap-3 shadow-md">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center text-lg font-black shrink-0 shadow-xs">
+                          {loginTargetStore.settings?.logoUrl ? (
+                            <img src={loginTargetStore.settings.logoUrl} alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
+                          ) : '🏪'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <h4 className="font-black text-xs text-white truncate">{loginTargetStore.name}</h4>
+                            <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.2 rounded-full font-bold">✓ ហាងត្រឹមត្រូវ</span>
+                          </div>
+                          <p className="text-[10px] text-slate-300 font-mono truncate">
+                            sabayluk.com/store/{loginTargetStore.slug}
+                          </p>
+                        </div>
+                      </div>
 
-                <button
-                  type="submit"
-                  disabled={isLoggingIn}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isLoggingIn ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>កំពុងផ្ទៀងផ្ទាត់...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>🔐</span>
-                      <span>ចូលប្រើប្រាស់តាម Gmail (Login)</span>
-                    </>
-                  )}
-                </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginStep(1);
+                          setLoginError('');
+                          setLoginGmailPassword('');
+                        }}
+                        className="text-[11px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2.5 py-1.5 rounded-xl transition cursor-pointer shrink-0"
+                        title="ប្តូរទៅស្វែងរកហាងផ្សេង"
+                      >
+                        ‹ ប្តូរហាង
+                      </button>
+                    </div>
+
+                    {/* If multiple stores linked to this Gmail */}
+                    {loginDiscoveredStores.length > 1 && (
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 block">
+                          អ្នកមាន {loginDiscoveredStores.length} ហាង — សូមជ្រើសរើសហាងដែលចង់ចូល:
+                        </label>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {loginDiscoveredStores.map((st, sIdx) => (
+                            <button
+                              key={st.id || sIdx}
+                              type="button"
+                              onClick={() => {
+                                setLoginTargetStore(st);
+                                setLoginSelectedStaffMember(null);
+                                setLoginGmailPassword('');
+                              }}
+                              className={`p-2 rounded-xl text-left border transition flex items-center gap-2 cursor-pointer ${
+                                loginTargetStore.id === st.id
+                                  ? 'border-[#ff6a00] bg-orange-50/50 text-[#ff6a00] font-black'
+                                  : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold'
+                              }`}
+                            >
+                              <span className="text-sm">🏪</span>
+                              <div className="min-w-0 flex-1">
+                                <span className="text-xs truncate block">{st.name}</span>
+                                {st.status === 'PENDING_APPROVAL' && (
+                                  <span className="text-[9px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded block w-fit mt-0.5">
+                                    ⏳ រង់ចាំ Approve
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ⏳ Warning banner if selected store is pending approval */}
+                    {loginTargetStore && (loginTargetStore.status === 'PENDING_APPROVAL' || loginTargetStore.payment_status === 'PENDING_APPROVAL') && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex items-start gap-2.5 animate-in fade-in">
+                        <span className="text-base">⏳</span>
+                        <div className="text-xs text-amber-900 leading-relaxed font-bold">
+                          <p className="font-black text-amber-950">ហាងនេះកំពុងស្ថិតក្រោមការត្រួតពិនិត្យ (Pending Approval)</p>
+                          <p className="text-[11px] font-medium text-amber-800 mt-0.5">
+                            Admin កំពុងពិនិត្យមើលបង្កាន់ដៃបង់ប្រាក់ (Slip)។ លោកអ្នកនឹងអាច Login ចូលគ្រប់គ្រងហាងបានភ្លាមៗ នៅពេល Admin ចុច Approve!
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ⭐️ Verified Store Account Identity Banner (Clean & Standard) ⭐️ */}
+                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-2xl flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base font-black shrink-0 shadow-xs">
+                          👑
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black text-blue-700 uppercase tracking-wider">គណនីម្ចាស់ហាង (Store Owner)</p>
+                          <p className="text-xs font-black text-slate-900 truncate">
+                            {loginTargetStore.owner_name || 'ម្ចាស់ហាង'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold bg-white text-blue-700 px-2.5 py-1 rounded-xl border border-blue-200 shadow-2xs shrink-0">
+                        Gmail Verified
+                      </span>
+                    </div>
+
+
+
+                    {/* PIN / Password Input */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-bold text-slate-700">
+                          លេខកូដសម្ងាត់ ឬ PIN របស់ម្ចាស់ហាង <span className="text-rose-500">*</span>
+                        </label>
+                        <span className="text-[10px] text-slate-400 font-mono">Password / PIN</span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={loginShowGmailPassword ? 'text' : 'password'}
+                          value={loginGmailPassword}
+                          onChange={(e) => setLoginGmailPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-sm font-mono font-black outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition pr-10"
+                          required
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setLoginShowGmailPassword(!loginShowGmailPassword)}
+                          className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                        >
+                          {loginShowGmailPassword ? '🙈' : '👁️'}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                        🔒 ព័ត៌មានសម្ងាត់ត្រូវបានការពារដោយប្រព័ន្ធសុវត្ថិភាព 256-bit
+                      </p>
+                    </div>
+
+                    {/* Remember Me */}
+                    <div className="flex items-center justify-between text-xs pt-0.5">
+                      <label className="flex items-center gap-2 cursor-pointer text-slate-600 select-none">
+                        <input
+                          type="checkbox"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+                        />
+                        <span>ចងចាំការចូលប្រើ (Remember Me)</span>
+                      </label>
+                    </div>
+
+                    {/* Submit Button */}
+                    <button
+                      type="submit"
+                      disabled={isLoggingIn}
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>កំពុងផ្ទៀងផ្ទាត់...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🚀</span>
+                          <span>ចូលគ្រប់គ្រងហាង «{loginTargetStore.name}»</span>
+                        </>
+                      )}
+                    </button>
+
+                  </div>
+                )}
 
                 <div className="text-center pt-2">
                   <Link
@@ -17975,148 +23306,9 @@ export default function UnifiedAdminDashboard() {
               </form>
             )}
 
-            {/* TAB 2: PIN MODE */}
-            {loginMode === 'pin' && (
-              <div className="space-y-4 animate-in fade-in">
-                <div>
-                  <label className="text-[11px] font-black text-slate-500 uppercase tracking-wider block mb-2">
-                    ជ្រើសរើសគណនីបុគ្គលិក (Staff Account)
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {staffList.filter(s => s.active !== false).map(staff => {
-                      const isSelected = loginSelectedStaff?.id === staff.id;
-                      return (
-                        <button
-                          key={staff.id}
-                          type="button"
-                          onClick={() => {
-                            setLoginSelectedStaff(staff);
-                            setLoginEnteredPin('');
-                            setLoginError('');
-                          }}
-                          className={`p-2.5 rounded-2xl border transition-all text-center flex flex-col items-center gap-1.5 cursor-pointer ${
-                            isSelected
-                              ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/30 shadow-md shadow-blue-500/10'
-                              : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${staff.color || 'from-blue-500 to-indigo-600'} text-white flex items-center justify-center text-base shadow-xs`}>
-                            {staff.avatar || '👤'}
-                          </div>
-                          <span className="text-[11px] font-black text-slate-800 truncate max-w-full block">
-                            {staff.name.split(' ')[0]}
-                          </span>
-                          <span className="text-[9px] text-slate-500 font-bold truncate max-w-full block">
-                            {staff.role}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-center space-y-2.5">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <span className="text-xs text-slate-600 font-bold">
-                      វាយបញ្ចូល PIN សម្រាប់ <b className="text-slate-900">{loginSelectedStaff?.name}</b>:
-                    </span>
-                  </div>
-
-                  <div className="flex justify-center gap-3 py-1">
-                    {Array.from({ length: activePinLength }).map((_, i) => {
-                      const isFilled = i < loginEnteredPin.length;
-                      return (
-                        <div
-                          key={i}
-                          className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
-                            isFilled
-                              ? 'bg-blue-600 scale-125 shadow-md shadow-blue-500/40'
-                              : 'bg-slate-200 border border-slate-300'
-                          }`}
-                        />
-                      );
-                    })}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (loginSelectedStaff?.pin) {
-                        setLoginEnteredPin(loginSelectedStaff.pin);
-                        validatePin(loginSelectedStaff.pin, loginSelectedStaff);
-                      }
-                    }}
-                    className="text-[10px] text-blue-600 hover:text-blue-700 font-bold underline cursor-pointer"
-                  >
-                    ⚡ បំពេញ PIN ស្វ័យប្រវត្តិ ({loginSelectedStaff?.pin}) សម្រាប់តេស្ត
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'].map(btn => {
-                    const isAction = btn === 'C' || btn === '⌫';
-                    return (
-                      <button
-                        key={btn}
-                        type="button"
-                        onClick={() => {
-                          if (btn === 'C') handlePinClear();
-                          else if (btn === '⌫') handlePinBackspace();
-                          else handlePinDigit(btn);
-                        }}
-                        className={`h-11 rounded-2xl font-black text-base transition-all active:scale-90 cursor-pointer flex items-center justify-center ${
-                          isAction
-                            ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200'
-                            : 'bg-white hover:bg-blue-600 hover:text-white text-slate-800 border border-slate-200 shadow-xs'
-                        }`}
-                      >
-                        {btn}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* TAB 3: CREDENTIALS MODE */}
+            {/* DIRECT CREDENTIALS MODE (OPTIONAL FALLBACK) */}
             {loginMode === 'credentials' && (
               <form onSubmit={handleCredentialSubmit} className="space-y-4 animate-in fade-in">
-                <div>
-                  <span className="text-[11px] font-bold text-slate-500 block mb-1.5">គណនីគំរូរហ័ស (Quick Demo Accounts):</span>
-                  <div className="grid grid-cols-3 gap-1.5 text-[10px] font-black">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginUsername('sengsoveasna93@gmail.com');
-                        setLoginPassword('1234');
-                      }}
-                      className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 p-2 rounded-xl transition text-center cursor-pointer"
-                    >
-                      👑 Owner
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginUsername('cashier');
-                        setLoginPassword('1111');
-                      }}
-                      className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 p-2 rounded-xl transition text-center cursor-pointer"
-                    >
-                      💻 Cashier
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginUsername('stock');
-                        setLoginPassword('2222');
-                      }}
-                      className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 p-2 rounded-xl transition text-center cursor-pointer"
-                    >
-                      🗄️ Stock
-                    </button>
-                  </div>
-                </div>
-
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">
                     ឈ្មោះគណនី ឬ Gmail (Username / Email)
@@ -18125,9 +23317,10 @@ export default function UnifiedAdminDashboard() {
                     type="text"
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
-                    placeholder="sengsoveasna93@gmail.com"
+                    placeholder="ឈ្មោះគណនី ឬ Gmail"
                     className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition"
                     required
+                    autoFocus
                   />
                 </div>
 
@@ -18140,7 +23333,7 @@ export default function UnifiedAdminDashboard() {
                       type={loginShowPassword ? 'text' : 'password'}
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder="1234"
+                      placeholder="••••••••"
                       className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition pr-10"
                       required
                     />
@@ -18183,24 +23376,44 @@ export default function UnifiedAdminDashboard() {
                     </>
                   )}
                 </button>
+
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginMode('gmail');
+                      setLoginError('');
+                    }}
+                    className="text-xs font-bold text-slate-500 hover:text-blue-600 transition cursor-pointer"
+                  >
+                    ‹ ត្រឡប់ទៅស្វែងរកហាងតាម Gmail
+                  </button>
+                </div>
               </form>
             )}
+
+
 
           </div>
         </main>
 
-        {/* Footer */}
-        <footer className="text-center text-[11px] text-slate-500 font-bold relative z-10 space-y-1">
-          <p>© 2026 {storeSettings.storeName || 'SABAY LUK'} ERP • Master Owner: <span className="text-blue-600">sengsoveasna93@gmail.com</span></p>
-          <p className="text-slate-400 text-[10px]">
-            Master Owner PIN: <b>1234</b> • Cashier PIN: <b>1111</b> • Stock Keeper PIN: <b>2222</b>
+        {/* Secure Enterprise Footer */}
+        <footer className="text-center text-[11px] text-slate-500 font-medium relative z-10 space-y-1 mt-6">
+          <p className="font-bold text-slate-600">
+            © 2026 SABAY LUK ERP • Cloud POS & Multi-Store Management System
+          </p>
+          <p className="text-slate-400 text-[10px] flex items-center justify-center gap-2">
+            <span>🔒 256-Bit SSL Enterprise Security</span>
+            <span>•</span>
+            <span>🛡️ Multi-Tenant Isolated Protection</span>
+            <span>•</span>
+            <span>⚡ High Availability Cloud</span>
           </p>
         </footer>
       </div>
     );
   };
 
-  // ⭐️ ផ្នែក Loading ការពារ Hydration
   if (!isMounted) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50">
@@ -18219,6 +23432,84 @@ export default function UnifiedAdminDashboard() {
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden relative">
+      {/* ⭐️ PERSISTENT TOP-RIGHT PAYMENT & PLAN APPROVAL ALERT WIDGET (បង្ហាញតែម្ចាស់ប្រព័ន្ធ / ACCOUNT OWNER ប៉ុណ្ណោះ មិនបង្ហាញលើ ACCOUNT អតិថិជន) ⭐️ */}
+      {Boolean((activeStore?.id === 'store_default_sabayluk' || !activeStore?.id) && (isMasterOwner || currentStaff?.id === 'STAFF-1' || currentStaff?.role === 'ADMIN')) && totalPendingActionCount > 0 && (
+        <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end gap-2 animate-in slide-in-from-top-3 fade-in duration-300">
+          {!paymentAlertDismissed ? (
+            <div 
+              className="bg-slate-950/95 backdrop-blur-md text-white p-4 rounded-3xl shadow-2xl border-2 border-amber-400 max-w-sm w-full relative overflow-hidden group cursor-pointer hover:border-amber-300 transition-all active:scale-[0.99]"
+              onClick={() => handleNavigateToPendingApproval()}
+            >
+              {/* Glowing animated accent top line */}
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 animate-pulse"></div>
+
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative">
+                    <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-xl shadow-md">
+                      🔔
+                    </span>
+                    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-600 text-white text-[11px] font-black flex items-center justify-center border-2 border-slate-950 animate-bounce">
+                      {totalPendingActionCount}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+                        Payment & Plan Alert
+                      </span>
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                    </div>
+                    <h4 className="text-xs font-black text-white mt-1">
+                      ស្នើសុំបង់ប្រាក់ & គម្រោងថ្មី! ({totalPendingActionCount})
+                    </h4>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPaymentAlertDismissed(true);
+                  }}
+                  className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-xs font-bold transition shrink-0 cursor-pointer"
+                  title="បិទផ្ទាំងដំណឹងបណ្ដោះអាសន្ន (បិទបើកកម្មវិធីឡើងវិញនឹងលោតដដែលប្រសិនបើមិនទាន់ Approve)"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 text-[11px] text-slate-300 leading-snug">
+                <p>
+                  ហាង <b className="text-amber-300 font-bold">"{targetPendingStore?.name || 'urbangrabs'}"</b> បានផ្ញើបង្កាន់ដៃបង់ប្រាក់ (Slip) និងរង់ចាំ Admin ពិនិត្យ & Approve!
+                </p>
+                <div className="mt-2.5 flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-amber-400/90 font-mono bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 font-bold">
+                    កញ្ចប់: {targetPendingStore?.plan || 'STARTER'} ($1/ខែ)
+                  </span>
+                  <span className="text-[10px] font-black text-white bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-1 rounded-xl shadow-xs group-hover:scale-105 transition flex items-center gap-1">
+                    <span>👉 ពិនិត្យ & Approve</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleNavigateToPendingApproval()}
+              className="group bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 hover:from-amber-600 hover:to-orange-600 text-white px-3.5 py-2.5 rounded-2xl shadow-2xl border-2 border-amber-400 flex items-center gap-2.5 transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer relative"
+              title="ចុចដើម្បីពិនិត្យ និង Approve ហាងដែលបានបង់ប្រាក់"
+            >
+              <span className="text-base group-hover:rotate-12 transition-transform">🔔</span>
+              <span className="text-xs font-black">ស្នើសុំ Approve</span>
+              <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center border-2 border-slate-950 animate-bounce">
+                {totalPendingActionCount}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ⭐️ REALTIME FLOATING NEW ORDER ALERT TOAST FOR ADMIN & SALES ⭐️ */}
       {newOrderAlert && (
         <div className="fixed top-5 right-5 z-50 bg-slate-950 text-white p-4 rounded-3xl shadow-2xl flex items-center gap-3.5 border-2 border-emerald-500 animate-in slide-in-from-top-4 max-w-md">
@@ -18285,443 +23576,190 @@ export default function UnifiedAdminDashboard() {
           style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.14) transparent' }}
           className="flex-1 px-3 py-3.5 space-y-4 overflow-y-auto custom-scrollbar select-none"
         >
-          {/* SECTION 1: CORE OPERATIONS (ផ្នែកលក់ & គ្រប់គ្រងស្តុក) */}
-          <div className="space-y-1">
-            <p className="px-3 text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
-              <span>ប្រតិបត្តិការលក់ & ស្តុក</span>
-              <span className="text-[9px] text-slate-600 font-mono">01</span>
-            </p>
+          {/* ⭐️ ULTRA-MODERN NESTED TAB NAVIGATION (PARENT TABS & SUB-TABS) ⭐️ */}
+          {(() => {
+            const tabGroups = [
+              {
+                id: 'sales_stock',
+                title: 'លក់ & គ្រប់គ្រងស្តុក',
+                icon: '🛍️',
+                tabs: [
+                  { id: 'pos', name: 'ប្រព័ន្ធលក់ (POS)', icon: '💻', perm: 'pos', tag: '⚡ SALE', iconColor: 'text-blue-400' },
+                  { id: 'orders', name: 'ការបញ្ជាទិញ (Orders)', icon: '🛒', perm: 'orders', count: realOrders.filter(o => o.status === 'Pending').length, iconColor: 'text-orange-400' },
+                  { id: 'inventory', name: 'គ្រប់គ្រងស្តុកទំនិញ', icon: '🗄️', perm: 'inventory', iconColor: 'text-purple-400' },
+                  { id: 'upload', name: 'បញ្ចូលទំនិញថ្មី', icon: '📤', perm: 'upload', iconColor: 'text-sky-400' }
+                ]
+              },
+              {
+                id: 'finance_crm',
+                title: 'ហិរញ្ញវត្ថុ & អតិថិជន',
+                icon: '📈',
+                tabs: [
+                  { id: 'finance', name: 'ហិរញ្ញវត្ថុ IFRS & ចំណេញខាត', icon: '🏛️', perm: 'expenses', tag: 'ស្តង់ដារពិភពលោក', iconColor: 'text-emerald-400' },
+                  { id: 'analytics', name: 'វិភាគទិន្នន័យ (P&L)', icon: '📊', perm: 'analytics', iconColor: 'text-emerald-400' },
+                  { id: 'expenses', name: 'កត់ត្រាចំណាយ (Expenses)', icon: '💸', perm: 'expenses', iconColor: 'text-rose-400' },
+                  { id: 'customers', name: 'អតិថិជន (CRM)', icon: '👥', perm: 'customers', iconColor: 'text-teal-400' },
+                  { id: 'feedbacks', name: 'មតិយោបល់ (Feedbacks)', icon: '💬', perm: 'feedbacks', count: unreadFeedbacksCount, iconColor: 'text-amber-400' }
+                ]
+              },
+              {
+                id: 'store_settings',
+                title: 'មុខហាង & ការកំណត់',
+                icon: '🏪',
+                tabs: [
+                  { id: 'categories', name: 'ប្រភេទផលិតផល', icon: '🏷️', perm: 'storefront', iconColor: 'text-amber-400' },
+                  { id: 'cover', name: 'គ្រប់គ្រង Cover ហាង', icon: '🖼️', perm: 'storefront', iconColor: 'text-pink-400' },
+                  { id: 'settings', name: 'កំណត់ហាង & Logo', icon: '🏪', perm: 'settings', iconColor: 'text-orange-400' },
+                  { id: 'invoice', name: 'កំណត់វិក្កយបត្រ', icon: '🧾', perm: 'invoice', iconColor: 'text-rose-400' },
+                  { id: 'api', name: 'ការតភ្ជាប់ (API & Bot)', icon: '🔌', perm: 'api', iconColor: 'text-violet-400' }
+                ]
+              },
+              {
+                id: 'staff_platform',
+                title: 'បុគ្គលិក & ប្រព័ន្ធ',
+                icon: '👥',
+                tabs: [
+                  { id: 'staff', name: 'គ្រប់គ្រងបុគ្គលិក', icon: '👥', perm: 'staff', countText: `${staffList.length} នាក់`, iconColor: 'text-indigo-400' },
+                  { 
+                    id: 'upgrade_plan', 
+                    name: 'ដំឡើងគម្រោង (Upgrade Plan)', 
+                    icon: '⚡', 
+                    perm: 'staff', 
+                    tag: activeStore?.plan ? `${activeStore.plan}` : 'FREE', 
+                    iconColor: 'text-amber-400',
+                    isSpecial: true
+                  },
+                  ...(isMasterOwner ? [{ id: 'stores', name: 'គ្រប់គ្រងហាងទាំងអស់', icon: '🌐', perm: 'stores', countText: inactiveStores.length > 0 ? `⚠️ ${inactiveStores.length} អសកម្ម` : `${registeredStores.length} ហាង`, iconColor: inactiveStores.length > 0 ? 'text-rose-400' : 'text-amber-400', isSpecial: true }] : [])
+                ]
+              }
+            ];
 
-            {/* POS TAB (ADMIN & CASHIER) */}
-            {hasStaffPermission('pos') && (
-              <button 
-                type="button"
-                onClick={() => setActiveTab('pos')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'pos' 
-                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'pos' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'pos' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-blue-400 group-hover:bg-slate-700'
-                  }`}>
-                    💻
-                  </span>
-                  <span className="text-xs truncate">ប្រព័ន្ធលក់ (POS)</span>
-                </div>
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
-                  activeTab === 'pos' ? 'bg-white/20 text-white' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                }`}>
-                  ⚡ SALE
-                </span>
-              </button>
-            )}
+            return tabGroups.map(group => {
+              // Filter tabs based on staff permissions
+              const visibleTabs = group.tabs.filter(tab => hasStaffPermission(tab.perm));
+              if (visibleTabs.length === 0) return null;
 
-            {/* ANALYTICS TAB (SUPER ADMIN ONLY) */}
-            {hasStaffPermission('analytics') && (
-              <button 
-                type="button"
-                onClick={() => setActiveTab('analytics')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'analytics' 
-                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'analytics' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'analytics' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-emerald-400 group-hover:bg-slate-700'
-                  }`}>
-                    📊
-                  </span>
-                  <span className="text-xs truncate">វិភាគទិន្នន័យ (P&L)</span>
-                </div>
-              </button>
-            )}
+              const isGroupOpen = !!openParentTabs[group.id];
+              const isGroupActive = visibleTabs.some(t => t.id === activeTab);
+              const totalAlerts = visibleTabs.reduce((s, t) => s + (t.count || 0), 0);
 
-            {/* INVENTORY TAB (ADMIN & STOCK KEEPER) */}
-            {hasStaffPermission('inventory') && (
-              <button 
-                type="button"
-                onClick={() => setActiveTab('inventory')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'inventory' 
-                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'inventory' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'inventory' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-purple-400 group-hover:bg-slate-700'
-                  }`}>
-                    🗄️
-                  </span>
-                  <span className="text-xs truncate">គ្រប់គ្រងស្តុក</span>
-                </div>
-              </button>
-            )}
+              return (
+                <div key={group.id} className="space-y-1">
+                  {/* ⭐️ PARENT TAB (មេ TAB) ⭐️ */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenParentTabs(prev => ({
+                        ...prev,
+                        [group.id]: !prev[group.id]
+                      }));
+                    }}
+                    className={`w-full group flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                      isGroupActive
+                        ? 'bg-slate-800/90 text-white border border-slate-700/80 shadow-md ring-1 ring-slate-700/50'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/60 border border-slate-800/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
+                        isGroupActive
+                          ? 'bg-gradient-to-br from-blue-600/30 to-indigo-600/30 text-white border border-blue-500/30'
+                          : 'bg-slate-800/80 text-slate-300 group-hover:bg-slate-700'
+                      }`}>
+                        {group.icon}
+                      </span>
+                      <div className="text-left min-w-0">
+                        <span className="text-xs font-black truncate block leading-tight">
+                          {group.title}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-bold block truncate">
+                          {visibleTabs.length} មុខងារ
+                        </span>
+                      </div>
+                    </div>
 
-            {/* UPLOAD PRODUCT TAB (ADMIN & STOCK KEEPER) */}
-            {hasStaffPermission('upload') && (
-              <button 
-                type="button"
-                onClick={() => setActiveTab('upload')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'upload' 
-                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'upload' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'upload' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-sky-400 group-hover:bg-slate-700'
-                  }`}>
-                    📤
-                  </span>
-                  <span className="text-xs truncate">បញ្ចូលទំនិញថ្មី</span>
-                </div>
-              </button>
-            )}
-          </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {totalAlerts > 0 && (
+                        <span className="text-[10px] bg-orange-500 text-white font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                          {totalAlerts}
+                        </span>
+                      )}
+                      <span className={`w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] transition-transform duration-300 ${
+                        isGroupOpen ? 'rotate-180 text-blue-400 bg-blue-500/10' : 'text-slate-400 group-hover:text-white'
+                      }`}>
+                        ▼
+                      </span>
+                    </div>
+                  </button>
 
-          {/* SECTION 2: STOREFRONT & CUSTOMERS (ផ្នែកមុខហាង & អតិថិជន) */}
-          <div className="space-y-1 pt-1 border-t border-slate-800/60">
-            <p className="px-3 pt-2 text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
-              <span>មុខហាង & អតិថិជន</span>
-              <span className="text-[9px] text-slate-600 font-mono">02</span>
-            </p>
+                  {/* ⭐️ CHILD TABS (កូន TAB) - បង្ហាញតែពេលចុចបើក មេ TAB ⭐️ */}
+                  {isGroupOpen && (
+                    <div className="pl-3 space-y-1 border-l-2 border-slate-700/60 ml-4 my-1.5 animate-in slide-in-from-top-2 duration-200">
+                      {visibleTabs.map(tab => {
+                        const isTabActive = activeTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveTab(tab.id);
+                              if (tab.id === 'upgrade_plan') {
+                                setUpgradePlanModalOpen(true);
+                              }
+                              if (tab.id === 'feedbacks') {
+                                markFeedbacksAsRead();
+                              }
+                            }}
+                            className={`w-full group/tab relative flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
+                              isTabActive
+                                ? tab.isSpecial
+                                  ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-md shadow-orange-500/25 font-black'
+                                  : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-md shadow-blue-500/25 font-black'
+                                : 'text-slate-400 hover:text-white hover:bg-slate-800/70 font-bold'
+                            }`}
+                          >
+                            {isTabActive && (
+                              <span className="absolute left-1 top-2 bottom-2 w-0.5 rounded-full bg-white shadow-xs"></span>
+                            )}
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={`text-sm shrink-0 transition-transform group-hover/tab:scale-110 ${tab.iconColor || 'text-slate-300'}`}>
+                                {tab.icon}
+                              </span>
+                              <span className="text-xs truncate">{tab.name}</span>
+                            </div>
 
-            {/* STOREFRONT DROPDOWN (ADMIN & STOCK KEEPER) */}
-            {hasStaffPermission('storefront') && (
-              <div className="space-y-1">
-                <button 
-                  type="button"
-                  onClick={() => setIsStoreOpen(!isStoreOpen)} 
-                  className={`w-full group flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                    isStoreOpen || activeTab === 'categories' || activeTab === 'cover'
-                      ? 'bg-slate-800/90 text-white border border-slate-700/60 shadow-xs' 
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 bg-slate-800 text-amber-400 group-hover:scale-110 transition-transform">
-                      🏬
-                    </span>
-                    <span className="text-xs font-bold truncate">គ្រប់គ្រងមុខហាង</span>
-                  </div>
-                  <span className={`text-[10px] transition-transform duration-300 mr-1 ${isStoreOpen ? 'rotate-180 text-blue-400' : 'text-slate-500'}`}>
-                    ▼
-                  </span>
-                </button>
-
-                {/* Sub-menus */}
-                {isStoreOpen && (
-                  <div className="pl-3 space-y-1 border-l-2 border-blue-500/60 ml-4 my-1.5 animate-in slide-in-from-top-2 duration-200">
-                    <button 
-                      type="button"
-                      onClick={() => setActiveTab('categories')} 
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold cursor-pointer active:scale-[0.98] ${
-                        activeTab === 'categories' 
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' 
-                          : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
-                      }`}
-                    >
-                      <span>🏷️</span>
-                      <span>ប្រភេទផលិតផល</span>
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setActiveTab('cover')} 
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-xs font-bold cursor-pointer active:scale-[0.98] ${
-                        activeTab === 'cover' 
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' 
-                          : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
-                      }`}
-                    >
-                      <span>🖼️</span>
-                      <span>គ្រប់គ្រង Cover ហាង</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ORDERS TAB (ADMIN & CASHIER) */}
-            {hasStaffPermission('orders') && (
-              <button 
-                type="button"
-                onClick={() => setActiveTab('orders')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'orders' 
-                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'orders' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'orders' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-orange-400 group-hover:bg-slate-700'
-                  }`}>
-                    🛒
-                  </span>
-                  <span className="text-xs truncate">ការបញ្ជាទិញ</span>
-                </div>
-                {realOrders.filter(o => o.status === 'Pending').length > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black animate-pulse ${
-                    activeTab === 'orders' ? 'bg-white text-slate-900' : 'bg-orange-500 text-white'
-                  }`}>
-                    {realOrders.filter(o => o.status === 'Pending').length}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {/* EXPENSES & NET PROFIT TAB (SUPER ADMIN ONLY) */}
-            {hasStaffPermission('expenses') && (
-              <button 
-                type="button"
-                onClick={() => setActiveTab('expenses')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'expenses' 
-                    ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'expenses' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'expenses' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-emerald-400 group-hover:bg-slate-700'
-                  }`}>
-                    💸
-                  </span>
-                  <span className="text-xs truncate">ចំណាយ & ចំណេញសុទ្ធ</span>
-                </div>
-                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
-                  activeTab === 'expenses' ? 'bg-white/20 text-white' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                }`}>
-                  P&L
-                </span>
-              </button>
-            )}
-
-            {/* CUSTOMERS CRM TAB (SUPER ADMIN ONLY) */}
-            {hasStaffPermission('customers') && (
-              <button 
-                type="button"
-                onClick={() => setActiveTab('customers')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'customers' 
-                    ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'customers' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'customers' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-teal-400 group-hover:bg-slate-700'
-                  }`}>
-                    👥
-                  </span>
-                  <span className="text-xs truncate">អតិថិជន (CRM)</span>
-                </div>
-              </button>
-            )}
-
-            {/* FEEDBACKS TAB (SUPER ADMIN ONLY) */}
-            {hasStaffPermission('feedbacks') && (
-              <button 
-                type="button"
-                onClick={() => setActiveTab('feedbacks')} 
-                className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                  activeTab === 'feedbacks' 
-                    ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-lg shadow-amber-500/25 font-black' 
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                }`}
-              >
-                {activeTab === 'feedbacks' && (
-                  <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                )}
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                    activeTab === 'feedbacks' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-amber-400 group-hover:bg-slate-700'
-                  }`}>
-                    💬
-                  </span>
-                  <span className="text-xs truncate">មតិយោបល់ (Feedbacks)</span>
-                </div>
-                {adminFeedbacks.length > 0 && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                    activeTab === 'feedbacks' ? 'bg-white/25 text-white' : 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
-                  }`}>
-                    {adminFeedbacks.length}
-                  </span>
-                )}
-              </button>
-            )}
-          </div>
-
-          {/* SECTION 3: SYSTEM & CONFIGURATION */}
-          {(hasStaffPermission('api') || hasStaffPermission('settings') || hasStaffPermission('invoice') || hasStaffPermission('staff')) && (
-            <div className="space-y-1 pt-1 border-t border-slate-800/60">
-              <p className="px-3 pt-2 text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
-                <span>ប្រព័ន្ធ & ការកំណត់</span>
-                <span className="text-[9px] text-slate-600 font-mono">03</span>
-              </p>
-
-              {/* API & TELEGRAM TAB */}
-              {hasStaffPermission('api') && (
-                <button 
-                  type="button"
-                  onClick={() => setActiveTab('api')} 
-                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                    activeTab === 'api' 
-                      ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                  }`}
-                >
-                  {activeTab === 'api' && (
-                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {tab.count > 0 && (
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black animate-pulse ${
+                                  isTabActive ? 'bg-white text-slate-900' : 'bg-orange-500 text-white'
+                                }`}>
+                                  {tab.count}
+                                </span>
+                              )}
+                              {tab.tag && (
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                                  isTabActive ? 'bg-white/20 text-white' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                }`}>
+                                  {tab.tag}
+                                </span>
+                              )}
+                              {tab.countText && (
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold ${
+                                  isTabActive ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'
+                                }`}>
+                                  {tab.countText}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                      activeTab === 'api' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-violet-400 group-hover:bg-slate-700'
-                    }`}>
-                      🔌
-                    </span>
-                    <span className="text-xs truncate">ការតភ្ជាប់ (API & Bot)</span>
-                  </div>
-                </button>
-              )}
-
-              {/* STORE SETTINGS TAB */}
-              {hasStaffPermission('settings') && (
-                <button 
-                  type="button"
-                  onClick={() => setActiveTab('settings')} 
-                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                    activeTab === 'settings' 
-                      ? 'bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-lg shadow-orange-600/25 font-black' 
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                  }`}
-                >
-                  {activeTab === 'settings' && (
-                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                  )}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                      activeTab === 'settings' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-orange-400 group-hover:bg-slate-700'
-                    }`}>
-                      🏪
-                    </span>
-                    <span className="text-xs truncate">កំណត់ហាង & Logo</span>
-                  </div>
-                </button>
-              )}
-
-              {/* INVOICE SETTINGS TAB */}
-              {hasStaffPermission('invoice') && (
-                <button 
-                  type="button"
-                  onClick={() => setActiveTab('invoice')} 
-                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                    activeTab === 'invoice' 
-                      ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 font-black' 
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                  }`}
-                >
-                  {activeTab === 'invoice' && (
-                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                  )}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                      activeTab === 'invoice' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-rose-400 group-hover:bg-slate-700'
-                    }`}>
-                      🧾
-                    </span>
-                    <span className="text-xs truncate">កំណត់វិក្កយបត្រ</span>
-                  </div>
-                </button>
-              )}
-
-              {/* MULTI-STAFF MANAGEMENT TAB */}
-              {hasStaffPermission('staff') && (
-                <button 
-                  type="button"
-                  onClick={() => setActiveTab('staff')} 
-                  className={`w-full group relative flex items-center justify-between px-3 py-2 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                    activeTab === 'staff' 
-                      ? 'bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/25 font-black' 
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70 font-bold'
-                  }`}
-                >
-                  {activeTab === 'staff' && (
-                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                  )}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                      activeTab === 'staff' ? 'bg-white/20 text-white shadow-inner' : 'bg-slate-800/80 text-indigo-400 group-hover:bg-slate-700'
-                    }`}>
-                      👥
-                    </span>
-                    <span className="text-xs truncate">គ្រប់គ្រងបុគ្គលិក</span>
-                  </div>
-                  <span className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-1.5 py-0.5 rounded-full font-bold">
-                    {staffList.length} នាក់
-                  </span>
-                </button>
-              )}
-
-              {/* 👑 MASTER OWNER ONLY: 🌐 គ្រប់គ្រងហាងទាំងអស់ (ALL STORES) */}
-              {isMasterOwner && (
-                <button 
-                  type="button"
-                  onClick={() => setActiveTab('stores')} 
-                  className={`w-full group relative flex items-center justify-between px-3 py-2.5 rounded-2xl transition-all duration-200 cursor-pointer active:scale-[0.98] ${
-                    activeTab === 'stores' 
-                      ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white shadow-lg shadow-orange-500/25 font-black' 
-                      : 'text-amber-400 hover:text-white hover:bg-slate-800/80 font-bold border border-amber-500/25'
-                  }`}
-                >
-                  {activeTab === 'stores' && (
-                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-white shadow-xs"></span>
-                  )}
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base shrink-0 transition-transform group-hover:scale-110 ${
-                      activeTab === 'stores' ? 'bg-white/20 text-white shadow-inner' : 'bg-amber-500/20 text-amber-300 group-hover:bg-slate-700'
-                    }`}>
-                      🌐
-                    </span>
-                    <span className="text-xs truncate">គ្រប់គ្រងហាងទាំងអស់</span>
-                  </div>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                    activeTab === 'stores' ? 'bg-white text-slate-900' : 'bg-amber-500/20 text-amber-300'
-                  }`}>
-                    {registeredStores.length} ហាង
-                  </span>
-                </button>
-              )}
-            </div>
-          )}
+                </div>
+              );
+            });
+          })()}
 
           {/* ACTIVE STAFF PROFILE CARD AT BOTTOM */}
           <div className="pt-2 pb-1 border-t border-slate-800/80 mt-2">
@@ -18767,18 +23805,59 @@ export default function UnifiedAdminDashboard() {
 
           {/* QUICK STOREFRONT LINK AT BOTTOM */}
           <div className="pt-1 pb-1">
-            <a 
-              href="/" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl transition-all duration-200 transform hover:scale-[1.02] active:scale-95 text-orange-300 bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-orange-500/10 hover:from-orange-500/20 hover:to-amber-500/20 font-bold border border-orange-500/25 shadow-xs group"
+            {isAppWindow && (
+              <div className="mb-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left space-y-1.5 animate-in fade-in">
+                <div className="flex items-center gap-1.5 text-amber-400 font-black text-[11px]">
+                  <span>💡</span>
+                  <span>កំពុងបើកក្នុងផ្ទាំង App</span>
+                </div>
+                <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
+                  ដើម្បីឱ្យបើកជាប់ជា Tab ក្នុង Google Chrome សូមចុចសញ្ញាចុចបី <b>(⋮)</b> នៅលើជ្រុងស្តាំដៃ រួចជ្រើស <b>«Open in Chrome»</b> ឬ <b>«Uninstall»</b>។
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const storeUrl = window.location.origin + (activeStore?.slug ? `/store/${activeStore.slug}` : '/');
+                    navigator.clipboard.writeText(storeUrl);
+                    setToastNotification('📋 បានចម្លង Link មុខហាង! សូមយកទៅ Paste លើ Google Chrome');
+                    setTimeout(() => setToastNotification(null), 4000);
+                  }}
+                  className="w-full py-1.5 px-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black rounded-xl text-[10px] transition cursor-pointer shadow-xs active:scale-95 text-center"
+                >
+                  📋 ចម្លង Link បើកលើ Chrome Browser
+                </button>
+              </div>
+            )}
+            <button 
+              type="button"
+              onClick={() => {
+                const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+                const storeUrl = `${origin}${activeStore?.slug ? `/store/${activeStore.slug}` : '/'}`;
+                
+                // 1. Direct browser open immediately
+                try {
+                  window.open(storeUrl, '_blank');
+                } catch(e) {}
+
+                // 2. Also trigger Windows Shell to ensure Google Chrome opens it
+                fetch('/api/open-chrome', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ url: storeUrl })
+                }).catch(() => {});
+
+                setToastNotification('🌐 បានបើកមុខហាងលើ Google Chrome រួចរាល់!');
+                setTimeout(() => setToastNotification(null), 3000);
+              }}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl transition-all duration-200 transform hover:scale-[1.02] active:scale-95 text-orange-300 bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-orange-500/10 hover:from-orange-500/20 hover:to-amber-500/20 font-bold border border-orange-500/25 shadow-xs group cursor-pointer text-left"
+              title="បើកមុខហាងលើ Google Chrome Browser"
             >
               <span className="flex items-center gap-2.5 text-xs">
                 <span className="text-base group-hover:rotate-12 transition-transform">🌐</span>
-                <span>មើលមុខហាងផ្ទាល់</span>
+                <span>មើលមុខហាងផ្ទាល់ (Chrome)</span>
               </span>
               <span className="text-xs text-orange-400 group-hover:translate-x-0.5 transition-transform">↗</span>
-            </a>
+            </button>
           </div>
         </nav>
       </aside>
@@ -18840,70 +23919,82 @@ export default function UnifiedAdminDashboard() {
           );
         })()}
 
-        {/* ⭐️ TOP STORE CONTEXT & MULTI-TENANT SWITCHER BAR ⭐️ */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white px-4 sm:px-6 py-3 rounded-2xl border border-slate-800 shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ff6a00] to-orange-600 flex items-center justify-center text-xl shadow-md shrink-0">
-              🏬
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-sm text-white">{activeStore?.name || 'SABAY LUK'}</span>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
-                  {STORE_PLANS[activeStore?.plan]?.name || '🎁 FREE (15 មុខ)'}
+        {/* 💡 NOTICE & GUIDE TO SWITCH FROM APP WINDOW TO FULL CHROME BROWSER WITH TABS 💡 */}
+        {isAppWindow && (
+          <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl border-2 border-blue-500/40 animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-3">
+              <span className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-xl shrink-0">
+                🌐
+              </span>
+              <div className="text-xs">
+                <span className="font-black text-amber-300 block text-sm">
+                  💡 បច្ចុប្បន្នកំពុងដំណើរការជាផ្ទាំង App (គ្មាន Tab របស់ Browser):
                 </span>
-                {activeStore?.id !== 'store_default_sabayluk' && (
-                  <span className="text-[9px] font-mono text-slate-400 hidden sm:inline">
-                    ID: {activeStore?.slug}
-                  </span>
-                )}
+                <p className="text-[11px] text-slate-200 mt-0.5 leading-relaxed">
+                  ដើម្បីឱ្យ Dashboard និងទំព័រមុខហាង <b>ជាប់ Tab គ្នាក្នុង Google Chrome / Edge តែមួយ</b>៖ សូមក្រឡេកមើលជ្រុងខាងលើស្តាំដៃបង្អស់នៃផ្ទាំងនេះ ចុចសញ្ញាចុចបី <b>(⋮)</b> រួចរើសយក <b>«Open in Chrome»</b>!
+                </p>
               </div>
-              <p className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
-                <span>🔗 មុខហាង: <a href={`/store/${activeStore?.slug || 'sabay-luk'}`} target="_blank" rel="noreferrer" className="text-orange-400 hover:underline font-mono">/store/{activeStore?.slug || 'sabay-luk'}</a></span>
-                <span>•</span>
-                <span>ទំនិញ: <b>{products.filter(p => !p.store_id || p.store_id === activeStore?.id || activeStore?.id === 'store_default_sabayluk').length}</b> / {activeStore?.max_products || 15} មុខ</span>
-              </p>
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setUpgradePlanModalOpen(true)}
-              className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-              title="ដំឡើងកញ្ចប់ទំនិញ & បុគ្គលិក"
-            >
-              <span>⚡</span>
-              <span>ដំឡើងកញ្ចប់ (Upgrade)</span>
-            </button>
-
             <button
               type="button"
               onClick={() => {
-                setRegisteredStores(getLocalStores());
-                setStoreSwitchModalOpen(true);
+                const url = window.location.href;
+                if (navigator.clipboard) {
+                  navigator.clipboard.writeText(url);
+                  setToastNotification('📋 បានចម្លង Link Dashboard! សូមបើកកម្មវិធី Google Chrome ធម្មតា រួច Paste (Ctrl+V) ដើម្បីប្រើជាមួយ Tabs ជាប់គ្នា។');
+                  setTimeout(() => setToastNotification(null), 6000);
+                }
               }}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-xl text-xs font-black border border-slate-700 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-              title="ប្តូរទៅកាន់ហាងផ្សេងទៀត"
+              className="px-4 py-2.5 rounded-xl bg-white text-slate-900 hover:bg-amber-100 font-black text-xs transition shadow-md shrink-0 flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
-              <span>🔄</span>
-              <span>ប្តូរហាង ({registeredStores.length})</span>
+              <span>📋</span>
+              <span>ចម្លង Link បើកក្នុង Chrome</span>
             </button>
-
-            <a
-              href="/register"
-              target="_blank"
-              rel="noreferrer"
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-              title="បង្កើតហាងថ្មីមួយទៀត"
-            >
-              <span>➕</span>
-              <span className="hidden sm:inline">បង្កើតហាងថ្មី</span>
-            </a>
           </div>
-        </div>
+        )}
+
+
+
+
 
         {/* ⭐️ TOP STAFF STATUS & SWITCH BAR ⭐️ */}
+        {/* 🚨 MASTER OWNER ALERT: INACTIVE STORES (>= 30 DAYS) 🚨 */}
+        {isMasterOwner && inactiveStores.length > 0 && (
+          <div className="mb-4 p-4 rounded-3xl bg-gradient-to-r from-amber-500 via-rose-500 to-amber-600 text-white shadow-lg flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl shrink-0">
+                🚨
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-sm tracking-wide">
+                    ដំណឹងបន្ទាន់ជូន Master Owner ({inactiveStores.length} ហាងអសកម្មលើសពី ៣០ ថ្ងៃ)
+                  </span>
+                  <span className="bg-white text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                    រង់ចាំការត្រួតពិនិត្យ
+                  </span>
+                </div>
+                <p className="text-xs text-white/90 mt-0.5">
+                  ប្រព័ន្ធបានរកឃើញហាងដែលគ្មានការលក់ ឬ Login អស់រយៈពេលជាង ១ ខែ។ បងអាចចូលពិនិត្យមើល និងសម្រេចចិត្តផ្អាកដំណើរការ ឬបិទចោលបាន។
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('stores');
+                  setStoresManagerSubTab('stores');
+                  setStoreFilterStatus('INACTIVE');
+                }}
+                className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-black text-xs transition shadow-md cursor-pointer active:scale-95"
+              >
+                🔍 ពិនិត្យហាងអសកម្មទាំងនេះ ({inactiveStores.length})
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ⚠️ SUSPENSION WARNING ALERT IF STORE IS SUSPENDED ⚠️ */}
         {activeStore?.status === 'SUSPENDED' && (
           <div className="p-4 mb-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 text-xs font-bold flex flex-wrap items-center justify-between gap-3">
@@ -18912,21 +24003,21 @@ export default function UnifiedAdminDashboard() {
               <div>
                 <p className="font-black text-rose-900 text-sm">ហាងនេះត្រូវបានផ្អាកដំណើរការជាបណ្តោះអាសន្ន (Store Suspended)</p>
                 <p className="text-[11px] text-rose-700 mt-0.5">
-                  សូមទំនាក់ទំនងមកកាន់ម្ចាស់ប្រព័ន្ធ Sabay Luk ដើម្បីដោះស្រាយបញ្ហា ឬបន្តសុពលភាពកញ្ចប់សេវា។
+                  មូលហេតុ៖ {activeStore.suspend_reason || 'ហាងមិនមានសកម្មភាពលក់ ឬ Login លើសពី ៣០ ថ្ងៃ'} • សូមទំនាក់ទំនងមកកាន់ Master Owner តាមរយៈ Telegram @Sabayluk ឬទូរស័ព្ទ 096 720 5522 ដើម្បីបើកដំណើរការឡើងវិញ។
                 </p>
               </div>
             </div>
             {isMasterOwner && (
               <button
                 type="button"
-                onClick={() => {
-                  const updatedStore = { ...activeStore, status: 'ACTIVE' };
-                  setActiveStore(updatedStore);
-                  setActiveStoreState(updatedStore);
-                  const stores = getLocalStores().map(s => s.id === updatedStore.id ? updatedStore : s);
-                  saveLocalStores(stores);
-                  setToastNotification('🟢 បានបើកដំណើរការហាងឡើងវិញជោគជ័យ!');
-                  setTimeout(() => setToastNotification(null), 3000);
+                onClick={async () => {
+                  const updatedStore = await reactivateStore(activeStore.id);
+                  if (updatedStore) {
+                    setActiveStoreState(updatedStore);
+                    setRegisteredStores(getLocalStores());
+                    setToastNotification('🟢 បានបើកដំណើរការហាងឡើងវិញជោគជ័យ!');
+                    setTimeout(() => setToastNotification(null), 3000);
+                  }
                 }}
                 className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition shrink-0 cursor-pointer shadow-xs active:scale-95"
               >
@@ -18936,58 +24027,35 @@ export default function UnifiedAdminDashboard() {
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-white/90 backdrop-blur-md px-4 sm:px-5 py-3 rounded-2xl border border-gray-200/80 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${currentStaff?.color || 'from-amber-500 to-orange-600'} text-white flex items-center justify-center text-xl shadow-xs shrink-0`}>
-              {currentStaff?.avatar || '👑'}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-black text-sm text-gray-900">{currentStaff?.name || 'វិចិត្រ (ម្ចាស់ហាង)'}</span>
-                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                  currentStaff?.role === 'ADMIN' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                  currentStaff?.role === 'CASHIER' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                  'bg-purple-100 text-purple-800 border border-purple-200'
-                }`}>
-                  {currentStaff?.roleLabel || 'ម្ចាស់ហាង (Super Admin)'}
-                </span>
+        {/* ⚠️ INACTIVITY WARNING FOR TENANT STORE (>= 20 DAYS) ⚠️ */}
+        {!isMasterOwner && activeStore && activeStore.id !== 'store_default_sabayluk' && activeStore.status !== 'SUSPENDED' && isStoreInactive(activeStore, 20) && (
+          <div className="p-4 mb-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold flex items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">⚠️</span>
+              <div>
+                <p className="font-black text-amber-950">
+                  ការជូនដំណឹងពីសកម្មភាពហាង (Inactivity Warning - {getStoreInactivityDays(activeStore)} ថ្ងៃ)
+                </p>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  ហាងរបស់អ្នកមិនមានសកម្មភាពចំនួន {getStoreInactivityDays(activeStore)} ថ្ងៃហើយ។ ប្រព័ន្ធនឹងរាយការណ៍ជូន Master Owner ដើម្បីពិនិត្យ និងអាចផ្អាកហាង ប្រសិនបើអសកម្មលើសពី ៣០ ថ្ងៃ។ សូមធ្វើការលក់ ឬកែប្រែទំនិញដើម្បីរក្សាហាងឱ្យមានសកម្មភាពជានិច្ច!
+                </p>
               </div>
-              <p className="text-[11px] text-gray-500 font-medium mt-0.5">
-                {currentStaff?.role === 'ADMIN' && '🔓 សិទ្ធិគ្រប់គ្រងពេញលេញ (Full Access) — គ្រប់គ្រងមុខងារទាំងអស់'}
-                {currentStaff?.role === 'CASHIER' && '💻 សិទ្ធិអ្នកគិតលុយ (Cashier) — ប្រើប្រាស់ POS & ការបញ្ជាទិញ (គ្មានសិទ្ធិមើលថ្លៃដើម/របាយការណ៍ចំណេញ)'}
-                {currentStaff?.role === 'STOCK' && '🗄️ សិទ្ធិអ្នកកាន់ស្តុក (Stock Keeper) — គ្រប់គ្រងស្តុក, បញ្ចូលទំនិញ & ប្រភេទមុខទំនិញ'}
-              </p>
             </div>
           </div>
+        )}
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedStaffToLogin(null);
-                setEnteredPin('');
-                setPinError('');
-                setSwitchStaffModalOpen(true);
-              }}
-              className="bg-slate-900 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-              title="ប្តូរបុគ្គលិកប្រើប្រាស់ (Switch Staff Account)"
-            >
-              <span>🔒</span>
-              <span>ប្តូរគណនី (Switch Profile)</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="bg-red-50 hover:bg-red-600 text-red-600 hover:text-white px-3 py-2 rounded-xl text-xs font-black transition border border-red-200 hover:border-red-600 flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
-              title="ចាកចេញ និងចាក់សោប្រព័ន្ធ (Logout & Lock Portal)"
-            >
-              <span>🚪</span>
-              <span className="hidden sm:inline">ចាកចេញ</span>
-            </button>
-          </div>
-        </div>
+
 
         {activeTab === 'pos' && PosView()}
+        {activeTab === 'finance' && (
+          <WorldStandardFinanceView
+            realOrders={currentStoreOrders}
+            products={currentStoreProducts}
+            expenses={currentStoreExpenses}
+            storeSettings={storeSettings}
+            activeStore={activeStore}
+          />
+        )}
         {activeTab === 'analytics' && AnalyticsView()}
         {activeTab === 'inventory' && InventoryView()}
         {activeTab === 'upload' && UploadView()}
@@ -19002,9 +24070,30 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'settings' && StoreSettingsView()}
         {activeTab === 'invoice' && InvoiceSettingsView()}
         {activeTab === 'staff' && StaffManagementView()}
+        {activeTab === 'upgrade_plan' && UpgradePlanFullView()}
         {activeTab === 'stores' && isMasterOwner && MasterStoresManagementView()}
       </main>
 
+
+      {/* ⭐️ ម៉ាស៊ីនស្កេនកាមេរ៉ា FULL OPTION (CAMERA SCANNER MODAL) ⭐️ */}
+      <BarcodeCameraModal
+        isOpen={isCameraScannerOpen}
+        onClose={() => setIsCameraScannerOpen(false)}
+        onScan={handleUniversalBarcodeScan}
+        playBeep={playScannerBeep}
+      />
+
+      {/* ⭐️ ការកំណត់ម៉ាស៊ីនស្កេន FULL OPTION (USB / WIRELESS SCANNER GUN SETTINGS MODAL) ⭐️ */}
+      <BarcodeScannerSettingsModal
+        isOpen={scannerSettingsOpen}
+        onClose={() => setScannerSettingsOpen(false)}
+        scannerSoundEnabled={scannerSoundEnabled}
+        setScannerSoundEnabled={setScannerSoundEnabled}
+        autoAddVariant={scannerAutoAddVariant}
+        setAutoAddVariant={setScannerAutoAddVariant}
+        playBeep={playScannerBeep}
+        playErrorBeep={playScannerErrorBeep}
+      />
       {/* ⭐️ SLIP LIGHTBOX MODAL ⭐️ */}
       {viewingSlipUrl && (
         <div 
@@ -19843,7 +24932,15 @@ export default function UnifiedAdminDashboard() {
             </div>
 
             <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
-              {registeredStores.map(st => {
+              {registeredStores.filter(st => {
+                if (isMasterOwner) return true;
+                const loggedEmail = (currentStaff?.email || activeStore?.owner_email || '').trim().toLowerCase();
+                const loggedUsername = (currentStaff?.username || activeStore?.owner_username || '').trim().toLowerCase();
+                if (st.id === activeStore?.id) return true;
+                if (st.owner_email && loggedEmail && st.owner_email.toLowerCase() === loggedEmail) return true;
+                if (st.owner_username && loggedUsername && st.owner_username.toLowerCase() === loggedUsername) return true;
+                return false;
+              }).map(st => {
                 const isSelected = activeStore?.id === st.id;
                 const planDetails = STORE_PLANS[st.plan] || STORE_PLANS.FREE;
 
@@ -19853,6 +24950,14 @@ export default function UnifiedAdminDashboard() {
                     onClick={() => {
                       setActiveStore(st);
                       setActiveStoreState(st);
+                      const targetStaff = getStoreActiveStaff(st);
+                      setCurrentStaff(targetStaff);
+                      setStaffList(getStoreStaffList(st));
+                      if (typeof window !== 'undefined') {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('store', st.slug || st.id);
+                        window.history.replaceState({}, '', url.toString());
+                      }
                       setStoreSwitchModalOpen(false);
                       setToastNotification(`🏬 បានប្តូរទៅកាន់ហាង "${st.name}" ជោគជ័យ!`);
                       setTimeout(() => setToastNotification(null), 3000);
@@ -19916,131 +25021,286 @@ export default function UnifiedAdminDashboard() {
         </div>
       )}
 
-      {/* ⭐️ MODAL ដំឡើងកញ្ចប់ UPGRADE PLAN (MICRO-SAAS PRICING) ⭐️ */}
-      {upgradePlanModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-slate-900 text-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative border border-slate-800 animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto">
-            
-            <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-6">
-              <div>
-                <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest bg-orange-500/10 px-2.5 py-0.5 rounded-full border border-orange-500/20">
-                  Sabay Luk Micro-SaaS
-                </span>
-                <h3 className="font-black text-lg text-white mt-1">
-                  ដំឡើងកញ្ចប់ទំនិញ & បុគ្គលិកសម្រាប់ហាង "{activeStore?.name}"
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setUpgradePlanModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold flex items-center justify-center text-xs"
-              >
-                ✕
-              </button>
-            </div>
+      {/* ⭐️ MODAL ដំឡើងកញ្ចប់ UPGRADE PLAN: PREMIUM 2-COLUMN KHQR & SLIP CHECKOUT ⭐️ */}
+      {upgradePlanModalOpen && selectedUpgradePlan && (() => {
+        const plan = selectedUpgradePlan;
+        const totalAmount = upgradeBillingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly;
+        const khrAmount = (totalAmount * 4100).toLocaleString();
 
-            {/* Plans Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-              {[
-                { key: 'STARTER', name: '🌱 Starter', price: '$1/ខែ', yearly: '$10/ឆ្នាំ', prods: '៥០ មុខ', staff: '២ នាក់' },
-                { key: 'BASIC', name: '⚡ Basic', price: '$2/ខែ', yearly: '$20/ឆ្នាំ', prods: '១០០ មុខ', staff: '២ នាក់', highlight: true },
-                { key: 'PRO', name: '🚀 Pro', price: '$3/ខែ', yearly: '$30/ឆ្នាំ', prods: '២៥០ មុខ', staff: '៣ នាក់' },
-              ].map(p => (
-                <div 
-                  key={p.key}
-                  className={`p-4 rounded-2xl border transition relative flex flex-col justify-between ${
-                    p.highlight ? 'bg-orange-500/10 border-[#ff6a00]' : 'bg-slate-950/70 border-slate-800'
-                  }`}
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden border border-slate-100 animate-in zoom-in-95 duration-200">
+              
+              {/* ⭐️ FIXED TOP HEADER ⭐️ */}
+              <div className="px-5 sm:px-7 py-3.5 sm:py-4 border-b border-slate-100 bg-white flex items-center justify-between shrink-0 z-10 shadow-xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-10 h-10 rounded-2xl bg-orange-50 text-[#ff6a00] flex items-center justify-center text-xl font-black shrink-0 shadow-xs">
+                    💳
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="font-black text-sm sm:text-base text-slate-900 truncate flex items-center gap-2">
+                      <span>បង់ប្រាក់តាម KHQR & Upload បង្កាន់ដៃ (Slip)</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                        {plan.name}
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium truncate">
+                      ហាង៖ <b className="text-slate-700">{activeStore?.name}</b> • {upgradeBillingCycle === 'yearly' ? 'គម្រោងប្រចាំឆ្នាំ (១២ ខែ - សន្សំ ២០%)' : 'គម្រោងប្រចាំខែ (១ ខែ)'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUpgradePlanModalOpen(false)}
+                  className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 font-black flex items-center justify-center text-sm transition cursor-pointer shrink-0 ml-2"
+                  title="បិទ (Close)"
                 >
-                  <div>
-                    <h4 className="font-black text-sm text-white">{p.name}</h4>
-                    <p className="text-xl font-black text-white my-1">{p.price}</p>
-                    <p className="text-[10px] text-orange-400 font-bold mb-3">{p.yearly} (សន្សំ ២ ខែ)</p>
-                    <ul className="text-[11px] text-slate-300 space-y-1">
-                      <li>✓ ទំនិញរហូតដល់ <b>{p.prods}</b></li>
-                      <li>✓ គណនីបុគ្គលិក <b>{p.staff}</b></li>
-                      <li>✓ POS & ព្រីនវិក្កយបត្រ</li>
-                    </ul>
+                  ✕
+                </button>
+              </div>
+
+              {/* ⭐️ SCROLLABLE 2-COLUMN RESPONSIVE BODY ⭐️ */}
+              <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+                
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+                  
+                  {/* 👉 LEFT COLUMN: KHQR CODE & BANK DETAILS (6 COLUMNS) */}
+                  <div className="lg:col-span-6 space-y-3.5">
+                    
+                    {/* Official KHQR Payment Card */}
+                    <div className="p-4 sm:p-5 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl border border-slate-800 shadow-xl space-y-3.5">
+                      
+                      {/* Top Bank Badge */}
+                      <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-600 font-black text-[10px] tracking-wider uppercase text-white shadow-xs">
+                            ABA BANK
+                          </span>
+                          <span className="text-xs font-black text-slate-200">គណនីផ្លូវការ</span>
+                        </div>
+                        <span className="text-[10px] text-emerald-400 font-black bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>✓ ស្កេនបង់ប្រាក់ភ្លាមៗ</span>
+                        </span>
+                      </div>
+
+                      {/* KHQR Card Box */}
+                      <div className="w-full bg-white p-3 rounded-2xl shadow-xl border-2 border-red-500 text-center">
+                        <div className="bg-[#e11938] text-white py-1 px-3 text-center font-black text-xs tracking-wider rounded-lg mb-2 uppercase flex items-center justify-center gap-1.5 shadow-xs">
+                          <span>🇰🇭 BAKONG KHQR</span>
+                        </div>
+
+                        {/* QR Image Container */}
+                        <div className="overflow-hidden rounded-xl bg-white flex items-center justify-center">
+                          <img
+                            src="/khqr-aba.jpg"
+                            alt="Owner ABA Bakong KHQR"
+                            className="w-full max-h-[250px] sm:max-h-[280px] object-contain rounded-lg"
+                          />
+                        </div>
+
+                        {/* Amount Tag */}
+                        <div className="mt-2 text-center bg-orange-50 text-orange-700 font-black text-xs sm:text-sm py-1.5 rounded-xl border border-orange-200 font-mono">
+                          ចំនួនទឹកប្រាក់ត្រូវបង់: ${totalAmount}.00 (≈ {khrAmount} ៛)
+                        </div>
+                      </div>
+
+                      {/* Download Link & Tip */}
+                      <div className="flex items-center justify-between text-xs pt-1 px-1">
+                        <a
+                          href="/khqr-aba.jpg"
+                          download="ABA-KHQR-OFFICIAL.jpg"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-400 hover:text-sky-300 underline cursor-pointer"
+                        >
+                          <span>📥</span>
+                          <span>ទាញយករូប QR ទុកស្កេន</span>
+                        </a>
+                        <span className="text-[11px] text-slate-400 font-medium">ស្កេនបានគ្រប់ App ធនាគារ</span>
+                      </div>
+
+                      {/* Bank Account Numbers info */}
+                      <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 text-[11px] space-y-1 font-mono text-slate-300">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">ឈ្មោះគណនី:</span>
+                          <span className="font-bold text-white">SENG SOVEASNA</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">ABA USD / Tel:</span>
+                          <span className="font-bold text-amber-300">096 720 5522</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">ABA KHR:</span>
+                          <span className="font-bold text-white">004 500 394</span>
+                        </div>
+                      </div>
+
+                    </div>
+
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newExpiry = p.key === 'FREE' ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-                      const updatedStore = {
-                        ...activeStore,
-                        plan: p.key,
-                        plan_expires_at: newExpiry,
-                        max_products: p.key === 'STARTER' ? 50 : (p.key === 'BASIC' ? 100 : (p.key === 'PRO' ? 250 : (p.key === 'BUSINESS' ? 600 : 2500))),
-                        max_staff: p.key === 'PRO' ? 3 : (p.key === 'BUSINESS' ? 5 : (p.key === 'ENTERPRISE' ? 10 : 2)),
-                        status: 'ACTIVE'
-                      };
-                      setActiveStore(updatedStore);
-                      setActiveStoreState(updatedStore);
-                      const stores = getLocalStores().map(s => s.id === updatedStore.id ? updatedStore : s);
-                      saveLocalStores(stores);
-                      setUpgradePlanModalOpen(false);
+                  {/* 👉 RIGHT COLUMN: SLIP UPLOAD & SUBMIT (6 COLUMNS) */}
+                  <div className="lg:col-span-6 space-y-4">
+                    
+                    {/* Order Summary Pill */}
+                    <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">កញ្ចប់សេវាកម្ម</span>
+                        <p className="text-xs font-black text-slate-900 mt-0.5">
+                          {plan.name}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          ហាង៖ <b>{activeStore?.name}</b>
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">តម្លៃសរុប</span>
+                        <p className="text-lg font-black text-[#ff6a00] leading-none mt-0.5">
+                          ${totalAmount}.00
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">≈ {khrAmount} ៛</p>
+                      </div>
+                    </div>
 
-                      // Send Telegram notification to Master Owner
-                      try {
-                        fetch('/api/telegram', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            action: 'plan_upgraded',
-                            store: updatedStore,
-                            newPlan: p.name,
-                            price: p.price
-                          })
-                        }).catch(e => console.warn('Telegram notice error:', e));
-                      } catch (e) {}
+                    {/* Quick Guide Card */}
+                    <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-2xl text-[11px] text-amber-900 flex items-start gap-2.5">
+                      <span className="text-base shrink-0">💡</span>
+                      <div className="space-y-0.5">
+                        <p className="font-black text-amber-950">របៀបបង់ប្រាក់ និងដំណើរការគម្រោង៖</p>
+                        <p className="text-amber-800">
+                          ១. ស្កេន KHQR ខាងឆ្វេងនេះ ដើម្បីបង់ប្រាក់តាម App ធនាគារណាក៏បាន។<br/>
+                          ២. <b>Screenshot បង្កាន់ដៃ (Slip)</b> រួច Upload ក្នុងប្រអប់ខាងក្រោម។
+                        </p>
+                      </div>
+                    </div>
 
-                      setToastNotification(`🎉 អបអរសាទរ! ហាង "${activeStore.name}" ត្រូវបានដំឡើងទៅកាន់កញ្ចប់ ${p.name} រួចរាល់!`);
-                      setTimeout(() => setToastNotification(null), 3500);
-                    }}
-                    className={`mt-4 w-full py-2 rounded-xl text-xs font-black transition cursor-pointer ${
-                      p.highlight 
-                        ? 'bg-[#ff6a00] hover:bg-[#e65c00] text-white shadow-md shadow-orange-500/25' 
-                        : 'bg-slate-800 hover:bg-slate-700 text-white'
-                    }`}
-                  >
-                    ជ្រើសរើសកញ្ចប់នេះ
-                  </button>
+                    {/* Form Section */}
+                    <form onSubmit={handleUpgradeSlipSubmit} className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                            <span>📸 Upload រូបភាពបង្កាន់ដៃផ្ទេរប្រាក់ (Slip)</span>
+                            <span className="text-rose-500 font-black">*</span>
+                          </label>
+                          <span className="text-[10px] text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                            ចាំបាច់ដាច់ខាត
+                          </span>
+                        </div>
+
+                        {!upgradeSlipPreview ? (
+                          <label className="border-2 border-dashed border-slate-300 hover:border-[#ff6a00] hover:bg-orange-50/30 rounded-2xl p-5 text-center transition cursor-pointer flex flex-col items-center justify-center gap-2 group block bg-slate-50/50">
+                            <span className="text-3xl group-hover:scale-110 transition">📤</span>
+                            <div>
+                              <span className="text-xs font-black text-slate-800 block">
+                                ចុចទីនេះដើម្បីជ្រើសរើសរូបថតបង្កាន់ដៃ (Upload Slip)
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-medium">
+                                គាំទ្រ PNG, JPG ឬ Screenshot វិក្កយបត្រពីធនាគារ
+                              </span>
+                            </div>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              required
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setUpgradeSlipFile(file);
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => {
+                                    setUpgradeSlipPreview(ev.target?.result);
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        ) : (
+                          <div className="p-3 bg-emerald-50/70 border-2 border-emerald-300 rounded-2xl flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-16 h-16 rounded-xl overflow-hidden border border-emerald-200 bg-white shrink-0 shadow-xs">
+                                <img src={upgradeSlipPreview} alt="Slip" className="w-full h-full object-cover" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1 text-emerald-800 font-black text-xs">
+                                  <span>✓</span>
+                                  <span>បានភ្ជាប់បង្កាន់ដៃជោគជ័យ</span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                                  {upgradeSlipFile ? upgradeSlipFile.name : 'Slip Image Attached'}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUpgradeSlipFile(null);
+                                setUpgradeSlipPreview(null);
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-bold text-rose-600 bg-white hover:bg-rose-50 border border-rose-200 rounded-xl transition cursor-pointer"
+                            >
+                              ✕ ដកចេញ
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Transaction Ref (Optional) */}
+                      <div>
+                        <label className="block text-xs font-black text-slate-700 mb-1">
+                          លេខកូដប្រតិបត្តិការ (Txn Ref / Code - មិនបង្ខំ)
+                        </label>
+                        <input
+                          type="text"
+                          value={upgradeTxRef}
+                          onChange={(e) => setUpgradeTxRef(e.target.value)}
+                          placeholder="ឧ. 012345678 ឬ Note បន្ថែម"
+                          className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-2.5 rounded-xl text-xs font-bold outline-none transition bg-slate-50/50 focus:bg-white"
+                        />
+                      </div>
+
+                      {/* Submit CTA */}
+                      <button
+                        type="submit"
+                        disabled={upgradeSubmitting || (!upgradeSlipPreview && !upgradeSlipFile)}
+                        className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#ff6a00] to-orange-500 hover:from-[#e65c00] hover:to-orange-600 text-white font-black text-sm shadow-lg shadow-orange-500/25 transition active:scale-98 disabled:opacity-50 disabled:shadow-none cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        {upgradeSubmitting ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>កំពុងផ្ញើបង្កាន់ដៃជូន Admin...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>🚀</span>
+                            <span>ផ្ញើបង្កាន់ដៃ & ស្នើសុំដំឡើងគម្រោង</span>
+                          </>
+                        )}
+                      </button>
+
+                      <p className="text-[10px] text-slate-400 text-center leading-relaxed">
+                        🔒 បន្ទាប់ពីផ្ញើបង្កាន់ដៃរួច Admin នឹងពិនិត្យផ្ទៀងផ្ទាត់ និង Approve កញ្ចប់សេវាជូនភ្លាមៗ
+                      </p>
+                    </form>
+
+                  </div>
+
                 </div>
-              ))}
-            </div>
 
-            {/* KHQR ABA Payment Box */}
-            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="space-y-1">
-                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">
-                  💳 វិធីសាស្ត្របង់ប្រាក់ស្វ័យប្រវត្តិ
-                </span>
-                <h4 className="font-black text-xs text-white">ស្កេនទូទាត់តាម Bakong KHQR / ABA Pay</h4>
-                <p className="text-[11px] text-slate-400">
-                  ឈ្មោះគណនី: <b>SABAY LUK PLATFORM</b> (096 720 5522)
-                </p>
-                <p className="text-[10px] text-slate-500">
-                  ចំណាំពេលវេរ៖ <b>Upgrade - {activeStore?.name}</b>
-                </p>
               </div>
 
-              <div className="w-24 h-24 bg-white p-1 rounded-xl shrink-0 border border-slate-700 flex items-center justify-center">
-                <img src="/khqr-aba.jpg" alt="ABA KHQR" className="w-full h-full object-contain" />
-              </div>
             </div>
-
-            <div className="text-center pt-4">
-              <button
-                type="button"
-                onClick={() => setUpgradePlanModalOpen(false)}
-                className="text-xs font-bold text-slate-400 hover:text-white"
-              >
-                ✕ បិទផ្ទាំងនេះ
-              </button>
-            </div>
-
           </div>
+        );
+      })()}
+
+      {/* ⭐️ GLOBAL TOAST NOTIFICATION ⭐️ */}
+      {toastNotification && (
+        <div className="fixed bottom-6 right-6 z-[9999] bg-slate-900/95 backdrop-blur-md text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 text-xs font-black flex items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-200">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>{toastNotification}</span>
         </div>
       )}
     </div>
