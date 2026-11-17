@@ -157,6 +157,8 @@ export async function POST(request) {
         `━━━━━━━━━━━━━━━━━━\n` +
         `🧾 <b>លេខវិក្កយបត្រ:</b> <code>#${ord.order_id || 'N/A'}</code>\n` +
         `🏪 <b>ហាង:</b> <b>${storeName || 'SABAY LUK SHOES STORE 👟'}</b>\n` +
+        (body.storePhone ? `📞 <b>ទូរស័ព្ទហាង:</b> <code>${body.storePhone}</code>\n` : '') +
+        (body.storeTelegram ? `✈️ <b>Telegram ហាង:</b> @${body.storeTelegram.replace(/^@/, '')}\n` : '') +
         `👤 <b>ឈ្មោះអតិថិជន:</b> <b>${ord.customer_name || ord.customer || 'អតិថិជន'}</b>\n` +
         `📞 <b>លេខទូរស័ព្ទ:</b> <code>${ord.phone || ord.phone_number || 'N/A'}</code>\n` +
         (ord.telegram ? `✈️ <b>Telegram:</b> @${ord.telegram.replace(/^@/, '')}\n` : '') +

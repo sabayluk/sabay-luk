@@ -1372,14 +1372,15 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       setStoreSettings(prev => ({
         ...prev,
         ...scopedSettings,
-        storeName: active.name || scopedSettings.storeName || prev.storeName,
-        phone: active.phone || scopedSettings.phone || prev.phone,
-        telegram: active.telegram || scopedSettings.telegram || prev.telegram,
-        facebook: active.facebook || scopedSettings.facebook || prev.facebook,
-        tiktok: active.tiktok || scopedSettings.tiktok || prev.tiktok,
-        address: active.address || scopedSettings.address || prev.address,
-        themeColor: active.settings?.themeColor || scopedSettings.themeColor || prev.themeColor,
-        logoUrl: active.settings?.logoUrl || scopedSettings.logoUrl || prev.logoUrl,
+        storeName: scopedSettings.storeName || active.name || prev.storeName,
+        phone: scopedSettings.phone || active.phone || prev.phone,
+        phone2: scopedSettings.phone2 || prev.phone2,
+        telegram: (scopedSettings.telegram || active.telegram || prev.telegram || '').replace(/^@/, ''),
+        facebook: scopedSettings.facebook || active.facebook || prev.facebook,
+        tiktok: scopedSettings.tiktok || active.tiktok || prev.tiktok,
+        address: scopedSettings.address || active.address || prev.address,
+        themeColor: scopedSettings.themeColor || active.settings?.themeColor || prev.themeColor,
+        logoUrl: scopedSettings.logoUrl || active.settings?.logoUrl || prev.logoUrl,
         bankAccountName: scopedSettings.bankAccountName || (active.id === 'store_default_sabayluk' ? 'SENG SOVEASNA' : (active.owner_name || active.name)),
         bankAccountKhr: scopedSettings.bankAccountKhr || (active.id === 'store_default_sabayluk' ? '004 500 394' : '004 500 394'),
         bankAccountUsd: scopedSettings.bankAccountUsd || (active.id === 'store_default_sabayluk' ? '010 723 080' : (active.phone || '010 723 080')),
@@ -5471,20 +5472,20 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                       {/* ⭐️ Quick Contact & Support Buttons ⭐️ */}
                       <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-100">
                         <a 
-                          href={`https://t.me/share/url?url=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : 'https://sabayluk.com')}&text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរនាំពីការកុម្ម៉ង់លេខ #${order.order_id} របស់ខ្ញុំ`)}`}
+                          href={`https://t.me/${(storeSettings?.telegram || currentStore?.telegram || 'Sabayluk').replace(/^@/, '')}?text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរនាំពីការកុម្ម៉ង់លេខ #${order.order_id} របស់ខ្ញុំ`)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-3 py-1.5 rounded-xl transition"
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-3 py-1.5 rounded-xl transition"
                         >
                           <span>💬</span>
-                          <span>ឆាតសួរនាំតាម Telegram</span>
+                          <span>ឆាតតាម Telegram (@{(storeSettings?.telegram || currentStore?.telegram || 'Sabayluk').replace(/^@/, '')})</span>
                         </a>
                         <a 
-                          href="tel:0967205522" 
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl transition"
+                          href={`tel:${(storeSettings?.phone || currentStore?.phone || '0967205522').replace(/\s+/g, '')}`} 
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl transition"
                         >
                           <span>📞</span>
-                          <span>ទូរស័ព្ទហាង: 096 720 5522</span>
+                          <span>ទូរស័ព្ទហាង: {storeSettings?.phone || currentStore?.phone || '096 720 5522'}</span>
                         </a>
                       </div>
 

@@ -124,6 +124,23 @@ function InvoiceContent() {
 
         if (!error && data) {
           setOrder(data);
+          // ⭐️ Sync store settings from order's store_id ⭐️
+          if (data.store_id) {
+            try {
+              const { data: sData } = await supabase.from('stores').select('settings, name, phone, telegram, address').eq('id', data.store_id).maybeSingle();
+              if (sData) {
+                const sSettings = sData.settings || {};
+                setStoreSettings(prev => ({
+                  ...prev,
+                  ...sSettings,
+                  storeName: sSettings.storeName || sData.name || prev.storeName,
+                  phone: sSettings.phone || sData.phone || prev.phone,
+                  telegram: (sSettings.telegram || sData.telegram || prev.telegram || '').replace(/^@/, ''),
+                  address: sSettings.address || sData.address || prev.address
+                }));
+              }
+            } catch (sErr) {}
+          }
           setLoading(false);
           return;
         }

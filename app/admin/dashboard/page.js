@@ -2041,38 +2041,22 @@ export default function UnifiedAdminDashboard() {
   const getStoreScopedSettings = (store) => {
     const storeId = store?.id || 'store_default_sabayluk';
     const storeSpecificKey = `sabay_store_settings_${storeId}`;
+    let savedParsed = null;
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(storeSpecificKey) || (storeId === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
       if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          return {
-            ...DEFAULT_STORE_SETTINGS,
-            ...parsed,
-            storeName: parsed.storeName || store?.name || 'SABAY LUK',
-            phone: parsed.phone || store?.phone || (storeId === 'store_default_sabayluk' ? '096 720 5522' : ''),
-            telegram: parsed.telegram || store?.telegram || (storeId === 'store_default_sabayluk' ? 'Sabayluk' : ''),
-            address: parsed.address || store?.address || (storeId === 'store_default_sabayluk' ? 'Street 271, Phnom Penh, Cambodia' : '')
-          };
-        } catch (e) {}
+        try { savedParsed = JSON.parse(saved); } catch (e) {}
       }
     }
-    if (store && store.id !== 'store_default_sabayluk') {
-      return {
-        ...DEFAULT_STORE_SETTINGS,
-        storeName: store.name || 'ហាងរបស់ខ្ញុំ',
-        phone: store.phone || '',
-        phone2: '',
-        telegram: store.telegram || '',
-        address: store.address || '',
-        bankAccountName: store.owner_name || store.name || '',
-        bankAccountKhr: '',
-        bankAccountUsd: '',
-        bankAccountNumber: '',
-        khqrImageUrl: ''
-      };
-    }
-    return DEFAULT_STORE_SETTINGS;
+    const dbSettings = store?.settings || {};
+    const merged = { ...DEFAULT_STORE_SETTINGS, ...dbSettings, ...(savedParsed || {}) };
+    return {
+      ...merged,
+      storeName: merged.storeName || store?.name || 'SABAY LUK',
+      phone: merged.phone || store?.phone || (storeId === 'store_default_sabayluk' ? '096 720 5522' : ''),
+      telegram: (merged.telegram || store?.telegram || (storeId === 'store_default_sabayluk' ? 'Sabayluk' : '')).replace(/^@/, ''),
+      address: merged.address || store?.address || (storeId === 'store_default_sabayluk' ? 'Street 271, Phnom Penh, Cambodia' : '')
+    };
   };
 
   const [storeSettings, setStoreSettings] = useState(() => getStoreScopedSettings(getActiveStore()));
@@ -2127,52 +2111,92 @@ export default function UnifiedAdminDashboard() {
   };
 
   // រក្សាទុកការកំណត់ហាងទាំងអស់ (Save Store Settings)
-  const handleSaveStoreSettings = (e) => {
+  const handleSaveStoreSettings = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (guardDemoAction("កែប្រែការកំណត់ហាង")) return;
-    if (e && e.preventDefault) e.preventDefault();
-    localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+
+    const cleanTg = (storeSettings.telegram || '').replace(/^@/, '').trim();
+    const updatedSettings = {
+      ...storeSettings,
+      telegram: cleanTg
+    };
+
+    localStorage.setItem('sabay_store_settings', JSON.stringify(updatedSettings));
     
     // Save scoped per-store settings if multi-tenant store is active
-    if (activeStore?.id) {
-      localStorage.setItem(`sabay_store_settings_${activeStore.id}`, JSON.stringify(storeSettings));
-      const updatedStores = (registeredStores || []).map(s => {
-        if (s.id === activeStore.id) {
-          return {
-            ...s,
-            name: storeSettings.storeName || s.name,
-            phone: storeSettings.phone || s.phone,
-            telegram: storeSettings.telegram || s.telegram,
-            address: storeSettings.address || s.address,
-            settings: { ...(s.settings || {}), ...storeSettings }
-          };
-        }
-        return s;
-      });
-      setRegisteredStores(updatedStores);
-      saveLocalStores(updatedStores);
-    }
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(updatedSettings));
+
+    const updatedStores = (registeredStores || []).map(s => {
+      if (s.id === storeId) {
+        return {
+          ...s,
+          name: updatedSettings.storeName || s.name,
+          phone: updatedSettings.phone || s.phone,
+          telegram: cleanTg || s.telegram,
+          address: updatedSettings.address || s.address,
+          settings: { ...(s.settings || {}), ...updatedSettings }
+        };
+      }
+      return s;
+    });
+    setRegisteredStores(updatedStores);
+    saveLocalStores(updatedStores);
+
+    // Update activeStore state immediately
+    setActiveStore(prev => ({
+      ...prev,
+      name: updatedSettings.storeName || prev?.name,
+      phone: updatedSettings.phone || prev?.phone,
+      telegram: cleanTg || prev?.telegram,
+      address: updatedSettings.address || prev?.address,
+      settings: { ...(prev?.settings || {}), ...updatedSettings }
+    }));
     
     // Auto-sync ទៅ invoiceSettings
     const updatedInvoice = {
       ...invoiceSettings,
-      storeName: storeSettings.storeName || invoiceSettings.storeName,
-      phone: storeSettings.phone || invoiceSettings.phone,
-      address: storeSettings.address || invoiceSettings.address,
-      exchangeRate: Number(storeSettings.exchangeRate) || 4100,
-      policyNote: storeSettings.policyNote || invoiceSettings.policyNote
+      storeName: updatedSettings.storeName || invoiceSettings.storeName,
+      phone: updatedSettings.phone || invoiceSettings.phone,
+      telegram: cleanTg || invoiceSettings.telegram,
+      address: updatedSettings.address || invoiceSettings.address,
+      exchangeRate: Number(updatedSettings.exchangeRate) || 4100,
+      policyNote: updatedSettings.policyNote || invoiceSettings.policyNote
     };
     setInvoiceSettings(updatedInvoice);
-    const storeId = activeStore?.id || 'store_default_sabayluk';
     localStorage.setItem(`sabay_invoice_settings_${storeId}`, JSON.stringify(updatedInvoice));
     if (storeId === 'store_default_sabayluk') {
       localStorage.setItem('sabay_invoice_settings', JSON.stringify(updatedInvoice));
     }
-    setExchangeRate(Number(storeSettings.exchangeRate) || 4100);
+    setExchangeRate(Number(updatedSettings.exchangeRate) || 4100);
+
+    // ⭐️ SYNC TO SUPABASE CLOUD DATABASE (stores table) ⭐️
+    try {
+      const { error: dbErr } = await supabase
+        .from('stores')
+        .update({
+          name: updatedSettings.storeName || activeStore?.name || 'SABAY LUK',
+          phone: updatedSettings.phone || activeStore?.phone || '',
+          telegram: cleanTg || activeStore?.telegram || '',
+          address: updatedSettings.address || activeStore?.address || '',
+          settings: updatedSettings,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', storeId);
+
+      if (dbErr) {
+        console.warn('Supabase store update warning:', dbErr);
+      } else {
+        console.log('✅ Successfully synced store settings to Supabase for store:', storeId);
+      }
+    } catch (err) {
+      console.warn('Failed to update Supabase stores table:', err);
+    }
 
     // Notify other windows/tabs (e.g. Storefront)
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('sabay_store_changed', { detail: { storeId } }));
     }
 
     setStoreSettingsSavedMsg('🎉 រក្សាទុកការកំណត់ហាង និងម៉ាកយីហោជោគជ័យ!');

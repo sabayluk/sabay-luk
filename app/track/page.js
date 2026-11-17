@@ -10,6 +10,18 @@ export default function OrderTrackingPage() {
   const [foundOrders, setFoundOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [orderStoreInfo, setOrderStoreInfo] = useState(null);
+
+  // Sync store details (Telegram, phone, etc.) for selected order
+  useEffect(() => {
+    if (selectedOrder?.store_id) {
+      supabase.from('stores').select('id, name, phone, telegram, settings').eq('id', selectedOrder.store_id).maybeSingle().then(({ data }) => {
+        if (data) setOrderStoreInfo(data);
+      });
+    } else {
+      setOrderStoreInfo(null);
+    }
+  }, [selectedOrder?.store_id]);
 
   // Auto search if query param ?q=, ?order=, ?id=, or ?phone= is provided
   useEffect(() => {
@@ -586,13 +598,13 @@ export default function OrderTrackingPage() {
                         </a>
 
                         <a
-                          href={`https://t.me/Sabayluk?text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរពីការកុម្ម៉ង់លេខ #${selectedOrder.order_id || selectedOrder.id}`)}`}
+                          href={`https://t.me/${(orderStoreInfo?.settings?.telegram || orderStoreInfo?.telegram || 'Sabayluk').replace(/^@/, '')}?text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរពីការកុម្ម៉ង់លេខ #${selectedOrder.order_id || selectedOrder.id}`)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex-1 bg-[#24A1DE] hover:bg-[#1f8ec4] text-white py-3 rounded-2xl font-black text-xs text-center transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20"
                         >
                           <span>💬</span>
-                          <span>ឆាតសួរក្នុង Telegram</span>
+                          <span>ឆាតសួរក្នុង Telegram (@{(orderStoreInfo?.settings?.telegram || orderStoreInfo?.telegram || 'Sabayluk').replace(/^@/, '')})</span>
                         </a>
 
                         <Link
