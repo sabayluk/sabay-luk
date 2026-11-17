@@ -1845,6 +1845,7 @@ export default function UnifiedAdminDashboard() {
 
   // ⭐️ States & Realtime Alert សម្រាប់គ្រប់គ្រងការកុម្ម៉ង់ថ្មី (ADMIN & SALES ALERT) ⭐️
   const [newOrderAlert, setNewOrderAlert] = useState(null);
+  const [highlightedOrderId, setHighlightedOrderId] = useState(null);
 
   // សំឡេងកណ្ដឹងជូនដំណឹងពេលមានការកុម្ម៉ង់ថ្មី (Notification Chime)
   const playNewOrderSound = () => {
@@ -10172,7 +10173,7 @@ export default function UnifiedAdminDashboard() {
                     const isOnline = (order.order_type || 'POS').toUpperCase() === 'ONLINE';
 
                     return (
-                      <tr key={order.id} className="hover:bg-gray-50/80 transition">
+                      <tr key={order.id} id={`order-row-${order.id}`} className={`hover:bg-gray-50/80 transition ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset animate-pulse' : ''}`}>
                         <td className="px-5 py-3.5 font-black text-blue-600">
                           {order.order_id || order.id}
                         </td>
@@ -10953,7 +10954,7 @@ export default function UnifiedAdminDashboard() {
                       const displayId = order.order_id || order.id;
 
                       return (
-                        <tr key={order.id} className="hover:bg-gray-50/80 transition">
+                        <tr key={order.id} id={`order-row-${order.id}`} className={`hover:bg-gray-50/80 transition ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset animate-pulse' : ''}`}>
                           <td className="px-6 py-4 font-black text-blue-600 text-xs">{displayId}</td>
                           <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">
                             {order.created_at ? new Date(order.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : 'POS Sale'}
@@ -23492,7 +23493,27 @@ export default function UnifiedAdminDashboard() {
 
       {/* ⭐️ REALTIME FLOATING NEW ORDER ALERT TOAST FOR ADMIN & SALES ⭐️ */}
       {newOrderAlert && (
-        <div className="fixed top-5 right-5 z-50 bg-slate-950 text-white p-4 rounded-3xl shadow-2xl flex items-center gap-3.5 border-2 border-emerald-500 animate-in slide-in-from-top-4 max-w-md">
+        <div
+          className="fixed top-5 right-5 z-50 bg-slate-950 text-white p-4 rounded-3xl shadow-2xl flex items-center gap-3.5 border-2 border-emerald-500 animate-in slide-in-from-top-4 max-w-md cursor-pointer hover:border-emerald-400 hover:bg-slate-900 transition"
+          onClick={() => {
+            // 1. Switch to orders tab
+            setActiveTab('orders');
+            // 2. Close the alert
+            setNewOrderAlert(null);
+            // 3. Highlight + scroll to the order row after tab renders
+            if (newOrderAlert?.id) {
+              setHighlightedOrderId(newOrderAlert.id);
+              setTimeout(() => {
+                const el = document.getElementById(`order-row-${newOrderAlert.id}`);
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                // Remove highlight after 4s
+                setTimeout(() => setHighlightedOrderId(null), 4000);
+              }, 300);
+            }
+          }}
+        >
           <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl shrink-0 animate-bounce">
             🛍️
           </div>
@@ -23509,10 +23530,11 @@ export default function UnifiedAdminDashboard() {
             <p className="text-[11px] font-bold text-emerald-400">
               ទឹកប្រាក់: ${Number(newOrderAlert.total || 0).toFixed(2)} {newOrderAlert.phone ? `• 📞 ${newOrderAlert.phone}` : ''}
             </p>
+            <p className="text-[9px] text-slate-500 mt-0.5">👆 ចុចដើម្បីទៅមើលបញ្ជា</p>
           </div>
           <button
             type="button"
-            onClick={() => setNewOrderAlert(null)}
+            onClick={(e) => { e.stopPropagation(); setNewOrderAlert(null); }}
             className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-xs font-bold transition shrink-0 cursor-pointer"
           >
             ✕
