@@ -831,6 +831,7 @@ export default function UnifiedAdminDashboard() {
     { key: 'invoice', label: '🧾 ទម្រង់វិក្កយបត្រ (Invoice Customizer)', desc: 'អាចកែប្រែទម្រង់ព្រីន ឡូហ្គោ QR Code និងពន្ធ VAT 10%', category: 'admin', icon: '🧾' },
     { key: 'api', label: '📱 ស្វ័យប្រវត្តិកម្ម & Telegram', desc: 'អាចកំណត់ Telegram Bot និងប្រព័ន្ធជូនដំណឹងស្វ័យប្រវត្តិ', category: 'admin', icon: '📱' },
     { key: 'staff', label: '👥 គ្រប់គ្រងបុគ្គលិក (Staff Roles)', desc: 'អាចបង្កើត កែប្រែ ឬកំណត់សិទ្ធិបុគ្គលិកដទៃទៀត', category: 'admin', icon: '👥' },
+    { key: 'stores', label: '🌐 គ្រប់គ្រងហាង & អនុម័ត Slip (Platform Stores & Approvals)', desc: 'អនុញ្ញាតឱ្យបុគ្គលិកអាចពិនិត្យមើលហាងទាំងអស់ ផ្ទៀងផ្ទាត់បង្កាន់ដៃ Slip និងចុច Approve ហាងថ្មី (បុគ្គលិក Admin ប្រព័ន្ធ)', category: 'admin', icon: '🌐' },
   ];
 
   const ROLE_PRESET_PERMISSIONS = {
@@ -838,7 +839,7 @@ export default function UnifiedAdminDashboard() {
       pos: true, orders: true, customers: true, feedbacks: true,
       inventory: true, upload: true, barcode: true, storefront: true,
       analytics: true, expenses: true, canViewCost: true,
-      settings: true, invoice: true, api: true, staff: true
+      settings: true, invoice: true, api: true, staff: true, stores: true
     },
     CASHIER: {
       pos: true, orders: true, customers: true, feedbacks: false,
@@ -1276,12 +1277,23 @@ export default function UnifiedAdminDashboard() {
     )
   );
 
+  // ⭐️ បំពាក់សិទ្ធិគ្រប់គ្រងហាង & អនុម័ត Slip ជូនបុគ្គលិករបស់ Admin (Platform Staff Management Access) ⭐️
+  const canManageStores = Boolean(
+    isMasterOwner ||
+    ((activeStore?.id === 'store_default_sabayluk' || !activeStore?.id) && (
+      currentStaff?.role === 'ADMIN' ||
+      currentStaff?.id === 'STAFF-1' ||
+      currentStaff?.permissions?.stores === true
+    ))
+  );
+
   // ⭐️ Helper ពិនិត្យមើលសិទ្ធិរបស់បុគ្គលិកបច្ចុប្បន្ន (hasStaffPermission) ⭐️
   const hasStaffPermission = (permissionKey) => {
     if (isDemoMode) {
       if (permissionKey === 'stores') return false;
       return true;
     }
+    if (permissionKey === 'stores') return canManageStores;
     if (!currentStaff) return true; // fallback
     if (currentStaff.role === 'ADMIN') return true; // Super admin has full control
     if (currentStaff.permissions && typeof currentStaff.permissions[permissionKey] === 'boolean') {
@@ -1870,8 +1882,10 @@ export default function UnifiedAdminDashboard() {
   useEffect(() => {
     fetchRealOrders();
 
-    // 1. Supabase Realtime Channel
+    // 1. Supabase Realtime Channels (Orders, Stores, Subscriptions)
     let channel;
+    let storesChannel;
+    let subChannel;
     try {
       channel = supabase
         .channel('admin_orders_channel')
@@ -1886,6 +1900,30 @@ export default function UnifiedAdminDashboard() {
           });
         })
         .subscribe();
+
+      storesChannel = supabase
+        .channel('admin_stores_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, () => {
+          playNewOrderSound();
+          fetchAllStores().then(stores => setRegisteredStores(stores));
+          setPaymentAlertDismissed(false);
+          setToastNotification('🔔 ទទួលបានការចុះឈ្មោះហាងថ្មីលើប្រព័ន្ធ!');
+          setTimeout(() => setToastNotification(null), 4000);
+        })
+        .subscribe();
+
+      subChannel = supabase
+        .channel('admin_sub_payments_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'subscription_payments' }, () => {
+          playNewOrderSound();
+          if (typeof getSubscriptionPayments === 'function') {
+            setAllSubscriptionPayments(getSubscriptionPayments());
+          }
+          setPaymentAlertDismissed(false);
+          setToastNotification('💳 ទទួលបានបង្កាន់ដៃបង់ប្រាក់កញ្ចប់សេវា (Slip) ថ្មី!');
+          setTimeout(() => setToastNotification(null), 4000);
+        })
+        .subscribe();
     } catch (e) {}
 
     // 2. Storage event listener (multi-tab sync)
@@ -1898,11 +1936,25 @@ export default function UnifiedAdminDashboard() {
           setNewOrderAlert(parsed);
         } catch (err) {}
       }
+      if (e && (e.key === 'sabay_new_store_alert' || e.key === 'sabay_subscription_alert') && e.newValue) {
+        try {
+          playNewOrderSound();
+          setRegisteredStores(getLocalStores());
+          if (typeof getSubscriptionPayments === 'function') {
+            setAllSubscriptionPayments(getSubscriptionPayments());
+          }
+          setPaymentAlertDismissed(false);
+          setToastNotification('🔔 ទទួលបានការចុះឈ្មោះហាងថ្មី / បង់ប្រាក់ Slip ថ្មី!');
+          setTimeout(() => setToastNotification(null), 4000);
+        } catch (err) {}
+      }
     };
     window.addEventListener('storage', handleStorageOrder);
 
     // 3. BroadcastChannel listener (instant cross-tab sync for Admin & Sales)
     let bc = null;
+    let bcStores = null;
+    let bcSubs = null;
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       bc = new BroadcastChannel('sabay_orders_sync');
       bc.onmessage = (event) => {
@@ -1912,12 +1964,37 @@ export default function UnifiedAdminDashboard() {
           setNewOrderAlert(event.data);
         }
       };
+
+      bcStores = new BroadcastChannel('sabay_stores_sync');
+      bcStores.onmessage = () => {
+        playNewOrderSound();
+        setRegisteredStores(getLocalStores());
+        fetchAllStores().then(stores => setRegisteredStores(stores));
+        setPaymentAlertDismissed(false);
+        setToastNotification('🔔 ទទួលបានការចុះឈ្មោះហាងថ្មីលើប្រព័ន្ធ!');
+        setTimeout(() => setToastNotification(null), 4000);
+      };
+
+      bcSubs = new BroadcastChannel('sabay_subscription_sync');
+      bcSubs.onmessage = () => {
+        playNewOrderSound();
+        if (typeof getSubscriptionPayments === 'function') {
+          setAllSubscriptionPayments(getSubscriptionPayments());
+        }
+        setPaymentAlertDismissed(false);
+        setToastNotification('💳 ទទួលបានបង្កាន់ដៃបង់ប្រាក់កញ្ចប់សេវា (Slip) ថ្មី!');
+        setTimeout(() => setToastNotification(null), 4000);
+      };
     }
 
     return () => {
       if (channel) supabase.removeChannel(channel);
+      if (storesChannel) supabase.removeChannel(storesChannel);
+      if (subChannel) supabase.removeChannel(subChannel);
       window.removeEventListener('storage', handleStorageOrder);
       if (bc) bc.close();
+      if (bcStores) bcStores.close();
+      if (bcSubs) bcSubs.close();
     };
   }, []);
 
@@ -12869,6 +12946,24 @@ export default function UnifiedAdminDashboard() {
                   </span>
                 )}
               </button>
+
+              <button
+                type="button"
+                onClick={() => setStoresManagerSubTab('staff_access')}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 cursor-pointer relative ${
+                  storesManagerSubTab === 'staff_access'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                    : 'bg-white hover:bg-blue-50 text-slate-700 border border-slate-200'
+                }`}
+              >
+                <span>👥</span>
+                <span>បំពាក់សិទ្ធិបុគ្គលិកគ្រប់គ្រង (Admin Staff Access)</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  storesManagerSubTab === 'staff_access' ? 'bg-white/25 text-white' : 'bg-blue-50 text-blue-700'
+                }`}>
+                  សិទ្ធិបុគ្គលិក
+                </span>
+              </button>
             </div>
           );
         })()}
@@ -13744,7 +13839,206 @@ export default function UnifiedAdminDashboard() {
           );
         })()}
 
-                {/* ⭐️ MODAL កែប្រែព័ត៌មានហាង (EDIT STORE DETAILS MODAL) ⭐️ */}
+        {/* ⭐️ SUB-TAB 3: បំពាក់សិទ្ធិបុគ្គលិកគ្រប់គ្រងហាង & អនុម័ត SLIP (STAFF ACCESS & ROLES) ⭐️ */}
+        {storesManagerSubTab === 'staff_access' && (() => {
+          const flagshipStore = { id: 'store_default_sabayluk' };
+          const platformStaff = getStoreStaffList(flagshipStore);
+
+          const handleToggleStaffStorePerm = (stf) => {
+            if (guardDemoAction("កែប្រែសិទ្ធិបុគ្គលិក")) return;
+            if (stf.id === 'STAFF-1' || stf.email?.toLowerCase() === 'sengsoveasna93@gmail.com') {
+              alert('🛑 គណនី Master Owner នេះមានសិទ្ធិគ្រប់គ្រងជាអចិន្ត្រៃយ៍ មិនអាចដកសិទ្ធិបានឡើយ!');
+              return;
+            }
+            const currentStoresPerm = stf.role === 'ADMIN' || !!stf.permissions?.stores;
+            const newPerm = !currentStoresPerm;
+            
+            const updated = platformStaff.map(s => {
+              if (s.id === stf.id) {
+                return {
+                  ...s,
+                  permissions: {
+                    ...(s.permissions || {}),
+                    stores: newPerm
+                  }
+                };
+              }
+              return s;
+            });
+
+            localStorage.setItem('sabay_staff_list_store_default_sabayluk', JSON.stringify(updated));
+            localStorage.setItem('sabay_staff_list', JSON.stringify(updated));
+            setStaffList(updated);
+
+            setToastNotification(
+              newPerm 
+                ? `✅ បានបំពាក់សិទ្ធិ «គ្រប់គ្រងហាង & អនុម័ត Slip» ជូនបុគ្គលិក "${stf.name}" រួចរាល់!`
+                : `🔒 បានដកសិទ្ធិគ្រប់គ្រងហាងពីបុគ្គលិក "${stf.name}" រួចរាល់!`
+            );
+            setTimeout(() => setToastNotification(null), 3500);
+          };
+
+          return (
+            <div className="space-y-6 animate-in fade-in duration-150">
+              {/* Header card explaining feature */}
+              <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-blue-800/60">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-300 flex items-center justify-center text-2xl shrink-0 border border-blue-400/30">
+                    👥
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white flex items-center gap-2">
+                      <span>បំពាក់សិទ្ធិបុគ្គលិកគ្រប់គ្រងហាង & អនុម័ត Slip</span>
+                      <span className="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                        Staff Permissions
+                      </span>
+                    </h3>
+                    <p className="text-xs text-blue-200/90 mt-1 leading-relaxed max-w-2xl">
+                      លោកអ្នកជា <b>Master Owner</b> អាចជ្រើសរើសបើកសិទ្ធិជូនបុគ្គលិករបស់លោកអ្នក ដើម្បីឱ្យពួកគាត់អាចជួយពិនិត្យមើលបញ្ជីហាង ផ្ទៀងផ្ទាត់រូបភាពបង្កាន់ដៃ (Payment Slips) និងចុច Approve ហាងថ្មីនៅលើប្រព័ន្ធបាន។
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3 mt-3 text-[11px] text-blue-300">
+                      <span className="flex items-center gap-1.5 bg-blue-950/60 px-3 py-1 rounded-xl border border-blue-800">
+                        <span>🔒</span> <b>សម្គាល់សំខាន់:</b> សារ Telegram ជូនដំណឹងចុះឈ្មោះហាងថ្មី & បង្កាន់ដៃ Slip នឹងផ្ញើជូនតែ <b>Super Admin ១រូបគត់</b> (ហាមផ្ញើឱ្យបុគ្គលិក ឬហាងអតិថិជន)។
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingStaff(null);
+                    setStaffFormName('');
+                    setStaffFormEmail('');
+                    setStaffFormUsername('');
+                    setStaffFormPassword('');
+                    setStaffFormPhone('');
+                    setStaffFormRole('CUSTOM');
+                    setStaffFormPermissions({ ...ROLE_PRESET_PERMISSIONS.CASHIER, stores: true });
+                    setStaffModalOpen(true);
+                  }}
+                  className="bg-blue-500 hover:bg-blue-400 text-white font-black text-xs px-4 py-3 rounded-2xl transition shadow-md shadow-blue-500/25 flex items-center gap-2 shrink-0 cursor-pointer self-start sm:self-auto"
+                >
+                  <span>➕</span>
+                  <span>បន្ថែមបុគ្គលិកថ្មី</span>
+                </button>
+              </div>
+
+              {/* Staff table */}
+              <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                    <span>👥</span>
+                    <span>បញ្ជីបុគ្គលិក Admin ប្រព័ន្ធ ({platformStaff.length} នាក់)</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-500">
+                    ចុចប៊ូតុងបើក/បិទ ដើម្បីបំពាក់ ឬដកសិទ្ធិភ្លាមៗ
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 text-slate-600 font-black text-[11px] uppercase tracking-wider border-b border-slate-200">
+                        <th className="px-5 py-3.5">បុគ្គលិក</th>
+                        <th className="px-5 py-3.5">តួនាទី (Role)</th>
+                        <th className="px-5 py-3.5">ទំនាក់ទំនង</th>
+                        <th className="px-5 py-3.5 text-center">សិទ្ធិគ្រប់គ្រងហាង & Slip</th>
+                        <th className="px-5 py-3.5 text-right">សកម្មភាព</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {platformStaff.map(stf => {
+                        const isOwner = stf.id === 'STAFF-1' || stf.email?.toLowerCase() === 'sengsoveasna93@gmail.com';
+                        const hasAccess = isOwner || stf.role === 'ADMIN' || !!stf.permissions?.stores;
+
+                        return (
+                          <tr key={stf.id} className="hover:bg-slate-50/60 transition">
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${stf.color || 'from-blue-500 to-indigo-600'} text-white flex items-center justify-center text-lg font-bold shrink-0 shadow-2xs`}>
+                                  {stf.avatar || '👤'}
+                                </div>
+                                <div>
+                                  <p className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                                    <span>{stf.name}</span>
+                                    {isOwner && (
+                                      <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-1.5 py-0.5 rounded-full border border-amber-200">
+                                        👑 Master Owner
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-[11px] text-slate-400 font-mono">
+                                    ID: {stf.id} • Username: @{stf.username || stf.email}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-4 whitespace-nowrap">
+                              <span className="px-2.5 py-1 rounded-xl text-[10px] font-black bg-slate-100 text-slate-700 border border-slate-200">
+                                {stf.roleLabel || stf.role || 'បុគ្គលិក'}
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-4 whitespace-nowrap text-slate-600 text-[11px]">
+                              <p className="font-bold text-slate-800">{stf.phone || '—'}</p>
+                              <p className="text-[10px] text-slate-400">{stf.email || '—'}</p>
+                            </td>
+
+                            <td className="px-5 py-4 text-center whitespace-nowrap">
+                              {isOwner ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black">
+                                  <span>👑</span>
+                                  <span>សិទ្ធិពេញលេញ (អចិន្ត្រៃយ៍)</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleStaffStorePerm(stf)}
+                                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer border shadow-2xs ${
+                                    hasAccess
+                                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-500'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300'
+                                  }`}
+                                  title={hasAccess ? 'ចុចដើម្បីដកសិទ្ធិ' : 'ចុចដើម្បីបំពាក់សិទ្ធិ'}
+                                >
+                                  <span>{hasAccess ? '✅ បើកសិទ្ធិគ្រប់គ្រង' : '🔒 បិទសិទ្ធិ (គ្មានសិទ្ធិ)'}</span>
+                                </button>
+                              )}
+                            </td>
+
+                            <td className="px-5 py-4 text-right whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingStaff(stf);
+                                  setStaffFormName(stf.name || '');
+                                  setStaffFormEmail(stf.email || '');
+                                  setStaffFormUsername(stf.username || '');
+                                  setStaffFormPassword(stf.pin || stf.password || '');
+                                  setStaffFormPhone(stf.phone || '');
+                                  setStaffFormRole(stf.role || 'CASHIER');
+                                  setStaffFormPermissions(stf.permissions || ROLE_PRESET_PERMISSIONS[stf.role] || ROLE_PRESET_PERMISSIONS.CASHIER);
+                                  setStaffModalOpen(true);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                              >
+                                ⚙️ កែប្រែសិទ្ធិលម្អិត
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ⭐️ MODAL កែប្រែព័ត៌មានហាង (EDIT STORE DETAILS MODAL) ⭐️ */}
         {editStoreModalOpen && storeFormToEdit && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
@@ -23442,7 +23736,7 @@ export default function UnifiedAdminDashboard() {
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden relative">
       {/* ⭐️ PERSISTENT TOP-RIGHT PAYMENT & PLAN APPROVAL ALERT WIDGET (បង្ហាញតែម្ចាស់ប្រព័ន្ធ / ACCOUNT OWNER ប៉ុណ្ណោះ មិនបង្ហាញលើ ACCOUNT អតិថិជន) ⭐️ */}
-      {Boolean((activeStore?.id === 'store_default_sabayluk' || !activeStore?.id) && (isMasterOwner || currentStaff?.id === 'STAFF-1' || currentStaff?.role === 'ADMIN')) && totalPendingActionCount > 0 && (
+      {Boolean((activeStore?.id === 'store_default_sabayluk' || !activeStore?.id) && (canManageStores || currentStaff?.id === 'STAFF-1' || currentStaff?.role === 'ADMIN')) && totalPendingActionCount > 0 && (
         <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end gap-2 animate-in slide-in-from-top-3 fade-in duration-300">
           {!paymentAlertDismissed ? (
             <div 
@@ -23659,7 +23953,7 @@ export default function UnifiedAdminDashboard() {
                     iconColor: 'text-amber-400',
                     isSpecial: true
                   },
-                  ...(isMasterOwner ? [{ id: 'stores', name: 'គ្រប់គ្រងហាងទាំងអស់', icon: '🌐', perm: 'stores', countText: inactiveStores.length > 0 ? `⚠️ ${inactiveStores.length} អសកម្ម` : `${registeredStores.length} ហាង`, iconColor: inactiveStores.length > 0 ? 'text-rose-400' : 'text-amber-400', isSpecial: true }] : [])
+                  ...(canManageStores ? [{ id: 'stores', name: 'គ្រប់គ្រងហាងទាំងអស់', icon: '🌐', perm: 'stores', countText: inactiveStores.length > 0 ? `⚠️ ${inactiveStores.length} អសកម្ម` : `${registeredStores.length} ហាង`, iconColor: inactiveStores.length > 0 ? 'text-rose-400' : 'text-amber-400', isSpecial: true }] : [])
                 ]
               }
             ];
@@ -23989,7 +24283,7 @@ export default function UnifiedAdminDashboard() {
 
         {/* ⭐️ TOP STAFF STATUS & SWITCH BAR ⭐️ */}
         {/* 🚨 MASTER OWNER ALERT: INACTIVE STORES (>= 30 DAYS) 🚨 */}
-        {isMasterOwner && inactiveStores.length > 0 && (
+        {(isMasterOwner || canManageStores) && inactiveStores.length > 0 && (
           <div className="mb-4 p-4 rounded-3xl bg-gradient-to-r from-amber-500 via-rose-500 to-amber-600 text-white shadow-lg flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl shrink-0">
@@ -24037,7 +24331,7 @@ export default function UnifiedAdminDashboard() {
                 </p>
               </div>
             </div>
-            {isMasterOwner && (
+            {(isMasterOwner || canManageStores) && (
               <button
                 type="button"
                 onClick={async () => {
@@ -24101,7 +24395,7 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'invoice' && InvoiceSettingsView()}
         {activeTab === 'staff' && StaffManagementView()}
         {activeTab === 'upgrade_plan' && UpgradePlanFullView()}
-        {activeTab === 'stores' && isMasterOwner && MasterStoresManagementView()}
+        {activeTab === 'stores' && canManageStores && MasterStoresManagementView()}
       </main>
 
 

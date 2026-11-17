@@ -260,6 +260,23 @@ function RegisterStoreForm() {
           }).catch(e => console.warn('Telegram notice skipped', e));
         } catch (tgErr) {}
 
+        // 🔔 ជូនដំណឹង Realtime ឆ្លង Tab ទៅកាន់ Admin Dashboard
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('sabay_new_store_alert', JSON.stringify({
+              action: 'new_store_registered_pending_approval',
+              store: newStore,
+              slipUrl: slipUrl || '',
+              timestamp: Date.now()
+            }));
+            if ('BroadcastChannel' in window) {
+              const bc = new BroadcastChannel('sabay_stores_sync');
+              bc.postMessage({ type: 'NEW_STORE_PENDING_APPROVAL', store: newStore, slipUrl: slipUrl || '' });
+              bc.close();
+            }
+          } catch (_) {}
+        }
+
         setLoading(false);
         setIsSubmittingPayment(false);
         setPendingPaidSuccessStore(newStore);
@@ -281,6 +298,22 @@ function RegisterStoreForm() {
           })
         }).catch(e => console.warn('Telegram notice skipped', e));
       } catch (tgErr) {}
+
+      // 🔔 ជូនដំណឹង Realtime ឆ្លង Tab ទៅកាន់ Admin Dashboard
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('sabay_new_store_alert', JSON.stringify({
+            action: 'new_store_registered',
+            store: newStore,
+            timestamp: Date.now()
+          }));
+          if ('BroadcastChannel' in window) {
+            const bc = new BroadcastChannel('sabay_stores_sync');
+            bc.postMessage({ type: 'NEW_STORE_REGISTERED', store: newStore });
+            bc.close();
+          }
+        } catch (_) {}
+      }
 
       // Auto-login session for owner (Isolated store context)
       if (typeof window !== 'undefined') {
