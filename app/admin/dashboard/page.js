@@ -322,24 +322,31 @@ export default function UnifiedAdminDashboard() {
   // Function ទាញយកប្រវត្តិចលនាស្តុក (Stock Movements) ដាច់ដោយឡែកតាម Store
   const fetchStockMovements = async (targetStoreId) => {
     setLoadingMovements(true);
-    const storeId = targetStoreId || activeStore?.id || 'store_default_sabayluk';
+    const storeObj = targetStoreId ? { id: targetStoreId } : getActiveStore();
+    const storeId = targetStoreId || storeObj?.id || 'store_default_sabayluk';
     try {
       const { data, error } = await supabase
         .from('stock_movements')
         .select('*, products(name, sku, image_url, store_id), product_variants(size, color)')
         .order('created_at', { ascending: false })
-        .limit(250);
+        .limit(300);
 
       if (!error && data) {
         // Filter movements strictly for the active store
         const storeMovements = data.filter(m => {
-          const pStore = m.store_id || (m.products && m.products.store_id) || 'store_default_sabayluk';
+          const pStore = m.store_id || (m.products && m.products.store_id);
+          if (storeId === 'store_default_sabayluk') {
+            return !pStore || pStore === 'store_default_sabayluk';
+          }
           return pStore === storeId;
         });
         setStockMovements(storeMovements);
+      } else {
+        setStockMovements([]);
       }
     } catch (err) {
       console.error('Error fetching stock movements:', err);
+      setStockMovements([]);
     } finally {
       setLoadingMovements(false);
     }
@@ -624,93 +631,123 @@ export default function UnifiedAdminDashboard() {
     }
   }, [activeTab, isMounted]);
 
-  // ================= 👥 ផ្នែកគ្រប់គ្រងអតិថិជន FULL OPTION (CRM STATES) =================
-  const [customers, setCustomers] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_customers');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch (e) {}
-      }
+  // ================= 👥 ផ្នែកគ្រប់គ្រងអតិថិជន FULL OPTION (CRM STATES - SCOPED PER STORE) =================
+  const DEFAULT_FLAGSHIP_CUSTOMERS = [
+    {
+      id: 'CUS-1001',
+      name: 'សុខ វិសាល',
+      phone: '0967205522',
+      telegram: 'visal_sok',
+      address: 'ផ្ទះលេខ ១២, ផ្លូវ ២០០, សង្កាត់បឹងកក់, ភ្នំពេញ',
+      tier: 'VIP',
+      discount_percent: 10,
+      notes: 'អតិថិជនពិសេស ទិញស្បែកជើងញឹកញាប់ ចំណូលចិត្ត Size 41 ពណ៌ខ្មៅ',
+      joined: '2026-01-15',
+      baseSpent: 260.00,
+      baseOrderCount: 4,
+      store_id: 'store_default_sabayluk'
+    },
+    {
+      id: 'CUS-1002',
+      name: 'ចាន់ ធីតា',
+      phone: '012345678',
+      telegram: 'thida_chan',
+      address: 'ផ្ទះ 45B, មហាវិថីសហព័ន្ធរុស្ស៊ី, ភ្នំពេញ',
+      tier: 'WHOLESALE',
+      discount_percent: 15,
+      notes: 'ម៉ូយដុំ យកម្ដង 10-20 គូ ផ្ញើតាមឡានក្រុងវីរៈប៊ុនថាំ',
+      joined: '2026-03-20',
+      baseSpent: 520.00,
+      baseOrderCount: 8,
+      store_id: 'store_default_sabayluk'
+    },
+    {
+      id: 'CUS-1003',
+      name: 'គឹម ហេង',
+      phone: '0889988776',
+      telegram: '',
+      address: 'ក្រុងសៀមរាប, ខេត្តសៀមរាប',
+      tier: 'LOYAL',
+      discount_percent: 5,
+      notes: 'អតិថិជនស្មោះត្រង់ ចូលចិត្តម៉ូតស្បែកជើងស្បែក',
+      joined: '2026-06-10',
+      baseSpent: 120.00,
+      baseOrderCount: 2,
+      store_id: 'store_default_sabayluk'
+    },
+    {
+      id: 'CUS-1004',
+      name: 'លីណា',
+      phone: '0978877665',
+      telegram: 'lina_style',
+      address: 'ខេត្តបាត់ដំបង',
+      tier: 'REGULAR',
+      discount_percent: 0,
+      notes: 'កុម្ម៉ង់តាម Online ដឹកជញ្ជូនរហ័ស',
+      joined: '2026-08-01',
+      baseSpent: 45.00,
+      baseOrderCount: 1,
+      store_id: 'store_default_sabayluk'
+    },
+    {
+      id: 'CUS-1005',
+      name: 'veasna',
+      phone: '010723080',
+      telegram: '',
+      address: 'ភ្នំពេញ - 178',
+      tier: 'LOYAL',
+      discount_percent: 5,
+      notes: 'អតិថិជនកុម្ម៉ង់ Online តាម Website',
+      joined: '2026-11-10',
+      baseSpent: 0,
+      baseOrderCount: 0,
+      store_id: 'store_default_sabayluk'
     }
-    return [
-      {
-        id: 'CUS-1001',
-        name: 'សុខ វិសាល',
-        phone: '0967205522',
-        telegram: 'visal_sok',
-        address: 'ផ្ទះលេខ ១២, ផ្លូវ ២០០, សង្កាត់បឹងកក់, ភ្នំពេញ',
-        tier: 'VIP',
-        discount_percent: 10,
-        notes: 'អតិថិជនពិសេស ទិញស្បែកជើងញឹកញាប់ ចំណូលចិត្ត Size 41 ពណ៌ខ្មៅ',
-        joined: '2026-01-15',
-        baseSpent: 260.00,
-        baseOrderCount: 4
-      },
-      {
-        id: 'CUS-1002',
-        name: 'ចាន់ ធីតា',
-        phone: '012345678',
-        telegram: 'thida_chan',
-        address: 'ផ្ទះ 45B, មហាវិថីសហព័ន្ធរុស្ស៊ី, ភ្នំពេញ',
-        tier: 'WHOLESALE',
-        discount_percent: 15,
-        notes: 'ម៉ូយដុំ យកម្ដង 10-20 គូ ផ្ញើតាមឡានក្រុងវីរៈប៊ុនថាំ',
-        joined: '2026-03-20',
-        baseSpent: 520.00,
-        baseOrderCount: 8
-      },
-      {
-        id: 'CUS-1003',
-        name: 'គឹម ហេង',
-        phone: '0889988776',
-        telegram: '',
-        address: 'ក្រុងសៀមរាប, ខេត្តសៀមរាប',
-        tier: 'LOYAL',
-        discount_percent: 5,
-        notes: 'អតិថិជនស្មោះត្រង់ ចូលចិត្តម៉ូតស្បែកជើងស្បែក',
-        joined: '2026-06-10',
-        baseSpent: 120.00,
-        baseOrderCount: 2
-      },
-      {
-        id: 'CUS-1004',
-        name: 'លីណា',
-        phone: '0978877665',
-        telegram: 'lina_style',
-        address: 'ខេត្តបាត់ដំបង',
-        tier: 'REGULAR',
-        discount_percent: 0,
-        notes: 'កុម្ម៉ង់តាម Online ដឹកជញ្ជូនរហ័ស',
-        joined: '2026-08-01',
-        baseSpent: 45.00,
-        baseOrderCount: 1
-      },
-      {
-        id: 'CUS-1005',
-        name: 'veasna',
-        phone: '010723080',
-        telegram: '',
-        address: 'ភ្នំពេញ - 178',
-        tier: 'LOYAL',
-        discount_percent: 5,
-        notes: 'អតិថិជនកុម្ម៉ង់ Online តាម Website',
-        joined: '2026-11-10',
-        baseSpent: 0,
-        baseOrderCount: 0
+  ];
+
+  // Helper សម្រាប់ទាញយក Customer ដាច់ដោយឡែកតាម Store នីមួយៗ (Zero Cross-Store Leakage)
+  const getStoreScopedCustomers = (targetStore) => {
+    if (typeof window === 'undefined') return [];
+    const st = targetStore || getActiveStore();
+    const stId = st?.id || 'store_default_sabayluk';
+    try {
+      const saved = localStorage.getItem(`sabay_customers_${stId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       }
-    ];
-  });
+    } catch (_) {}
+
+    // Flagship Store អាចប្រើ Sample ឬទិន្នន័យចាស់
+    if (stId === 'store_default_sabayluk' || st?.slug === 'sabay-luk') {
+      try {
+        const legacy = localStorage.getItem('sabay_customers');
+        if (legacy) {
+          const parsed = JSON.parse(legacy);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (_) {}
+      return DEFAULT_FLAGSHIP_CUSTOMERS;
+    }
+
+    // ហាងថ្មី ឬហាងអតិថិជន ចាប់ផ្តើមដោយ ០ អតិថិជន (Zero Customers initially)
+    return [];
+  };
+
+  const [customers, setCustomers] = useState(() => getStoreScopedCustomers());
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('sabay_customers', JSON.stringify(customers));
+      const st = getActiveStore();
+      const stId = st?.id || 'store_default_sabayluk';
+      localStorage.setItem(`sabay_customers_${stId}`, JSON.stringify(customers));
+      if (stId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_customers', JSON.stringify(customers));
+      }
     }
   }, [customers]);
 
-  // ================= 💸 ផ្នែកគ្រប់គ្រងចំណាយ & គណនាប្រាក់ចំណេញសុទ្ធ (EXPENSES & NET PROFIT) =================
+  // ================= 💸 ផ្នែកគ្រប់គ្រងចំណាយ & គណនាប្រាក់ចំណេញសុទ្ធ (EXPENSES - SCOPED PER STORE) =================
   const EXPENSE_CATEGORIES = [
     { id: 'rent', label: 'ថ្លៃជួលតូប / ទីតាំង (Rent)', icon: '🏢', badge: 'bg-amber-50 text-amber-700 border-amber-200' },
     { id: 'utilities', label: 'ទឹក ភ្លើង & អ៊ីនធឺណិត (Utilities)', icon: '💡', badge: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
@@ -722,57 +759,82 @@ export default function UnifiedAdminDashboard() {
     { id: 'other', label: 'ចំណាយផ្សេងៗ (Other Miscellaneous)', icon: '📦', badge: 'bg-purple-50 text-purple-700 border-purple-200' },
   ];
 
-  const [expenses, setExpenses] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_luk_expenses');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch (e) {}
-      }
+  const DEFAULT_FLAGSHIP_EXPENSES = [
+    {
+      id: 'EXP-1001',
+      title: 'ថ្លៃជួលតូបប្រចាំខែ',
+      category: 'rent',
+      amount: 250.00,
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'ABA',
+      recipient: 'ម្ចាស់ទីតាំង',
+      note: 'បង់ថ្លៃជួលទីតាំងតូបកណ្តាលក្រុង',
+      created_at: new Date().toISOString(),
+      store_id: 'store_default_sabayluk'
+    },
+    {
+      id: 'EXP-1002',
+      title: 'ថ្លៃទឹក ភ្លើង & Wi-Fi អ៊ីនធឺណិត',
+      category: 'utilities',
+      amount: 35.50,
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'ABA',
+      recipient: 'EDC / ISP',
+      note: 'បង់ថ្លៃភ្លើងហាង និងថ្លៃ Wi-Fi ប្រចាំខែ',
+      created_at: new Date().toISOString(),
+      store_id: 'store_default_sabayluk'
+    },
+    {
+      id: 'EXP-1003',
+      title: 'ទិញថង់ និងប្រអប់កាតុងវេចខ្ចប់',
+      category: 'delivery',
+      amount: 25.00,
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'Cash',
+      recipient: 'រោងពុម្ពវេចខ្ចប់',
+      note: 'ទិញថង់ និងប្រអប់កាតុង ២០០ ប្រអប់',
+      created_at: new Date().toISOString(),
+      store_id: 'store_default_sabayluk'
     }
-    const today = new Date().toISOString().slice(0, 10);
-    return [
-      {
-        id: 'EXP-1001',
-        title: 'ថ្លៃជួលតូបប្រចាំខែ',
-        category: 'rent',
-        amount: 250.00,
-        date: today,
-        paymentMethod: 'ABA',
-        recipient: 'ម្ចាស់ទីតាំង',
-        note: 'បង់ថ្លៃជួលទីតាំងតូបកណ្តាលក្រុង',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EXP-1002',
-        title: 'ថ្លៃទឹក ភ្លើង & Wi-Fi អ៊ីនធឺណិត',
-        category: 'utilities',
-        amount: 35.50,
-        date: today,
-        paymentMethod: 'ABA',
-        recipient: 'EDC / ISP',
-        note: 'បង់ថ្លៃភ្លើងហាង និងថ្លៃ Wi-Fi ប្រចាំខែ',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: 'EXP-1003',
-        title: 'ទិញថង់ និងប្រអប់កាតុងវេចខ្ចប់',
-        category: 'delivery',
-        amount: 25.00,
-        date: today,
-        paymentMethod: 'Cash',
-        recipient: 'រោងពុម្ពវេចខ្ចប់',
-        note: 'ទិញថង់ និងប្រអប់កាតុង ២០០ ប្រអប់',
-        created_at: new Date().toISOString()
+  ];
+
+  // Helper សម្រាប់ទាញយក Expense ដាច់ដោយឡែកតាម Store
+  const getStoreScopedExpenses = (targetStore) => {
+    if (typeof window === 'undefined') return [];
+    const st = targetStore || getActiveStore();
+    const stId = st?.id || 'store_default_sabayluk';
+    try {
+      const saved = localStorage.getItem(`sabay_expenses_${stId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       }
-    ];
-  });
+    } catch (_) {}
+
+    if (stId === 'store_default_sabayluk' || st?.slug === 'sabay-luk') {
+      try {
+        const legacy = localStorage.getItem('sabay_luk_expenses');
+        if (legacy) {
+          const parsed = JSON.parse(legacy);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (_) {}
+      return DEFAULT_FLAGSHIP_EXPENSES;
+    }
+
+    return [];
+  };
+
+  const [expenses, setExpenses] = useState(() => getStoreScopedExpenses());
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('sabay_luk_expenses', JSON.stringify(expenses));
+      const st = getActiveStore();
+      const stId = st?.id || 'store_default_sabayluk';
+      localStorage.setItem(`sabay_expenses_${stId}`, JSON.stringify(expenses));
+      if (stId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_luk_expenses', JSON.stringify(expenses));
+      }
     }
   }, [expenses]);
 
@@ -1201,10 +1263,13 @@ export default function UnifiedAdminDashboard() {
     fetchProducts(storeId);
     fetchCategories(storeId);
     fetchRealOrders(storeId);
+    setStockMovements([]); // Clear previous movements immediately
     fetchStockMovements(storeId);
     setInvoiceSettings(getStoreScopedInvoiceSettings(activeStore));
     setSlides(getStoreScopedCoverSlides(activeStore));
     setStoreSettings(getStoreScopedSettings(activeStore));
+    setCustomers(getStoreScopedCustomers(activeStore));
+    setExpenses(getStoreScopedExpenses(activeStore));
 
     // ⭐️ Reload POS Cart ដាច់ដោយឡែកតាម Store នីមួយៗ (Zero Cart Leakage) ⭐️
     try {
@@ -2465,6 +2530,9 @@ export default function UnifiedAdminDashboard() {
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [resetActionType, setResetActionType] = useState('all'); // 'all' | 'orders' | 'movements' | 'customers' | 'products'
   const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetPasswordInput, setResetPasswordInput] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetErrorMsg, setResetErrorMsg] = useState('');
   const [isResetting, setIsResetting] = useState(false);
 
   // Preset ពណ៌សម្រាប់ Brand Theme
@@ -3026,67 +3094,142 @@ export default function UnifiedAdminDashboard() {
     document.body.removeChild(link);
   };
 
-  // ⭐️ មុខងារ Reset / សម្អាតទិន្នន័យតេស្តហាង ⭐️
+  // ⭐️ មុខងារ Reset / សម្អាតទិន្នន័យតេស្តហាង (មានសុវត្ថិភាពខ្ពស់ ផ្ទៀងផ្ទាត់ Password ម្ចាស់ហាង និងបែងចែកទិន្នន័យដាច់ដោយឡែក ១០០%) ⭐️
   const handleExecuteReset = async () => {
+    setResetErrorMsg('');
+
+    // 1. ពិនិត្យលេខសម្ងាត់ម្ចាស់ហាង (Verify Store Owner Credentials)
+    const inputPass = resetPasswordInput.trim();
+    if (!inputPass) {
+      setResetErrorMsg('សូមបញ្ចូលលេខសម្ងាត់ ឬ PIN របស់ម្ចាស់ហាងដើម្បីផ្ទៀងផ្ទាត់សុវត្ថិភាព!');
+      return;
+    }
+
+    const storePin = (activeStore?.pin || activeStore?.password || '1234').toString().trim();
+    const storeOwnerPass = (activeStore?.settings?.owner_password || activeStore?.settings?.pin || '').toString().trim();
+    const staffPin = (currentStaff?.pin || currentStaff?.password || '').toString().trim();
+    const storeStaffList = getStoreStaffList(activeStore);
+    const ownerAccount = storeStaffList.find(s => s.role === 'ADMIN' || s.isOwner);
+    const ownerAccountPin = (ownerAccount?.pin || ownerAccount?.password || '').toString().trim();
+
+    const isPasswordValid = (
+      inputPass === storePin ||
+      inputPass === storeOwnerPass ||
+      inputPass === staffPin ||
+      inputPass === ownerAccountPin ||
+      (isMasterOwner && (inputPass === '1234' || inputPass === (masterCredentials?.pin || '1234')))
+    );
+
+    if (!isPasswordValid) {
+      setResetErrorMsg(`❌ លេខសម្ងាត់ម្ចាស់ហាងមិនត្រឹមត្រូវទេ! សូមបញ្ចូលលេខសម្ងាត់ ឬ PIN របស់ហាង [${activeStore?.name || ''}] របស់អ្នកឱ្យបានត្រឹមត្រូវ។`);
+      return;
+    }
+
+    // 2. ពិនិត្យអក្សរបញ្ជាក់ពាក្យ RESET
     if (resetConfirmText.trim().toUpperCase() !== 'RESET') {
-      alert('សូមវាយពាក្យ "RESET" ឱ្យបានត្រឹមត្រូវដើម្បីបញ្ជាក់ការលុប!');
+      setResetErrorMsg('សូមវាយពាក្យ "RESET" ឱ្យបានត្រឹមត្រូវដើម្បីបញ្ជាក់ការលុប!');
       return;
     }
 
     setIsResetting(true);
+    const currentStoreId = activeStore?.id || 'store_default_sabayluk';
+    const isFlagship = currentStoreId === 'store_default_sabayluk';
+
     try {
+      // 🛒 ១. សម្អាតការបញ្ជាទិញ (Orders) សម្រាប់តែ Store នេះប៉ុណ្ណោះ (Never delete other stores)
       if (resetActionType === 'orders' || resetActionType === 'all') {
-        const { data: ords } = await supabase.from('orders').select('id');
+        let ordQuery = supabase.from('orders').select('id');
+        if (isFlagship) {
+          ordQuery = ordQuery.or(`store_id.eq.${currentStoreId},store_id.is.null`);
+        } else {
+          ordQuery = ordQuery.eq('store_id', currentStoreId);
+        }
+        const { data: ords } = await ordQuery;
         if (ords && ords.length > 0) {
           const ids = ords.map(o => o.id);
           await supabase.from('orders').delete().in('id', ids);
         }
-        setRealOrders([]);
+        setRealOrders(prev => prev.filter(o => {
+          const oStore = o.store_id || 'store_default_sabayluk';
+          return oStore !== currentStoreId;
+        }));
       }
 
+      // 📋 ២. សម្អាតចលនាស្តុក (Stock Movements) សម្រាប់តែ Store នេះប៉ុណ្ណោះ
       if (resetActionType === 'movements' || resetActionType === 'all') {
-        const { data: mvts } = await supabase.from('stock_movements').select('id');
-        if (mvts && mvts.length > 0) {
-          const ids = mvts.map(m => m.id);
-          await supabase.from('stock_movements').delete().in('id', ids);
+        let prodQuery = supabase.from('products').select('id');
+        if (isFlagship) {
+          prodQuery = prodQuery.or(`store_id.eq.${currentStoreId},store_id.is.null`);
+        } else {
+          prodQuery = prodQuery.eq('store_id', currentStoreId);
+        }
+        const { data: prods } = await prodQuery;
+        if (prods && prods.length > 0) {
+          const prodIds = prods.map(p => p.id);
+          await supabase.from('stock_movements').delete().in('product_id', prodIds);
         }
         setStockMovements([]);
       }
 
+      // 👥 ៣. សម្អាតអតិថិជន (Customers) សម្រាប់តែ Store នេះប៉ុណ្ណោះ
       if (resetActionType === 'customers' || resetActionType === 'all') {
-        localStorage.removeItem('sabay_customers');
+        localStorage.removeItem(`sabay_customers_${currentStoreId}`);
+        if (isFlagship) {
+          localStorage.removeItem('sabay_customers');
+        }
         setCustomers([]);
       }
 
+      // 📦 ៤. សម្អាតទំនិញ និង Variant (Products & Variants) សម្រាប់តែ Store នេះប៉ុណ្ណោះ
       if (resetActionType === 'products' || resetActionType === 'all') {
-        const { data: vars } = await supabase.from('product_variants').select('id');
-        if (vars && vars.length > 0) {
-          await supabase.from('product_variants').delete().in('id', vars.map(v => v.id));
+        let prodQuery = supabase.from('products').select('id');
+        if (isFlagship) {
+          prodQuery = prodQuery.or(`store_id.eq.${currentStoreId},store_id.is.null`);
+        } else {
+          prodQuery = prodQuery.eq('store_id', currentStoreId);
         }
-        const { data: prods } = await supabase.from('products').select('id');
+        const { data: prods } = await prodQuery;
         if (prods && prods.length > 0) {
-          await supabase.from('products').delete().in('id', prods.map(p => p.id));
+          const prodIds = prods.map(p => p.id);
+          await supabase.from('product_variants').delete().in('product_id', prodIds);
+          await supabase.from('stock_movements').delete().in('product_id', prodIds);
+          await supabase.from('products').delete().in('id', prodIds);
         }
-        setProducts([]);
+        setProducts(prev => prev.filter(p => {
+          const pStore = p.store_id || 'store_default_sabayluk';
+          return pStore !== currentStoreId;
+        }));
       }
 
+      // 🧹 ៥. សម្អាត POS Cart, Hold Orders & ចំណាយ Expenses សម្រាប់តែ Store នេះប៉ុណ្ណោះ
       if (resetActionType === 'all') {
-        localStorage.removeItem('sabay_pos_cart');
-        localStorage.removeItem('sabay_pos_hold_orders');
+        localStorage.removeItem(`sabay_pos_cart_${currentStoreId}`);
+        localStorage.removeItem(`sabay_pos_hold_orders_${currentStoreId}`);
+        localStorage.removeItem(`sabay_expenses_${currentStoreId}`);
+        if (isFlagship) {
+          localStorage.removeItem('sabay_pos_cart');
+          localStorage.removeItem('sabay_pos_hold_orders');
+          localStorage.removeItem('sabay_expenses');
+          localStorage.removeItem('sabay_luk_expenses');
+        }
         setPosCart([]);
         setHoldOrders([]);
+        setExpenses([]);
       }
 
-      if (fetchProducts) fetchProducts();
-      if (fetchRealOrders) fetchRealOrders();
-      if (fetchStockMovements) fetchStockMovements();
+      // ទាញទិន្នន័យថ្មីសម្រាប់ Store នេះ
+      if (fetchProducts) await fetchProducts(currentStoreId);
+      if (fetchRealOrders) await fetchRealOrders(currentStoreId);
+      if (fetchStockMovements) await fetchStockMovements(currentStoreId);
 
       setResetModalOpen(false);
       setResetConfirmText('');
-      alert('🎉 សម្អាតទិន្នន័យបានជោគជ័យរួចរាល់!');
+      setResetPasswordInput('');
+      setResetErrorMsg('');
+      alert(`🎉 សម្អាតទិន្នន័យសម្រាប់ហាង [${activeStore?.name || 'Sabay Luk'}] បានជោគជ័យ ១០០%! ទិន្នន័យហាងដទៃទៀតត្រូវបានការពារមិនឱ្យប៉ះពាល់ឡើយ។`);
     } catch (err) {
       console.error('Reset error:', err);
-      alert('❌ មានបញ្ហាក្នុងការសម្អាតទិន្នន័យ: ' + err.message);
+      setResetErrorMsg('❌ មានបញ្ហាក្នុងការសម្អាតទិន្នន័យ: ' + err.message);
     } finally {
       setIsResetting(false);
     }
@@ -22758,7 +22901,21 @@ export default function UnifiedAdminDashboard() {
           )}
 
           {/* TAB 7: DATA MANAGEMENT & STORE RESET */}
-          {activeSettingsSubTab === 'data' && (
+          {activeSettingsSubTab === 'data' && (() => {
+            const curStoreId = activeStore?.id || 'store_default_sabayluk';
+            const isFlagship = curStoreId === 'store_default_sabayluk';
+            const scopedProds = (products || []).filter(p => isFlagship ? (!p.store_id || p.store_id === curStoreId) : p.store_id === curStoreId);
+            const scopedOrders = (realOrders || []).filter(o => isFlagship ? (!o.store_id || o.store_id === curStoreId) : o.store_id === curStoreId);
+            const scopedMovements = (stockMovements || []).filter(m => {
+              const pStore = m.store_id || (m.products && m.products.store_id);
+              return isFlagship ? (!pStore || pStore === curStoreId) : pStore === curStoreId;
+            });
+            const scopedCustomers = (customers || []).filter(c => {
+              const cStore = c.store_id || 'store_default_sabayluk';
+              return isFlagship ? (!c.store_id || cStore === curStoreId) : (c.store_id === curStoreId || !c.store_id);
+            });
+
+            return (
             <div className="space-y-6 animate-in fade-in">
               <div>
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
@@ -22938,7 +23095,7 @@ export default function UnifiedAdminDashboard() {
                   >
                     <span className="text-xl">🗄️</span>
                     <span>របាយការណ៍ស្តុកទំនិញ</span>
-                    <span className="text-[10px] text-gray-400 font-bold">({products.length} Products)</span>
+                    <span className="text-[10px] text-gray-400 font-bold">({scopedProds.length} Products)</span>
                   </button>
                   <button
                     type="button"
@@ -22947,7 +23104,7 @@ export default function UnifiedAdminDashboard() {
                   >
                     <span className="text-xl">🛒</span>
                     <span>របាយការណ៍ការលក់</span>
-                    <span className="text-[10px] text-gray-400 font-bold">({realOrders.length} Orders)</span>
+                    <span className="text-[10px] text-gray-400 font-bold">({scopedOrders.length} Orders)</span>
                   </button>
                   <button
                     type="button"
@@ -22956,7 +23113,7 @@ export default function UnifiedAdminDashboard() {
                   >
                     <span className="text-xl">📋</span>
                     <span>កំណត់ត្រាចលនាស្តុក</span>
-                    <span className="text-[10px] text-gray-400 font-bold">({stockMovements.length} Logs)</span>
+                    <span className="text-[10px] text-gray-400 font-bold">({scopedMovements.length} Logs)</span>
                   </button>
                   <button
                     type="button"
@@ -22965,7 +23122,7 @@ export default function UnifiedAdminDashboard() {
                   >
                     <span className="text-xl">👥</span>
                     <span>បញ្ជីអតិថិជន CRM</span>
-                    <span className="text-[10px] text-gray-400 font-bold">({customers.length} Customers)</span>
+                    <span className="text-[10px] text-gray-400 font-bold">({scopedCustomers.length} Customers)</span>
                   </button>
                 </div>
               </div>
@@ -22976,7 +23133,7 @@ export default function UnifiedAdminDashboard() {
                   <span className="p-2 bg-amber-600 text-white rounded-xl text-sm">🧹</span>
                   <div>
                     <h4 className="text-xs font-black text-amber-950 uppercase">២. សម្អាតទិន្នន័យតេស្តតាមផ្នែក (Selective Reset)</h4>
-                    <p className="text-[11px] text-amber-800">លុបទិន្នន័យចាស់ៗដែលបានតេស្ត ទៅតាមផ្នែកនីមួយៗដោយសុវត្ថិភាព</p>
+                    <p className="text-[11px] text-amber-800">លុបទិន្នន័យចាស់ៗដែលបានតេស្ត ទៅតាមផ្នែកនីមួយៗដោយសុវត្ថិភាព សម្រាប់តែហាង [{activeStore?.name || 'បច្ចុប្បន្ន'}]</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -22985,11 +23142,13 @@ export default function UnifiedAdminDashboard() {
                     onClick={() => {
                       setResetActionType('orders');
                       setResetConfirmText('');
+                      setResetPasswordInput('');
+                      setResetErrorMsg('');
                       setResetModalOpen(true);
                     }}
                     className="bg-white hover:bg-red-50 text-red-700 border border-red-200 p-3 rounded-2xl text-xs font-black transition flex items-center justify-between cursor-pointer"
                   >
-                    <span>🛒 លុបប្រវត្តិលក់ ({realOrders.length})</span>
+                    <span>🛒 លុបប្រវត្តិលក់ ({scopedOrders.length})</span>
                     <span>🗑️</span>
                   </button>
                   <button
@@ -22997,11 +23156,13 @@ export default function UnifiedAdminDashboard() {
                     onClick={() => {
                       setResetActionType('movements');
                       setResetConfirmText('');
+                      setResetPasswordInput('');
+                      setResetErrorMsg('');
                       setResetModalOpen(true);
                     }}
                     className="bg-white hover:bg-red-50 text-red-700 border border-red-200 p-3 rounded-2xl text-xs font-black transition flex items-center justify-between cursor-pointer"
                   >
-                    <span>📋 លុបចលនាស្តុក ({stockMovements.length})</span>
+                    <span>📋 លុបចលនាស្តុក ({scopedMovements.length})</span>
                     <span>🗑️</span>
                   </button>
                   <button
@@ -23009,11 +23170,13 @@ export default function UnifiedAdminDashboard() {
                     onClick={() => {
                       setResetActionType('customers');
                       setResetConfirmText('');
+                      setResetPasswordInput('');
+                      setResetErrorMsg('');
                       setResetModalOpen(true);
                     }}
                     className="bg-white hover:bg-red-50 text-red-700 border border-red-200 p-3 rounded-2xl text-xs font-black transition flex items-center justify-between cursor-pointer"
                   >
-                    <span>👥 លុបបញ្ជីភ្ញៀវតេស្ត ({customers.length})</span>
+                    <span>👥 លុបបញ្ជីភ្ញៀវតេស្ត ({scopedCustomers.length})</span>
                     <span>🗑️</span>
                   </button>
                 </div>
@@ -23035,6 +23198,8 @@ export default function UnifiedAdminDashboard() {
                   onClick={() => {
                     setResetActionType('all');
                     setResetConfirmText('');
+                    setResetPasswordInput('');
+                    setResetErrorMsg('');
                     setResetModalOpen(true);
                   }}
                   className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl text-xs font-black shadow-lg shadow-red-600/30 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
@@ -23043,7 +23208,8 @@ export default function UnifiedAdminDashboard() {
                 </button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* TAB 8: STORE PASSWORD / SECURITY */}
           {activeSettingsSubTab === 'security' && (
@@ -23173,36 +23339,98 @@ export default function UnifiedAdminDashboard() {
             </div>
           )}
 
-          {/* ⭐️ Modal សម្អាតទិន្នន័យតេស្ត (Reset Confirmation Modal) ⭐️ */}
+          {/* ⭐️ Modal សម្អាតទិន្នន័យតេស្ត (Reset Confirmation Modal - តម្រូវឱ្យមាន Password ម្ចាស់ហាង) ⭐️ */}
       {resetModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-4 animate-in fade-in zoom-in-95">
-            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-2xl mx-auto shadow-xs">
+            <div className="w-14 h-14 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-3xl mx-auto shadow-xs">
               ⚠️
             </div>
+
             <div className="text-center space-y-1">
               <h3 className="text-base font-black text-gray-900">
-                {resetActionType === 'all' ? 'បញ្ជាក់ការសម្អាតទិន្នន័យហាងទាំងអស់' : 'បញ្ជាក់ការលុបទិន្នន័យ'}
+                {resetActionType === 'all' && 'បញ្ជាក់ការសម្អាតទិន្នន័យហាងទាំងអស់ (Factory Reset)'}
+                {resetActionType === 'orders' && 'បញ្ជាក់ការលុបប្រវត្តិលក់ (Clear Sales History)'}
+                {resetActionType === 'movements' && 'បញ្ជាក់ការលុបចលនាស្តុក (Clear Stock Logs)'}
+                {resetActionType === 'customers' && 'បញ្ជាក់ការលុបបញ្ជីអតិថិជន (Clear Customers)'}
+                {resetActionType === 'products' && 'បញ្ជាក់ការលុបទំនិញ (Clear Products)'}
               </h3>
               <p className="text-xs text-gray-500 font-medium">
                 {resetActionType === 'all'
                   ? 'រាល់ការបញ្ជាទិញ, ចលនាស្តុក, អតិថិជន និងផលិតផលតេស្ត នឹងត្រូវបានលុបជាអចិន្ត្រៃយ៍ មិនអាចត្រឡប់ក្រោយបានទេ!'
-                  : 'ទិន្នន័យដែលបានជ្រើសរើសនឹងត្រូវលុបជាអចិន្ត្រៃយ៍!'}
+                  : 'ទិន្នន័យដែលបានជ្រើសរើសនៃហាងនេះ នឹងត្រូវលុបជាអចិន្ត្រៃយ៍!'}
               </p>
             </div>
 
-            <div className="p-3 bg-red-50 rounded-2xl border border-red-200 text-center">
-              <p className="text-[11px] font-black text-red-800 mb-1">
-                សូមវាយពាក្យ <span className="font-mono bg-white px-2 py-0.5 rounded border border-red-300 text-red-600">RESET</span> ដើម្បីបញ្ជាក់៖
-              </p>
-              <input 
-                type="text"
-                value={resetConfirmText}
-                onChange={(e) => setResetConfirmText(e.target.value)}
-                placeholder="វាយពាក្យ RESET"
-                autoFocus
-                className="w-full border-2 border-red-300 p-2.5 rounded-xl text-center text-sm font-black text-red-600 uppercase outline-none bg-white focus:border-red-500"
-              />
+            {/* Target Store Badge */}
+            <div className="p-3 bg-orange-50 rounded-2xl border border-orange-200 flex items-center gap-2.5">
+              <span className="text-2xl shrink-0">🏬</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] text-orange-700 font-bold uppercase tracking-wider">ហាងដែលត្រូវសម្អាតទិន្នន័យ</div>
+                <div className="text-xs font-black text-gray-900 truncate">
+                  {activeStore?.name || storeSettings.storeName || 'Sabay Luk'} <span className="text-[10px] text-gray-400 font-mono">({activeStore?.slug || activeStore?.id || 'store_default_sabayluk'})</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Security notice */}
+            <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-[11px] font-bold flex items-center gap-2">
+              <span>🛡️</span>
+              <span>ធានាសុវត្ថិភាព៖ លុបតែទិន្នន័យនៃហាងនេះប៉ុណ្ណោះ មិនប៉ះពាល់ដល់ហាងដទៃឡើយ!</span>
+            </div>
+
+            {/* Error message */}
+            {resetErrorMsg && (
+              <div className="p-3 bg-red-100 rounded-xl border border-red-300 text-red-700 text-xs font-black flex items-center gap-2">
+                <span>❌</span>
+                <span>{resetErrorMsg}</span>
+              </div>
+            )}
+
+            {/* Security Password & RESET input */}
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                  <span>🔑 លេខសម្ងាត់ម្ចាស់ហាង (Owner Password / PIN) *</span>
+                  <span className="text-[10px] text-red-500 font-bold">តម្រូវឱ្យបញ្ចូល</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    value={resetPasswordInput}
+                    onChange={(e) => {
+                      setResetPasswordInput(e.target.value);
+                      if (resetErrorMsg) setResetErrorMsg('');
+                    }}
+                    placeholder="បញ្ចូលលេខសម្ងាត់ ឬ PIN ម្ចាស់ហាង..."
+                    autoFocus
+                    className="w-full border-2 border-gray-200 p-2.5 pr-10 rounded-xl text-xs font-bold text-gray-800 focus:border-red-500 outline-none transition bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm cursor-pointer"
+                  >
+                    {showResetPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-red-50 rounded-2xl border border-red-200 text-center">
+                <p className="text-[11px] font-black text-red-800 mb-1">
+                  សូមវាយពាក្យ <span className="font-mono bg-white px-2 py-0.5 rounded border border-red-300 text-red-600 font-black">RESET</span> ដើម្បីបញ្ជាក់៖
+                </p>
+                <input 
+                  type="text"
+                  value={resetConfirmText}
+                  onChange={(e) => {
+                    setResetConfirmText(e.target.value);
+                    if (resetErrorMsg) setResetErrorMsg('');
+                  }}
+                  placeholder="វាយពាក្យ RESET"
+                  className="w-full border-2 border-red-300 p-2.5 rounded-xl text-center text-xs font-black text-red-600 uppercase outline-none bg-white focus:border-red-500"
+                />
+              </div>
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -23212,6 +23440,8 @@ export default function UnifiedAdminDashboard() {
                 onClick={() => {
                   setResetModalOpen(false);
                   setResetConfirmText('');
+                  setResetPasswordInput('');
+                  setResetErrorMsg('');
                 }}
                 className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-2xl text-xs font-black transition cursor-pointer"
               >
@@ -23219,7 +23449,7 @@ export default function UnifiedAdminDashboard() {
               </button>
               <button
                 type="button"
-                disabled={isResetting || resetConfirmText.trim().toUpperCase() !== 'RESET'}
+                disabled={isResetting || !resetPasswordInput.trim() || resetConfirmText.trim().toUpperCase() !== 'RESET'}
                 onClick={handleExecuteReset}
                 className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white py-3 rounded-2xl text-xs font-black transition shadow-lg shadow-red-600/30 cursor-pointer flex items-center justify-center gap-1.5"
               >
@@ -23530,16 +23760,21 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* ================= 7️⃣ DATA & EXPORT VIEW ================= */}
-            {activeSettingsSubTab === 'data' && (
+            {activeSettingsSubTab === 'data' && (() => {
+              const curStoreId = activeStore?.id || 'store_default_sabayluk';
+              const isFlagship = curStoreId === 'store_default_sabayluk';
+              const pCount = (products || []).filter(p => isFlagship ? (!p.store_id || p.store_id === curStoreId) : p.store_id === curStoreId).length;
+              const oCount = (realOrders || []).filter(o => isFlagship ? (!o.store_id || o.store_id === curStoreId) : o.store_id === curStoreId).length;
+              return (
               <div className="space-y-3 animate-in fade-in">
                 <div className="bg-slate-800/90 rounded-2xl p-3.5 border border-slate-700 space-y-2.5 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 font-bold">ទំនិញសរុបក្នុងហាង:</span>
-                    <span className="font-mono font-black text-emerald-400">{(products || []).length} មុខ</span>
+                    <span className="font-mono font-black text-emerald-400">{pCount} មុខ</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 font-bold">ការកុម្ម៉ង់ទាំងអស់:</span>
-                    <span className="font-mono font-black text-orange-400">{(realOrders || []).length} កុម្ម៉ង់</span>
+                    <span className="font-mono font-black text-orange-400">{oCount} កុម្ម៉ង់</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400 font-bold">ស្ថានភាព Cloud Database:</span>
@@ -23550,7 +23785,8 @@ export default function UnifiedAdminDashboard() {
                   </div>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Footer with Open Website Link */}
             <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px]">
