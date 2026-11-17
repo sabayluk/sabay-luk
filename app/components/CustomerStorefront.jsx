@@ -901,7 +901,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         name: product.name,
         price: product.price,
         retail_discount: product.retail_discount,
-        image_url: product.image_url,
+        image_url: product.image_url || product.image || product.photo_url || '',
+        image: product.image_url || product.image || product.photo_url || '',
         stock_qty: product.stock_qty,
         category: product.category,
         sku: product.sku
@@ -1772,7 +1773,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         id: product.id,
         name: product.name,
         price: product.price,
-        image_url: product.image_url,
+        image_url: product.image_url || product.image || product.photo_url || '',
+        image: product.image_url || product.image || product.photo_url || '',
         size: 'ស្តង់ដារ',
         color: product.color || '',
         variantId: null,
@@ -1826,7 +1828,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
           id: selectedProductForVariant.id,
           name: selectedProductForVariant.name,
           price: selectedProductForVariant.price,
-          image_url: selectedProductForVariant.image_url,
+          image_url: selectedVariant?.image_url || selectedProductForVariant.image_url || selectedProductForVariant.image || selectedProductForVariant.photo_url || '',
+          image: selectedVariant?.image_url || selectedProductForVariant.image_url || selectedProductForVariant.image || selectedProductForVariant.photo_url || '',
           size: modalSelectedSize,
           color: modalSelectedColor || selectedProductForVariant.color || '',
           variantId: variantId,
@@ -4737,8 +4740,12 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                         <div key={`${item.id}_${item.variantId || idx}`} className="flex items-center gap-3 pt-2 first:pt-0">
                           <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 shadow-2xs">
                             <img 
-                              src={item.image || '/placeholder-shoes.jpg'} 
+                              src={item.image_url || item.image || item.photo_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80'} 
                               alt={item.name} 
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80';
+                              }}
                               className="w-full h-full object-cover"
                             />
                           </div>
@@ -4929,146 +4936,286 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         </div>
       )}
 
-      {/* ⭐️ 11. ORDER SUCCESS MODAL ⭐️ */}
+      {/* ⭐️ 11. ORDER SUCCESS MODAL (ENHANCED WITH DETAILED PRODUCT LIST & MAP) ⭐️ */}
       {orderSuccessModalOpen && completedOrder && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 text-center shadow-2xl relative animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">
-              🎉
-            </div>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
             
-            <h3 className="font-black text-xl text-gray-900 mb-1">ការបញ្ជាទិញទទួលបានជោគជ័យ!</h3>
-            <p className="text-xs text-gray-500 mb-4">
-              អរគុណសម្រាប់ការគាំទ្រ Sabay Luk! យើងខ្ញុំបានទទួលការកុម្ម៉ង់របស់អ្នករួចរាល់ហើយ។
-            </p>
+            {/* Header Banner */}
+            <div className="text-center pb-4 shrink-0 border-b border-slate-100">
+              <div className="w-14 h-14 bg-gradient-to-tr from-emerald-500 to-teal-400 text-white rounded-2xl flex items-center justify-center text-3xl mx-auto mb-2.5 shadow-lg shadow-emerald-500/25">
+                🎉
+              </div>
+              <h3 className="font-black text-lg sm:text-xl text-slate-900 leading-tight">
+                ការបញ្ជាទិញទទួលបានជោគជ័យ!
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                អរគុណសម្រាប់ការគាំទ្រ Sabay Luk! យើងខ្ញុំបានកត់ត្រាការកុម្ម៉ង់របស់អ្នករួចរាល់ហើយ។
+              </p>
+            </div>
 
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 text-left text-xs space-y-2 mb-5">
-              <div className="flex justify-between pb-1.5 border-b border-gray-200 font-bold">
-                <span className="text-gray-500">លេខកូដកុម្ម៉ង់ (Order ID):</span>
-                <span className="text-orange-600 font-mono text-sm">{completedOrder.order_id}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">អ្នកទទួល:</span>
-                <span className="font-bold text-gray-800">{completedOrder.customer}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">លេខទូរស័ព្ទ:</span>
-                <span className="font-bold text-gray-800">{completedOrder.phone}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">អាសយដ្ឋាន:</span>
-                <span className="font-bold text-gray-800 text-right">{completedOrder.address}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">វិធីសាស្ត្រទូទាត់:</span>
-                <span className="font-bold text-gray-800">{completedOrder.payment}</span>
-              </div>
-              {completedOrder.payment_slip_url && (
-                <div className="flex items-center justify-between pb-1 pt-1 border-t border-gray-100">
-                  <span className="text-gray-500">វិក្កយបត្រផ្ទេរប្រាក់:</span>
-                  <a 
-                    href={completedOrder.payment_slip_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-[#ff6a00] font-bold text-[11px] underline flex items-center gap-1"
-                  >
-                    <span>🧾</span> មើល Slip ផ្ទេរប្រាក់ ↗
+            {/* Scrollable Order Details Body */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+              
+              {/* Order Meta Card */}
+              <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 text-xs space-y-2">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                  <span className="text-slate-500 font-bold">លេខកូដកុម្ម៉ង់ (Order ID):</span>
+                  <span className="text-orange-600 font-mono font-black text-sm bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-200">
+                    #{completedOrder.order_id}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-bold">អ្នកទទួល:</span>
+                  <span className="font-black text-slate-900">{completedOrder.customer}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-bold">លេខទូរស័ព្ទ:</span>
+                  <a href={`tel:${completedOrder.phone}`} className="font-bold text-blue-600 hover:underline">
+                    📞 {completedOrder.phone}
                   </a>
+                </div>
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-slate-500 font-bold shrink-0">អាសយដ្ឋានដឹក:</span>
+                  <span className="font-bold text-slate-900 text-right leading-relaxed">
+                    {completedOrder.address || completedOrder.delivery_address}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-bold">វិធីសាស្ត្រទូទាត់:</span>
+                  <span className="font-black text-slate-900 uppercase bg-slate-200/70 px-2 py-0.5 rounded text-[11px]">
+                    {completedOrder.payment || completedOrder.payment_method || 'COD'}
+                  </span>
+                </div>
+
+                {/* Google Maps Location Button if provided */}
+                {(completedOrder.google_map_url || (completedOrder.items && completedOrder.items[0]?.google_map_url)) && (
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                    <span className="text-slate-600 font-bold flex items-center gap-1">
+                      <span>🗺️</span> ទីតាំងផែនទី Google Maps:
+                    </span>
+                    <a
+                      href={completedOrder.google_map_url || completedOrder.items[0]?.google_map_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-[11px] px-2.5 py-1 rounded-lg border border-blue-200 transition"
+                    >
+                      <span>📍</span> បើកមើល Maps ↗
+                    </a>
+                  </div>
+                )}
+
+                {/* House Photo Preview if provided */}
+                {(completedOrder.location_photo_url || (completedOrder.items && completedOrder.items[0]?.location_photo_url)) && (
+                  <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                    <span className="text-slate-600 font-bold flex items-center gap-1">
+                      <span>🏠</span> រូបថតទីតាំង ឬផ្ទះទទួលឥវ៉ាន់:
+                    </span>
+                    <div className="flex items-center gap-2.5 bg-white p-2 rounded-xl border border-slate-200">
+                      <img
+                        src={completedOrder.location_photo_url || completedOrder.items[0]?.location_photo_url}
+                        alt="Location"
+                        className="w-16 h-16 object-cover rounded-lg border shrink-0 bg-slate-100"
+                      />
+                      <div className="text-[11px]">
+                        <p className="font-black text-slate-900">បានភ្ជាប់រូបថតទីតាំងទទួល</p>
+                        <p className="text-slate-400 mt-0.5">ជួយឱ្យអ្នកដឹកជញ្ជូនស្គាល់ច្រកចូលផ្ទះបានត្រឹមត្រូវ</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Payment Slip Preview if provided */}
+                {completedOrder.payment_slip_url && (
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
+                    <span className="text-slate-600 font-bold flex items-center gap-1">
+                      <span>🧾</span> បង្កាន់ដៃផ្ទេរប្រាក់ (Slip):
+                    </span>
+                    <a 
+                      href={completedOrder.payment_slip_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-orange-600 hover:text-orange-700 font-bold text-[11px] underline flex items-center gap-1"
+                    >
+                      <span>🔍</span> មើល Slip ផ្ទេរប្រាក់ ↗
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* ⭐️ DETAILED ORDERED ITEMS LIST (ពត័មានទំនិញលម្អិត) ⭐️ */}
+              {completedOrder.items && Array.isArray(completedOrder.items) && completedOrder.items.length > 0 && (
+                <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                    <h4 className="font-black text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>📦</span> បញ្ជីមុខទំនិញដែលបានកុម្ម៉ង់ ({completedOrder.items.filter(it => !it.is_tax_meta).length} មុខ)
+                    </h4>
+                  </div>
+                  
+                  <div className="space-y-2.5 divide-y divide-slate-200/60">
+                    {completedOrder.items.filter(it => !it.is_tax_meta).map((it, idx) => (
+                      <div key={idx} className="flex items-center gap-3 pt-2.5 first:pt-0">
+                        <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 shadow-2xs">
+                          <img
+                            src={it.image_url || it.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80'}
+                            alt={it.name}
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80';
+                            }}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-black text-xs text-slate-900 truncate">
+                            {it.name}
+                          </h5>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {it.size && (
+                              <span className="text-[10px] font-bold bg-white text-slate-700 px-1.5 py-0.2 rounded border border-slate-200">
+                                Size: {it.size}
+                              </span>
+                            )}
+                            {it.color && (
+                              <span className="text-[10px] font-bold bg-white text-slate-700 px-1.5 py-0.2 rounded border border-slate-200">
+                                {it.color}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              x{it.qty || 1}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="font-black text-xs text-slate-900 font-mono">
+                            ${((it.price || 0) * (it.qty || 1)).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Pricing Breakdown Summary */}
+                  <div className="pt-3 border-t border-slate-200 space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>តម្លៃទំនិញសរុប:</span>
+                      <span className="font-mono text-slate-900">${(completedOrder.subtotal || completedOrder.total).toFixed(2)}</span>
+                    </div>
+                    {completedOrder.discount > 0 && (
+                      <div className="flex justify-between text-emerald-600 font-bold">
+                        <span>បញ្ចុះតម្លៃ ({completedOrder.coupon_code || 'Promo'}):</span>
+                        <span className="font-mono">-${Number(completedOrder.discount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-slate-600">
+                      <span>ថ្លៃដឹកជញ្ជូន:</span>
+                      <span className="text-emerald-700 font-bold">✓ ឥតគិតថ្លៃ (Free)</span>
+                    </div>
+                    <div className="flex justify-between items-baseline pt-2 border-t border-slate-200 font-black text-sm">
+                      <span className="text-slate-900">សរុបទឹកប្រាក់ (Grand Total):</span>
+                      <div className="text-right">
+                        <span className="text-[#ff6a00] font-mono text-lg block">${completedOrder.total.toFixed(2)}</span>
+                        <span className="text-[11px] text-slate-500 font-bold">({Math.round(completedOrder.total * 4100).toLocaleString()} ៛)</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
-              <div className="flex justify-between pt-1.5 border-t border-gray-200 text-sm font-black">
-                <span className="text-gray-900">សរុបទឹកប្រាក់:</span>
-                <span className="text-[#ff6a00]">${completedOrder.total.toFixed(2)} ({(completedOrder.total * 4100).toLocaleString()} ៛)</span>
-              </div>
-            </div>
 
-            <p className="text-[11px] text-gray-400 mb-3">
-              📞 ក្រុមការងារយើងខ្ញុំនឹងទាក់ទងទៅកាន់លេខ {completedOrder.phone} របស់អ្នក ដើម្បីបញ្ជាក់ការដឹកជញ្ជូនក្នុងពេលឆាប់ៗនេះ។
-            </p>
-
-            {/* ⭐️ Telegram & Official PDF Invoice Delivery Banner ⭐️ */}
-            <div className="mb-4 p-3.5 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200/80 rounded-2xl text-left flex items-start gap-3">
-              <span className="text-2xl mt-0.5">✈️</span>
-              <div className="flex-1 text-xs">
-                <span className="font-black text-sky-900 block">
-                  វិក្កយបត្រ PDF ផ្លូវការត្រូវបានផ្ញើជូនតាម Telegram!
-                </span>
-                <p className="text-[11px] text-sky-700 mt-0.5 leading-relaxed">
-                  ប្រព័ន្ធបានបញ្ជូនវិក្កយបត្រផ្លូវការមាន Logo ហាងទៅកាន់ Telegram រួចរាល់។ លោកអ្នកក៏អាចទាញយក ឬបើកមើលភ្លាមៗនៅទីនេះបានផងដែរ។
-                </p>
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <a
-                    href={`/invoice?id=${encodeURIComponent(completedOrder.order_id)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 bg-sky-600 hover:bg-sky-700 text-white font-black text-[11px] px-3 py-1.5 rounded-xl transition shadow-xs"
-                  >
-                    <span>📄</span> បើកមើលវិក្កយបត្រ PDF ↗
-                  </a>
-                  <a
-                    href={`/api/invoice/download?orderId=${encodeURIComponent(completedOrder.order_id)}`}
-                    download={`Invoice_${completedOrder.order_id}.pdf`}
-                    className="inline-flex items-center gap-1 bg-white hover:bg-gray-100 text-gray-800 border border-gray-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition shadow-2xs"
-                  >
-                    <span>📥</span> ទាញយក PDF
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            {/* ⭐️ Direct Feedback Buttons for Completed Order ⭐️ */}
-            {completedOrder.items && completedOrder.items.length > 0 && (
-              <div className="mb-4 text-left p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black text-amber-900 flex items-center gap-1.5">
-                    <span>⭐</span> ផ្តល់ Feedback លើទំនិញដែលបានកុម្ម៉ង់:
+              {/* Telegram & Official PDF Invoice Delivery Notice */}
+              <div className="p-3.5 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200/80 rounded-2xl text-left flex items-start gap-3">
+                <span className="text-2xl mt-0.5">✈️</span>
+                <div className="flex-1 text-xs">
+                  <span className="font-black text-sky-950 block">
+                    វិក្កយបត្រ PDF ផ្លូវការត្រូវបានផ្ញើជូនតាម Telegram!
                   </span>
-                  <span className="text-[10px] bg-amber-200/70 text-amber-800 px-2 py-0.5 rounded-full font-bold">1 Order = 1 Feedback</span>
-                </div>
-                <div className="space-y-1.5">
-                  {completedOrder.items.map((it, idx) => (
-                    <div key={idx} className="flex items-center justify-between gap-2 bg-white p-2 rounded-xl border border-amber-100 shadow-2xs">
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        {it.image_url ? (
-                          <img src={it.image_url} alt={it.name} className="w-8 h-8 rounded-lg object-cover" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-xs">🛍️</div>
-                        )}
-                        <span className="text-xs font-bold text-gray-800 truncate">{it.name}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOrderSuccessModalOpen(false);
-                          openFeedbackModal(it, true, completedOrder.order_id);
-                        }}
-                        className="text-[11px] font-black text-white bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded-xl transition shadow-2xs whitespace-nowrap cursor-pointer"
-                      >
-                        ✍️ Feedback
-                      </button>
-                    </div>
-                  ))}
+                  <p className="text-[11px] text-sky-700 mt-0.5 leading-relaxed">
+                    ប្រព័ន្ធបានបញ្ជូនវិក្កយបត្រផ្លូវការមាន Logo ហាងទៅកាន់ Telegram រួចរាល់។ លោកអ្នកក៏អាចទាញយក ឬបើកមើលភ្លាមៗនៅទីនេះបានផងដែរ។
+                  </p>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <a
+                      href={`/invoice?id=${encodeURIComponent(completedOrder.order_id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 bg-sky-600 hover:bg-sky-700 text-white font-black text-[11px] px-3 py-1.5 rounded-xl transition shadow-xs"
+                    >
+                      <span>📄</span> បើកមើលវិក្កយបត្រ PDF ↗
+                    </a>
+                    <a
+                      href={`/api/invoice/download?orderId=${encodeURIComponent(completedOrder.order_id)}`}
+                      download={`Invoice_${completedOrder.order_id}.pdf`}
+                      className="inline-flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition shadow-2xs"
+                    >
+                      <span>📥</span> ទាញយក PDF
+                    </a>
+                  </div>
                 </div>
               </div>
-            )}
 
-            <Link
-              href={`/track?order=${encodeURIComponent(completedOrder.order_id)}`}
-              className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white py-3.5 rounded-2xl font-black text-xs transition mb-2.5 flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 active:scale-98"
-            >
-              <span>🚚</span>
-              <span>តាមដានការដឹកជញ្ជូនបន្តផ្ទាល់ (Live Tracking /track) ➔</span>
-            </Link>
+              {/* Direct Feedback Buttons for Ordered Items */}
+              {completedOrder.items && completedOrder.items.length > 0 && (
+                <div className="text-left p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-black text-amber-900 flex items-center gap-1.5">
+                      <span>⭐</span> ផ្តល់ Feedback លើទំនិញដែលបានកុម្ម៉ង់:
+                    </span>
+                    <span className="text-[10px] bg-amber-200/70 text-amber-800 px-2 py-0.5 rounded-full font-bold">1 Order = 1 Feedback</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {completedOrder.items.filter(it => !it.is_tax_meta).map((it, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 bg-white p-2 rounded-xl border border-amber-100 shadow-2xs">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <img 
+                            src={it.image_url || it.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80'} 
+                            alt={it.name} 
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80';
+                            }}
+                            className="w-8 h-8 rounded-lg object-cover" 
+                          />
+                          <span className="text-xs font-bold text-slate-800 truncate">{it.name}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrderSuccessModalOpen(false);
+                            openFeedbackModal(it, true, completedOrder.order_id);
+                          }}
+                          className="text-[11px] font-black text-white bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded-xl transition shadow-2xs whitespace-nowrap cursor-pointer"
+                        >
+                          ✍️ Feedback
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            <button
-              onClick={() => {
-                setOrderSuccessModalOpen(false);
-                setCompletedOrder(null);
-              }}
-              className="w-full bg-[#18181b] hover:bg-[#27272a] text-white py-3.5 rounded-2xl font-black text-sm transition shadow-md"
-            >
-              ទិញទំនិញបន្ត (Continue Shopping)
-            </button>
+            </div>
+
+            {/* Modal Footer CTAs */}
+            <div className="pt-3 border-t border-slate-100 space-y-2 shrink-0">
+              <Link
+                href={`/track?order=${encodeURIComponent(completedOrder.order_id)}`}
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white py-3 rounded-2xl font-black text-xs transition flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 active:scale-98"
+              >
+                <span>🚚</span>
+                <span>តាមដានការដឹកជញ្ជូនបន្តផ្ទាល់ (Live Tracking /track) ➔</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderSuccessModalOpen(false);
+                  setCompletedOrder(null);
+                }}
+                className="w-full bg-slate-900 hover:bg-black text-white py-2.5 rounded-2xl font-black text-xs transition cursor-pointer"
+              >
+                ទិញទំនិញបន្ត (Continue Shopping)
+              </button>
+            </div>
+
           </div>
         </div>
       )}

@@ -51,6 +51,19 @@ export async function POST(request) {
       } catch (dbErr) {
         console.warn('Telegram store settings lookup error:', dbErr);
       }
+
+      // ⭐️ Fallback ទៅ store_default_sabayluk ប្រសិនបើហាងសាខាមិនទាន់បានកំណត់ Bot Token ផ្ទាល់ខ្លួន ⭐️
+      if (!token || !chat) {
+        try {
+          const { data: defaultRow } = await supabase.from('stores').select('settings').eq('id', 'store_default_sabayluk').maybeSingle();
+          if (defaultRow?.settings) {
+            if (!token && defaultRow.settings.telegramBotToken) token = defaultRow.settings.telegramBotToken.trim();
+            if (!chat && defaultRow.settings.telegramChatId) chat = defaultRow.settings.telegramChatId.trim();
+          }
+        } catch (fbErr) {
+          console.warn('Fallback telegram lookup error:', fbErr);
+        }
+      }
     }
 
     let finalMessage = message;
@@ -148,8 +161,14 @@ export async function POST(request) {
         `📞 <b>លេខទូរស័ព្ទ:</b> <code>${ord.phone || ord.phone_number || 'N/A'}</code>\n` +
         (ord.telegram ? `✈️ <b>Telegram:</b> @${ord.telegram.replace(/^@/, '')}\n` : '') +
         `📍 <b>អាសយដ្ឋានដឹក:</b> ${ord.delivery_address || ord.address || 'N/A'}\n` +
-        (ord.google_map_url ? `🗺️ <b>Google Maps:</b> <a href="${ord.google_map_url}">ចុចមើលទីតាំងលើផែនទី Google Maps</a>\n` : '') +
-        (ord.location_photo_url ? `🏠 <b>រូបថតទីតាំង:</b> <a href="${ord.location_photo_url}">ចុចមើលរូបភាពទីតាំង</a>\n` : '') +
+        (() => {
+          const gMap = ord.google_map_url || (Array.isArray(ord.items) && ord.items[0]?.google_map_url) || null;
+          const hPhoto = ord.location_photo_url || (Array.isArray(ord.items) && ord.items[0]?.location_photo_url) || null;
+          let extra = '';
+          if (gMap) extra += `🗺️ <b>Google Maps:</b> <a href="${gMap}">ចុចមើលទីតាំងលើផែនទី Google Maps ↗</a>\n`;
+          if (hPhoto) extra += `🏠 <b>រូបថតទីតាំង / ផ្ទះទទួល:</b> <a href="${hPhoto}">ចុចមើលរូបភាពទីតាំង ↗</a>\n`;
+          return extra;
+        })() +
         (ord.payment_slip_url ? `🧾 <b>បង្កាន់ដៃបង់ប្រាក់ KHQR:</b> <a href="${ord.payment_slip_url}">ចុចមើលរូបភាព Slip ↗</a>\n` : '') +
         `💳 <b>វិធីទូទាត់:</b> <b>${ord.payment_method || 'Bakong KHQR / Cash'}</b>\n` +
         (ord.coupon_code ? `🎟️ <b>កូដបញ្ចុះតម្លៃ:</b> <code>${ord.coupon_code}</code> (-$${Number(ord.discount || 0).toFixed(2)})\n` : '') +
