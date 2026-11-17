@@ -554,7 +554,7 @@ export default function PlansAndSaaSPage() {
       <footer className="bg-white border-t border-slate-200 py-8 px-4 text-center text-xs text-slate-500 font-medium space-y-2">
         <p>© 2026 SABAY LUK POS ERP • All Rights Reserved</p>
         <p className="text-slate-400 text-[11px]">
-          ទំនាក់ទំនងម្ចាស់ប្រព័ន្ធ៖ <b>sengsoveasna93@gmail.com</b> • 📞 096 720 5522 • Telegram: @Sabayluk
+          ទំនាក់ទំនងម្ចាស់ប្រព័ន្ធ៖ <b>sengsoveasna93@gmail.com</b> • 📞 096 720 5522 • Telegram: @Sabay_luk
         </p>
       </footer>
     </div>

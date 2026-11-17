@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { supabase } from '../../supabase';
 import { renderCategorySvg } from '../../lib/categoryIcons';
 import { getActiveStore, isItemBelongsToStore, fetchStoreBySlug, DEFAULT_FLAGSHIP_STORE } from '../../lib/stores';
+import LocationPickerModal from './LocationPickerModal';
 
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក បញ្ចុះតម្លៃ & វីដេអូ YouTube ធានាមិនបាត់ ១០០%
 const parseProductMeta = (p) => {
@@ -585,6 +586,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerTelegram, setCustomerTelegram] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [showMapPickerModal, setShowMapPickerModal] = useState(false);
   const [customerProvince, setCustomerProvince] = useState('ភ្នំពេញ');
   const [customerAddress, setCustomerAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD'); // 'COD' | 'ABA KHQR'
@@ -2025,14 +2028,12 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       }
       if (uploadedLocationPhotoUrl) {
         fullAddress += ` [🏠 រូបផ្ទះ: ${uploadedLocationPhotoUrl}]`;
-      if (customerTelegram && customerTelegram.trim()) {
-        const cleanContact = customerTelegram.trim();
-        if (cleanContact.includes('@') && cleanContact.includes('.')) {
-          fullAddress += ` [✉️ Email: ${cleanContact}]`;
-        } else {
-          fullAddress += ` [✈️ Telegram: ${cleanContact}]`;
-        }
       }
+      if (customerTelegram && customerTelegram.trim()) {
+        fullAddress += ` [✈️ Telegram: ${customerTelegram.trim()}]`;
+      }
+      if (customerEmail && customerEmail.trim()) {
+        fullAddress += ` [✉️ Email: ${customerEmail.trim()}]`;
       }
       const customerContact = customerPhone.trim();
 
@@ -2042,6 +2043,9 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         phone: customerContact,
         phone_number: customerContact,
         telegram: customerTelegram.trim().replace(/^@/, '') || null,
+        email: customerEmail.trim() || null,
+        customer_telegram: customerTelegram.trim() || null,
+        customer_email: customerEmail.trim() || null,
         address: fullAddress,
         delivery_address: fullAddress,
         total_amount: totalPrice,
@@ -2067,7 +2071,9 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             payment_slip_url: uploadedSlipUrl || null,
             google_map_url: googleMapUrl || null,
             location_photo_url: uploadedLocationPhotoUrl || null,
-            coupon_code: appliedCoupon ? appliedCoupon.code : null
+            coupon_code: null,
+            customer_telegram: customerTelegram.trim() || null,
+            customer_email: customerEmail.trim() || null
           })),
           ...(isTaxEnabled && taxAmount > 0 ? [{
             is_tax_meta: true,
@@ -2184,6 +2190,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               order_id: generatedOrderId,
               customer_name: customerName.trim(),
               phone: customerContact,
+              customer_telegram: customerTelegram.trim() || null,
+              customer_email: customerEmail.trim() || null,
               address: customerAddress.trim(),
               province: customerProvince,
               delivery_address: fullAddress,
@@ -4088,80 +4096,6 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
             {cart.length > 0 && (
               <div className="pt-4 border-t border-gray-100 mt-3 space-y-3">
-                {/* 🏷️ Promo Code / Coupon Section in Cart Drawer */}
-                <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                      <span>🏷️</span> កូដបញ្ចុះតម្លៃ (Promo Code)
-                    </span>
-                    {appliedCoupon && (
-                      <button 
-                        type="button" 
-                        onClick={handleRemoveCoupon} 
-                        className="text-[10px] font-bold text-red-500 hover:text-red-700 cursor-pointer"
-                      >
-                        ✕ ដោះកូដចេញ
-                      </button>
-                    )}
-                  </div>
-
-                  {appliedCoupon ? (
-                    <div className="bg-emerald-50 border border-emerald-300 p-2 rounded-xl flex items-center justify-between text-xs text-emerald-800">
-                      <div className="flex items-center gap-1.5">
-                        <span className="bg-emerald-600 text-white font-mono font-black px-1.5 py-0.5 rounded text-[10px]">
-                          {appliedCoupon.code}
-                        </span>
-                        <span className="font-bold text-[11px]">{appliedCoupon.label}</span>
-                      </div>
-                      <span className="font-black text-emerald-700 text-xs">
-                        -{appliedCoupon.type === 'percent' ? `${appliedCoupon.value}%` : `$${appliedCoupon.value.toFixed(2)}`}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <div className="flex gap-1.5">
-                        <input 
-                          type="text" 
-                          placeholder="វាយកូដ (ឧ. SABAY10)" 
-                          value={couponInput}
-                          onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyCoupon(); } }}
-                          className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-mono font-bold uppercase focus:border-orange-500 outline-none"
-                        />
-                        <button 
-                          type="button" 
-                          onClick={() => handleApplyCoupon()}
-                          className="bg-slate-900 hover:bg-black text-white px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95"
-                        >
-                          ប្រើ
-                        </button>
-                      </div>
-
-                      {/* Quick Suggestion Pills */}
-                      <div className="flex flex-wrap gap-1">
-                        {getDisplayCoupons().slice(0, 4).map((cpn) => (
-                          <button
-                            key={cpn.code}
-                            type="button"
-                            onClick={() => handleApplyCoupon(cpn.code)}
-                            className="bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-600 border border-dashed border-gray-300 hover:border-orange-400 px-1.5 py-0.5 rounded-lg text-[9px] font-black transition cursor-pointer flex items-center gap-0.5"
-                          >
-                            <span>🏷️</span>
-                            <span>{cpn.code}</span>
-                            <span className="text-orange-500 font-bold">({cpn.type === 'percent' ? `-${cpn.value}%` : `-$${cpn.value}`})</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {couponMsg && (
-                    <div className={`text-[10px] font-bold p-1.5 rounded-lg ${couponMsg.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-600'}`}>
-                      {couponMsg.text}
-                    </div>
-                  )}
-                </div>
-
                 <div className="bg-emerald-50 text-emerald-700 text-[11px] p-2.5 rounded-xl font-bold flex items-center gap-1.5">
                   <span>🚚</span>
                   <span>ប្រូម៉ូសិនពិសេស៖ ដឹកជញ្ជូនឥតគិតថ្លៃគ្រប់ទីកន្លែង!</span>
@@ -4210,7 +4144,18 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         </div>
       )}
 
-      {/* ⭐️ 10. FULL-OPTION CHECKOUT MODAL (REDESIGNED LUXURY E-COMMERCE STANDARD) ⭐️ */}
+            {/* 🗺️ Location Picker Modal (Interactive OpenStreetMap) */}
+      <LocationPickerModal
+        isOpen={showMapPickerModal}
+        onClose={() => setShowMapPickerModal(false)}
+        onConfirm={({ mapUrl }) => {
+          setGoogleMapUrl(mapUrl);
+        }}
+        initialUrl={googleMapUrl}
+        selectedProvince={customerProvince}
+      />
+
+{/* ⭐️ 10. FULL-OPTION CHECKOUT MODAL (REDESIGNED LUXURY E-COMMERCE STANDARD) ⭐️ */}
       {checkoutModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl relative max-h-[94vh] flex flex-col overflow-hidden border border-slate-150 animate-in zoom-in-95 duration-200">
@@ -4295,21 +4240,39 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                       </div>
                     </div>
 
-                    {/* Telegram (Optional) */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                        <span>Telegram ឬ Gmail (សម្រាប់ផ្ញើវិក្កយបត្រ PDF)</span>
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត (Optional)</span>
-                      </label>
-                      <input 
-                        type="text"
-                        placeholder="ឧ. @username, លេខ Telegram ឬ Gmail..."
-                        value={customerTelegram}
-                        onChange={(e) => setCustomerTelegram(e.target.value)}
-                        className="w-full bg-white border border-slate-200 focus:border-[#ff6a00] focus:ring-2 focus:ring-orange-500/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition shadow-2xs placeholder:text-slate-400"
-                      />
+                    {/* Contact: Telegram & Gmail (Distinct inputs) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-sky-500">✈️</span> <span>គណនី Telegram</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត</span>
+                        </label>
+                        <input 
+                          type="text"
+                          placeholder="ឧ. @username ឬ លេខទូរស័ព្ទ Telegram"
+                          value={customerTelegram}
+                          onChange={(e) => setCustomerTelegram(e.target.value)}
+                          className="w-full bg-white border border-slate-200 focus:border-[#ff6a00] focus:ring-2 focus:ring-orange-500/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition shadow-2xs placeholder:text-slate-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-rose-500">✉️</span> <span>Gmail / Email</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត</span>
+                        </label>
+                        <input 
+                          type="email"
+                          placeholder="ឧ. customer@gmail.com"
+                          value={customerEmail}
+                          onChange={(e) => setCustomerEmail(e.target.value)}
+                          className="w-full bg-white border border-slate-200 focus:border-[#ff6a00] focus:ring-2 focus:ring-orange-500/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition shadow-2xs placeholder:text-slate-400"
+                        />
+                      </div>
                     </div>
 
                     {/* Province & Detailed Address */}
@@ -4380,23 +4343,31 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                           <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                             <span>🗺️</span> <span>ទីតាំងផែនទី Google Maps (សម្រាប់អ្នកដឹកជញ្ជូន)</span>
                           </label>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setShowMapPickerModal(true)}
+                              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
+                            >
+                              <span>🗺️</span>
+                              <span>រើសទីតាំងលើផែនទី</span>
+                            </button>
                             <button
                               type="button"
                               onClick={handleGetCurrentLocation}
                               disabled={isLocating}
-                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1 rounded-lg text-[10px] font-black transition flex items-center gap-1 border border-blue-200 active:scale-95 disabled:opacity-50 cursor-pointer shadow-2xs"
+                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1 border border-blue-200 active:scale-95 disabled:opacity-50 cursor-pointer shadow-2xs"
                             >
                               <span>{isLocating ? '⏳' : '📍'}</span>
-                              <span>{isLocating ? 'កំពុងចាប់ GPS...' : 'ចាប់យក GPS បច្ចុប្បន្ន'}</span>
+                              <span>{isLocating ? 'ចាប់ GPS...' : 'ចាប់ GPS'}</span>
                             </button>
                             <a
                               href="https://www.google.com/maps"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-slate-200"
+                              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1 border border-slate-200"
                             >
-                              <span>↗️</span> បើក Maps
+                              <span>↗️</span> Maps
                             </a>
                           </div>
                         </div>
@@ -4786,80 +4757,6 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                         </div>
                       ))}
                     </div>
-                  </div>
-
-                  {/* CARD 4: 🏷️ កូដបញ្ចុះតម្លៃ (Promo Code) */}
-                  <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                        <span>🏷️</span> កូដបញ្ចុះតម្លៃ (Promo Code)
-                      </span>
-                      {appliedCoupon && (
-                        <button 
-                          type="button" 
-                          onClick={handleRemoveCoupon} 
-                          className="text-[11px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer"
-                        >
-                          ✕ ដោះកូដចេញ
-                        </button>
-                      )}
-                    </div>
-
-                    {appliedCoupon ? (
-                      <div className="bg-emerald-50 border border-emerald-300 p-2.5 rounded-xl flex items-center justify-between text-xs text-emerald-800">
-                        <div className="flex items-center gap-2">
-                          <span className="bg-emerald-600 text-white font-mono font-black px-2 py-0.5 rounded text-[11px]">
-                            {appliedCoupon.code}
-                          </span>
-                          <span className="font-bold">{appliedCoupon.label}</span>
-                        </div>
-                        <span className="font-black text-emerald-700">
-                          -{appliedCoupon.type === 'percent' ? `${appliedCoupon.value}%` : `$${appliedCoupon.value.toFixed(2)}`}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
-                          <input 
-                            type="text" 
-                            placeholder="វាយបញ្ចូលកូដ (ឧ. SABAY10)" 
-                            value={couponInput}
-                            onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyCoupon(); } }}
-                            className="flex-1 bg-white border border-slate-200 focus:border-[#ff6a00] rounded-xl px-3 py-2 text-xs font-mono font-bold uppercase outline-none shadow-2xs placeholder:text-slate-400"
-                          />
-                          <button 
-                            type="button" 
-                            onClick={() => handleApplyCoupon()}
-                            className="bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 shadow-2xs"
-                          >
-                            ប្រើកូដ
-                          </button>
-                        </div>
-
-                        {/* Quick 1-Click Coupon Badges */}
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          {getDisplayCoupons().slice(0, 4).map((cpn) => (
-                            <button
-                              key={cpn.code}
-                              type="button"
-                              onClick={() => handleApplyCoupon(cpn.code)}
-                              className="bg-white hover:bg-orange-50 text-slate-700 hover:text-orange-600 border border-dashed border-slate-300 hover:border-orange-400 px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                            >
-                              <span>🏷️</span>
-                              <span>{cpn.code}</span>
-                              <span className="text-orange-500 font-bold">({cpn.type === 'percent' ? `-${cpn.value}%` : `-$${cpn.value}`})</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {couponMsg && (
-                      <div className={`text-[11px] font-bold p-2 rounded-lg ${couponMsg.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-50 text-rose-600'}`}>
-                        {couponMsg.text}
-                      </div>
-                    )}
                   </div>
 
                   {/* CARD 5: 🧾 សង្ខេបវិក្កយបត្រ (Invoice Summary Breakdown) */}

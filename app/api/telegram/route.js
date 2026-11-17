@@ -260,7 +260,14 @@ export async function POST(request) {
         (body.storeTelegram ? `✈️ <b>Telegram ហាង:</b> @${body.storeTelegram.replace(/^@/, '')}\n` : '') +
         `👤 <b>ឈ្មោះអតិថិជន:</b> <b>${ord.customer_name || ord.customer || 'អតិថិជន'}</b>\n` +
         `📞 <b>លេខទូរស័ព្ទ:</b> <code>${ord.phone || ord.phone_number || 'N/A'}</code>\n` +
-        (ord.telegram ? `✈️ <b>Telegram:</b> @${ord.telegram.replace(/^@/, '')}\n` : '') +
+        (() => {
+          const custTg = ord.telegram || ord.customer_telegram || (Array.isArray(ord.items) && ord.items[0]?.customer_telegram) || null;
+          const custEmail = ord.email || ord.customer_email || (Array.isArray(ord.items) && ord.items[0]?.customer_email) || null;
+          let contactInfo = '';
+          if (custTg) contactInfo += `✈️ <b>Telegram អតិថិជន:</b> @${String(custTg).replace(/^@/, '')}\n`;
+          if (custEmail) contactInfo += `✉️ <b>Gmail / Email:</b> <code>${custEmail}</code>\n`;
+          return contactInfo;
+        })() +
         `📍 <b>អាសយដ្ឋានដឹក:</b> ${ord.delivery_address || ord.address || 'N/A'}\n` +
         (() => {
           const gMap = ord.google_map_url || (Array.isArray(ord.items) && ord.items[0]?.google_map_url) || null;

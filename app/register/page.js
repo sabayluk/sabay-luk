@@ -515,7 +515,7 @@ function RegisterStoreForm() {
               <ul className="list-disc list-inside space-y-1 text-[11px] leading-relaxed text-blue-800">
                 <li>Super Admin នឹងផ្ទៀងផ្ទាត់បង្កាន់ដៃ និងចុច <strong>Approve</strong> (ជាទូទៅក្នុងរង្វង់ 5 - 15 នាទី)។</li>
                 <li>នៅពេល Admin ចុច Approve រួចរាល់ លោកអ្នកអាចប្រើ <strong>Gmail</strong> និង <strong>លេខសម្ងាត់/PIN</strong> ដើម្បី Login ចូលដំណើរការហាងបានភ្លាមៗ។</li>
-                <li>ប្រសិនបើលោកអ្នកប្រញាប់ សូមទំនាក់ទំនង Admin តាម Telegram: <strong className="text-blue-950">@Sabayluk</strong> ឬទូរស័ព្ទ <strong className="text-blue-950">096 720 5522</strong>។</li>
+                <li>ប្រសិនបើលោកអ្នកប្រញាប់ សូមទំនាក់ទំនង Admin តាម Telegram: <strong className="text-blue-950">@Sabay_luk</strong> ឬទូរស័ព្ទ <strong className="text-blue-950">096 720 5522</strong>។</li>
               </ul>
             </div>
 

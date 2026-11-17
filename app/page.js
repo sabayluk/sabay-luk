@@ -744,7 +744,7 @@ export default function SaaSPlatformLandingPage() {
               </li>
               <li className="flex items-center gap-2">
                 <span>✈️</span>
-                <span>Telegram: @Sabayluk</span>
+                <span>Telegram: @Sabay_luk</span>
               </li>
               <li className="flex items-center gap-2">
                 <span>📍</span>
