@@ -11690,6 +11690,27 @@ export default function UnifiedAdminDashboard() {
           const orderItems = (ord.items && Array.isArray(ord.items) ? ord.items : []).filter(it => !it.is_tax_meta);
           const rawAddress = ord.address || ord.delivery_address || 'ទូទៅ / នៅហាង';
           
+          // Extract Telegram & Email from all possible order sources
+          const tgAddressMatch = (rawAddress || '').match(/Telegram(?:\/Email)?:\s*([^\s\]]+)/i);
+          const emailAddressMatch = (rawAddress || '').match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+
+          const itemWithTg = orderItems.find(it => it && (it.telegram || it.customer_telegram));
+          const itemWithEmail = orderItems.find(it => it && (it.email || it.customer_email));
+
+          const rawTelegram = ord.telegram || ord.customer_telegram || 
+                              itemWithTg?.telegram || itemWithTg?.customer_telegram || 
+                              (tgAddressMatch ? tgAddressMatch[1] : null);
+
+          const isTelegramAnEmail = rawTelegram && rawTelegram.includes('@') && rawTelegram.includes('.');
+
+          const rawEmail = ord.email || ord.customer_email || 
+                           itemWithEmail?.email || itemWithEmail?.customer_email || 
+                           (emailAddressMatch ? emailAddressMatch[1] : null) || 
+                           (isTelegramAnEmail ? rawTelegram : null);
+
+          const finalCustomerTelegram = isTelegramAnEmail ? null : rawTelegram;
+          const finalCustomerEmail = rawEmail;
+
           // Extract Google Maps URL
           const mapMatch = (rawAddress || '').match(/Maps:\s*(https?:\/\/[^\s\]]+)/i) || 
                            (rawAddress || '').match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)[^\s\]]+)/i);
@@ -11699,9 +11720,13 @@ export default function UnifiedAdminDashboard() {
           const photoMatch = (rawAddress || '').match(/រូបផ្ទះ:\s*(https?:\/\/[^\s\]]+)/i);
           const locPhotoUrl = ord.location_photo_url || orderItems[0]?.location_photo_url || (photoMatch ? photoMatch[1] : null);
 
-          // Clean display address (strip out bracketed Maps / Photo tags)
-          const cleanDisplayAddress = rawAddress.replace(/\[📍 Maps:.*?\]/gi, '').replace(/\[🏠 រូបផ្ទះ:.*?\]/gi, '').trim();
-
+          // Clean display address (strip out bracketed Maps / Photo / Telegram tags)
+          const cleanDisplayAddress = rawAddress
+            .replace(/\[📍 Maps:.*?\]/gi, '')
+            .replace(/\[🏠 រូបផ្ទះ:.*?\]/gi, '')
+            .replace(/\[✈️ Telegram(?:\/Email)?:.*?\]/gi, '')
+            .replace(/\[✉️ Email:.*?\]/gi, '')
+            .trim();
           const slipUrl = ord.payment_slip_url || orderItems[0]?.payment_slip_url || null;
           const totalAmt = Number(ord.total || ord.total_amount || 0);
           const subtotalAmt = Number(ord.subtotal || ord.total || 0);
@@ -11768,12 +11793,50 @@ export default function UnifiedAdminDashboard() {
                       </div>
                     </div>
 
-                    {ord.telegram && (
+                    {/* Telegram & Gmail/Email Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/80">
                       <div>
                         <span className="text-slate-400 block text-[10px]">Telegram:</span>
-                        <span className="font-bold text-slate-700">@{ord.telegram.replace('@', '')}</span>
+                        {finalCustomerTelegram ? (
+                          <a
+                            href={`https://t.me/${finalCustomerTelegram.replace(/^@/, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 font-bold text-sky-600 hover:text-sky-700 hover:underline"
+                          >
+                            <span>✈️</span>
+                            <span>@{finalCustomerTelegram.replace(/^@/, '')}</span>
+                            <span className="text-[10px] text-sky-400">↗</span>
+                          </a>
+                        ) : (ord.phone || ord.phone_number) ? (
+                          <a
+                            href={`https://t.me/+855${(ord.phone || ord.phone_number).replace(/[^0-9]/g, '').replace(/^0/, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 hover:underline"
+                          >
+                            <span>✈️</span>
+                            <span>ឆាត Telegram តាមលេខ ↗</span>
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">មិនបានបញ្ជាក់</span>
+                        )}
                       </div>
-                    )}
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Gmail / Email:</span>
+                        {finalCustomerEmail ? (
+                          <a
+                            href={`mailto:${finalCustomerEmail}`}
+                            className="inline-flex items-center gap-1 font-bold text-rose-600 hover:underline break-all"
+                          >
+                            <span>✉️</span>
+                            <span>{finalCustomerEmail}</span>
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">មិនបានបញ្ជាក់</span>
+                        )}
+                      </div>
+                    </div>
 
                     <div>
                       <span className="text-slate-400 block text-[10px]">អាសយដ្ឋានដឹកជញ្ជូន:</span>
@@ -23880,13 +23943,13 @@ export default function UnifiedAdminDashboard() {
 
       // 🛑 បើហាងត្រូវបានផ្អាក (SUSPENDED) មិនអនុញ្ញាតឱ្យចូលប្រើទេ (លើកលែងតែ Master Owner)
       if (targetStore.status === 'SUSPENDED' && emailInput !== 'sengsoveasna93@gmail.com') {
-        setLoginError(`🛑 ហាង "${targetStore.name}" ត្រូវបានផ្អាកដំណើរការ (Suspended) ដោយសារអសកម្មលើសពី ៣០ ថ្ងៃ! សូមទាក់ទង Master Owner តាម Telegram: @Sabayluk ឬទូរស័ព្ទ 096 720 5522 ដើម្បីបើកដំណើរការឡើងវិញ។`);
+        setLoginError(`🛑 ហាង "${targetStore.name}" ត្រូវបានផ្អាកដំណើរការ (Suspended) ដោយសារអសកម្មលើសពី ៣០ ថ្ងៃ! សូមទាក់ទង Master Owner តាម Telegram: @Sabay_luk ឬទូរស័ព្ទ 096 720 5522 ដើម្បីបើកដំណើរការឡើងវិញ។`);
         return;
       }
 
       // ⏳ បើហាងកំពុងស្ថិតក្នុងការរង់ចាំ Approve (PENDING_APPROVAL) មិនទាន់អនុញ្ញាតឱ្យចូលទេ
       if ((targetStore.status === 'PENDING_APPROVAL' || targetStore.payment_status === 'PENDING_APPROVAL') && emailInput !== 'sengsoveasna93@gmail.com') {
-        setLoginError(`⏳ ហាង "${targetStore.name}" កំពុងស្ថិតក្រោមការត្រួតពិនិត្យបង្កាន់ដៃ (Slip) ដោយ Admin! សូមរង់ចាំការអនុម័ត (Approve) ពី Admin ជាមុនសិន ទើបអាច Login ចូលគ្រប់គ្រងហាងបាន។ ឬទាក់ទង Master Owner តាម Telegram: @Sabayluk`);
+        setLoginError(`⏳ ហាង "${targetStore.name}" កំពុងស្ថិតក្រោមការត្រួតពិនិត្យបង្កាន់ដៃ (Slip) ដោយ Admin! សូមរង់ចាំការអនុម័ត (Approve) ពី Admin ជាមុនសិន ទើបអាច Login ចូលគ្រប់គ្រងហាងបាន។ ឬទាក់ទង Master Owner តាម Telegram: @Sabay_luk`);
         return;
       }
 
@@ -25110,7 +25173,7 @@ export default function UnifiedAdminDashboard() {
               <div>
                 <p className="font-black text-rose-900 text-sm">ហាងនេះត្រូវបានផ្អាកដំណើរការជាបណ្តោះអាសន្ន (Store Suspended)</p>
                 <p className="text-[11px] text-rose-700 mt-0.5">
-                  មូលហេតុ៖ {activeStore.suspend_reason || 'ហាងមិនមានសកម្មភាពលក់ ឬ Login លើសពី ៣០ ថ្ងៃ'} • សូមទំនាក់ទំនងមកកាន់ Master Owner តាមរយៈ Telegram @Sabayluk ឬទូរស័ព្ទ 096 720 5522 ដើម្បីបើកដំណើរការឡើងវិញ។
+                  មូលហេតុ៖ {activeStore.suspend_reason || 'ហាងមិនមានសកម្មភាពលក់ ឬ Login លើសពី ៣០ ថ្ងៃ'} • សូមទំនាក់ទំនងមកកាន់ Master Owner តាមរយៈ Telegram @Sabay_luk ឬទូរស័ព្ទ 096 720 5522 ដើម្បីបើកដំណើរការឡើងវិញ។
                 </p>
               </div>
             </div>
