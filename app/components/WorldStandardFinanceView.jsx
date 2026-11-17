@@ -15,8 +15,20 @@ export default function WorldStandardFinanceView({
 }) {
   // Navigation subtabs inside Finance Suite
   const [activeFinanceTab, setActiveFinanceTab] = useState('pnl'); // 'pnl' | 'balance_sheet' | 'cash_flow' | 'kpis' | 'expenses' | 'banks' | 'coa'
-  const [period, setPeriod] = useState('this_month'); // 'today' | 'yesterday' | 'this_week' | 'this_month' | 'this_year' | 'all'
+  const [period, setPeriod] = useState('this_month'); // 'today' | 'yesterday' | 'this_week' | 'last_30_days' | 'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'last_year' | 'custom' | 'all'
   const [currencyMode, setCurrencyMode] = useState('USD'); // 'USD' | 'KHR'
+
+  // ⭐️ Smart Custom Date Range State ⭐️
+  const [customStartDate, setCustomStartDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [customEndDate, setCustomEndDate] = useState(() => {
+    return new Date().toISOString().slice(0, 10);
+  });
+  const [showCustomRangeModal, setShowCustomRangeModal] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   
   // Bank balances state (can be saved to localStorage)
   const [bankBalances, setBankBalances] = useState(() => {
@@ -61,13 +73,63 @@ export default function WorldStandardFinanceView({
     const yesterdayDate = new Date(Date.now() - 86400000);
     const yesterdayStr = yesterdayDate.toISOString().slice(0, 10);
     const sevenDaysAgo = Date.now() - (7 * 86400000);
+    const thirtyDaysAgo = Date.now() - (30 * 86400000);
     const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-    const yearStartStr = `${now.getFullYear()}-01-01`;
 
-    return { todayStr, yesterdayStr, sevenDaysAgo, monthStartStr, yearStartStr };
+    // Last Month
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthStartStr = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
+    const lastMonthEndDate = new Date(now.getFullYear(), now.getMonth(), 0);
+    const lastMonthEndStr = `${lastMonthEndDate.getFullYear()}-${String(lastMonthEndDate.getMonth() + 1).padStart(2, '0')}-${String(lastMonthEndDate.getDate()).padStart(2, '0')}`;
+
+    // Quarter
+    const currentQuarter = Math.floor(now.getMonth() / 3);
+    const quarterStartMonth = currentQuarter * 3;
+    const quarterStartStr = `${now.getFullYear()}-${String(quarterStartMonth + 1).padStart(2, '0')}-01`;
+
+    // Years
+    const yearStartStr = `${now.getFullYear()}-01-01`;
+    const lastYearStartStr = `${now.getFullYear() - 1}-01-01`;
+    const lastYearEndStr = `${now.getFullYear() - 1}-12-31`;
+
+    return { 
+      todayStr, 
+      yesterdayStr, 
+      sevenDaysAgo, 
+      thirtyDaysAgo,
+      monthStartStr, 
+      lastMonthStartStr,
+      lastMonthEndStr,
+      quarterStartStr,
+      yearStartStr,
+      lastYearStartStr,
+      lastYearEndStr
+    };
   }, []);
 
-  // Filter Orders strictly by Period
+  // Dynamic Period Display Label Helper
+  const getPeriodLabel = () => {
+    const now = new Date();
+    if (period === 'today') return `ថ្ងៃនេះ (${dateRanges.todayStr})`;
+    if (period === 'yesterday') return `ម្សិលមិញ (${dateRanges.yesterdayStr})`;
+    if (period === 'this_week') return '៧ ថ្ងៃចុងក្រោយ (7 Days)';
+    if (period === 'last_30_days') return '៣០ ថ្ងៃចុងក្រោយ (30 Days)';
+    if (period === 'this_month') return `ខែនេះ (${now.toLocaleString('km-KH', { month: 'short' })} ${now.getFullYear()})`;
+    if (period === 'last_month') return 'ខែមុន (Last Month)';
+    if (period === 'this_quarter') return `ត្រីមាសនេះ (Q${Math.floor(now.getMonth() / 3) + 1} ${now.getFullYear()})`;
+    if (period === 'this_year') return `ឆ្នាំនេះ (${now.getFullYear()})`;
+    if (period === 'last_year') return `ឆ្នាំមុន (${now.getFullYear() - 1})`;
+    if (period === 'custom') {
+      if (customStartDate && customEndDate) {
+        if (customStartDate === customEndDate) return `ថ្ងៃ ${customStartDate}`;
+        return `${customStartDate} ➔ ${customEndDate}`;
+      }
+      return customStartDate ? `ចាប់ពី ${customStartDate}` : `រហូតដល់ ${customEndDate}`;
+    }
+    return 'ពេលវេលាទាំងអស់ (All Time)';
+  };
+
+  // Filter Orders strictly by Period & Custom Dates
   const filteredOrders = useMemo(() => {
     return realOrders.filter(o => {
       if (o.status === 'Cancelled') return false;
@@ -78,13 +140,22 @@ export default function WorldStandardFinanceView({
       if (period === 'today') return orderDateStr === dateRanges.todayStr;
       if (period === 'yesterday') return orderDateStr === dateRanges.yesterdayStr;
       if (period === 'this_week') return orderTime >= dateRanges.sevenDaysAgo;
+      if (period === 'last_30_days') return orderTime >= dateRanges.thirtyDaysAgo;
       if (period === 'this_month') return orderDateStr >= dateRanges.monthStartStr;
+      if (period === 'last_month') return orderDateStr >= dateRanges.lastMonthStartStr && orderDateStr <= dateRanges.lastMonthEndStr;
+      if (period === 'this_quarter') return orderDateStr >= dateRanges.quarterStartStr;
       if (period === 'this_year') return orderDateStr >= dateRanges.yearStartStr;
+      if (period === 'last_year') return orderDateStr >= dateRanges.lastYearStartStr && orderDateStr <= dateRanges.lastYearEndStr;
+      if (period === 'custom') {
+        if (customStartDate && orderDateStr < customStartDate) return false;
+        if (customEndDate && orderDateStr > customEndDate) return false;
+        return true;
+      }
       return true; // 'all'
     });
-  }, [realOrders, period, dateRanges]);
+  }, [realOrders, period, dateRanges, customStartDate, customEndDate]);
 
-  // Filter Expenses strictly by Period
+  // Filter Expenses strictly by Period & Custom Dates
   const filteredExpenses = useMemo(() => {
     return expenses.filter(exp => {
       if (!exp.date) return true;
@@ -94,11 +165,20 @@ export default function WorldStandardFinanceView({
       if (period === 'today') return expDateStr === dateRanges.todayStr;
       if (period === 'yesterday') return expDateStr === dateRanges.yesterdayStr;
       if (period === 'this_week') return expTime >= dateRanges.sevenDaysAgo;
+      if (period === 'last_30_days') return expTime >= dateRanges.thirtyDaysAgo;
       if (period === 'this_month') return expDateStr >= dateRanges.monthStartStr;
+      if (period === 'last_month') return expDateStr >= dateRanges.lastMonthStartStr && expDateStr <= dateRanges.lastMonthEndStr;
+      if (period === 'this_quarter') return expDateStr >= dateRanges.quarterStartStr;
       if (period === 'this_year') return expDateStr >= dateRanges.yearStartStr;
+      if (period === 'last_year') return expDateStr >= dateRanges.lastYearStartStr && expDateStr <= dateRanges.lastYearEndStr;
+      if (period === 'custom') {
+        if (customStartDate && expDateStr < customStartDate) return false;
+        if (customEndDate && expDateStr > customEndDate) return false;
+        return true;
+      }
       return true; // 'all'
     });
-  }, [expenses, period, dateRanges]);
+  }, [expenses, period, dateRanges, customStartDate, customEndDate]);
 
   // 1. Core Revenue & COGS Calculations
   const metrics = useMemo(() => {
@@ -345,19 +425,221 @@ export default function WorldStandardFinanceView({
             </button>
           </div>
 
-          {/* Period Filter */}
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="border-2 border-slate-200 bg-white text-xs font-black px-3.5 py-2 rounded-2xl outline-none focus:border-emerald-500 cursor-pointer"
-          >
-            <option value="today">📅 ថ្ងៃនេះ (Today)</option>
-            <option value="yesterday">📅 ម្សិលមិញ (Yesterday)</option>
-            <option value="this_week">📅 ៧ ថ្ងៃចុងក្រោយ (7 Days)</option>
-            <option value="this_month">📅 ខែនេះ (This Month)</option>
-            <option value="this_year">📅 ឆ្នាំនេះ (This Year)</option>
-            <option value="all">📅 ពេលវេលាទាំងអស់ (All Time)</option>
-          </select>
+          {/* Modern Interactive Date Range Trigger Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowCustomRangeModal(true)}
+              className="bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-emerald-500 text-slate-800 text-xs font-black px-3.5 py-2 rounded-2xl shadow-xs transition flex items-center gap-2 cursor-pointer active:scale-95"
+              title="ចុចដើម្បីជ្រើសរើសចន្លោះថ្ងៃខែឆ្នាំតាមចិត្ត"
+            >
+              <span className="text-emerald-600 text-base">📅</span>
+              <span className="font-mono">{getPeriodLabel()}</span>
+              <span className="text-[10px] text-slate-400">▼</span>
+            </button>
+          </div>
+
+          {/* ⭐️ FLOATING CUSTOM DATE RANGE & CALENDAR MODAL ⭐️ */}
+          {showCustomRangeModal && (
+            <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+              <div 
+                className="bg-white rounded-3xl shadow-2xl border border-slate-200 p-5 sm:p-6 max-w-lg w-full space-y-4 animate-in zoom-in-95 text-slate-900"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-lg border border-emerald-100">
+                      📅
+                    </span>
+                    <div>
+                      <h4 className="text-sm font-black text-slate-900">
+                        ជ្រើសរើសគ្រាគណនេយ្យ (Financial Date Range)
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        កំណត់កាលបរិច្ឆេទ ថ្ងៃ ខែ ឆ្នាំ ដើម្បីគណនា P&L និងតុល្យការ
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomRangeModal(false)}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* 1. Quick Preset Pills */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    ជម្រើសលឿនៗ (Quick Presets)
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                    {[
+                      { id: 'today', label: '⚡ ថ្ងៃនេះ (Today)' },
+                      { id: 'yesterday', label: '⚡ ម្សិលមិញ (Yesterday)' },
+                      { id: 'this_week', label: '⚡ ៧ ថ្ងៃចុងក្រោយ' },
+                      { id: 'last_30_days', label: '⚡ ៣០ ថ្ងៃចុងក្រោយ' },
+                      { id: 'this_month', label: '⚡ ខែនេះ (This Month)' },
+                      { id: 'last_month', label: '⚡ ខែមុន (Last Month)' },
+                      { id: 'this_quarter', label: '⚡ ត្រីមាសនេះ (Quarter)' },
+                      { id: 'this_year', label: '⚡ ឆ្នាំនេះ (This Year)' },
+                      { id: 'last_year', label: '⚡ ឆ្នាំមុន (Last Year)' },
+                      { id: 'all', label: '⚡ ទាំងអស់ (All Time)' },
+                    ].map(pr => (
+                      <button
+                        key={pr.id}
+                        type="button"
+                        onClick={() => {
+                          setPeriod(pr.id);
+                          setShowCustomRangeModal(false);
+                        }}
+                        className={`px-2.5 py-2 rounded-xl text-xs font-bold transition text-left cursor-pointer border ${
+                          period === pr.id
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm font-black'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {pr.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Custom Date Range Pickers (From ➔ To) */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                  <span className="text-[11px] font-black text-slate-800 flex items-center gap-1.5">
+                    <span>🎯</span>
+                    <span>កំណត់ចន្លោះថ្ងៃខែឆ្នាំផ្ទាល់ខ្លួន (Custom Date Range)</span>
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                        ចាប់ពីថ្ងៃ (Start Date):
+                      </label>
+                      <input
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                        className="w-full bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                        រហូតដល់ថ្ងៃ (End Date):
+                      </label>
+                      <input
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                        className="w-full bg-white border-2 border-slate-200 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none transition"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Quick Single Month & Year Selector */}
+                <div className="p-3.5 bg-emerald-50/70 rounded-2xl border border-emerald-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-emerald-950 text-[11px] flex items-center gap-1">
+                      <span>🗓️</span> រើសតាមខែ និងឆ្នាំជាក់លាក់ (Specific Month & Year):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const yr = Number(selectedYear);
+                        const mo = Number(selectedMonth);
+                        const s = `${yr}-${String(mo).padStart(2, '0')}-01`;
+                        const lastD = new Date(yr, mo, 0).getDate();
+                        const e = `${yr}-${String(mo).padStart(2, '0')}-${String(lastD).padStart(2, '0')}`;
+                        setCustomStartDate(s);
+                        setCustomEndDate(e);
+                        setPeriod('custom');
+                        setShowCustomRangeModal(false);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] px-3 py-1 rounded-lg transition shadow-2xs cursor-pointer"
+                    >
+                      អនុវត្តខែនេះ ➔
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                      className="bg-white border border-emerald-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                    >
+                      {[
+                        { m: 1, name: 'ខែមករា (Jan)' },
+                        { m: 2, name: 'ខែកុម្ភៈ (Feb)' },
+                        { m: 3, name: 'ខែមីនា (Mar)' },
+                        { m: 4, name: 'ខែមេសា (Apr)' },
+                        { m: 5, name: 'ខែឧសភា (May)' },
+                        { m: 6, name: 'ខែមិថុនា (Jun)' },
+                        { m: 7, name: 'ខែកក្កដា (Jul)' },
+                        { m: 8, name: 'ខែសីហា (Aug)' },
+                        { m: 9, name: 'ខែកញ្ញា (Sep)' },
+                        { m: 10, name: 'ខែតុលា (Oct)' },
+                        { m: 11, name: 'ខែវិច្ឆិកា (Nov)' },
+                        { m: 12, name: 'ខែធ្នូ (Dec)' },
+                      ].map(item => (
+                        <option key={item.m} value={item.m}>{item.name}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      className="bg-white border border-emerald-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                    >
+                      {[2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030].map(y => (
+                        <option key={y} value={y}>ឆ្នាំ {y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPeriod('this_month');
+                      setShowCustomRangeModal(false);
+                    }}
+                    className="text-slate-500 hover:text-slate-800 font-bold text-xs px-3 py-2 rounded-xl transition cursor-pointer"
+                  >
+                    🔄 Reset ខែនេះ
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomRangeModal(false)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+                    >
+                      បោះបង់
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (customStartDate || customEndDate) {
+                          setPeriod('custom');
+                        }
+                        setShowCustomRangeModal(false);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-5 py-2 rounded-xl transition shadow-md shadow-emerald-600/20 cursor-pointer"
+                    >
+                      ✓ អនុវត្ត (Apply)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Export Full Financial Audit */}
           <button
@@ -540,9 +822,16 @@ export default function WorldStandardFinanceView({
                 គណនាត្រឹមត្រូវតាមស្ដង់ដារគណនេយ្យអន្តរជាតិ IFRS for SMEs
               </p>
             </div>
-            <span className="text-xs font-black text-slate-600 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
-              គ្រាគណនេយ្យ: {period.toUpperCase()}
-            </span>
+            <button
+              type="button"
+              onClick={() => setShowCustomRangeModal(true)}
+              className="text-xs font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3.5 py-1.5 rounded-xl border border-emerald-200 transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="ចុចដើម្បីប្តូរកាលបរិច្ឆេទ"
+            >
+              <span>📅 គ្រាគណនេយ្យ:</span>
+              <span className="font-mono">{getPeriodLabel()}</span>
+              <span className="text-[10px] text-emerald-600 font-bold">✏️ កែប្រែ</span>
+            </button>
           </div>
 
           {/* Multi-Step P&L Table */}
