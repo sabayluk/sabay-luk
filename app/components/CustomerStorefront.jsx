@@ -4198,577 +4198,731 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         </div>
       )}
 
-      {/* ⭐️ 10. FULL-OPTION CHECKOUT MODAL ⭐️ */}
+      {/* ⭐️ 10. FULL-OPTION CHECKOUT MODAL (REDESIGNED LUXURY E-COMMERCE STANDARD) ⭐️ */}
       {checkoutModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl relative max-h-[94vh] overflow-y-auto">
-            <button 
-              onClick={() => setCheckoutModalOpen(false)}
-              className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center font-bold"
-            >
-              ✕
-            </button>
-
-            <div className="flex items-center gap-2.5 pb-4 border-b border-gray-100 mb-5">
-              <span className="text-2xl">🛍️</span>
-              <div>
-                <h3 className="font-black text-lg text-gray-900 leading-tight">បញ្ជាក់ការបញ្ជាទិញ (Checkout Order)</h3>
-                <p className="text-xs text-gray-500">សូមបំពេញព័ត៌មានដឹកជញ្ជូន និងជ្រើសរើសវិធីសាស្ត្រទូទាត់</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleProcessOrder} className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 space-y-3">
-                <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>📍</span> ព័ត៌មានអតិថិជន និងទីតាំងដឹកជញ្ជូន
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      ឈ្មោះអ្នកទទួល <span className="text-red-500">*</span>
-                    </label>
-                    <input 
-                      type="text"
-                      required
-                      placeholder="ឧ. សុខ ចាន់ណា"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      លេខទូរស័ព្ទទំនាក់ទំនង <span className="text-red-500">*</span>
-                    </label>
-                    <input 
-                      type="tel"
-                      required
-                      placeholder="ឧ. 096 123 4567"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
-                      <span className="flex items-center gap-1"><span>✈️</span> Telegram (ទទួលវិក្កយបត្រ PDF)</span>
-                      <span className="text-[10px] text-gray-400 font-normal">មិនបាច់ដាក់ក៏បាន</span>
-                    </label>
-                    <input 
-                      type="text"
-                      placeholder="ឧ. @username ឬលេខទូរស័ព្ទ Telegram"
-                      value={customerTelegram}
-                      onChange={(e) => setCustomerTelegram(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl relative max-h-[94vh] flex flex-col overflow-hidden border border-slate-150 animate-in zoom-in-95 duration-200">
+            
+            {/* 🌟 1. MODAL HEADER WITH PROGRESS BAR */}
+            <div className="px-6 py-4.5 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-orange-500/20 border border-orange-500/30 flex items-center justify-center text-xl shadow-inner">
+                  🛍️
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      រាជធានី / ខេត្ត <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={customerProvince}
-                      onChange={(e) => setCustomerProvince(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-orange-500 cursor-pointer"
-                    >
-                      <option value="ភ្នំពេញ">ភ្នំពេញ (Phnom Penh)</option>
-                      <option value="កណ្តាល">កណ្តាល (Kandal)</option>
-                      <option value="សៀមរាប">សៀមរាប (Siem Reap)</option>
-                      <option value="បាត់ដំបង">បាត់ដំបង (Battambang)</option>
-                      <option value="ព្រះសីហនុ">ព្រះសីហនុ (Preah Sihanouk)</option>
-                      <option value="កំពង់ចាម">កំពង់ចាម (Kampong Cham)</option>
-                      <option value="កំពង់ឆ្នាំង">កំពង់ឆ្នាំង (Kampong Chhnang)</option>
-                      <option value="កំពង់ស្ពឺ">កំពង់ស្ពឺ (Kampong Speu)</option>
-                      <option value="កំពង់ធំ">កំពង់ធំ (Kampong Thom)</option>
-                      <option value="កំពត">កំពត (Kampot)</option>
-                      <option value="កែប">កែប (Kep)</option>
-                      <option value="កោះកុង">កោះកុង (Koh Kong)</option>
-                      <option value="ក្រចេះ">ក្រចេះ (Kratie)</option>
-                      <option value="មណ្ឌលគិរី">មណ្ឌលគិរី (Mondulkiri)</option>
-                      <option value="ឧត្តរមានជ័យ">ឧត្តរមានជ័យ (Oddar Meanchey)</option>
-                      <option value="ប៉ៃលិន">ប៉ៃលិន (Pailin)</option>
-                      <option value="ព្រះវិហារ">ព្រះវិហារ (Preah Vihear)</option>
-                      <option value="ព្រៃវែង">ព្រៃវែង (Prey Veng)</option>
-                      <option value="ពោធិ៍សាត់">ពោធិ៍សាត់ (Pursat)</option>
-                      <option value="រតនគិរី">រតនគិរី (Ratanakiri)</option>
-                      <option value="ស្ទឹងត្រែង">ស្ទឹងត្រែង (Stung Treng)</option>
-                      <option value="ស្វាយរៀង">ស្វាយរៀង (Svay Rieng)</option>
-                      <option value="តាកែវ">តាកែវ (Takeo)</option>
-                      <option value="ត្បូងឃ្មុំ">ត្បូងឃ្មុំ (Tboung Khmum)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      អាសយដ្ឋានលម្អិត / ចំណាំ <span className="text-red-500">*</span>
-                    </label>
-                    <input 
-                      type="text"
-                      required
-                      placeholder="ផ្ទះលេខ ផ្លូវ ឬទីតាំងចំណាំ..."
-                      value={customerAddress}
-                      onChange={(e) => setCustomerAddress(e.target.value)}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-medium focus:outline-none focus:border-orange-500"
-                    />
-                  </div>
-
-                  {/* ⭐️ GOOGLE MAPS LOCATION PIN & LINK ⭐️ */}
-                  <div className="pt-2 border-t border-gray-200/80 space-y-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                      <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                        <span>🗺️</span> ទីតាំងផែនទី Google Maps (សម្រាប់អ្នកដឹកជញ្ជូន)
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={handleGetCurrentLocation}
-                          disabled={isLocating}
-                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1 rounded-lg text-[10px] font-black transition flex items-center gap-1 border border-blue-200 active:scale-95 disabled:opacity-50 cursor-pointer"
-                        >
-                          <span>{isLocating ? '⏳' : '📍'}</span>
-                          <span>{isLocating ? 'កំពុងចាប់ទីតាំង...' : 'ចាប់យក GPS បច្ចុប្បន្ន'}</span>
-                        </button>
-                        <a
-                          href="https://www.google.com/maps"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-gray-200"
-                        >
-                          <span>↗️</span> បើក Maps
-                        </a>
-                      </div>
-                    </div>
-
-                    <div className="relative">
-                      <input
-                        type="url"
-                        placeholder="បិទភ្ជាប់ (Paste) Link ពី Google Maps នៅទីនេះ (ឧ. https://maps.app.goo.gl/...)"
-                        value={googleMapUrl}
-                        onChange={(e) => setGoogleMapUrl(e.target.value)}
-                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-blue-500 pr-16"
-                      />
-                      {googleMapUrl && (
-                        <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
-                          <a
-                            href={googleMapUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-1 rounded-lg hover:bg-emerald-200 transition"
-                          >
-                            មើល
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => setGoogleMapUrl('')}
-                            className="text-gray-400 hover:text-red-500 text-xs px-1 cursor-pointer"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    {googleMapUrl && (
-                      <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                        <span>✅</span> បានកំណត់ Link ទីតាំង Google Maps រួចរាល់!
-                      </p>
-                    )}
-                  </div>
-
-                  {/* ⭐️ HOUSE / WORKPLACE PHOTO UPLOAD ⭐️ */}
-                  <div className="pt-2 border-t border-gray-200/80 space-y-2">
-                    <label className="text-xs font-bold text-gray-700 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <span>🏠</span> រូបថតផ្ទះ ឬកន្លែងធ្វើការ (ជួយអ្នកដឹកស្គាល់ទីតាំង)
-                      </span>
-                      <span className="text-[10px] text-gray-400 font-normal">Optional</span>
-                    </label>
-
-                    {locationPhotoPreview ? (
-                      <div className="flex items-center gap-3 p-2 bg-white rounded-xl border border-gray-200">
-                        <img
-                          src={locationPhotoPreview}
-                          alt="House / Workplace"
-                          className="w-14 h-14 object-cover rounded-lg border border-gray-200 shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-gray-800 truncate">
-                            {locationPhotoFile ? locationPhotoFile.name : 'រូបថតទីតាំង'}
-                          </p>
-                          <p className="text-[10px] text-emerald-600 font-bold mt-0.5">✅ បានជ្រើសរើសរូបថតផ្ទះ/កន្លែងធ្វើការ</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLocationPhotoFile(null);
-                              setLocationPhotoPreview(null);
-                            }}
-                            className="text-red-500 hover:text-red-700 text-[10px] font-bold mt-0.5 underline cursor-pointer"
-                          >
-                            លុបរូបថតចេញ
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="flex items-center justify-center gap-2 p-3 bg-white hover:bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer transition text-xs font-bold text-gray-600">
-                        <span>📸</span>
-                        <span>ថត ឬ Upload រូបថតផ្ទះ / ស្លាកសញ្ញាកន្លែងធ្វើការ</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLocationPhotoChange}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                    <p className="text-[10px] text-gray-400">
-                      ជួយឱ្យអ្នកដឹកជញ្ជូនស្គាល់ច្រកចូល ពណ៌ផ្ទះ ឬស្លាកសញ្ញាបានរហ័ស មិនបាច់ខលសួរច្រើនដង។
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 space-y-2.5">
-                <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <span>💳</span> ជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់
-                </h4>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label 
-                    className={`p-3.5 rounded-xl border cursor-pointer transition flex items-center gap-3 ${
-                      paymentMethod === 'COD' 
-                        ? 'border-orange-500 bg-orange-50/70 text-orange-900 shadow-2xs' 
-                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <input 
-                      type="radio" 
-                      name="paymentMethod" 
-                      checked={paymentMethod === 'COD'}
-                      onChange={() => setPaymentMethod('COD')}
-                      className="accent-orange-600"
-                    />
-                    <div>
-                      <div className="font-black text-xs">💵 បង់ប្រាក់ពេលទទួល (COD)</div>
-                      <div className="text-[10px] text-gray-500">ពិនិត្យទំនិញរួច ទើបប្រគល់ប្រាក់ជូនអ្នកដឹក</div>
-                    </div>
-                  </label>
-
-                  <label 
-                    className={`p-3.5 rounded-xl border cursor-pointer transition flex items-center gap-3 ${
-                      paymentMethod === 'ABA KHQR' 
-                        ? 'border-orange-500 bg-orange-50/70 text-orange-900 shadow-2xs' 
-                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <input 
-                      type="radio" 
-                      name="paymentMethod" 
-                      checked={paymentMethod === 'ABA KHQR'}
-                      onChange={() => setPaymentMethod('ABA KHQR')}
-                      className="accent-orange-600"
-                    />
-                    <div>
-                      <div className="font-black text-xs">📱 ស្កេនទូទាត់ ABA KHQR</div>
-                      <div className="text-[10px] text-gray-500">ទូទាត់តាម Bakong / គ្រប់ធនាគារ</div>
-                    </div>
-                  </label>
-                </div>
-
-                {/* ⭐️ INTERACTIVE BAKONG / ABA KHQR CARD & SLIP UPLOAD ⭐️ */}
-                {paymentMethod === 'ABA KHQR' && (
-                  <div className="bg-gradient-to-b from-gray-50 to-white p-4 sm:p-5 rounded-2xl border-2 border-red-100 shadow-sm space-y-4 animate-in fade-in">
-                    
-                    {/* KHQR Card */}
-                    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-md max-w-sm mx-auto">
-                      {/* KHQR Official Red Header */}
-                      <div className="bg-[#E1251B] text-white px-4 py-2.5 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 font-black text-sm tracking-wider">
-                          <span className="bg-white text-[#E1251B] px-1.5 py-0.5 rounded text-[10px] font-black">KH</span>
-                          <span>QR</span>
-                        </div>
-                        <span className="text-[11px] font-bold tracking-wide">BAKONG / ABA PAY</span>
-                      </div>
-
-                      {/* Store Name & Amount */}
-                      <div className="p-4 text-center border-b border-gray-100">
-                        <p className="text-xs font-black text-gray-900 tracking-wide uppercase">
-                          {storeSettings.bankAccountName || storeSettings.storeName || 'SENG SOVEASNA'}
-                        </p>
-                        <div className="mt-1">
-                          <span className="text-2xl font-black text-[#ff6a00]">${totalPrice.toFixed(2)}</span>
-                          <span className="block text-xs font-bold text-gray-500 mt-0.5">≈ {totalRiel.toLocaleString()} ៛</span>
-                        </div>
-                      </div>
-
-                      {/* Dynamic Real QR Code Image */}
-                      <div className="p-4 flex flex-col items-center justify-center bg-gray-50/50">
-                        <div className="bg-white p-3 rounded-2xl border-2 border-gray-200 shadow-inner">
-                          <img 
-                            src={storeSettings.khqrImageUrl || '/khqr-aba.jpg'} 
-                            alt="KHQR Code" 
-                            className="w-48 h-auto max-h-64 object-contain rounded-lg"
-                          />
-                        </div>
-                        <p className="text-[10px] text-gray-500 font-bold mt-2.5 flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border border-gray-200 shadow-2xs">
-                          <span>✨</span> <span>ស្កេនបានទាំង <b className="text-emerald-700">ប្រាក់រៀល (KHR)</b> & <b className="text-blue-700">ប្រាក់ដុល្លារ (USD)</b></span>
-                        </p>
-                      </div>
-
-                      {/* Bank Details & Copy Buttons */}
-                      <div className="px-4 py-3.5 bg-gray-50 text-xs border-t border-gray-100 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-400 font-bold">ធនាគារ៖</span>
-                          <span className="font-black text-gray-900">ABA Bank (KHQR Multi-Currency)</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-400 font-bold">ឈ្មោះគណនី៖</span>
-                          <span className="font-black text-gray-900 uppercase">
-                            {storeSettings.bankAccountName || 'SENG SOVEASNA'}
-                          </span>
-                        </div>
-
-                        {/* KHR Account */}
-                        <div className="flex items-center justify-between pt-1.5 border-t border-gray-200/70">
-                          <span className="text-gray-700 font-bold flex items-center gap-1.5">
-                            <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black inline-flex items-center justify-center shrink-0">៛</span>
-                            <span>គណនី KHR:</span>
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-black text-xs text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
-                              {storeSettings.bankAccountKhr || '004 500 394'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText((storeSettings.bankAccountKhr || '004500394').replace(/\s+/g, ''));
-                                setIsCopiedAccountKhr(true);
-                                setTimeout(() => setIsCopiedAccountKhr(false), 2000);
-                              }}
-                              className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer"
-                            >
-                              {isCopiedAccountKhr ? '✓ បានចម្លង' : '📋 ចម្លង KHR'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* USD Account */}
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-gray-700 font-bold flex items-center gap-1.5">
-                            <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black inline-flex items-center justify-center shrink-0">$</span>
-                            <span>គណនី USD:</span>
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-black text-xs text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200">
-                              {storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010 723 080'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText((storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010723080').replace(/\s+/g, ''));
-                                setIsCopiedAccountUsd(true);
-                                setTimeout(() => setIsCopiedAccountUsd(false), 2000);
-                              }}
-                              className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer"
-                            >
-                              {isCopiedAccountUsd ? '✓ បានចម្លង' : '📋 ចម្លង USD'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 📎 Payment Slip Upload Section */}
-                    <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-gray-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                          <span>📎</span> ភ្ជាប់វិក្កយបត្រផ្ទេរប្រាក់ (Payment Slip / Screenshot)
-                        </span>
-                        <span className="text-[10px] text-gray-400 font-medium">(ជម្រើស ឬចាំបាច់)</span>
-                      </div>
-
-                      {slipPreviewUrl ? (
-                        <div className="flex items-center gap-3 bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-xl">
-                          <img 
-                            src={slipPreviewUrl} 
-                            alt="Slip Preview" 
-                            className="w-14 h-14 object-cover rounded-lg border border-emerald-300 bg-white"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-black text-emerald-800 truncate">
-                              {slipFile ? slipFile.name : 'វិក្កយបត្របានភ្ជាប់'}
-                            </p>
-                            <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">
-                              ✓ បានភ្ជាប់វិក្កយបត្ររួចរាល់
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSlipFile(null);
-                              setSlipPreviewUrl(null);
-                            }}
-                            className="text-gray-400 hover:text-red-500 font-black text-sm p-1"
-                            title="ដកចេញ"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="border border-dashed border-gray-300 hover:border-orange-400 bg-gray-50/70 hover:bg-orange-50/50 p-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition text-center group">
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            onChange={async (e) => {
-                              const f = e.target.files?.[0];
-                              if (f) {
-                                const compressed = await compressMediaFile(f, 1200, 0.82);
-                                setSlipFile(compressed);
-                                setSlipPreviewUrl(URL.createObjectURL(compressed));
-                              }
-                            }} 
-                            className="hidden" 
-                          />
-                          <span className="text-base group-hover:scale-110 transition">📸</span>
-                          <span className="text-xs font-bold text-gray-600 group-hover:text-orange-600">
-                            ចុចទីនេះ ដើម្បីភ្ជាប់រូបភាពវិក្កយបត្រផ្ទេរប្រាក់ (Slip)
-                          </span>
-                        </label>
-                      )}
-                      <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-                        💡 បន្ទាប់ពីផ្ទេរប្រាក់រួច សូមភ្ជាប់រូបភាព Slip ដើម្បីឱ្យហាងឆាប់បញ្ជាក់ការដឹកជញ្ជូន។
-                      </p>
-                    </div>
-
-                  </div>
-                )}
-              </div>
-
-              {/* 🏷️ Promo Code / Coupon Section in Checkout Modal */}
-              <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
-                    <span>🏷️</span> កូដបញ្ចុះតម្លៃ (Promo Code)
-                  </span>
-                  {appliedCoupon && (
-                    <button 
-                      type="button" 
-                      onClick={handleRemoveCoupon} 
-                      className="text-[11px] font-bold text-red-500 hover:text-red-700 cursor-pointer"
-                    >
-                      ✕ ដោះកូដចេញ
-                    </button>
-                  )}
-                </div>
-
-                {appliedCoupon ? (
-                  <div className="bg-emerald-50 border border-emerald-300 p-2.5 rounded-xl flex items-center justify-between text-xs text-emerald-800">
-                    <div className="flex items-center gap-2">
-                      <span className="bg-emerald-600 text-white font-mono font-black px-2 py-0.5 rounded text-[11px]">
-                        {appliedCoupon.code}
-                      </span>
-                      <span className="font-bold">{appliedCoupon.label}</span>
-                    </div>
-                    <span className="font-black text-emerald-700">
-                      -{appliedCoupon.type === 'percent' ? `${appliedCoupon.value}%` : `$${appliedCoupon.value.toFixed(2)}`}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-base sm:text-lg text-white tracking-tight">
+                      បញ្ជាក់ការបញ្ជាទិញ (Checkout Order)
+                    </h3>
+                    <span className="hidden sm:inline-flex text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                      ជំហានចុងក្រោយ
                     </span>
                   </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        placeholder="វាយបញ្ចូលកូដ (ឧ. SABAY10)" 
-                        value={couponInput}
-                        onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyCoupon(); } }}
-                        className="flex-1 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono font-bold uppercase focus:border-orange-500 outline-none"
-                      />
-                      <button 
-                        type="button" 
-                        onClick={() => handleApplyCoupon()}
-                        className="bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer active:scale-95"
-                      >
-                        ប្រើកូដ
-                      </button>
+                  <p className="text-[11px] text-slate-300">
+                    សូមបំពេញព័ត៌មានដឹកជញ្ជូន និងជ្រើសរើសវិធីសងប្រាក់
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setCheckoutModalOpen(false)}
+                className="w-9 h-9 rounded-full bg-slate-800/80 hover:bg-rose-500 text-slate-400 hover:text-white flex items-center justify-center font-bold text-sm transition cursor-pointer"
+                title="បិទផ្ទាំង"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 🌟 2. MODAL BODY (MODERN 2-COLUMN RESPONSIVE GRID) */}
+            <form onSubmit={handleProcessOrder} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* 👈 LEFT COLUMN: 📍 DELIVERY INFO & 💳 PAYMENT METHOD (Cols: 7) */}
+                <div className="lg:col-span-7 space-y-5">
+                  
+                  {/* CARD 1: 📍 ព័ត៌មានអ្នកទទួល និងទីតាំងដឹកជញ្ជូន */}
+                  <div className="bg-slate-50/80 rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
+                    <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-lg bg-orange-100 text-orange-600 font-black text-xs flex items-center justify-center">1</span>
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                          ព័ត៌មានអ្នកទទួល & ទីតាំងដឹកជញ្ជូន
+                        </h4>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-medium">* ចាំបាច់បំពេញ</span>
                     </div>
 
-                    <div className="flex flex-wrap gap-1">
-                      {getDisplayCoupons().slice(0, 4).map((cpn) => (
-                        <button
-                          key={cpn.code}
-                          type="button"
-                          onClick={() => handleApplyCoupon(cpn.code)}
-                          className="bg-white hover:bg-orange-50 text-gray-700 hover:text-orange-600 border border-dashed border-gray-300 hover:border-orange-400 px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1"
+                    {/* Full Name & Phone */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                          <span>👤</span> ឈ្មោះអ្នកទទួល <span className="text-rose-500">*</span>
+                        </label>
+                        <input 
+                          type="text"
+                          required
+                          placeholder="ឧ. សេង សុខា..."
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          className="w-full bg-white border border-slate-200 focus:border-[#ff6a00] focus:ring-2 focus:ring-orange-500/15 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition shadow-2xs placeholder:text-slate-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                          <span>📞</span> លេខទូរស័ព្ទទំនាក់ទំនង <span className="text-rose-500">*</span>
+                        </label>
+                        <input 
+                          type="tel"
+                          required
+                          placeholder="ឧ. 012 345 678"
+                          value={customerPhone}
+                          onChange={(e) => setCustomerPhone(e.target.value)}
+                          className="w-full bg-white border border-slate-200 focus:border-[#ff6a00] focus:ring-2 focus:ring-orange-500/15 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition shadow-2xs placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Telegram (Optional) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <span>✈️</span> <span>Telegram សម្រាប់ផ្ញើវិក្កយបត្រ PDF</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត (Optional)</span>
+                      </label>
+                      <input 
+                        type="text"
+                        placeholder="ឧ. @username ឬ លេខទូរស័ព្ទ Telegram"
+                        value={customerTelegram}
+                        onChange={(e) => setCustomerTelegram(e.target.value)}
+                        className="w-full bg-white border border-slate-200 focus:border-[#ff6a00] focus:ring-2 focus:ring-orange-500/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition shadow-2xs placeholder:text-slate-400"
+                      />
+                    </div>
+
+                    {/* Province & Detailed Address */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                          <span>🏛️</span> រាជធានី / ខេត្ត <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={customerProvince}
+                          onChange={(e) => setCustomerProvince(e.target.value)}
+                          className="w-full bg-white border border-slate-200 focus:border-[#ff6a00] focus:ring-2 focus:ring-orange-500/15 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition shadow-2xs cursor-pointer"
                         >
-                          <span>🏷️</span>
-                          <span>{cpn.code}</span>
-                          <span className="text-orange-500 font-bold">({cpn.type === 'percent' ? `-${cpn.value}%` : `-$${cpn.value}`})</span>
-                        </button>
+                          <option value="ភ្នំពេញ">ភ្នំពេញ (Phnom Penh)</option>
+                          <option value="កណ្តាល">កណ្តាល (Kandal)</option>
+                          <option value="សៀមរាប">សៀមរាប (Siem Reap)</option>
+                          <option value="បាត់ដំបង">បាត់ដំបង (Battambang)</option>
+                          <option value="ព្រះសីហនុ">ព្រះសីហនុ (Preah Sihanouk)</option>
+                          <option value="កំពង់ចាម">កំពង់ចាម (Kampong Cham)</option>
+                          <option value="កំពង់ឆ្នាំង">កំពង់ឆ្នាំង (Kampong Chhnang)</option>
+                          <option value="កំពង់ស្ពឺ">កំពង់ស្ពឺ (Kampong Speu)</option>
+                          <option value="កំពង់ធំ">កំពង់ធំ (Kampong Thom)</option>
+                          <option value="កំពត">កំពត (Kampot)</option>
+                          <option value="កែប">កែប (Kep)</option>
+                          <option value="កោះកុង">កោះកុង (Koh Kong)</option>
+                          <option value="ក្រចេះ">ក្រចេះ (Kratie)</option>
+                          <option value="មណ្ឌលគិរី">មណ្ឌលគិរី (Mondulkiri)</option>
+                          <option value="ឧត្តរមានជ័យ">ឧត្តរមានជ័យ (Oddar Meanchey)</option>
+                          <option value="ប៉ៃលិន">ប៉ៃលិន (Pailin)</option>
+                          <option value="ព្រះវិហារ">ព្រះវិហារ (Preah Vihear)</option>
+                          <option value="ព្រៃវែង">ព្រៃវែង (Prey Veng)</option>
+                          <option value="ពោធិ៍សាត់">ពោធិ៍សាត់ (Pursat)</option>
+                          <option value="រតនគិរី">រតនគិរី (Ratanakiri)</option>
+                          <option value="ស្ទឹងត្រែង">ស្ទឹងត្រែង (Stung Treng)</option>
+                          <option value="ស្វាយរៀង">ស្វាយរៀង (Svay Rieng)</option>
+                          <option value="តាកែវ">តាកែវ (Takeo)</option>
+                          <option value="ត្បូងឃ្មុំ">ត្បូងឃ្មុំ (Tboung Khmum)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1">
+                          <span>🏠</span> អាសយដ្ឋានលម្អិត / ផ្ទះលេខ / ផ្លូវ <span className="text-rose-500">*</span>
+                        </label>
+                        <input 
+                          type="text"
+                          required
+                          placeholder="ផ្ទះលេខ, ផ្លូវ, សង្កាត់/ឃុំ, ខណ្ឌ/ស្រុក..."
+                          value={customerAddress}
+                          onChange={(e) => setCustomerAddress(e.target.value)}
+                          className="w-full bg-white border border-slate-200 focus:border-[#ff6a00] focus:ring-2 focus:ring-orange-500/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition shadow-2xs placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+
+                    {/* SMART DELIVERY ASSIST: GOOGLE MAPS & HOUSE PHOTO */}
+                    <div className="pt-3 border-t border-slate-200 space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                          🚀 ជំនួយការដឹកជញ្ជូនរហ័ស (Smart Delivery Assist)
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត</span>
+                      </div>
+
+                      {/* Google Maps Pin Link */}
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                            <span>🗺️</span> <span>ទីតាំងផែនទី Google Maps (សម្រាប់អ្នកដឹកជញ្ជូន)</span>
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={handleGetCurrentLocation}
+                              disabled={isLocating}
+                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1 rounded-lg text-[10px] font-black transition flex items-center gap-1 border border-blue-200 active:scale-95 disabled:opacity-50 cursor-pointer shadow-2xs"
+                            >
+                              <span>{isLocating ? '⏳' : '📍'}</span>
+                              <span>{isLocating ? 'កំពុងចាប់ GPS...' : 'ចាប់យក GPS បច្ចុប្បន្ន'}</span>
+                            </button>
+                            <a
+                              href="https://www.google.com/maps"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-slate-200"
+                            >
+                              <span>↗️</span> បើក Maps
+                            </a>
+                          </div>
+                        </div>
+
+                        <div className="relative">
+                          <input
+                            type="url"
+                            placeholder="បិទភ្ជាប់ (Paste) Link ពី Google Maps នៅទីនេះ (ឧ. https://maps.app.goo.gl/...)"
+                            value={googleMapUrl}
+                            onChange={(e) => setGoogleMapUrl(e.target.value)}
+                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-blue-500 pr-16 transition"
+                          />
+                          {googleMapUrl && (
+                            <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+                              <a
+                                href={googleMapUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-lg hover:bg-emerald-200 transition"
+                              >
+                                មើល
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => setGoogleMapUrl('')}
+                                className="text-slate-400 hover:text-rose-500 text-xs px-1 cursor-pointer font-bold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {googleMapUrl && (
+                          <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                            <span>✅</span> បានកំណត់ Link ទីតាំង Google Maps រួចរាល់!
+                          </p>
+                        )}
+                      </div>
+
+                      {/* House Photo Upload */}
+                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
+                        <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <span>🏠</span> <span>រូបថតផ្ទះ ឬកន្លែងទទួល (ជួយអ្នកដឹកស្គាល់ច្រកចូល)</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត</span>
+                        </label>
+
+                        {locationPhotoPreview ? (
+                          <div className="flex items-center gap-3 p-2 bg-emerald-50/60 rounded-xl border border-emerald-200">
+                            <img
+                              src={locationPhotoPreview}
+                              alt="House / Workplace"
+                              className="w-14 h-14 object-cover rounded-lg border border-emerald-300 shrink-0 bg-white"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-800 truncate">
+                                {locationPhotoFile ? locationPhotoFile.name : 'រូបថតទីតាំង'}
+                              </p>
+                              <p className="text-[10px] text-emerald-600 font-bold mt-0.5">✅ បានជ្រើសរើសរូបថតទីតាំង</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLocationPhotoFile(null);
+                                  setLocationPhotoPreview(null);
+                                }}
+                                className="text-rose-500 hover:text-rose-700 text-[10px] font-bold mt-0.5 underline cursor-pointer"
+                              >
+                                លុបរូបថតចេញ
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="flex items-center justify-center gap-2 p-3 bg-slate-50 hover:bg-orange-50/50 border-2 border-dashed border-slate-200 hover:border-orange-400 rounded-xl cursor-pointer transition text-xs font-bold text-slate-600 hover:text-orange-600 group">
+                            <span className="text-base group-hover:scale-110 transition">📸</span>
+                            <span>ចុចទីនេះ ដើម្បីថត ឬ Upload រូបថតមុខផ្ទះ / ស្លាកសញ្ញា</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleLocationPhotoChange}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          ជួយឱ្យអ្នកដឹកជញ្ជូនស្គាល់ច្រកចូល ពណ៌ផ្ទះ ឬស្លាកសញ្ញាបានរហ័ស មិនបាច់ខលសួរច្រើនដង។
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 2: 💳 ជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់ */}
+                  <div className="bg-slate-50/80 rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-4">
+                    <div className="flex items-center gap-2 pb-2.5 border-b border-slate-200">
+                      <span className="w-6 h-6 rounded-lg bg-orange-100 text-orange-600 font-black text-xs flex items-center justify-center">2</span>
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        ជ្រើសរើសវិធីសាស្ត្រទូទាត់ប្រាក់
+                      </h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {/* Option 1: COD */}
+                      <label 
+                        className={`p-4 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3 relative overflow-hidden ${
+                          paymentMethod === 'COD' 
+                            ? 'border-orange-500 bg-white ring-4 ring-orange-500/10 shadow-md text-orange-950' 
+                            : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
+                        }`}
+                      >
+                        <input 
+                          type="radio" 
+                          name="paymentMethod" 
+                          checked={paymentMethod === 'COD'}
+                          onChange={() => setPaymentMethod('COD')}
+                          className="accent-[#ff6a00] w-4 h-4 mt-0.5"
+                        />
+                        <div className="space-y-1">
+                          <div className="font-black text-xs sm:text-sm flex items-center gap-1.5">
+                            <span>💵</span>
+                            <span>បង់ប្រាក់ពេលទទួល (COD)</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            ពិនិត្យទំនិញរួចរាល់ ទើបប្រគល់ប្រាក់ជូនអ្នកដឹកជញ្ជូន
+                          </p>
+                          <span className="inline-block text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            ✓ ពេញនិយម និងសុវត្ថិភាព
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* Option 2: ABA KHQR */}
+                      <label 
+                        className={`p-4 rounded-2xl border-2 cursor-pointer transition flex items-start gap-3 relative overflow-hidden ${
+                          paymentMethod === 'ABA KHQR' 
+                            ? 'border-[#E1251B] bg-white ring-4 ring-red-500/10 shadow-md text-slate-900' 
+                            : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
+                        }`}
+                      >
+                        <input 
+                          type="radio" 
+                          name="paymentMethod" 
+                          checked={paymentMethod === 'ABA KHQR'}
+                          onChange={() => setPaymentMethod('ABA KHQR')}
+                          className="accent-[#E1251B] w-4 h-4 mt-0.5"
+                        />
+                        <div className="space-y-1">
+                          <div className="font-black text-xs sm:text-sm flex items-center gap-1.5">
+                            <span className="bg-[#E1251B] text-white px-1.5 py-0.2 rounded text-[10px] font-black">KHQR</span>
+                            <span>ស្កេនទូទាត់ ABA KHQR</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            ស្កេនតាម Bakong, ABA ឬគ្រប់ធនាគារក្នុងប្រទេសកម្ពុជា
+                          </p>
+                          <span className="inline-block text-[9px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                            ⚡ ឆាប់រហ័ស Multi-Currency
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* INTERACTIVE BAKONG / ABA KHQR CARD & SLIP UPLOAD */}
+                    {paymentMethod === 'ABA KHQR' && (
+                      <div className="bg-gradient-to-b from-slate-50 to-white p-4 sm:p-5 rounded-2xl border-2 border-red-200 shadow-sm space-y-4 animate-in fade-in duration-200">
+                        
+                        {/* KHQR Card Box */}
+                        <div className="bg-white rounded-2xl border border-slate-250 overflow-hidden shadow-md max-w-sm mx-auto">
+                          {/* KHQR Official Red Header */}
+                          <div className="bg-[#E1251B] text-white px-4 py-2.5 flex items-center justify-between shadow-xs">
+                            <div className="flex items-center gap-1.5 font-black text-sm tracking-wider">
+                              <span className="bg-white text-[#E1251B] px-1.5 py-0.5 rounded text-[10px] font-black shadow-2xs">KH</span>
+                              <span>QR</span>
+                            </div>
+                            <span className="text-[11px] font-bold tracking-wide">BAKONG / ABA PAY</span>
+                          </div>
+
+                          {/* Store Name & Amount */}
+                          <div className="p-4 text-center border-b border-slate-100 bg-slate-50/40">
+                            <p className="text-xs font-black text-slate-900 tracking-wide uppercase">
+                              {storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK STORE'}
+                            </p>
+                            <div className="mt-1">
+                              <span className="text-2xl font-black text-[#ff6a00]">${totalPrice.toFixed(2)}</span>
+                              <span className="block text-xs font-bold text-slate-500 mt-0.5">≈ {totalRiel.toLocaleString()} ៛</span>
+                            </div>
+                          </div>
+
+                          {/* Dynamic Real QR Code Image */}
+                          <div className="p-4 flex flex-col items-center justify-center bg-slate-50/50">
+                            <div className="bg-white p-3 rounded-2xl border-2 border-slate-200 shadow-inner">
+                              <img 
+                                src={storeSettings.khqrImageUrl || '/khqr-aba.jpg'} 
+                                alt="KHQR Code" 
+                                className="w-48 h-auto max-h-64 object-contain rounded-lg"
+                              />
+                            </div>
+                            <p className="text-[10px] text-slate-600 font-bold mt-2.5 flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
+                              <span>✨</span> <span>ស្កេនបានទាំង <b className="text-emerald-700">ប្រាក់រៀល (KHR)</b> & <b className="text-blue-700">ប្រាក់ដុល្លារ (USD)</b></span>
+                            </p>
+                          </div>
+
+                          {/* Bank Details & Copy Buttons */}
+                          <div className="px-4 py-3.5 bg-slate-50 text-xs border-t border-slate-150 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 font-bold">ធនាគារ៖</span>
+                              <span className="font-black text-slate-900">ABA Bank (KHQR Multi-Currency)</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-400 font-bold">ឈ្មោះគណនី៖</span>
+                              <span className="font-black text-slate-900 uppercase">
+                                {storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK'}
+                              </span>
+                            </div>
+
+                            {/* KHR Account */}
+                            <div className="flex items-center justify-between pt-1.5 border-t border-slate-200">
+                              <span className="text-slate-700 font-bold flex items-center gap-1.5">
+                                <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black inline-flex items-center justify-center shrink-0">៛</span>
+                                <span>គណនី KHR:</span>
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-black text-xs text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                                  {storeSettings.bankAccountKhr || '004 500 394'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText((storeSettings.bankAccountKhr || '004500394').replace(/\s+/g, ''));
+                                    setIsCopiedAccountKhr(true);
+                                    setTimeout(() => setIsCopiedAccountKhr(false), 2000);
+                                  }}
+                                  className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer"
+                                >
+                                  {isCopiedAccountKhr ? '✓ បានចម្លង' : '📋 ចម្លង KHR'}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* USD Account */}
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-slate-700 font-bold flex items-center gap-1.5">
+                                <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-800 text-[10px] font-black inline-flex items-center justify-center shrink-0">$</span>
+                                <span>គណនី USD:</span>
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-black text-xs text-blue-800 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200">
+                                  {storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010 723 080'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText((storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010723080').replace(/\s+/g, ''));
+                                    setIsCopiedAccountUsd(true);
+                                    setTimeout(() => setIsCopiedAccountUsd(false), 2000);
+                                  }}
+                                  className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2.5 py-1 rounded-lg text-[10px] font-black transition cursor-pointer"
+                                >
+                                  {isCopiedAccountUsd ? '✓ បានចម្លង' : '📋 ចម្លង USD'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 📎 Payment Slip Upload Section */}
+                        <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-slate-250 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                              <span>📎</span> ភ្ជាប់វិក្កយបត្រផ្ទេរប្រាក់ (Payment Slip / Screenshot)
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">ស្រេចចិត្ត ឬចាំបាច់</span>
+                          </div>
+
+                          {slipPreviewUrl ? (
+                            <div className="flex items-center gap-3 bg-emerald-50/70 border border-emerald-200 p-2.5 rounded-xl">
+                              <img 
+                                src={slipPreviewUrl} 
+                                alt="Slip Preview" 
+                                className="w-14 h-14 object-cover rounded-lg border border-emerald-300 bg-white"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-black text-emerald-800 truncate">
+                                  {slipFile ? slipFile.name : 'វិក្កយបត្របានភ្ជាប់'}
+                                </p>
+                                <span className="text-[10px] text-emerald-600 font-bold block mt-0.5">
+                                  ✓ បានភ្ជាប់វិក្កយបត្ររួចរាល់
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSlipFile(null);
+                                  setSlipPreviewUrl(null);
+                                }}
+                                className="text-slate-400 hover:text-rose-500 font-black text-sm p-1 cursor-pointer"
+                                title="ដកចេញ"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="border border-dashed border-slate-300 hover:border-orange-400 bg-slate-50/70 hover:bg-orange-50/50 p-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition text-center group">
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={async (e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) {
+                                    const compressed = await compressMediaFile(f, 1200, 0.82);
+                                    setSlipFile(compressed);
+                                    setSlipPreviewUrl(URL.createObjectURL(compressed));
+                                  }
+                                }} 
+                                className="hidden" 
+                              />
+                              <span className="text-base group-hover:scale-110 transition">📸</span>
+                              <span className="text-xs font-bold text-slate-600 group-hover:text-orange-600">
+                                ចុចទីនេះ ដើម្បីភ្ជាប់រូបភាពវិក្កយបត្រផ្ទេរប្រាក់ (Slip)
+                              </span>
+                            </label>
+                          )}
+                          <p className="text-[10px] text-slate-400 text-center">
+                            💡 បន្ទាប់ពីផ្ទេរប្រាក់រួច សូមភ្ជាប់រូបភាព Slip ដើម្បីឱ្យហាងឆាប់បញ្ជាក់ការដឹកជញ្ជូន។
+                          </p>
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* 👉 RIGHT COLUMN: 🛒 CART PREVIEW, 🏷️ PROMO & 🧾 TOTAL SUMMARY (Cols: 5) */}
+                <div className="lg:col-span-5 space-y-4">
+                  
+                  {/* CARD 3: 🛒 បញ្ជីទំនិញក្នុងកន្ត្រក (Cart Items Preview) */}
+                  <div className="bg-slate-50/80 rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                      <div className="flex items-center gap-1.5 font-black text-xs text-slate-900 uppercase tracking-wider">
+                        <span>🛒</span>
+                        <span>ទំនិញកុម្ម៉ង់ ({cart.length} មុខ)</span>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-400">
+                        សរុប {cart.reduce((sum, item) => sum + item.qty, 0)} គូ/ដុំ
+                      </span>
+                    </div>
+
+                    {/* Scrollable Cart Items List */}
+                    <div className="max-h-52 overflow-y-auto space-y-2.5 divide-y divide-slate-100 pr-1">
+                      {cart.map((item, idx) => (
+                        <div key={`${item.id}_${item.variantId || idx}`} className="flex items-center gap-3 pt-2 first:pt-0">
+                          <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 shadow-2xs">
+                            <img 
+                              src={item.image || '/placeholder-shoes.jpg'} 
+                              alt={item.name} 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h5 className="font-bold text-xs text-slate-900 truncate">
+                              {item.name}
+                            </h5>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {item.size && (
+                                <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded">
+                                  Size: {item.size}
+                                </span>
+                              )}
+                              {item.color && (
+                                <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded">
+                                  {item.color}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                x{item.qty}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="font-black text-xs text-slate-900">
+                              ${((item.price || 0) * item.qty).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {couponMsg && (
-                  <div className={`text-[11px] font-bold p-2 rounded-lg ${couponMsg.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-600'}`}>
-                    {couponMsg.text}
-                  </div>
-                )}
-              </div>
+                  {/* CARD 4: 🏷️ កូដបញ្ចុះតម្លៃ (Promo Code) */}
+                  <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                        <span>🏷️</span> កូដបញ្ចុះតម្លៃ (Promo Code)
+                      </span>
+                      {appliedCoupon && (
+                        <button 
+                          type="button" 
+                          onClick={handleRemoveCoupon} 
+                          className="text-[11px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer"
+                        >
+                          ✕ ដោះកូដចេញ
+                        </button>
+                      )}
+                    </div>
 
-              <div className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200">
-                <div className="flex justify-between items-center text-xs font-bold text-gray-600 mb-2">
-                  <span>ទំនិញសរុប ({cart.length} មុខ):</span>
-                  <span>${subtotalPrice.toFixed(2)}</span>
-                </div>
-                {appliedCoupon && couponDiscountAmount > 0 && (
-                  <div className="flex justify-between items-center text-xs font-bold text-emerald-600 mb-2">
-                    <span>បញ្ចុះតម្លៃ Promo Code ({appliedCoupon.code}):</span>
-                    <span>-${couponDiscountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                {isTaxEnabled && taxAmount > 0 && (
-                  <div className="flex justify-between items-center text-xs font-bold text-blue-600 mb-2">
-                    <span>ពន្ធអាករ (VAT {taxRatePercent}%):</span>
-                    <span>{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${taxAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center text-xs font-bold text-emerald-600 mb-2">
-                  <span>ថ្លៃដឹកជញ្ជូន:</span>
-                  <span>ឥតគិតថ្លៃ (Free)</span>
-                </div>
-                <div className="flex justify-between items-baseline pt-2 border-t border-gray-200">
-                  <span className="font-black text-sm text-gray-900">ទឹកប្រាក់សរុប (Total):</span>
-                  <div className="text-right">
-                    <span className="font-black text-xl text-[#ff6a00]">${totalPrice.toFixed(2)}</span>
-                    <span className="block text-[11px] font-bold text-gray-500">({totalRiel.toLocaleString()} ៛)</span>
-                  </div>
-                </div>
-              </div>
+                    {appliedCoupon ? (
+                      <div className="bg-emerald-50 border border-emerald-300 p-2.5 rounded-xl flex items-center justify-between text-xs text-emerald-800">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-emerald-600 text-white font-mono font-black px-2 py-0.5 rounded text-[11px]">
+                            {appliedCoupon.code}
+                          </span>
+                          <span className="font-bold">{appliedCoupon.label}</span>
+                        </div>
+                        <span className="font-black text-emerald-700">
+                          -{appliedCoupon.type === 'percent' ? `${appliedCoupon.value}%` : `$${appliedCoupon.value.toFixed(2)}`}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="វាយបញ្ចូលកូដ (ឧ. SABAY10)" 
+                            value={couponInput}
+                            onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyCoupon(); } }}
+                            className="flex-1 bg-white border border-slate-200 focus:border-[#ff6a00] rounded-xl px-3 py-2 text-xs font-mono font-bold uppercase outline-none shadow-2xs placeholder:text-slate-400"
+                          />
+                          <button 
+                            type="button" 
+                            onClick={() => handleApplyCoupon()}
+                            className="bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 shadow-2xs"
+                          >
+                            ប្រើកូដ
+                          </button>
+                        </div>
 
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={checkoutLoading}
-                  className="w-full bg-[#ff6a00] hover:bg-[#ea580c] text-white py-4 rounded-2xl font-black text-sm active:scale-98 transition shadow-xl flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {checkoutLoading ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>កំពុងដំណើរការកុម្ម៉ង់...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>✅</span>
-                      <span>បញ្ជាក់ការកុម្ម៉ង់ឥឡូវនេះ (Confirm Order)</span>
-                    </>
-                  )}
-                </button>
+                        {/* Quick 1-Click Coupon Badges */}
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {getDisplayCoupons().slice(0, 4).map((cpn) => (
+                            <button
+                              key={cpn.code}
+                              type="button"
+                              onClick={() => handleApplyCoupon(cpn.code)}
+                              className="bg-white hover:bg-orange-50 text-slate-700 hover:text-orange-600 border border-dashed border-slate-300 hover:border-orange-400 px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                            >
+                              <span>🏷️</span>
+                              <span>{cpn.code}</span>
+                              <span className="text-orange-500 font-bold">({cpn.type === 'percent' ? `-${cpn.value}%` : `-$${cpn.value}`})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {couponMsg && (
+                      <div className={`text-[11px] font-bold p-2 rounded-lg ${couponMsg.type === 'success' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-50 text-rose-600'}`}>
+                        {couponMsg.text}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CARD 5: 🧾 សង្ខេបវិក្កយបត្រ (Invoice Summary Breakdown) */}
+                  <div className="p-4 sm:p-5 bg-gradient-to-b from-slate-50 to-orange-50/20 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+                    <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                      <span>ទំនិញសរុប ({cart.length} មុខ):</span>
+                      <span className="font-mono text-slate-900">${subtotalPrice.toFixed(2)}</span>
+                    </div>
+                    {appliedCoupon && couponDiscountAmount > 0 && (
+                      <div className="flex justify-between items-center text-xs font-bold text-emerald-600">
+                        <span>បញ្ចុះតម្លៃ Promo Code ({appliedCoupon.code}):</span>
+                        <span className="font-mono">-${couponDiscountAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {isTaxEnabled && taxAmount > 0 && (
+                      <div className="flex justify-between items-center text-xs font-bold text-blue-600">
+                        <span>ពន្ធអាករ (VAT {taxRatePercent}%):</span>
+                        <span className="font-mono">{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${taxAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                      <span>ថ្លៃដឹកជញ្ជូន:</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                        ✓ ឥតគិតថ្លៃ (Free)
+                      </span>
+                    </div>
+
+                    {/* Grand Total */}
+                    <div className="flex justify-between items-baseline pt-3 border-t border-slate-200/80">
+                      <div>
+                        <span className="font-black text-sm text-slate-900 block leading-tight">ទឹកប្រាក់សរុប (Total):</span>
+                        <span className="text-[10px] text-slate-400 font-medium">រួមបញ្ចូលពន្ធ និងថ្លៃដឹក</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-black text-2xl text-[#ff6a00] font-mono leading-none">${totalPrice.toFixed(2)}</span>
+                        <span className="block text-xs font-bold text-slate-500 mt-1">({totalRiel.toLocaleString()} ៛)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 6: 🟧 CONFIRM ORDER BUTTON & TRUST BADGES */}
+                  <div className="space-y-3 pt-1">
+                    <button
+                      type="submit"
+                      disabled={checkoutLoading}
+                      className="w-full bg-gradient-to-r from-[#ff6a00] via-[#ea580c] to-[#ff6a00] hover:from-[#ea580c] hover:to-[#c2410c] text-white py-4 rounded-2xl font-black text-sm sm:text-base active:scale-98 transition shadow-xl shadow-orange-500/25 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                    >
+                      {checkoutLoading ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>កំពុងដំណើរការកុម្ម៉ង់...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>✔️</span>
+                          <span>បញ្ជាក់ការកុម្ម៉ង់ឥឡូវនេះ (Confirm Order)</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Trust Badges */}
+                    <div className="grid grid-cols-3 gap-2 text-center text-[10px] text-slate-500 font-bold pt-1">
+                      <div className="flex items-center justify-center gap-1 bg-slate-50 py-1.5 px-1 rounded-xl border border-slate-200/60">
+                        <span>🔒</span>
+                        <span>សុវត្ថិភាព ១០០%</span>
+                      </div>
+                      <div className="flex items-center justify-center gap-1 bg-slate-50 py-1.5 px-1 rounded-xl border border-slate-200/60">
+                        <span>⚡</span>
+                        <span>ដឹកលឿន ២៤-៤៨ម៉</span>
+                      </div>
+                      <div className="flex items-center justify-center gap-1 bg-slate-50 py-1.5 px-1 rounded-xl border border-slate-200/60">
+                        <span>🔄</span>
+                        <span>ធានាប្តូរទំហំ</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
               </div>
             </form>
           </div>
