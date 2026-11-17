@@ -12406,7 +12406,9 @@ export default function UnifiedAdminDashboard() {
         (s.name || '').toLowerCase().includes(q) ||
         (s.slug || '').toLowerCase().includes(q) ||
         (s.phone || '').includes(q) ||
-        (s.owner_name || '').toLowerCase().includes(q);
+        (s.owner_name || '').toLowerCase().includes(q) ||
+        (s.owner_email || '').toLowerCase().includes(q) ||
+        (s.settings?.owner_email || '').toLowerCase().includes(q);
       const matchPlan = storeFilterPlan === 'ALL' || s.plan === storeFilterPlan;
       const matchStatus = storeFilterStatus === 'ALL' || 
         (storeFilterStatus === 'ACTIVE' && s.status !== 'SUSPENDED' && !isStoreInactive(s, 30)) ||
@@ -12721,10 +12723,27 @@ export default function UnifiedAdminDashboard() {
                         <p className="font-bold text-slate-900 text-xs">{st.owner_name || 'ម្ចាស់ហាង'}</p>
                         {/* ⭐️ Highlighted Owner's Gmail ⭐️ */}
                         <div className="flex items-center gap-1.5 my-1">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/80 font-mono text-[11px] font-black shadow-2xs">
-                            <span>📧</span>
-                            <span>{st.owner_email || st.settings?.owner_email || st.email || '—'}</span>
-                          </span>
+                          {(st.owner_email || st.settings?.owner_email || st.email) ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/80 font-mono text-[11px] font-black shadow-2xs">
+                              <span>📧</span>
+                              <span>{st.owner_email || st.settings?.owner_email || st.email}</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStoreFormToEdit({
+                                  ...st,
+                                  owner_email: st.owner_email || st.settings?.owner_email || st.email || ''
+                                });
+                                setEditStoreModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-300 font-bold text-[10px] hover:bg-amber-100 transition cursor-pointer"
+                              title="ចុចដើម្បីបន្ថែម Gmail សម្រាប់ហាងនេះ"
+                            >
+                              <span>⚠️ មិនទាន់មាន Gmail (ចុចបន្ថែម)</span>
+                            </button>
+                          )}
                         </div>
                         <p className="text-[10px] text-slate-500 font-mono">
                           📞 {st.phone || '—'} {st.telegram ? `• TG: @${st.telegram}` : ''}
