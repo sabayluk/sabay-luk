@@ -1963,22 +1963,43 @@ export default function UnifiedAdminDashboard() {
   // ⭐️ Helper ទទួលបាន Invoice Settings តាមហាងនីមួយៗ (Per-Store Scoped Invoice Settings) ⭐️
   const getStoreScopedInvoiceSettings = (store) => {
     const storeId = store?.id || 'store_default_sabayluk';
+    const dbSettings = store?.settings || {};
+
+    // ១. Load ពី localStorage ជាមុន (highest priority)
+    let localParsed = null;
     if (typeof window !== 'undefined') {
       const scoped = localStorage.getItem(`sabay_invoice_settings_${storeId}`);
       if (scoped) {
-        try { return JSON.parse(scoped); } catch (_) {}
+        try { localParsed = JSON.parse(scoped); } catch (_) {}
       }
     }
+
+    // ២. Load storeSettings localStorage (sabay_store_settings_<id>) សម្រាប់ khqrImageUrl
+    let storeLocalParsed = null;
+    if (typeof window !== 'undefined') {
+      const sk = localStorage.getItem(`sabay_store_settings_${storeId}`) || (storeId === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
+      if (sk) { try { storeLocalParsed = JSON.parse(sk); } catch (_) {} }
+    }
+
+    // ៣. khqrImageUrl — priority: storeLocal > dbSettings > default
+    const khqrImageUrl = storeLocalParsed?.khqrImageUrl || dbSettings?.khqrImageUrl || (storeId === 'store_default_sabayluk' ? '/khqr-aba.jpg' : '');
+
+    if (localParsed) {
+      // Merge khqrImageUrl ចូល localStorage invoice settings (ពេលខ្វះ)
+      return { ...localParsed, khqrImageUrl: localParsed.khqrImageUrl || khqrImageUrl };
+    }
+
     if (store && storeId !== 'store_default_sabayluk') {
       return {
         storeName: store.name || 'ហាងរបស់ខ្ញុំ',
-        address: store.address || '',
-        phone: store.phone || '',
+        address: store.address || dbSettings?.address || '',
+        phone: store.phone || dbSettings?.phone || '',
         title: 'OFFICIAL RECEIPT',
-        exchangeRate: 4100,
+        exchangeRate: storeLocalParsed?.exchangeRate || dbSettings?.exchangeRate || 4100,
         cashierName: 'Admin',
         showKHR: true,
         showLogo: true,
+        khqrImageUrl,
         thankYouMsg: 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត',
         policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ'
       };
@@ -1992,6 +2013,7 @@ export default function UnifiedAdminDashboard() {
       cashierName: 'Admin',
       showKHR: true,
       showLogo: true,
+      khqrImageUrl,
       thankYouMsg: 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត',
       policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៣ ថ្ងៃ)'
     };
@@ -2162,7 +2184,8 @@ export default function UnifiedAdminDashboard() {
       telegram: cleanTg || invoiceSettings.telegram,
       address: updatedSettings.address || invoiceSettings.address,
       exchangeRate: Number(updatedSettings.exchangeRate) || 4100,
-      policyNote: updatedSettings.policyNote || invoiceSettings.policyNote
+      policyNote: updatedSettings.policyNote || invoiceSettings.policyNote,
+      khqrImageUrl: updatedSettings.khqrImageUrl || invoiceSettings.khqrImageUrl || ''
     };
     setInvoiceSettings(updatedInvoice);
     localStorage.setItem(`sabay_invoice_settings_${storeId}`, JSON.stringify(updatedInvoice));
@@ -2860,7 +2883,10 @@ export default function UnifiedAdminDashboard() {
       const compressed = await compressMediaFile(file, 800, 0.9);
       const reader = new FileReader();
       reader.onload = (event) => {
-        setStoreSettings(prev => ({ ...prev, khqrImageUrl: event.target.result }));
+        const url = event.target.result;
+        // ⭐️ sync ទៅ ទាំង storeSettings និង invoiceSettings
+        setStoreSettings(prev => ({ ...prev, khqrImageUrl: url }));
+        setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: url }));
       };
       reader.readAsDataURL(compressed);
     } catch (err) {
@@ -11517,9 +11543,9 @@ export default function UnifiedAdminDashboard() {
                             google_map_url: gMapUrl,
                             location_photo_url: locPhotoUrl,
                             payment_slip_url: slipUrl,
-                            total_amount: tot,
-                            subtotal: sub,
-                            discount: disc,
+                            total_amount: totalAmt,
+                            subtotal: subtotalAmt,
+                            discount: discountAmt,
                             coupon_code: ord.coupon_code || orderItems[0]?.coupon_code || null,
                             items: orderItems,
                             payment_method: ord.payment || ord.payment_method || 'Cash',
@@ -19863,7 +19889,9 @@ export default function UnifiedAdminDashboard() {
                           if (file) {
                             const reader = new FileReader();
                             reader.onload = (event) => {
-                              setStoreSettings(prev => ({ ...prev, khqrImageUrl: event.target.result }));
+                              const url = event.target.result;
+                              setStoreSettings(prev => ({ ...prev, khqrImageUrl: url }));
+                              setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: url }));
                             };
                             reader.readAsDataURL(file);
                           }
