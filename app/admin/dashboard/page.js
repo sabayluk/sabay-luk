@@ -1706,30 +1706,36 @@ export default function UnifiedAdminDashboard() {
         if (data.length > 0) {
           setCategory(prev => data.find(c => c.name === prev) ? prev : data[0].name);
         } else {
-          setCategory('');
+          const defaultCats = [
+            { id: '1', name: 'ស្បែកជើងបុរស', icon: 'shoe', store_id: storeId },
+            { id: '2', name: 'ស្បែកជើងនារី', icon: 'heel', store_id: storeId },
+            { id: '3', name: 'កាបូប & ខ្សែក្រវាត់', icon: 'bag', store_id: storeId },
+            { id: '4', name: 'សម្លៀកបំពាក់', icon: 'shirt', store_id: storeId },
+            { id: '5', name: 'ទូទៅ', icon: 'box', store_id: storeId }
+          ];
+          setCategories(defaultCats);
+          setCategory('ស្បែកជើងបុរស');
         }
       } else {
-        if (storeId === 'store_default_sabayluk') {
-          setCategories([
-            { id: '1', name: 'ស្បែកជើងបុរស', icon: 'shoe', store_id: 'store_default_sabayluk' },
-            { id: '2', name: 'ស្បែកជើងនារី', icon: 'heel', store_id: 'store_default_sabayluk' },
-            { id: '3', name: 'ខ្សែក្រវាត់', icon: 'belt', store_id: 'store_default_sabayluk' },
-          ]);
-          setCategory('ស្បែកជើងបុរស');
-        } else {
-          setCategories([]);
-          setCategory('');
-        }
+        const defaultCats = [
+          { id: '1', name: 'ស្បែកជើងបុរស', icon: 'shoe', store_id: storeId },
+          { id: '2', name: 'ស្បែកជើងនារី', icon: 'heel', store_id: storeId },
+          { id: '3', name: 'កាបូប & ខ្សែក្រវាត់', icon: 'bag', store_id: storeId },
+          { id: '4', name: 'សម្លៀកបំពាក់', icon: 'shirt', store_id: storeId },
+          { id: '5', name: 'ទូទៅ', icon: 'box', store_id: storeId }
+        ];
+        setCategories(defaultCats);
+        setCategory('ស្បែកជើងបុរស');
       }
     } catch (e) {
-      if (storeId === 'store_default_sabayluk') {
-        setCategories([
-          { id: '1', name: 'ស្បែកជើងបុរស', icon: 'shoe', store_id: 'store_default_sabayluk' },
-          { id: '2', name: 'ស្បែកជើងនារី', icon: 'heel', store_id: 'store_default_sabayluk' },
-        ]);
-      } else {
-        setCategories([]);
-      }
+      const defaultCats = [
+        { id: '1', name: 'ស្បែកជើងបុរស', icon: 'shoe', store_id: storeId },
+        { id: '2', name: 'ស្បែកជើងនារី', icon: 'heel', store_id: storeId },
+        { id: '3', name: 'កាបូប & ខ្សែក្រវាត់', icon: 'bag', store_id: storeId },
+        { id: '4', name: 'សម្លៀកបំពាក់', icon: 'shirt', store_id: storeId }
+      ];
+      setCategories(defaultCats);
+      setCategory('ស្បែកជើងបុរស');
     }
   }
 
@@ -4745,14 +4751,32 @@ export default function UnifiedAdminDashboard() {
       setBulkVariantStockInput('');
     };
 
-    // ⚡ មុខងាររើស Size តាម Preset
+        // ⚡ មុខងាររើស Size តាម Preset
     const applySizePreset = (type) => {
       if (type === 'men') {
         const menSizes = ['39', '40', '41', '42', '43', '44', '45'];
+        setAvailableSizes(prev => {
+          const next = [...prev];
+          menSizes.forEach(s => { if (!next.includes(s)) next.push(s); });
+          return next;
+        });
         setSelectedSizes(menSizes);
       } else if (type === 'women') {
         const womenSizes = ['35', '36', '37', '38', '39', '40'];
+        setAvailableSizes(prev => {
+          const next = [...prev];
+          womenSizes.forEach(s => { if (!next.includes(s)) next.push(s); });
+          return next;
+        });
         setSelectedSizes(womenSizes);
+      } else if (type === 'clothes') {
+        const clothSizes = ['S', 'M', 'L', 'XL', '2XL'];
+        setAvailableSizes(prev => {
+          const next = [...prev];
+          clothSizes.forEach(s => { if (!next.includes(s)) next.push(s); });
+          return next;
+        });
+        setSelectedSizes(clothSizes);
       } else if (type === 'all') {
         setSelectedSizes([...availableSizes]);
       } else if (type === 'none') {
@@ -5147,8 +5171,9 @@ export default function UnifiedAdminDashboard() {
               {/* ផ្នែកទំហំ (Size) */}
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
-                    ទំហំផលិតផល (Product Sizes)
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>👟</span>
+                    <span>ទំហំផលិតផល (Product Sizes)</span>
                   </label>
                   {/* Preset Buttons */}
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -5156,127 +5181,137 @@ export default function UnifiedAdminDashboard() {
                     <button
                       type="button"
                       onClick={() => applySizePreset('men')}
-                      className="px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-bold transition border border-blue-100"
+                      className="px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-bold transition border border-blue-100 cursor-pointer shadow-2xs"
                     >
                       👟 39-45 (ប្រុស)
                     </button>
                     <button
                       type="button"
                       onClick={() => applySizePreset('women')}
-                      className="px-2.5 py-1 rounded-xl bg-pink-50 text-pink-700 hover:bg-pink-100 text-[11px] font-bold transition border border-pink-100"
+                      className="px-2.5 py-1 rounded-xl bg-pink-50 text-pink-700 hover:bg-pink-100 text-[11px] font-bold transition border border-pink-100 cursor-pointer shadow-2xs"
                     >
                       👠 35-40 (ស្រី)
                     </button>
                     <button
                       type="button"
+                      onClick={() => applySizePreset('clothes')}
+                      className="px-2.5 py-1 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold transition border border-purple-100 cursor-pointer shadow-2xs"
+                    >
+                      👕 S-2XL (ខោអាវ)
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => applySizePreset('all')}
-                      className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition"
+                      className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition cursor-pointer shadow-2xs"
                     >
                       ✓ ទាំងអស់
                     </button>
                     <button
                       type="button"
                       onClick={() => applySizePreset('none')}
-                      className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-rose-600 text-[11px] font-bold transition"
+                      className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-rose-600 text-[11px] font-bold transition cursor-pointer shadow-2xs"
                     >
                       ✕ ដោះចេញ
                     </button>
                   </div>
                 </div>
 
-                {category.includes('ស្បែកជើង') ? (
-                  <div>
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {availableSizes.map((sz, idx) => {
-                        const isSelected = selectedSizes.includes(sz);
-                        return (
-                          <div 
-                            key={sz} 
-                            draggable
-                            onDragStart={() => handleSizeDragStart(idx)}
-                            onDragOver={(e) => handleSizeDragOver(e, idx)}
-                            onDragEnd={handleSizeDragEnd}
-                            className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
+                {/* Available Sizes List & Inline Creator (Always Available for All Products/Categories) */}
+                <div>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {availableSizes.map((sz, idx) => {
+                      const isSelected = selectedSizes.includes(sz);
+                      return (
+                        <div 
+                          key={sz} 
+                          draggable
+                          onDragStart={() => handleSizeDragStart(idx)}
+                          onDragOver={(e) => handleSizeDragOver(e, idx)}
+                          onDragEnd={handleSizeDragEnd}
+                          className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleSize(sz)}
+                            className={`px-3.5 py-2.5 rounded-2xl font-black text-xs transition-all border-2 flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#ff6a00] text-white border-[#ff6a00] shadow-md shadow-orange-500/20 scale-105'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
                           >
-                            <button
-                              type="button"
-                              onClick={() => toggleSize(sz)}
-                              className={`px-3.5 py-2.5 rounded-2xl font-black text-xs transition-all border-2 flex items-center gap-1.5 shadow-2xs ${
-                                isSelected
-                                  ? 'bg-[#ff6a00] text-white border-[#ff6a00] shadow-md shadow-orange-500/20 scale-105'
-                                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                              }`}
-                            >
-                              {isSelected && <span>✓</span>}
-                              <span>{sz}</span>
-                            </button>
-                            
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (window.confirm(`តើអ្នកពិតជាចង់លុបទំហំ [${sz}] នេះមែនទេ?`)) {
-                                  setAvailableSizes(availableSizes.filter(s => s !== sz));
-                                  setSelectedSizes(selectedSizes.filter(s => s !== sz));
-                                }
-                              }}
-                              className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-xs opacity-0 group-hover:opacity-100 transition duration-200 z-10"
-                              title="លុបទំហំនេះ"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Inline Add Size */}
-                    <div className="flex items-center gap-2 max-w-sm">
-                      <input 
-                        type="text" 
-                        value={newSizeInput}
-                        onChange={(e) => setNewSizeInput(e.target.value)}
-                        placeholder="បន្ថែម Size ថ្មី (ឧ. 49)" 
-                        className="flex-1 border-2 border-slate-200 focus:border-[#ff6a00] px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-50 focus:bg-white outline-none"
-                      />
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          if (newSizeInput.trim() && !availableSizes.includes(newSizeInput.trim())) {
-                            setAvailableSizes([...availableSizes, newSizeInput.trim()]);
-                            setSelectedSizes([...selectedSizes, newSizeInput.trim()]);
-                            setNewSizeInput('');
-                          }
-                        }}
-                        className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black transition shrink-0"
-                      >
-                        + បន្ថែម Size
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-2 mt-2 text-xs">
-                      <span className="text-slate-400 font-bold">ទំហំបានជ្រើសរើស ({selectedSizes.length}):</span>
-                      <span className="font-black text-[#ff6a00] bg-orange-50 px-2.5 py-0.5 rounded-lg border border-orange-100">
-                        {selectedSizes.join(', ') || 'មិនទាន់ជ្រើសរើស'}
-                      </span>
-                    </div>
+                            {isSelected && <span>✓</span>}
+                            <span>{sz}</span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`តើអ្នកពិតជាចង់លុបទំហំ [${sz}] នេះមែនទេ?`)) {
+                                setAvailableSizes(availableSizes.filter(s => s !== sz));
+                                setSelectedSizes(selectedSizes.filter(s => s !== sz));
+                              }
+                            }}
+                            className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-xs opacity-0 group-hover:opacity-100 transition duration-200 z-10 cursor-pointer"
+                            title="លុបទំហំនេះ"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                ) : category.includes('សម្លៀកបំពាក់') || category.includes('ខោអាវ') ? (
-                  <div>
+
+                  {/* Inline Create / Add Size */}
+                  <div className="flex items-center gap-2 max-w-md">
                     <input 
                       type="text" 
-                      value={customTextSize}
-                      onChange={(e) => setCustomTextSize(e.target.value)}
-                      placeholder="ឧ. S, M, L, XL, XXL ឬ Free Size" 
-                      className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-3.5 rounded-2xl text-sm font-bold bg-slate-50 focus:bg-white outline-none transition" 
+                      value={newSizeInput}
+                      onChange={(e) => setNewSizeInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (newSizeInput.trim() && !availableSizes.includes(newSizeInput.trim())) {
+                            const val = newSizeInput.trim();
+                            setAvailableSizes(prev => [...prev, val]);
+                            setSelectedSizes(prev => [...prev, val]);
+                            setNewSizeInput('');
+                          }
+                        }
+                      }}
+                      placeholder="បន្ថែម Size ថ្មី (ឧ. 49, XL, XXL ឬ Free Size)..." 
+                      className="flex-1 border-2 border-slate-200 focus:border-[#ff6a00] px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-50 focus:bg-white outline-none transition"
                     />
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        if (newSizeInput.trim() && !availableSizes.includes(newSizeInput.trim())) {
+                          const val = newSizeInput.trim();
+                          setAvailableSizes(prev => [...prev, val]);
+                          setSelectedSizes(prev => [...prev, val]);
+                          setNewSizeInput('');
+                        }
+                      }}
+                      className="bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-black transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-sm"
+                    >
+                      <span>➕</span>
+                      <span>បង្កើត Size</span>
+                    </button>
                   </div>
-                ) : (
-                  <div className="p-3.5 bg-blue-50 rounded-2xl text-blue-700 text-xs font-bold border border-blue-100 flex items-center gap-2">
-                    <span>ℹ️</span>
-                    <span>មុខទំនិញប្រភេទ «{category}» នេះ មិនចាំបាច់កំណត់ទំហំ (Size) ទេ ឬអាចប្រើទំហំទូទៅ។</span>
+
+                  <div className="flex flex-wrap items-center gap-2 mt-2.5 text-xs">
+                    <span className="text-slate-400 font-bold">ទំហំបានជ្រើសរើស ({selectedSizes.length}):</span>
+                    {selectedSizes.length > 0 ? (
+                      <span className="font-black text-[#ff6a00] bg-orange-50 px-2.5 py-0.5 rounded-lg border border-orange-100">
+                        {selectedSizes.join(', ')}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 italic">
+                        មិនទាន់បានជ្រើសរើសទំហំ (មុខទំនិញទូទៅ មិនបាច់បែងចែក Size)
+                      </span>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="border-t border-slate-100 pt-5 space-y-3">
