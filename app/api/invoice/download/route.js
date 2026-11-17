@@ -11,14 +11,19 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Order ID is required' }, { status: 400 });
     }
 
-    // 1. Fetch order details from Supabase
+    const cleanId = (orderId || '').replace(/^#/, '').trim();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+
+    // 1. Fetch order details from Supabase safely without UUID type error
     let order = null;
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .or(`order_id.eq.${orderId},id.eq.${orderId}`)
-        .single();
+      let query = supabase.from('orders').select('*');
+      if (isUuid) {
+        query = query.or(`order_id.eq.${cleanId},id.eq.${cleanId}`);
+      } else {
+        query = query.or(`order_id.eq.${cleanId},order_id.eq.#${cleanId}`);
+      }
+      const { data, error } = await query.maybeSingle();
       
       if (!error && data) {
         order = data;
@@ -27,7 +32,7 @@ export async function GET(request) {
       console.warn('Supabase fetch order error in invoice download:', e);
     }
 
-    // 2. Fetch Store Settings
+    // 2. Fetch Store Settings (from order's store_id or default)
     let storeSettings = {
       storeName: 'SABAY LUK SHOES STORE',
       address: 'Street 271, Sangkat Boeng Tumpun, Phnom Penh',
@@ -37,12 +42,37 @@ export async function GET(request) {
       exchangeRate: 4100
     };
 
-    try {
-      const { data: sData } = await supabase.from('settings').select('*').limit(1).single();
-      if (sData) {
-        storeSettings = { ...storeSettings, ...sData };
-      }
-    } catch (e) {}
+    if (order?.store_id) {
+      try {
+        const { data: stData } = await supabase.from('stores').select('settings, name, phone, telegram, address').eq('id', order.store_id).maybeSingle();
+        if (stData) {
+          const sSettings = stData.settings || {};
+          storeSettings = {
+            ...storeSettings,
+            ...sSettings,
+            storeName: sSettings.storeName || stData.name || storeSettings.storeName,
+            phone: sSettings.phone || stData.phone || storeSettings.phone,
+            telegram: (sSettings.telegram || stData.telegram || storeSettings.telegram || '').replace(/^@/, ''),
+            address: sSettings.address || stData.address || storeSettings.address
+          };
+        }
+      } catch (e) {}
+    } else {
+      try {
+        const { data: defaultStore } = await supabase.from('stores').select('settings, name, phone, telegram, address').eq('id', 'store_default_sabayluk').maybeSingle();
+        if (defaultStore) {
+          const sSettings = defaultStore.settings || {};
+          storeSettings = {
+            ...storeSettings,
+            ...sSettings,
+            storeName: sSettings.storeName || defaultStore.name || storeSettings.storeName,
+            phone: sSettings.phone || defaultStore.phone || storeSettings.phone,
+            telegram: (sSettings.telegram || defaultStore.telegram || storeSettings.telegram || '').replace(/^@/, ''),
+            address: sSettings.address || defaultStore.address || storeSettings.address
+          };
+        }
+      } catch (e) {}
+    }
 
     // Fallback if not found in DB (e.g. newly created client-side order or demo)
     if (!order) {

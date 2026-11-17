@@ -116,11 +116,14 @@ function InvoiceContent() {
 
       // 2. ស្វែងរកក្នុង Supabase orders table (ទាំង cleanId និង #${cleanId})
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .or(`order_id.eq.${cleanId},order_id.eq.#${cleanId},id.eq.${cleanId}`)
-          .maybeSingle();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+        let query = supabase.from('orders').select('*');
+        if (isUuid) {
+          query = query.or(`order_id.eq.${cleanId},id.eq.${cleanId}`);
+        } else {
+          query = query.or(`order_id.eq.${cleanId},order_id.eq.#${cleanId}`);
+        }
+        const { data, error } = await query.maybeSingle();
 
         if (!error && data) {
           setOrder(data);

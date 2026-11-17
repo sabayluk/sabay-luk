@@ -2143,14 +2143,24 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         throw orderError;
       }
 
-      setCompletedOrder({
+      const completedOrderData = {
         ...orderPayload,
         customer: customerName.trim(),
         total: totalPrice,
         payment: paymentMethod,
         payment_slip_url: uploadedSlipUrl || null,
         created_at: new Date().toISOString()
-      });
+      };
+      setCompletedOrder(completedOrderData);
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`sabay_order_${generatedOrderId}`, JSON.stringify(completedOrderData));
+          localStorage.setItem('sabay_current_invoice_order', JSON.stringify(completedOrderData));
+          const existingReal = JSON.parse(localStorage.getItem('sabay_real_orders') || '[]');
+          localStorage.setItem('sabay_real_orders', JSON.stringify([completedOrderData, ...existingReal.slice(0, 50)]));
+        } catch (e) {}
+      }
 
       setCart([]);
       setSlipFile(null);
@@ -5011,33 +5021,49 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                 </div>
               )}
 
-              {/* Telegram & Official PDF Invoice Delivery Notice */}
-              <div className="p-3.5 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200/80 rounded-2xl text-left flex items-start gap-3">
-                <span className="text-2xl mt-0.5">✈️</span>
-                <div className="flex-1 text-xs">
-                  <span className="font-black text-sky-950 block">
-                    វិក្កយបត្រ PDF ផ្លូវការត្រូវបានផ្ញើជូនតាម Telegram!
-                  </span>
-                  <p className="text-[11px] text-sky-700 mt-0.5 leading-relaxed">
-                    ប្រព័ន្ធបានបញ្ជូនវិក្កយបត្រផ្លូវការមាន Logo ហាងទៅកាន់ Telegram រួចរាល់។ លោកអ្នកក៏អាចទាញយក ឬបើកមើលភ្លាមៗនៅទីនេះបានផងដែរ។
-                  </p>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <a
-                      href={`/invoice?id=${encodeURIComponent(completedOrder.order_id)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 bg-sky-600 hover:bg-sky-700 text-white font-black text-[11px] px-3 py-1.5 rounded-xl transition shadow-xs"
-                    >
-                      <span>📄</span> បើកមើលវិក្កយបត្រ PDF ↗
-                    </a>
-                    <a
-                      href={`/api/invoice/download?orderId=${encodeURIComponent(completedOrder.order_id)}`}
-                      download={`Invoice_${completedOrder.order_id}.pdf`}
-                      className="inline-flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 font-bold text-[11px] px-3 py-1.5 rounded-xl transition shadow-2xs"
-                    >
-                      <span>📥</span> ទាញយក PDF
-                    </a>
+              {/* 🌟 PROMINENT INVOICE DOWNLOAD & SAVE NOTICE (LARGE TEXT AS REQUESTED) */}
+              <div className="p-4 sm:p-5 bg-gradient-to-br from-emerald-50 via-teal-50 to-sky-50 border-2 border-emerald-400/90 rounded-3xl text-left shadow-md space-y-3 relative overflow-hidden">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-2xl shadow-md shrink-0">
+                    📥
                   </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        សំខាន់ចាំបាច់ (Important)
+                      </span>
+                      <span className="text-xs font-mono font-bold text-emerald-800">
+                        លេខវិក្កយបត្រ៖ #{completedOrder.order_id}
+                      </span>
+                    </div>
+                    <h4 className="text-sm sm:text-base font-black text-slate-900 mt-1 leading-snug">
+                      សូមទាញយក និងរក្សាទុកវិក្កយបត្រ (Invoice PDF) របស់អ្នកទុក!
+                    </h4>
+                    <p className="text-xs sm:text-sm font-bold text-emerald-950 mt-1.5 leading-relaxed bg-white/80 p-3 rounded-2xl border border-emerald-200">
+                      💡 ដើម្បីងាយស្រួលយកលេខកូដវិក្កយបត្រ (<span className="text-emerald-700 font-mono font-black underline">#{completedOrder.order_id}</span>) ទៅតាមដានដំណើរការដឹកជញ្ជូនទំនិញ (Track Order) និងផ្ទៀងផ្ទាត់ពេលអ្នកដឹកទំនិញយកឥវ៉ាន់ទៅដល់!
+                    </p>
+                  </div>
+                </div>
+
+                {/* Big Action Buttons */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <a
+                    href={`/api/invoice/download?orderId=${encodeURIComponent(completedOrder.order_id)}`}
+                    download={`Invoice_${completedOrder.order_id}.pdf`}
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs sm:text-sm py-3 px-4 rounded-2xl shadow-md shadow-emerald-600/25 transition active:scale-95 cursor-pointer text-center"
+                  >
+                    <span className="text-base">📥</span>
+                    <span>ទាញយកវិក្កយបត្រ PDF ទុក</span>
+                  </a>
+                  <a
+                    href={`/invoice?id=${encodeURIComponent(completedOrder.order_id)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-300 font-black text-xs sm:text-sm py-3 px-4 rounded-2xl shadow-2xs transition active:scale-95 cursor-pointer text-center"
+                  >
+                    <span className="text-base">📄</span>
+                    <span>បើកមើលវិក្កយបត្រពេញលេញ ↗</span>
+                  </a>
                 </div>
               </div>
 
