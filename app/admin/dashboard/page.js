@@ -14,6 +14,93 @@ import { cacheProductsOffline, getCachedProductsOffline, queueOfflineOrder, sync
 const computePlanExpiry = (expiresAt) => {
   if (!expiresAt) {
     return { isNever: true, isExpired: false, daysLeft: 0, formatted: 'ឥតកំណត់' };
+
+// ⭐️ Helper: គណនាសមតុល្យថ្ងៃ និងទឹកប្រាក់នៅសល់សម្រាប់កាត់កងពេលដំឡើងគម្រោង (Plan Usage & Proration Engine) ⭐️
+const getPlanProrationInfo = (store, targetPlanPrice = 0) => {
+  const currentPlanKey = store?.plan || 'FREE';
+  const planInfo = STORE_PLANS[currentPlanKey] || STORE_PLANS.FREE;
+  const isFree = currentPlanKey === 'FREE';
+
+  // 1. Determine plan cycle and base price
+  const isYearly = store?.billing_cycle === 'yearly' || store?.settings?.billing_cycle === 'yearly';
+  const planCyclePrice = isFree ? 0 : (isYearly ? (planInfo.priceYearly || 0) : (planInfo.priceMonthly || planInfo.price || 0));
+  const totalCycleDays = isFree ? 0 : (isYearly ? 365 : 30);
+
+  // 2. Compute days left & used days
+  const expiresAt = store?.plan_expires_at;
+  let remainingDays = 0;
+  let isExpired = false;
+  let formattedExpiry = 'ឥតកំណត់';
+
+  if (isFree) {
+    remainingDays = 0;
+  } else if (expiresAt) {
+    const expiryDate = new Date(expiresAt);
+    if (!isNaN(expiryDate.getTime())) {
+      formattedExpiry = expiryDate.toLocaleDateString('km-KH');
+      const now = new Date();
+      const diffMs = expiryDate.getTime() - now.getTime();
+      const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      if (days <= 0) {
+        isExpired = true;
+        remainingDays = 0;
+      } else {
+        remainingDays = Math.min(totalCycleDays, days);
+      }
+    }
+  } else if (store?.created_at) {
+    const createdDate = new Date(store.created_at);
+    if (!isNaN(createdDate.getTime())) {
+      const expiryDate = new Date(createdDate.getTime() + totalCycleDays * 24 * 60 * 60 * 1000);
+      formattedExpiry = expiryDate.toLocaleDateString('km-KH');
+      const now = new Date();
+      const diffMs = expiryDate.getTime() - now.getTime();
+      const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      if (days <= 0) {
+        isExpired = true;
+        remainingDays = 0;
+      } else {
+        remainingDays = Math.min(totalCycleDays, days);
+      }
+    }
+  }
+
+  // Used days
+  const usedDays = isFree ? 0 : (isExpired ? totalCycleDays : Math.max(0, totalCycleDays - remainingDays));
+  const usedPercent = totalCycleDays > 0 ? Math.min(100, Math.round((usedDays / totalCycleDays) * 100)) : 0;
+  const remainingPercent = 100 - usedPercent;
+
+  // 3. Compute monetary values: used amount & remaining balance
+  const dailyRate = totalCycleDays > 0 ? planCyclePrice / totalCycleDays : 0;
+  const usedAmount = isFree ? 0 : Number((dailyRate * usedDays).toFixed(2));
+  const remainingCredit = (isFree || isExpired) ? 0 : Number((dailyRate * remainingDays).toFixed(2));
+
+  // 4. Upgrade calculation for target plan
+  const creditDiscount = Math.min(targetPlanPrice, remainingCredit);
+  const amountToPay = Math.max(0, Number((targetPlanPrice - creditDiscount).toFixed(2)));
+
+  return {
+    currentPlanKey,
+    currentPlanName: planInfo.name,
+    isFree,
+    isExpired,
+    isYearly,
+    planCyclePrice,
+    totalCycleDays,
+    usedDays,
+    remainingDays,
+    usedPercent,
+    remainingPercent,
+    dailyRate: Number(dailyRate.toFixed(3)),
+    usedAmount,
+    remainingCredit,
+    targetPlanPrice,
+    creditDiscount,
+    amountToPay,
+    formattedExpiry
+  };
+};
+
   }
   const expiry = new Date(expiresAt);
   if (isNaN(expiry.getTime())) {
@@ -15671,7 +15758,12 @@ export default function UnifiedAdminDashboard() {
     setUpgradeSubmitting(true);
     try {
       const planInfo = STORE_PLANS[selectedUpgradePlan.key] || STORE_PLANS.PRO;
-      const totalAmount = upgradeBillingCycle === 'yearly' ? selectedUpgradePlan.priceYearly : selectedUpgradePlan.priceMonthly;
+      const rawAmount = upgradeBillingCycle === 'yearly' ? selectedUpgradePlan.priceYearly : selectedUpgradePlan.priceMonthly;
+      const proration = getPlanProrationInfo(activeStore);
+      const creditDiscount = (selectedUpgradePlan.key !== 'FREE' && proration.remainingCredit > 0 && rawAmount > 0)
+        ? Math.min(rawAmount, proration.remainingCredit)
+        : 0;
+      const totalAmount = Math.max(0, Number((rawAmount - creditDiscount).toFixed(2)));
 
       // 1. Upload slip image to Supabase storage if file is present
       let finalSlipUrl = upgradeSlipPreview || '';
@@ -15697,7 +15789,7 @@ export default function UnifiedAdminDashboard() {
         billingCycle: upgradeBillingCycle,
         amount: totalAmount,
         slipUrl: finalSlipUrl,
-        notes: upgradeTxRef ? `Ref: ${upgradeTxRef}` : `ស្នើសុំដំឡើងគម្រោង ${selectedUpgradePlan.name} (${upgradeBillingCycle === 'yearly' ? 'ប្រចាំឆ្នាំ' : 'ប្រចាំខែ'})`
+        notes: upgradeTxRef ? `Ref: ${upgradeTxRef} (តម្លៃដើម ${rawAmount} - កាត់កងសល់ ${creditDiscount.toFixed(2)} = ត្រូវបង់ ${totalAmount})` : `ស្នើសុំដំឡើងគម្រោង ${selectedUpgradePlan.name} (${upgradeBillingCycle === 'yearly' ? 'ប្រចាំឆ្នាំ' : 'ប្រចាំខែ'}) - កាត់កងសល់ ${creditDiscount.toFixed(2)} ត្រូវបង់ ${totalAmount}`
       });
 
       // 3. Send instant Telegram notification to Master Admin
@@ -15710,7 +15802,7 @@ export default function UnifiedAdminDashboard() {
             store: activeStore,
             newPlan: planInfo.name,
             cycle: upgradeBillingCycle === 'yearly' ? 'ប្រចាំឆ្នាំ (Yearly)' : 'ប្រចាំខែ (Monthly)',
-            amount: `$${totalAmount}`,
+            amount: `${totalAmount}${creditDiscount > 0 ? ` (តម្លៃដើម ${rawAmount} - កាត់កងសល់ ${creditDiscount.toFixed(2)})` : ''}`,
             slipUrl: finalSlipUrl,
             ref: upgradeTxRef || ''
           })
@@ -15752,6 +15844,7 @@ export default function UnifiedAdminDashboard() {
     const currentPlanKey = activeStore?.plan || 'FREE';
     const currentPlan = STORE_PLANS[currentPlanKey] || STORE_PLANS.FREE;
     const expiryInfo = computePlanExpiry(activeStore?.plan_expires_at);
+    const proration = getPlanProrationInfo(activeStore);
 
     // Filter store's subscription payments
     const storePayments = (allSubscriptionPayments || []).filter(p => 
@@ -16019,12 +16112,149 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
+        
+        {/* ⭐️ PRORATION & USAGE DASHBOARD CARD (ស្ថានភាពគម្រោង & សមតុល្យទឹកប្រាក់នៅសល់) ⭐️ */}
+        <div className="bg-slate-900/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 border border-slate-800 shadow-2xl space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center justify-center text-2xl shrink-0 shadow-xs">
+                📊
+              </div>
+              <div>
+                <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                  <span>ស្ថានភាពគម្រោង & សមតុល្យទឹកប្រាក់នៅសល់</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    {proration.currentPlanKey}
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  តាមដានថ្ងៃដែលបានប្រើប្រាស់ ទឹកប្រាក់ដែលចាយនៅហាងអស់ និងទឹកប្រាក់នៅសល់សម្រាប់កាត់កងស្វ័យប្រវត្តិ
+                </p>
+              </div>
+            </div>
+            <span className="self-start sm:self-auto text-[11px] font-black px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+              <span>⚡</span> យុទ្ធសាស្ត្រកាត់កងសមាមាត្រ (Prorated Upgrade)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Metric 1: ថ្ងៃនៅសល់ */}
+            <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                <span className="flex items-center gap-1.5">
+                  <span>📅</span> រយៈពេល & ថ្ងៃនៅសល់
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  {proration.isFree ? 'Free Forever' : `${proration.totalCycleDays} ថ្ងៃ/វដ្ត`}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-amber-400 font-mono">
+                  {proration.isFree ? 'ឥតកំណត់' : `${proration.remainingDays} ថ្ងៃ`}
+                </span>
+                {!proration.isFree && (
+                  <span className="text-xs text-slate-400">
+                    (បានដំណើរការ ${proration.usedDays} ថ្ងៃ)
+                  </span>
+                )}
+              </div>
+              {/* Progress bar */}
+              {!proration.isFree && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden flex">
+                    <div 
+                      style={{ width: `${proration.usedPercent}%` }} 
+                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500"
+                      title={`បានប្រើ ${proration.usedDays} ថ្ងៃ (${proration.usedPercent}%)`}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>ចាយពេលអស់ ${proration.usedPercent}%</span>
+                    <span className="text-amber-400 font-bold">នៅសល់ ${proration.remainingPercent}%</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Metric 2: ទឹកប្រាក់បានចាយនៅហាងអស់ */}
+            <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                <span className="flex items-center gap-1.5">
+                  <span>💸</span> ទឹកប្រាក់បានចាយអស់
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  ${proration.planCyclePrice}/${proration.isYearly ? 'ឆ្នាំ' : 'ខែ'}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-slate-200 font-mono">
+                  ${proration.usedAmount.toFixed(2)}
+                </span>
+                <span className="text-xs text-slate-400 font-mono">
+                  (≈ {Math.round(proration.usedAmount * 4100).toLocaleString()} ៛)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
+                {proration.isFree
+                  ? 'គម្រោង Free មិនគិតថ្លៃសេវាឡើយ'
+                  : `គណនាតាម ${proration.usedDays} ថ្ងៃដែលបានដំណើរការរួច (${proration.dailyRate}/ថ្ងៃ)`}
+              </p>
+            </div>
+
+            {/* Metric 3: ទឹកប្រាក់នៅសល់សម្រាប់កាត់កង */}
+            <div className="bg-gradient-to-br from-emerald-950/50 via-slate-950/80 to-slate-950 p-4 rounded-2xl border border-emerald-500/40 space-y-2.5 shadow-lg">
+              <div className="flex items-center justify-between text-xs text-emerald-400 font-bold">
+                <span className="flex items-center gap-1.5">
+                  <span>🎁</span> ទឹកប្រាក់នៅសល់សម្រាប់កាត់កង
+                </span>
+                <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                  Upgrade Credit
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl font-black text-emerald-400 font-mono">
+                  ${proration.remainingCredit.toFixed(2)}
+                </span>
+                <span className="text-xs text-emerald-300/80 font-mono">
+                  (≈ {Math.round(proration.remainingCredit * 4100).toLocaleString()} ៛)
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-300/90 leading-relaxed pt-1">
+                {proration.remainingCredit > 0
+                  ? `✓ ទឹកប្រាក់នេះនឹងត្រូវកាត់កងស្វ័យប្រវត្តិកាលណាដំឡើងគម្រោង!`
+                  : `គ្មានទឹកប្រាក់នៅសល់សម្រាប់កាត់កងឡើយ`}
+              </p>
+            </div>
+          </div>
+
+          {/* Strategy explanation banner */}
+          <div className="p-3.5 bg-amber-500/10 border border-amber-500/25 rounded-2xl text-xs text-amber-200 flex items-start gap-3">
+            <span className="text-lg shrink-0 mt-0.5">💡</span>
+            <div className="leading-relaxed space-y-0.5">
+              <p className="font-black text-amber-300">យុទ្ធសាស្ត្រគិតថ្លៃតាមសមាមាត្រ (Prorated Pricing Strategy)៖</p>
+              <p className="text-amber-100/90">
+                {proration.isFree ? (
+                  'បច្ចុប្បន្នហាងរបស់លោកអ្នកកំពុងប្រើគម្រោង 🎁 FREE។ នៅពេលលោកអ្នកជ្រើសរើសដំឡើងទៅគម្រោងណាមួយ លោកអ្នកនឹងបង់តាមតម្លៃគម្រោងនោះ ហើយទទួលបានការកាត់កងសមាមាត្រស្វ័យប្រវត្តិនៅរាល់ពេលដំឡើងបន្ទាប់!'
+                ) : (
+                  <>
+                    ហាងដំណើរការគម្រោង <b>${proration.planCyclePrice}/ខែ</b> បាន <b>{proration.usedDays} ថ្ងៃ</b> (ចាយអស់ <b>${proration.usedAmount.toFixed(2)}</b> នៅសល់ <b>${proration.remainingCredit.toFixed(2)}</b>)។ ប្រសិនបើតម្រូវការដំឡើងទៅគម្រោងថ្មី (ឧ. <b>$2/ខែ</b>) ប្រព័ន្ធនឹងយកទឹកប្រាក់នៅសល់មកកាត់កងភ្លាមៗ ដូច្នេះលោកអ្នកត្រូវថែមតែ <b>${Math.max(0, 2 - proration.remainingCredit).toFixed(2)}</b> ប៉ុណ្ណោះ!
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* ⭐️ 2. PLANS PRICING GRID (7 OFFICIAL PLANS) ⭐️ */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {plansList.map((p) => {
             const isCurrent = currentPlanKey === p.key;
             const price = upgradeBillingCycle === 'yearly' ? p.priceYearly : p.priceMonthly;
             const cycleText = upgradeBillingCycle === 'yearly' ? (p.priceYearly === 0 ? 'ឥតគិតថ្លៃ' : '/ ឆ្នាំ') : (p.priceMonthly === 0 ? 'ឥតគិតថ្លៃ' : '/ ខែ');
+            const creditDiscount = (!isCurrent && p.key !== 'FREE' && proration.remainingCredit > 0 && price > 0)
+              ? Math.min(price, proration.remainingCredit)
+              : 0;
+            const proratedPrice = Math.max(0, Number((price - creditDiscount).toFixed(2)));
 
             return (
               <div
@@ -16069,13 +16299,34 @@ export default function UnifiedAdminDashboard() {
                   </div>
 
                   {/* Price */}
-                  <div className="py-2 border-y border-slate-100 flex items-baseline gap-1.5">
-                    <span className="text-3xl font-black text-slate-900 font-mono">${price}</span>
-                    <span className="text-xs font-bold text-slate-500">{cycleText}</span>
-                    {upgradeBillingCycle === 'yearly' && p.priceMonthly > 0 && (
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 ml-auto font-mono">
-                        ~${(p.priceYearly / 12).toFixed(1)}/ខែ
-                      </span>
+                  <div className="py-2 border-y border-slate-100 space-y-1">
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                      {creditDiscount > 0 ? (
+                        <>
+                          <span className="text-sm font-bold text-slate-400 line-through font-mono">${price}</span>
+                          <span className="text-3xl font-black text-[#ff6a00] font-mono">${proratedPrice}</span>
+                          <span className="text-xs font-bold text-slate-500">{cycleText}</span>
+                          <span className="text-[10px] font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 ml-auto">
+                            ថែមតែ ${proratedPrice}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-3xl font-black text-slate-900 font-mono">${price}</span>
+                          <span className="text-xs font-bold text-slate-500">{cycleText}</span>
+                          {upgradeBillingCycle === 'yearly' && p.priceMonthly > 0 && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 ml-auto font-mono">
+                              ~${(p.priceYearly / 12).toFixed(1)}/ខែ
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {creditDiscount > 0 && (
+                      <div className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-xl flex items-center justify-between">
+                        <span>🎁 កាត់កងសល់: -${creditDiscount.toFixed(2)}</span>
+                        <span>(សល់ {proration.remainingDays} ថ្ងៃ)</span>
+                      </div>
                     )}
                   </div>
 
@@ -16128,7 +16379,7 @@ export default function UnifiedAdminDashboard() {
                         : 'bg-slate-950 hover:bg-black text-white'
                     }`}
                   >
-                    <span>{isCurrent ? '✓ កំពុងប្រើប្រាស់' : `⚡ ជ្រើសរើស ${p.name}`}</span>
+                    <span>{isCurrent ? '✓ កំពុងប្រើប្រាស់' : creditDiscount > 0 ? `⚡ ដំឡើងថែម ${proratedPrice}` : `⚡ ជ្រើសរើស ${p.name}`}</span>
                     {!isCurrent && <span>➔</span>}
                   </button>
                 </div>
@@ -25881,8 +26132,13 @@ export default function UnifiedAdminDashboard() {
       {/* ⭐️ MODAL ដំឡើងកញ្ចប់ UPGRADE PLAN: PREMIUM 2-COLUMN KHQR & SLIP CHECKOUT ⭐️ */}
       {upgradePlanModalOpen && selectedUpgradePlan && (() => {
         const plan = selectedUpgradePlan;
-        const totalAmount = upgradeBillingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly;
-        const khrAmount = (totalAmount * 4100).toLocaleString();
+        const proration = getPlanProrationInfo(activeStore);
+        const rawAmount = upgradeBillingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly;
+        const creditDiscount = (plan.key !== 'FREE' && proration.remainingCredit > 0 && rawAmount > 0)
+          ? Math.min(rawAmount, proration.remainingCredit)
+          : 0;
+        const totalAmount = Math.max(0, Number((rawAmount - creditDiscount).toFixed(2)));
+        const khrAmount = Math.round(totalAmount * 4100).toLocaleString();
 
         return (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
@@ -25957,8 +26213,17 @@ export default function UnifiedAdminDashboard() {
                         </div>
 
                         {/* Amount Tag */}
-                        <div className="mt-2 text-center bg-orange-50 text-orange-700 font-black text-xs sm:text-sm py-1.5 rounded-xl border border-orange-200 font-mono">
-                          ចំនួនទឹកប្រាក់ត្រូវបង់: ${totalAmount}.00 (≈ {khrAmount} ៛)
+                        <div className="mt-2 text-center bg-orange-50 text-orange-700 font-black text-xs sm:text-sm py-2 px-3 rounded-xl border border-orange-200 font-mono space-y-0.5">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span>ចំនួនទឹកប្រាក់ត្រូវបង់:</span>
+                            <span className="text-base sm:text-lg text-[#ff6a00] font-black">${totalAmount}</span>
+                            <span className="text-xs text-slate-500">(≈ {khrAmount} ៛)</span>
+                          </div>
+                          {creditDiscount > 0 && (
+                            <p className="text-[10px] text-emerald-700 font-sans font-bold">
+                              ✓ បានកាត់កងទឹកប្រាក់នៅសល់ -${creditDiscount.toFixed(2)} ពី {proration.currentPlanKey} រួចជាស្រេច
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -26001,23 +26266,38 @@ export default function UnifiedAdminDashboard() {
                   <div className="lg:col-span-6 space-y-4">
                     
                     {/* Order Summary Pill */}
-                    <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-3">
-                      <div>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">កញ្ចប់សេវាកម្ម</span>
-                        <p className="text-xs font-black text-slate-900 mt-0.5">
-                          {plan.name}
-                        </p>
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          ហាង៖ <b>{activeStore?.name}</b>
-                        </p>
+                    <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">កញ្ចប់សេវាកម្មថ្មី</span>
+                          <p className="text-xs font-black text-slate-900 mt-0.5">
+                            {plan.name}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            ហាង៖ <b>{activeStore?.name}</b>
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">តម្លៃគម្រោងដើម</span>
+                          <p className={`font-black ${creditDiscount > 0 ? 'text-xs text-slate-400 line-through' : 'text-lg text-[#ff6a00]'}`}>
+                            ${rawAmount}.00
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">{upgradeBillingCycle === 'yearly' ? 'ប្រចាំឆ្នាំ' : 'ប្រចាំខែ'}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">តម្លៃសរុប</span>
-                        <p className="text-lg font-black text-[#ff6a00] leading-none mt-0.5">
-                          ${totalAmount}.00
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">≈ {khrAmount} ៛</p>
-                      </div>
+
+                      {creditDiscount > 0 && (
+                        <div className="pt-2 border-t border-slate-200/80 text-[11px] space-y-1">
+                          <div className="flex items-center justify-between text-emerald-700 font-bold">
+                            <span>🎁 កាត់កងសមតុល្យនៅសល់ ({proration.currentPlanKey} សល់ {proration.remainingDays} ថ្ងៃ):</span>
+                            <span className="font-mono">-${creditDiscount.toFixed(2)}</span>
+                          </div>
+                          <div className="flex items-center justify-between font-black text-slate-900 pt-1.5 border-t border-dashed border-slate-200">
+                            <span className="text-xs">ទឹកប្រាក់ត្រូវបង់ជាក់ស្តែង (ថែមតែ):</span>
+                            <span className="text-lg text-[#ff6a00] font-mono">${totalAmount} (≈ {khrAmount} ៛)</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Quick Guide Card */}
