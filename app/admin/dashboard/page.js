@@ -14,6 +14,21 @@ import { cacheProductsOffline, getCachedProductsOffline, queueOfflineOrder, sync
 const computePlanExpiry = (expiresAt) => {
   if (!expiresAt) {
     return { isNever: true, isExpired: false, daysLeft: 0, formatted: 'ឥតកំណត់' };
+  }
+  const expiry = new Date(expiresAt);
+  if (isNaN(expiry.getTime())) {
+    return { isNever: true, isExpired: false, daysLeft: 0, formatted: 'ឥតកំណត់' };
+  }
+  const now = new Date();
+  const diffTime = expiry.getTime() - now.getTime();
+  const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return {
+    isNever: false,
+    isExpired: daysLeft <= 0,
+    daysLeft: Math.max(0, daysLeft),
+    formatted: expiry.toLocaleDateString('km-KH')
+  };
+};
 
 // ⭐️ Helper: គណនាសមតុល្យថ្ងៃ និងទឹកប្រាក់នៅសល់សម្រាប់កាត់កងពេលដំឡើងគម្រោង (Plan Usage & Proration Engine) ⭐️
 const getPlanProrationInfo = (store, targetPlanPrice = 0) => {
@@ -81,7 +96,7 @@ const getPlanProrationInfo = (store, targetPlanPrice = 0) => {
 
   return {
     currentPlanKey,
-    currentPlanName: planInfo.name,
+    currentPlanName: planInfo?.name || 'FREE',
     isFree,
     isExpired,
     isYearly,
@@ -92,28 +107,12 @@ const getPlanProrationInfo = (store, targetPlanPrice = 0) => {
     usedPercent,
     remainingPercent,
     dailyRate: Number(dailyRate.toFixed(3)),
-    usedAmount,
-    remainingCredit,
+    usedAmount: Number(usedAmount || 0),
+    remainingCredit: Number(remainingCredit || 0),
     targetPlanPrice,
     creditDiscount,
     amountToPay,
     formattedExpiry
-  };
-};
-
-  }
-  const expiry = new Date(expiresAt);
-  if (isNaN(expiry.getTime())) {
-    return { isNever: true, isExpired: false, daysLeft: 0, formatted: 'ឥតកំណត់' };
-  }
-  const now = new Date();
-  const diffTime = expiry.getTime() - now.getTime();
-  const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return {
-    isNever: false,
-    isExpired: daysLeft <= 0,
-    daysLeft: Math.max(0, daysLeft),
-    formatted: expiry.toLocaleDateString('km-KH')
   };
 };
 
