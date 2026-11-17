@@ -4337,74 +4337,89 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                         <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត</span>
                       </div>
 
-                      {/* Google Maps Pin Link */}
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                          <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                            <span>🗺️</span> <span>ទីតាំងផែនទី Google Maps (សម្រាប់អ្នកដឹកជញ្ជូន)</span>
+                      {/* Google Maps Delivery Location Picker (Can pick any location for anyone) */}
+                      <div className="bg-gradient-to-br from-emerald-50/70 via-white to-slate-50 p-4 rounded-2xl border-2 border-emerald-200 shadow-xs space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                            <span className="text-base">🗺️</span> <span>ជ្រើសរើសទីតាំងដឹកជញ្ជូនលើផែនទី (Delivery Location)</span>
                           </label>
-                          <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 font-medium">ស្រេចចិត្ត</span>
+                        </div>
+
+                        {/* Interactive Picker Trigger Banner */}
+                        <div 
+                          onClick={() => setShowMapPickerModal(true)}
+                          className="group relative bg-white hover:bg-emerald-50/40 border-2 border-dashed border-emerald-400/80 hover:border-emerald-500 rounded-2xl p-3.5 transition-all cursor-pointer shadow-2xs hover:shadow-sm"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition shrink-0">
+                                📍
+                              </div>
+                              <div>
+                                <h5 className="text-xs font-black text-slate-900 group-hover:text-emerald-700 transition flex items-center gap-1.5">
+                                  <span>{googleMapUrl ? 'ទីតាំងដឹកជញ្ជូនដែលបានជ្រើសរើស' : 'ចុចទីនេះដើម្បីរើសទីតាំងលើផែនទី'}</span>
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                                    {googleMapUrl ? 'បានជ្រើសរើស ✅' : 'រើសទីតាំងថ្មី ↗'}
+                                  </span>
+                                </h5>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  {googleMapUrl 
+                                    ? googleMapUrl 
+                                    : 'អាចរើសទីតាំងផ្ទះខ្លួនឯង ឬរើសទីតាំងអ្នកផ្សេងដែលចង់ទិញផ្ញើជូន (ទូទាំង ២៥ ខេត្ត-ក្រុង)'}
+                                </p>
+                              </div>
+                            </div>
+
                             <button
                               type="button"
-                              onClick={() => setShowMapPickerModal(true)}
-                              className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
+                              onClick={(e) => { e.stopPropagation(); setShowMapPickerModal(true); }}
+                              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition shrink-0 cursor-pointer active:scale-95 flex items-center gap-1"
                             >
                               <span>🗺️</span>
-                              <span>រើសទីតាំងលើផែនទី</span>
+                              <span>{googleMapUrl ? 'ប្ដូរទីតាំង' : 'បើកផែនទី'}</span>
                             </button>
-                            <button
-                              type="button"
-                              onClick={handleGetCurrentLocation}
-                              disabled={isLocating}
-                              className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1 border border-blue-200 active:scale-95 disabled:opacity-50 cursor-pointer shadow-2xs"
-                            >
-                              <span>{isLocating ? '⏳' : '📍'}</span>
-                              <span>{isLocating ? 'ចាប់ GPS...' : 'ចាប់ GPS'}</span>
-                            </button>
-                            <a
-                              href="https://www.google.com/maps"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1 border border-slate-200"
-                            >
-                              <span>↗️</span> Maps
-                            </a>
                           </div>
                         </div>
 
-                        <div className="relative">
-                          <input
-                            type="url"
-                            placeholder="បិទភ្ជាប់ (Paste) Link ពី Google Maps នៅទីនេះ (ឧ. https://maps.app.goo.gl/...)"
-                            value={googleMapUrl}
-                            onChange={(e) => setGoogleMapUrl(e.target.value)}
-                            className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-blue-500 pr-16 transition"
-                          />
-                          {googleMapUrl && (
-                            <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
-                              <a
-                                href={googleMapUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-lg hover:bg-emerald-200 transition"
-                              >
-                                មើល
-                              </a>
+                        {/* Direct Paste Fallback Input */}
+                        <div className="pt-2 border-t border-slate-150">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                              <span>🔗</span> ឬបិទភ្ជាប់ (Paste) Link Google Maps ដោយផ្ទាល់៖
+                            </span>
+                            {googleMapUrl && (
                               <button
                                 type="button"
                                 onClick={() => setGoogleMapUrl('')}
-                                className="text-slate-400 hover:text-rose-500 text-xs px-1 cursor-pointer font-bold"
+                                className="text-[10px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer"
                               >
-                                ✕
+                                ✕ ដក Link ចេញ
                               </button>
-                            </div>
-                          )}
+                            )}
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="url"
+                              placeholder="ឧ. https://maps.google.com/?q=... ឬ https://maps.app.goo.gl/..."
+                              value={googleMapUrl}
+                              onChange={(e) => setGoogleMapUrl(e.target.value)}
+                              className="w-full bg-white focus:bg-slate-50/50 border border-slate-200 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none pr-28 transition shadow-2xs"
+                            />
+                            {googleMapUrl && (
+                              <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+                                <a
+                                  href={googleMapUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-black px-2.5 py-1 rounded-lg transition"
+                                >
+                                  មើលលើ Maps ↗
+                                </a>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        {googleMapUrl && (
-                          <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                            <span>✅</span> បានកំណត់ Link ទីតាំង Google Maps រួចរាល់!
-                          </p>
-                        )}
                       </div>
 
                       {/* House Photo Upload */}

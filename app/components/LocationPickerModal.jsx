@@ -2,24 +2,33 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
-// Cambodian province default coordinates for quick presets
+// Cambodian 25 province default coordinates
 const PROVINCE_COORDINATES = {
-  'ភ្នំពេញ': { lat: 11.5564, lng: 104.9282, label: 'ភ្នំពេញ' },
-  'កណ្តាល': { lat: 11.4550, lng: 105.0000, label: 'កណ្តាល' },
-  'សៀមរាប': { lat: 13.3671, lng: 103.8448, label: 'សៀមរាប' },
-  'បាត់ដំបង': { lat: 13.0957, lng: 103.2022, label: 'បាត់ដំបង' },
-  'ព្រះសីហនុ': { lat: 10.6253, lng: 103.5234, label: 'ព្រះសីហនុ' },
-  'កំពង់ចាម': { lat: 12.0000, lng: 105.4500, label: 'កំពង់ចាម' },
-  'កំពត': { lat: 10.6104, lng: 104.1815, label: 'កំពត' },
-  'កំពង់ស្ពឺ': { lat: 11.4533, lng: 104.5209, label: 'កំពង់ស្ពឺ' },
-  'កែប': { lat: 10.4829, lng: 104.2949, label: 'កែប' },
-  'កោះកុង': { lat: 11.6153, lng: 102.9838, label: 'កោះកុង' },
-  'បន្ទាយមានជ័យ': { lat: 13.5859, lng: 102.9737, label: 'បន្ទាយមានជ័យ' },
-  'ស្វាយរៀង': { lat: 11.0879, lng: 105.7993, label: 'ស្វាយរៀង' },
-  'តាកែវ': { lat: 10.9908, lng: 104.7850, label: 'តាកែវ' },
-  'ព្រៃវែង': { lat: 11.4851, lng: 105.3262, label: 'ព្រៃវែង' },
-  'ពោធិ៍សាត់': { lat: 12.5388, lng: 103.9192, label: 'ពោធិ៍សាត់' },
-  'កំពង់ធំ': { lat: 12.7111, lng: 104.8887, label: 'កំពង់ធំ' }
+  'ភ្នំពេញ': { lat: 11.5564, lng: 104.9282, label: 'ភ្នំពេញ (Phnom Penh)' },
+  'កណ្តាល': { lat: 11.4550, lng: 105.0000, label: 'កណ្តាល (Kandal)' },
+  'សៀមរាប': { lat: 13.3671, lng: 103.8448, label: 'សៀមរាប (Siem Reap)' },
+  'បាត់ដំបង': { lat: 13.0957, lng: 103.2022, label: 'បាត់ដំបង (Battambang)' },
+  'ព្រះសីហនុ': { lat: 10.6253, lng: 103.5234, label: 'ព្រះសីហនុ (Preah Sihanouk)' },
+  'កំពង់ចាម': { lat: 12.0000, lng: 105.4500, label: 'កំពង់ចាម (Kampong Cham)' },
+  'កំពត': { lat: 10.6104, lng: 104.1815, label: 'កំពត (Kampot)' },
+  'កំពង់ស្ពឺ': { lat: 11.4533, lng: 104.5209, label: 'កំពង់ស្ពឺ (Kampong Speu)' },
+  'បន្ទាយមានជ័យ': { lat: 13.5859, lng: 102.9737, label: 'បន្ទាយមានជ័យ (Banteay Meanchey)' },
+  'ស្វាយរៀង': { lat: 11.0879, lng: 105.7993, label: 'ស្វាយរៀង (Svay Rieng)' },
+  'តាកែវ': { lat: 10.9908, lng: 104.7850, label: 'តាកែវ (Takeo)' },
+  'ព្រៃវែង': { lat: 11.4851, lng: 105.3262, label: 'ព្រៃវែង (Prey Veng)' },
+  'ពោធិ៍សាត់': { lat: 12.5388, lng: 103.9192, label: 'ពោធិ៍សាត់ (Pursat)' },
+  'កំពង់ធំ': { lat: 12.7111, lng: 104.8887, label: 'កំពង់ធំ (Kampong Thom)' },
+  'កំពង់ឆ្នាំង': { lat: 12.2500, lng: 104.6667, label: 'កំពង់ឆ្នាំង (Kampong Chhnang)' },
+  'កែប': { lat: 10.4829, lng: 104.2949, label: 'កែប (Kep)' },
+  'កោះកុង': { lat: 11.6153, lng: 102.9838, label: 'កោះកុង (Koh Kong)' },
+  'ក្រចេះ': { lat: 12.4881, lng: 106.0188, label: 'ក្រចេះ (Kratie)' },
+  'ស្ទឹងត្រែង': { lat: 13.5259, lng: 105.9683, label: 'ស្ទឹងត្រែង (Stung Treng)' },
+  'រតនគិរី': { lat: 13.7394, lng: 106.9873, label: 'រតនគិរី (Ratanakiri)' },
+  'មណ្ឌលគិរី': { lat: 12.4558, lng: 107.1881, label: 'មណ្ឌលគិរី (Mondulkiri)' },
+  'ព្រះវិហារ': { lat: 13.8073, lng: 104.9811, label: 'ព្រះវិហារ (Preah Vihear)' },
+  'ឧត្តរមានជ័យ': { lat: 14.1818, lng: 103.5176, label: 'ឧត្តរមានជ័យ (Oddar Meanchey)' },
+  'ប៉ៃលិន': { lat: 12.8489, lng: 102.6093, label: 'ប៉ៃលិន (Pailin)' },
+  'ត្បូងឃ្មុំ': { lat: 11.9000, lng: 105.6500, label: 'ត្បូងឃ្មុំ (Tboung Khmum)' }
 };
 
 export default function LocationPickerModal({
@@ -46,17 +55,21 @@ export default function LocationPickerModal({
 
   const initial = parseInitialCoords();
   const [coords, setCoords] = useState(initial);
-  const [isLocatingGps, setIsLocatingGps] = useState(false);
-  const [gpsError, setGpsError] = useState('');
-  const [activePreset, setActivePreset] = useState(selectedProvince || 'ភ្នំពេញ');
+  const [activeProvince, setActiveProvince] = useState(selectedProvince || 'ភ្នំពេញ');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchError, setSearchError] = useState('');
 
   // Sync coords when modal opens
   useEffect(() => {
     if (isOpen) {
       const init = parseInitialCoords();
       setCoords(init);
-      setGpsError('');
-      setActivePreset(selectedProvince || 'ភ្នំពេញ');
+      setActiveProvince(selectedProvince || 'ភ្នំពេញ');
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearchError('');
     }
   }, [isOpen, initialUrl, selectedProvince]);
 
@@ -88,40 +101,65 @@ export default function LocationPickerModal({
     }
   };
 
-  // Get current device GPS
-  const handleGetGps = () => {
-    if (typeof window === 'undefined' || !navigator.geolocation) {
-      setGpsError('ឧបករណ៍របស់អ្នកមិនគាំទ្រប្រព័ន្ធ GPS ទេ');
-      return;
-    }
-    setIsLocatingGps(true);
-    setGpsError('');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        sendLocationToIframe(lat, lng, 17);
-        setIsLocatingGps(false);
-        setActivePreset('GPS');
-      },
-      (err) => {
-        setIsLocatingGps(false);
-        setGpsError('មិនអាចចាប់ GPS បានទេ! សូមអនុញ្ញាត Location Permission លើទូរស័ព្ទ ឬកុំព្យូទ័ររបស់អ្នក។');
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  };
-
-  // Quick preset jump
-  const handlePresetClick = (provinceName) => {
-    const p = PROVINCE_COORDINATES[provinceName];
+  // Jump to province
+  const handleSelectProvince = (provName) => {
+    setActiveProvince(provName);
+    const p = PROVINCE_COORDINATES[provName];
     if (p) {
-      setActivePreset(provinceName);
       sendLocationToIframe(p.lat, p.lng, 14);
     }
   };
 
-  // Submit selected location
+  // Search places using OpenStreetMap Nominatim
+  const handleSearch = async (e) => {
+    if (e) e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    setIsSearching(true);
+    setSearchError('');
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ' Cambodia')}&countrycodes=kh&limit=5`;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'km,en' } });
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setSearchResults(data);
+        const top = data[0];
+        sendLocationToIframe(parseFloat(top.lat), parseFloat(top.lon), 16);
+      } else {
+        setSearchError('រកមិនឃើញទីតាំងនេះទេ! សូមសាកល្បងវាយឈ្មោះផ្សេង ឬចុចអូស Pin លើផែនទីដោយផ្ទាល់។');
+      }
+    } catch (err) {
+      setSearchError('មិនអាចស្វែងរកបានទេ! សូមចុចរើសទីតាំងលើផែនទីដោយផ្ទាល់។');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Select search result
+  const handlePickSearchResult = (item) => {
+    sendLocationToIframe(parseFloat(item.lat), parseFloat(item.lon), 16);
+    setSearchResults([]);
+  };
+
+  // Optional: device GPS
+  const handleUseCurrentGps = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      alert('ឧបករណ៍របស់អ្នកមិនគាំទ្រប្រព័ន្ធ GPS ទេ');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        sendLocationToIframe(pos.coords.latitude, pos.coords.longitude, 17);
+      },
+      () => {
+        alert('មិនអាចចាប់ GPS បានទេ! សូមអនុញ្ញាត Location Permission។');
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  // Confirm selection
   const handleConfirmLocation = () => {
     const mapUrl = `https://maps.google.com/?q=${coords.lat.toFixed(6)},${coords.lng.toFixed(6)}`;
     onConfirm({
@@ -134,7 +172,6 @@ export default function LocationPickerModal({
 
   if (!isOpen) return null;
 
-  // Generate self-contained HTML for Leaflet OpenStreetMap
   const srcDoc = `<!DOCTYPE html>
 <html>
 <head>
@@ -147,20 +184,20 @@ export default function LocationPickerModal({
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 32px;
+      font-size: 34px;
       line-height: 1;
-      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.45));
+      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
       cursor: grab;
       user-select: none;
       transition: transform 0.15s ease;
     }
     .custom-pin:active {
-      transform: scale(1.15) translateY(-6px);
+      transform: scale(1.2) translateY(-8px);
       cursor: grabbing;
     }
     .leaflet-bar a {
       background-color: #ffffff;
-      color: #333333;
+      color: #1e293b;
     }
   </style>
 </head>
@@ -180,8 +217,8 @@ export default function LocationPickerModal({
     const pinIcon = L.divIcon({
       className: 'custom-pin',
       html: '📍',
-      iconSize: [40, 40],
-      iconAnchor: [20, 36]
+      iconSize: [42, 42],
+      iconAnchor: [21, 38]
     });
 
     let marker = L.marker([startLat, startLng], {
@@ -189,7 +226,7 @@ export default function LocationPickerModal({
       icon: pinIcon
     }).addTo(map);
 
-    function reportCoordinates(lat, lng) {
+    function notify(lat, lng) {
       window.parent.postMessage({
         type: 'MAP_PIN_MOVED',
         lat: Number(lat.toFixed(6)),
@@ -199,12 +236,12 @@ export default function LocationPickerModal({
 
     marker.on('dragend', function(e) {
       const pos = e.target.getLatLng();
-      reportCoordinates(pos.lat, pos.lng);
+      notify(pos.lat, pos.lng);
     });
 
     map.on('click', function(e) {
       marker.setLatLng(e.latlng);
-      reportCoordinates(e.latlng.lat, e.latlng.lng);
+      notify(e.latlng.lat, e.latlng.lng);
     });
 
     window.addEventListener('message', function(ev) {
@@ -212,39 +249,39 @@ export default function LocationPickerModal({
       if (ev.data.type === 'SET_LOCATION') {
         const { lat, lng, zoom } = ev.data;
         if (lat && lng) {
-          map.setView([lat, lng], zoom || 16);
+          map.setView([lat, lng], zoom || 15);
           marker.setLatLng([lat, lng]);
-          reportCoordinates(lat, lng);
+          notify(lat, lng);
         }
       }
     });
 
     setTimeout(() => {
       map.invalidateSize();
-      reportCoordinates(startLat, startLng);
+      notify(startLat, startLng);
     }, 400);
   </script>
 </body>
 </html>`;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-md animate-fadeIn">
       <div 
-        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-scaleUp"
+        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[94vh] animate-scaleUp"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
         <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between border-b border-slate-700/50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-lg border border-orange-500/30">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-xl border border-orange-500/30">
               🗺️
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                ជ្រើសរើសទីតាំងលើផែនទី (Location Picker)
+                ជ្រើសរើសទីតាំងដឹកជញ្ជូនលើផែនទី (Pick Delivery Location)
               </h3>
               <p className="text-[11px] text-slate-300">
-                ចុចលើផែនទី ឬអូស Pin 📍 ទៅកាន់ទីតាំងផ្ទះ/កន្លែងដឹកជញ្ជូនរបស់អ្នក
+                អាចរើសទីតាំងផ្ទះខ្លួនឯង ឬទីតាំងអ្នកផ្សេងដែលចង់ទិញផ្ញើជូន (ទូទាំងប្រទេសកម្ពុជា)
               </p>
             </div>
           </div>
@@ -258,37 +295,80 @@ export default function LocationPickerModal({
           </button>
         </div>
 
-        {/* Toolbar: GPS button & Quick presets */}
+        {/* Toolbar: Search & Province Jump */}
         <div className="p-3 bg-slate-50 border-b border-slate-200 space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {/* GPS Locate Button */}
+          {/* Search bar */}
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="🔎 វាយស្វែងរកទីតាំង/ផ្សារ/ផ្លូវ (ឧ. វត្តភ្នំ, អុីអន, ទួលគោក...)"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-slate-300 focus:border-orange-500 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-800 outline-none shadow-2xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={isSearching}
+              className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition cursor-pointer shrink-0 disabled:opacity-50"
+            >
+              {isSearching ? 'កំពុងរក...' : 'ស្វែងរក'}
+            </button>
             <button
               type="button"
-              onClick={handleGetGps}
-              disabled={isLocatingGps}
-              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95 transition disabled:opacity-60 cursor-pointer"
+              onClick={handleUseCurrentGps}
+              className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1"
+              title="ប្រើទីតាំង GPS ឧបករណ៍របស់ខ្ញុំ (Optional)"
             >
-              <span>{isLocatingGps ? '⏳' : '📍'}</span>
-              <span>{isLocatingGps ? 'កំពុងចាប់ GPS...' : 'ទីតាំង GPS ខ្ញុំបច្ចុប្បន្ន'}</span>
+              <span>📍</span>
+              <span className="hidden sm:inline">GPS ខ្ញុំ</span>
             </button>
+          </form>
 
-            {/* Live Coords Display */}
-            <div className="flex items-center gap-2 text-xs bg-white px-3 py-1.5 rounded-xl border border-slate-200 font-mono text-slate-700 shadow-2xs">
-              <span className="text-emerald-600 font-black">● ទីតាំង:</span>
-              <span className="font-semibold">{coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}</span>
+          {/* Search Results Dropdown */}
+          {searchResults.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-lg space-y-1 max-h-40 overflow-y-auto text-xs">
+              <div className="text-[10px] font-bold text-slate-400 px-2">លទ្ធផលស្វែងរក (ចុចដើម្បីកំណត់ទីតាំង)៖</div>
+              {searchResults.map((item, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handlePickSearchResult(item)}
+                  className="w-full text-left px-2.5 py-1.5 hover:bg-orange-50 rounded-lg text-slate-700 transition flex items-center gap-2 cursor-pointer"
+                >
+                  <span>📍</span>
+                  <span className="truncate">{item.display_name}</span>
+                </button>
+              ))}
             </div>
-          </div>
+          )}
 
-          {/* Quick Province presets */}
+          {searchError && (
+            <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
+              ⚠️ {searchError}
+            </div>
+          )}
+
+          {/* Quick 25 Provinces Selector */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
-            <span className="text-slate-500 font-bold shrink-0">រហ័ស:</span>
-            {['ភ្នំពេញ', 'សៀមរាប', 'បាត់ដំបង', 'ព្រះសីហនុ', 'កំពង់ចាម', 'កំពត', 'កណ្តាល', 'បន្ទាយមានជ័យ'].map((prov) => (
+            <span className="text-slate-500 font-bold shrink-0">រើសខេត្ត/ក្រុង:</span>
+            {Object.keys(PROVINCE_COORDINATES).map((prov) => (
               <button
                 key={prov}
                 type="button"
-                onClick={() => handlePresetClick(prov)}
+                onClick={() => handleSelectProvince(prov)}
                 className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer ${
-                  activePreset === prov
+                  activeProvince === prov
                     ? 'bg-orange-500 text-white shadow-xs'
                     : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                 }`}
@@ -297,38 +377,34 @@ export default function LocationPickerModal({
               </button>
             ))}
           </div>
-
-          {gpsError && (
-            <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
-              ⚠️ {gpsError}
-            </div>
-          )}
         </div>
 
         {/* Map Container */}
         <div className="relative w-full h-[360px] sm:h-[420px] bg-slate-100">
           <iframe
             ref={iframeRef}
-            title="Interactive Location Picker Map"
+            title="Interactive Delivery Location Picker Map"
             srcDoc={srcDoc}
             className="w-full h-full border-0 block"
             sandbox="allow-scripts allow-same-origin"
           />
 
-          {/* Floating Instructions Pill */}
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none z-10">
-            <div className="bg-slate-900/85 backdrop-blur-md text-white text-[11px] font-bold px-3.5 py-1.5 rounded-full shadow-lg border border-white/20 flex items-center gap-1.5">
-              <span>👆</span>
-              <span>ចុចលើផែនទី ឬអូស Pin 📍 ទៅទីតាំងដែលចង់ឱ្យដឹក</span>
+          {/* Instructions Floating Pill */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none z-10 w-[90%] sm:w-auto text-center">
+            <div className="bg-slate-900/90 backdrop-blur-md text-white text-[11px] font-bold px-4 py-2 rounded-full shadow-lg border border-white/20 inline-flex items-center gap-2">
+              <span>📍</span>
+              <span>ចុចលើផែនទី ឬអូស Pin ទៅកាន់ទីតាំងផ្ទះ/កន្លែងដែលចង់ឱ្យដឹក</span>
             </div>
           </div>
         </div>
 
-        {/* Modal Footer / Actions */}
+        {/* Modal Footer */}
         <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="text-[11px] text-slate-500 flex items-center gap-1.5 text-center sm:text-left">
-            <span className="text-base">💡</span>
-            <span>ប្រព័ន្ធនឹងបម្លែងទីតាំងនេះទៅជា Google Maps Link ស្វ័យប្រវត្តិជូនអ្នកដឹកជញ្ជូន</span>
+          <div className="text-xs text-slate-600 flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-emerald-600 font-black">● ទីតាំងជ្រើសរើស:</span>
+            <span className="font-mono font-bold bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-800 text-[11px]">
+              {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+            </span>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -345,7 +421,7 @@ export default function LocationPickerModal({
               className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-[#ff6a00] hover:from-orange-600 hover:to-[#e55f00] text-white text-xs font-black shadow-md shadow-orange-500/25 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>✅</span>
-              <span>យល់ព្រមជ្រើសរើសទីតាំងនេះ</span>
+              <span>យល់ព្រមយកទីតាំងនេះ</span>
             </button>
           </div>
         </div>
