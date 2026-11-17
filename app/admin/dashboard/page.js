@@ -2179,6 +2179,13 @@ export default function UnifiedAdminDashboard() {
   const [storeSettingsSavedMsg, setStoreSettingsSavedMsg] = useState('');
   const [activeSettingsSubTab, setActiveSettingsSubTab] = useState('branding'); // 'branding' | 'contact' | 'announcement' | 'payment' | 'delivery'
 
+  // ⭐️ States សម្រាប់ប្តូរ Password ហាង (Change Store Password / PIN) ⭐️
+  const [currentStorePasswordInput, setCurrentStorePasswordInput] = useState('');
+  const [newStorePasswordInput, setNewStorePasswordInput] = useState('');
+  const [confirmStorePasswordInput, setConfirmStorePasswordInput] = useState('');
+  const [showStorePassword, setShowStorePassword] = useState(false);
+  const [isUpdatingStorePassword, setIsUpdatingStorePassword] = useState(false);
+
   // ⭐️ States សម្រាប់សាកល្បងទេសអតិថិជនបញ្ជាទិញផ្ទាល់ពី Website (Live Customer Order Simulator) ⭐️
   const [testOrderModalOpen, setTestOrderModalOpen] = useState(false);
   const [testOrderLocation, setTestOrderLocation] = useState('phnom_penh'); // 'phnom_penh' | 'province'
@@ -2302,6 +2309,138 @@ export default function UnifiedAdminDashboard() {
 
     setStoreSettingsSavedMsg('🎉 រក្សាទុកការកំណត់ហាង និងម៉ាកយីហោជោគជ័យ!');
     setTimeout(() => setStoreSettingsSavedMsg(''), 3500);
+  };
+
+  // ⭐️ មុខងារប្តូរលេខសម្ងាត់ហាង (Change Store Admin Password / PIN) ⭐️
+  const handleUpdateStorePassword = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (guardDemoAction("ប្តូរពាក្យសម្ងាត់ហាង")) return;
+
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    const currentPin = (activeStore?.pin || activeStore?.password || '1234').toString().trim();
+    const inputOld = currentStorePasswordInput.trim();
+    const inputNew = newStorePasswordInput.trim();
+    const inputConfirm = confirmStorePasswordInput.trim();
+
+    // 1. Validation
+    if (!inputNew) {
+      alert('សូមបញ្ចូលលេខសម្ងាត់ថ្មី!');
+      return;
+    }
+    if (inputNew.length < 4) {
+      alert('លេខសម្ងាត់ថ្មីត្រូវមានយ៉ាងហោចណាស់ ៤ ខ្ទង់ឡើងទៅ!');
+      return;
+    }
+    if (inputNew !== inputConfirm) {
+      alert('ការបញ្ជាក់លេខសម្ងាត់ថ្មីមិនត្រូវគ្នាទេ! សូមពិនិត្យមើលម្តងទៀត។');
+      return;
+    }
+
+    // Check old password (if not master owner)
+    if (!isMasterOwner) {
+      if (!inputOld) {
+        alert('សូមបញ្ចូលលេខសម្ងាត់ចាស់ដើម្បីផ្ទៀងផ្ទាត់សុវត្ថិភាព!');
+        return;
+      }
+      const matchesOld = inputOld === currentPin || 
+                         inputOld === (currentStaff?.pin || '').toString().trim() || 
+                         inputOld === (currentStaff?.password || '').toString().trim() ||
+                         (activeStore?.settings?.pin && inputOld === activeStore.settings.pin.toString().trim()) ||
+                         (activeStore?.settings?.owner_password && inputOld === activeStore.settings.owner_password.toString().trim());
+      if (!matchesOld) {
+        alert('❌ លេខសម្ងាត់ចាស់មិនត្រឹមត្រូវទេ! សូមព្យាយាមម្តងទៀត។');
+        return;
+      }
+    }
+
+    setIsUpdatingStorePassword(true);
+
+    try {
+      // 2. Update activeStore object
+      const updatedStore = {
+        ...activeStore,
+        pin: inputNew,
+        password: inputNew,
+        settings: {
+          ...(activeStore?.settings || {}),
+          pin: inputNew,
+          owner_password: inputNew
+        }
+      };
+      setActiveStore(updatedStore);
+      setActiveStoreState(updatedStore);
+
+      // 3. Update registeredStores in state & localStorage
+      const allStores = getLocalStores();
+      const updatedStoresList = allStores.map(s => s.id === storeId ? {
+        ...s,
+        pin: inputNew,
+        password: inputNew,
+        settings: {
+          ...(s.settings || {}),
+          pin: inputNew,
+          owner_password: inputNew
+        }
+      } : s);
+      setRegisteredStores(updatedStoresList);
+      saveLocalStores(updatedStoresList);
+
+      // 4. Update Staff List of this store (owner account)
+      const currentStoreStaff = getStoreStaffList(activeStore);
+      const updatedStaffList = currentStoreStaff.map(stf => {
+        if (stf.role === 'ADMIN' || stf.id === 'STAFF-1' || stf.id === `STAFF-${storeId}-OWNER`) {
+          return {
+            ...stf,
+            pin: inputNew,
+            password: inputNew
+          };
+        }
+        return stf;
+      });
+      localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(updatedStaffList));
+      if (storeId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_staff_list', JSON.stringify(updatedStaffList));
+      }
+      setStaffList(updatedStaffList);
+
+      // Update current logged-in staff if they are the owner
+      if (currentStaff?.role === 'ADMIN' || currentStaff?.id === 'STAFF-1' || currentStaff?.id === `STAFF-${storeId}-OWNER`) {
+        const updatedCurrentStaff = { ...currentStaff, pin: inputNew, password: inputNew };
+        setCurrentStaff(updatedCurrentStaff);
+        localStorage.setItem(`sabay_active_staff_${storeId}`, JSON.stringify(updatedCurrentStaff));
+      }
+
+      // 5. Sync to Supabase cloud database (stores table)
+      try {
+        await supabase
+          .from('stores')
+          .update({
+            pin: inputNew,
+            password: inputNew,
+            settings: {
+              ...(activeStore?.settings || {}),
+              pin: inputNew,
+              owner_password: inputNew
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', storeId);
+      } catch (dbErr) {
+        console.warn('Stores table pin update notice:', dbErr);
+      }
+
+      // Clear input fields
+      setCurrentStorePasswordInput('');
+      setNewStorePasswordInput('');
+      setConfirmStorePasswordInput('');
+
+      setToastNotification(`🎉 បានប្តូរលេខសម្ងាត់ហាង "${activeStore?.name || storeSettings.storeName}" ជោគជ័យ!`);
+      setTimeout(() => setToastNotification(null), 5000);
+    } catch (err) {
+      alert('មានបញ្ហាក្នុងការប្តូរលេខសម្ងាត់: ' + err.message);
+    } finally {
+      setIsUpdatingStorePassword(false);
+    }
   };
 
   // Upload Logo
@@ -21264,6 +21403,7 @@ export default function UnifiedAdminDashboard() {
           { id: 'announcement', label: '📢 សាររត់លើគេ', desc: 'Marquee Announcement' },
           { id: 'payment', label: '💳 គណនី KHQR / ABA', desc: 'Bank QR & Merchant Info' },
           { id: 'delivery', label: '🚚 ដឹកជញ្ជូន & អត្រាប្តូរប្រាក់', desc: 'ថ្លៃដឹក & អត្រាប្រាក់រៀល' },
+          { id: 'security', label: '🔒 ប្តូរលេខសម្ងាត់ហាង (Change Password)', desc: 'ប្តូរលេខសម្ងាត់/PIN ចូលគ្រប់គ្រងហាង' },
           { id: 'data', label: '🧹 សម្អាតទិន្នន័យ & Export', desc: 'Reset ទិន្នន័យតេស្ត & ទាញយក Excel' },
         ].map(tab => (
           <button
@@ -21393,6 +21533,134 @@ export default function UnifiedAdminDashboard() {
             </div>
           )}
 
+          {/* TAB 8: STORE PASSWORD / SECURITY */}
+          {activeSettingsSubTab === 'security' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="border-b border-gray-100 pb-4">
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                  <span>🔒</span> ប្តូរពាក្យសម្ងាត់ហាង (Change Store Admin Password / PIN)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN សម្រាប់ Login ចូលផ្ទាំងគ្រប់គ្រងហាង «{activeStore?.name || storeSettings.storeName}» នេះ
+                </p>
+              </div>
+
+              {/* Current Account Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
+                    🏪
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">
+                      ហាង: {activeStore?.name || storeSettings.storeName} ({activeStore?.slug || 'sabayluk'})
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      គណនី Admin: {activeStore?.owner_email || activeStore?.owner_username || currentStaff?.email || currentStaff?.username || 'admin'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    🟢 Active Store
+                  </span>
+                </div>
+              </div>
+
+              {/* Password Change Form */}
+              <form onSubmit={handleUpdateStorePassword} className="space-y-4 max-w-xl">
+                {!isMasterOwner && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                      <span>លេខសម្ងាត់ចាស់ (Current Password / PIN) *</span>
+                      <span className="text-[10px] text-gray-400 font-normal">លេខកូដដែលកំពុងប្រើបច្ចុប្បន្ន</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showStorePassword ? 'text' : 'password'}
+                        value={currentStorePasswordInput}
+                        onChange={(e) => setCurrentStorePasswordInput(e.target.value)}
+                        placeholder="បញ្ចូលលេខសម្ងាត់ចាស់..."
+                        required
+                        className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>លេខសម្ងាត់ថ្មី (New Password / PIN) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">យ៉ាងហោចណាស់ ៤ ខ្ទង់</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={newStorePasswordInput}
+                      onChange={(e) => setNewStorePasswordInput(e.target.value)}
+                      placeholder="បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password អក្សរ+លេខ)..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>បញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត (Confirm New Password) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">ត្រូវវាយឱ្យដូចលេខសម្ងាត់ថ្មីខាងលើ</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={confirmStorePasswordInput}
+                      onChange={(e) => setConfirmStorePasswordInput(e.target.value)}
+                      placeholder="វាយបញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={showStorePassword}
+                      onChange={(e) => setShowStorePassword(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#ff6a00] focus:ring-[#ff6a00] accent-[#ff6a00]"
+                    />
+                    <span>បង្ហាញលេខសម្ងាត់ (Show Password)</span>
+                  </label>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    disabled={isUpdatingStorePassword}
+                    className="w-full sm:w-auto bg-gradient-to-r from-[#ff6a00] to-orange-600 hover:from-[#e55f00] hover:to-orange-700 text-white px-7 py-3 rounded-2xl text-xs font-black shadow-lg shadow-orange-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>🔑</span>
+                    <span>{isUpdatingStorePassword ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកលេខសម្ងាត់ថ្មី (Update Password)'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Safety notice */}
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                <span className="text-base shrink-0 mt-0.5">💡</span>
+                <div className="leading-relaxed">
+                  <p className="font-bold">ចំណាំសំខាន់សម្រាប់ការចូលគ្រប់គ្រងហាង៖</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    ពេលប្តូរលេខសម្ងាត់រួច លោកអ្នកអាចប្រើលេខសម្ងាត់ថ្មីនេះ ដើម្បី Login តាមទម្រង់បញ្ចូលពាក្យសម្ងាត់ (Email/Username + Password) ឬតាម PIN Pad លើម៉ាស៊ីន POS បានភ្លាមៗ!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 2: CONTACT & LOCATION */}
           {activeSettingsSubTab === 'contact' && (
             <div className="space-y-5 animate-in fade-in">
@@ -21502,6 +21770,134 @@ export default function UnifiedAdminDashboard() {
             </div>
           )}
 
+          {/* TAB 8: STORE PASSWORD / SECURITY */}
+          {activeSettingsSubTab === 'security' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="border-b border-gray-100 pb-4">
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                  <span>🔒</span> ប្តូរពាក្យសម្ងាត់ហាង (Change Store Admin Password / PIN)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN សម្រាប់ Login ចូលផ្ទាំងគ្រប់គ្រងហាង «{activeStore?.name || storeSettings.storeName}» នេះ
+                </p>
+              </div>
+
+              {/* Current Account Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
+                    🏪
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">
+                      ហាង: {activeStore?.name || storeSettings.storeName} ({activeStore?.slug || 'sabayluk'})
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      គណនី Admin: {activeStore?.owner_email || activeStore?.owner_username || currentStaff?.email || currentStaff?.username || 'admin'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    🟢 Active Store
+                  </span>
+                </div>
+              </div>
+
+              {/* Password Change Form */}
+              <form onSubmit={handleUpdateStorePassword} className="space-y-4 max-w-xl">
+                {!isMasterOwner && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                      <span>លេខសម្ងាត់ចាស់ (Current Password / PIN) *</span>
+                      <span className="text-[10px] text-gray-400 font-normal">លេខកូដដែលកំពុងប្រើបច្ចុប្បន្ន</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showStorePassword ? 'text' : 'password'}
+                        value={currentStorePasswordInput}
+                        onChange={(e) => setCurrentStorePasswordInput(e.target.value)}
+                        placeholder="បញ្ចូលលេខសម្ងាត់ចាស់..."
+                        required
+                        className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>លេខសម្ងាត់ថ្មី (New Password / PIN) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">យ៉ាងហោចណាស់ ៤ ខ្ទង់</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={newStorePasswordInput}
+                      onChange={(e) => setNewStorePasswordInput(e.target.value)}
+                      placeholder="បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password អក្សរ+លេខ)..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>បញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត (Confirm New Password) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">ត្រូវវាយឱ្យដូចលេខសម្ងាត់ថ្មីខាងលើ</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={confirmStorePasswordInput}
+                      onChange={(e) => setConfirmStorePasswordInput(e.target.value)}
+                      placeholder="វាយបញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={showStorePassword}
+                      onChange={(e) => setShowStorePassword(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#ff6a00] focus:ring-[#ff6a00] accent-[#ff6a00]"
+                    />
+                    <span>បង្ហាញលេខសម្ងាត់ (Show Password)</span>
+                  </label>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    disabled={isUpdatingStorePassword}
+                    className="w-full sm:w-auto bg-gradient-to-r from-[#ff6a00] to-orange-600 hover:from-[#e55f00] hover:to-orange-700 text-white px-7 py-3 rounded-2xl text-xs font-black shadow-lg shadow-orange-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>🔑</span>
+                    <span>{isUpdatingStorePassword ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកលេខសម្ងាត់ថ្មី (Update Password)'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Safety notice */}
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                <span className="text-base shrink-0 mt-0.5">💡</span>
+                <div className="leading-relaxed">
+                  <p className="font-bold">ចំណាំសំខាន់សម្រាប់ការចូលគ្រប់គ្រងហាង៖</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    ពេលប្តូរលេខសម្ងាត់រួច លោកអ្នកអាចប្រើលេខសម្ងាត់ថ្មីនេះ ដើម្បី Login តាមទម្រង់បញ្ចូលពាក្យសម្ងាត់ (Email/Username + Password) ឬតាម PIN Pad លើម៉ាស៊ីន POS បានភ្លាមៗ!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 3: ANNOUNCEMENT BAR */}
           {activeSettingsSubTab === 'announcement' && (
             <div className="space-y-5 animate-in fade-in">
@@ -21545,6 +21941,134 @@ export default function UnifiedAdminDashboard() {
               <div className="bg-slate-950 text-white p-3 rounded-xl text-xs font-medium border border-slate-800 flex items-center justify-between">
                 <span className="truncate">{storeSettings.announcementText}</span>
                 <span className="text-[10px] text-orange-400 font-bold shrink-0 ml-2">📞 {storeSettings.phone}</span>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: STORE PASSWORD / SECURITY */}
+          {activeSettingsSubTab === 'security' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="border-b border-gray-100 pb-4">
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                  <span>🔒</span> ប្តូរពាក្យសម្ងាត់ហាង (Change Store Admin Password / PIN)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN សម្រាប់ Login ចូលផ្ទាំងគ្រប់គ្រងហាង «{activeStore?.name || storeSettings.storeName}» នេះ
+                </p>
+              </div>
+
+              {/* Current Account Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
+                    🏪
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">
+                      ហាង: {activeStore?.name || storeSettings.storeName} ({activeStore?.slug || 'sabayluk'})
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      គណនី Admin: {activeStore?.owner_email || activeStore?.owner_username || currentStaff?.email || currentStaff?.username || 'admin'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    🟢 Active Store
+                  </span>
+                </div>
+              </div>
+
+              {/* Password Change Form */}
+              <form onSubmit={handleUpdateStorePassword} className="space-y-4 max-w-xl">
+                {!isMasterOwner && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                      <span>លេខសម្ងាត់ចាស់ (Current Password / PIN) *</span>
+                      <span className="text-[10px] text-gray-400 font-normal">លេខកូដដែលកំពុងប្រើបច្ចុប្បន្ន</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showStorePassword ? 'text' : 'password'}
+                        value={currentStorePasswordInput}
+                        onChange={(e) => setCurrentStorePasswordInput(e.target.value)}
+                        placeholder="បញ្ចូលលេខសម្ងាត់ចាស់..."
+                        required
+                        className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>លេខសម្ងាត់ថ្មី (New Password / PIN) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">យ៉ាងហោចណាស់ ៤ ខ្ទង់</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={newStorePasswordInput}
+                      onChange={(e) => setNewStorePasswordInput(e.target.value)}
+                      placeholder="បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password អក្សរ+លេខ)..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>បញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត (Confirm New Password) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">ត្រូវវាយឱ្យដូចលេខសម្ងាត់ថ្មីខាងលើ</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={confirmStorePasswordInput}
+                      onChange={(e) => setConfirmStorePasswordInput(e.target.value)}
+                      placeholder="វាយបញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={showStorePassword}
+                      onChange={(e) => setShowStorePassword(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#ff6a00] focus:ring-[#ff6a00] accent-[#ff6a00]"
+                    />
+                    <span>បង្ហាញលេខសម្ងាត់ (Show Password)</span>
+                  </label>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    disabled={isUpdatingStorePassword}
+                    className="w-full sm:w-auto bg-gradient-to-r from-[#ff6a00] to-orange-600 hover:from-[#e55f00] hover:to-orange-700 text-white px-7 py-3 rounded-2xl text-xs font-black shadow-lg shadow-orange-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>🔑</span>
+                    <span>{isUpdatingStorePassword ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកលេខសម្ងាត់ថ្មី (Update Password)'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Safety notice */}
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                <span className="text-base shrink-0 mt-0.5">💡</span>
+                <div className="leading-relaxed">
+                  <p className="font-bold">ចំណាំសំខាន់សម្រាប់ការចូលគ្រប់គ្រងហាង៖</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    ពេលប្តូរលេខសម្ងាត់រួច លោកអ្នកអាចប្រើលេខសម្ងាត់ថ្មីនេះ ដើម្បី Login តាមទម្រង់បញ្ចូលពាក្យសម្ងាត់ (Email/Username + Password) ឬតាម PIN Pad លើម៉ាស៊ីន POS បានភ្លាមៗ!
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -21656,6 +22180,134 @@ export default function UnifiedAdminDashboard() {
             </div>
           )}
 
+          {/* TAB 8: STORE PASSWORD / SECURITY */}
+          {activeSettingsSubTab === 'security' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="border-b border-gray-100 pb-4">
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                  <span>🔒</span> ប្តូរពាក្យសម្ងាត់ហាង (Change Store Admin Password / PIN)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN សម្រាប់ Login ចូលផ្ទាំងគ្រប់គ្រងហាង «{activeStore?.name || storeSettings.storeName}» នេះ
+                </p>
+              </div>
+
+              {/* Current Account Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
+                    🏪
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">
+                      ហាង: {activeStore?.name || storeSettings.storeName} ({activeStore?.slug || 'sabayluk'})
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      គណនី Admin: {activeStore?.owner_email || activeStore?.owner_username || currentStaff?.email || currentStaff?.username || 'admin'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    🟢 Active Store
+                  </span>
+                </div>
+              </div>
+
+              {/* Password Change Form */}
+              <form onSubmit={handleUpdateStorePassword} className="space-y-4 max-w-xl">
+                {!isMasterOwner && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                      <span>លេខសម្ងាត់ចាស់ (Current Password / PIN) *</span>
+                      <span className="text-[10px] text-gray-400 font-normal">លេខកូដដែលកំពុងប្រើបច្ចុប្បន្ន</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showStorePassword ? 'text' : 'password'}
+                        value={currentStorePasswordInput}
+                        onChange={(e) => setCurrentStorePasswordInput(e.target.value)}
+                        placeholder="បញ្ចូលលេខសម្ងាត់ចាស់..."
+                        required
+                        className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>លេខសម្ងាត់ថ្មី (New Password / PIN) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">យ៉ាងហោចណាស់ ៤ ខ្ទង់</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={newStorePasswordInput}
+                      onChange={(e) => setNewStorePasswordInput(e.target.value)}
+                      placeholder="បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password អក្សរ+លេខ)..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>បញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត (Confirm New Password) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">ត្រូវវាយឱ្យដូចលេខសម្ងាត់ថ្មីខាងលើ</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={confirmStorePasswordInput}
+                      onChange={(e) => setConfirmStorePasswordInput(e.target.value)}
+                      placeholder="វាយបញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={showStorePassword}
+                      onChange={(e) => setShowStorePassword(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#ff6a00] focus:ring-[#ff6a00] accent-[#ff6a00]"
+                    />
+                    <span>បង្ហាញលេខសម្ងាត់ (Show Password)</span>
+                  </label>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    disabled={isUpdatingStorePassword}
+                    className="w-full sm:w-auto bg-gradient-to-r from-[#ff6a00] to-orange-600 hover:from-[#e55f00] hover:to-orange-700 text-white px-7 py-3 rounded-2xl text-xs font-black shadow-lg shadow-orange-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>🔑</span>
+                    <span>{isUpdatingStorePassword ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកលេខសម្ងាត់ថ្មី (Update Password)'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Safety notice */}
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                <span className="text-base shrink-0 mt-0.5">💡</span>
+                <div className="leading-relaxed">
+                  <p className="font-bold">ចំណាំសំខាន់សម្រាប់ការចូលគ្រប់គ្រងហាង៖</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    ពេលប្តូរលេខសម្ងាត់រួច លោកអ្នកអាចប្រើលេខសម្ងាត់ថ្មីនេះ ដើម្បី Login តាមទម្រង់បញ្ចូលពាក្យសម្ងាត់ (Email/Username + Password) ឬតាម PIN Pad លើម៉ាស៊ីន POS បានភ្លាមៗ!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 5: DELIVERY & RATES */}
           {activeSettingsSubTab === 'delivery' && (
             <div className="space-y-5 animate-in fade-in">
@@ -21722,6 +22374,134 @@ export default function UnifiedAdminDashboard() {
                   placeholder="ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)"
                   className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-medium focus:border-[#ff6a00] outline-none transition bg-white"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: STORE PASSWORD / SECURITY */}
+          {activeSettingsSubTab === 'security' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="border-b border-gray-100 pb-4">
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                  <span>🔒</span> ប្តូរពាក្យសម្ងាត់ហាង (Change Store Admin Password / PIN)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN សម្រាប់ Login ចូលផ្ទាំងគ្រប់គ្រងហាង «{activeStore?.name || storeSettings.storeName}» នេះ
+                </p>
+              </div>
+
+              {/* Current Account Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
+                    🏪
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">
+                      ហាង: {activeStore?.name || storeSettings.storeName} ({activeStore?.slug || 'sabayluk'})
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      គណនី Admin: {activeStore?.owner_email || activeStore?.owner_username || currentStaff?.email || currentStaff?.username || 'admin'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    🟢 Active Store
+                  </span>
+                </div>
+              </div>
+
+              {/* Password Change Form */}
+              <form onSubmit={handleUpdateStorePassword} className="space-y-4 max-w-xl">
+                {!isMasterOwner && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                      <span>លេខសម្ងាត់ចាស់ (Current Password / PIN) *</span>
+                      <span className="text-[10px] text-gray-400 font-normal">លេខកូដដែលកំពុងប្រើបច្ចុប្បន្ន</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showStorePassword ? 'text' : 'password'}
+                        value={currentStorePasswordInput}
+                        onChange={(e) => setCurrentStorePasswordInput(e.target.value)}
+                        placeholder="បញ្ចូលលេខសម្ងាត់ចាស់..."
+                        required
+                        className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>លេខសម្ងាត់ថ្មី (New Password / PIN) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">យ៉ាងហោចណាស់ ៤ ខ្ទង់</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={newStorePasswordInput}
+                      onChange={(e) => setNewStorePasswordInput(e.target.value)}
+                      placeholder="បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password អក្សរ+លេខ)..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>បញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត (Confirm New Password) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">ត្រូវវាយឱ្យដូចលេខសម្ងាត់ថ្មីខាងលើ</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={confirmStorePasswordInput}
+                      onChange={(e) => setConfirmStorePasswordInput(e.target.value)}
+                      placeholder="វាយបញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={showStorePassword}
+                      onChange={(e) => setShowStorePassword(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#ff6a00] focus:ring-[#ff6a00] accent-[#ff6a00]"
+                    />
+                    <span>បង្ហាញលេខសម្ងាត់ (Show Password)</span>
+                  </label>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    disabled={isUpdatingStorePassword}
+                    className="w-full sm:w-auto bg-gradient-to-r from-[#ff6a00] to-orange-600 hover:from-[#e55f00] hover:to-orange-700 text-white px-7 py-3 rounded-2xl text-xs font-black shadow-lg shadow-orange-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>🔑</span>
+                    <span>{isUpdatingStorePassword ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកលេខសម្ងាត់ថ្មី (Update Password)'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Safety notice */}
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                <span className="text-base shrink-0 mt-0.5">💡</span>
+                <div className="leading-relaxed">
+                  <p className="font-bold">ចំណាំសំខាន់សម្រាប់ការចូលគ្រប់គ្រងហាង៖</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    ពេលប្តូរលេខសម្ងាត់រួច លោកអ្នកអាចប្រើលេខសម្ងាត់ថ្មីនេះ ដើម្បី Login តាមទម្រង់បញ្ចូលពាក្យសម្ងាត់ (Email/Username + Password) ឬតាម PIN Pad លើម៉ាស៊ីន POS បានភ្លាមៗ!
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -21844,6 +22624,134 @@ export default function UnifiedAdminDashboard() {
                   >
                     ★ Best Seller
                   </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: STORE PASSWORD / SECURITY */}
+          {activeSettingsSubTab === 'security' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="border-b border-gray-100 pb-4">
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                  <span>🔒</span> ប្តូរពាក្យសម្ងាត់ហាង (Change Store Admin Password / PIN)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN សម្រាប់ Login ចូលផ្ទាំងគ្រប់គ្រងហាង «{activeStore?.name || storeSettings.storeName}» នេះ
+                </p>
+              </div>
+
+              {/* Current Account Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
+                    🏪
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">
+                      ហាង: {activeStore?.name || storeSettings.storeName} ({activeStore?.slug || 'sabayluk'})
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      គណនី Admin: {activeStore?.owner_email || activeStore?.owner_username || currentStaff?.email || currentStaff?.username || 'admin'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    🟢 Active Store
+                  </span>
+                </div>
+              </div>
+
+              {/* Password Change Form */}
+              <form onSubmit={handleUpdateStorePassword} className="space-y-4 max-w-xl">
+                {!isMasterOwner && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                      <span>លេខសម្ងាត់ចាស់ (Current Password / PIN) *</span>
+                      <span className="text-[10px] text-gray-400 font-normal">លេខកូដដែលកំពុងប្រើបច្ចុប្បន្ន</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showStorePassword ? 'text' : 'password'}
+                        value={currentStorePasswordInput}
+                        onChange={(e) => setCurrentStorePasswordInput(e.target.value)}
+                        placeholder="បញ្ចូលលេខសម្ងាត់ចាស់..."
+                        required
+                        className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>លេខសម្ងាត់ថ្មី (New Password / PIN) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">យ៉ាងហោចណាស់ ៤ ខ្ទង់</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={newStorePasswordInput}
+                      onChange={(e) => setNewStorePasswordInput(e.target.value)}
+                      placeholder="បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password អក្សរ+លេខ)..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>បញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត (Confirm New Password) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">ត្រូវវាយឱ្យដូចលេខសម្ងាត់ថ្មីខាងលើ</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={confirmStorePasswordInput}
+                      onChange={(e) => setConfirmStorePasswordInput(e.target.value)}
+                      placeholder="វាយបញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={showStorePassword}
+                      onChange={(e) => setShowStorePassword(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#ff6a00] focus:ring-[#ff6a00] accent-[#ff6a00]"
+                    />
+                    <span>បង្ហាញលេខសម្ងាត់ (Show Password)</span>
+                  </label>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    disabled={isUpdatingStorePassword}
+                    className="w-full sm:w-auto bg-gradient-to-r from-[#ff6a00] to-orange-600 hover:from-[#e55f00] hover:to-orange-700 text-white px-7 py-3 rounded-2xl text-xs font-black shadow-lg shadow-orange-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>🔑</span>
+                    <span>{isUpdatingStorePassword ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកលេខសម្ងាត់ថ្មី (Update Password)'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Safety notice */}
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                <span className="text-base shrink-0 mt-0.5">💡</span>
+                <div className="leading-relaxed">
+                  <p className="font-bold">ចំណាំសំខាន់សម្រាប់ការចូលគ្រប់គ្រងហាង៖</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    ពេលប្តូរលេខសម្ងាត់រួច លោកអ្នកអាចប្រើលេខសម្ងាត់ថ្មីនេះ ដើម្បី Login តាមទម្រង់បញ្ចូលពាក្យសម្ងាត់ (Email/Username + Password) ឬតាម PIN Pad លើម៉ាស៊ីន POS បានភ្លាមៗ!
+                  </p>
                 </div>
               </div>
             </div>
@@ -22133,6 +23041,134 @@ export default function UnifiedAdminDashboard() {
                 >
                   <span>🔥</span> សម្អាតទិន្នន័យតេស្តទាំងអស់តែមួយចុច (Complete Reset)
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: STORE PASSWORD / SECURITY */}
+          {activeSettingsSubTab === 'security' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="border-b border-gray-100 pb-4">
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                  <span>🔒</span> ប្តូរពាក្យសម្ងាត់ហាង (Change Store Admin Password / PIN)
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN សម្រាប់ Login ចូលផ្ទាំងគ្រប់គ្រងហាង «{activeStore?.name || storeSettings.storeName}» នេះ
+                </p>
+              </div>
+
+              {/* Current Account Card */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
+                    🏪
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-800">
+                      ហាង: {activeStore?.name || storeSettings.storeName} ({activeStore?.slug || 'sabayluk'})
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      គណនី Admin: {activeStore?.owner_email || activeStore?.owner_username || currentStaff?.email || currentStaff?.username || 'admin'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    🟢 Active Store
+                  </span>
+                </div>
+              </div>
+
+              {/* Password Change Form */}
+              <form onSubmit={handleUpdateStorePassword} className="space-y-4 max-w-xl">
+                {!isMasterOwner && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                      <span>លេខសម្ងាត់ចាស់ (Current Password / PIN) *</span>
+                      <span className="text-[10px] text-gray-400 font-normal">លេខកូដដែលកំពុងប្រើបច្ចុប្បន្ន</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showStorePassword ? 'text' : 'password'}
+                        value={currentStorePasswordInput}
+                        onChange={(e) => setCurrentStorePasswordInput(e.target.value)}
+                        placeholder="បញ្ចូលលេខសម្ងាត់ចាស់..."
+                        required
+                        className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>លេខសម្ងាត់ថ្មី (New Password / PIN) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">យ៉ាងហោចណាស់ ៤ ខ្ទង់</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={newStorePasswordInput}
+                      onChange={(e) => setNewStorePasswordInput(e.target.value)}
+                      placeholder="បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password អក្សរ+លេខ)..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                    <span>បញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត (Confirm New Password) *</span>
+                    <span className="text-[10px] text-gray-400 font-normal">ត្រូវវាយឱ្យដូចលេខសម្ងាត់ថ្មីខាងលើ</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showStorePassword ? 'text' : 'password'}
+                      value={confirmStorePasswordInput}
+                      onChange={(e) => setConfirmStorePasswordInput(e.target.value)}
+                      placeholder="វាយបញ្ជាក់លេខសម្ងាត់ថ្មីម្តងទៀត..."
+                      required
+                      minLength={4}
+                      className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={showStorePassword}
+                      onChange={(e) => setShowStorePassword(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#ff6a00] focus:ring-[#ff6a00] accent-[#ff6a00]"
+                    />
+                    <span>បង្ហាញលេខសម្ងាត់ (Show Password)</span>
+                  </label>
+                </div>
+
+                <div className="pt-3">
+                  <button
+                    type="submit"
+                    disabled={isUpdatingStorePassword}
+                    className="w-full sm:w-auto bg-gradient-to-r from-[#ff6a00] to-orange-600 hover:from-[#e55f00] hover:to-orange-700 text-white px-7 py-3 rounded-2xl text-xs font-black shadow-lg shadow-orange-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <span>🔑</span>
+                    <span>{isUpdatingStorePassword ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកលេខសម្ងាត់ថ្មី (Update Password)'}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Safety notice */}
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-3">
+                <span className="text-base shrink-0 mt-0.5">💡</span>
+                <div className="leading-relaxed">
+                  <p className="font-bold">ចំណាំសំខាន់សម្រាប់ការចូលគ្រប់គ្រងហាង៖</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    ពេលប្តូរលេខសម្ងាត់រួច លោកអ្នកអាចប្រើលេខសម្ងាត់ថ្មីនេះ ដើម្បី Login តាមទម្រង់បញ្ចូលពាក្យសម្ងាត់ (Email/Username + Password) ឬតាម PIN Pad លើម៉ាស៊ីន POS បានភ្លាមៗ!
+                  </p>
+                </div>
               </div>
             </div>
           )}
