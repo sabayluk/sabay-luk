@@ -29,6 +29,8 @@ function RegisterStoreForm() {
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerUsername, setOwnerUsername] = useState('');
   const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('FREE');
   const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' or 'monthly'
 
@@ -171,8 +173,17 @@ function RegisterStoreForm() {
       setErrorMsg('សូមកំណត់ Username សម្រាប់ចូលប្រើ!');
       return;
     }
+    // ត្រួតពិនិត្យ Telegram កុំឱ្យច្រឡំដាក់ Gmail
+    if (telegram.trim().includes('@') && telegram.trim().includes('.') && (telegram.toLowerCase().endsWith('.com') || telegram.toLowerCase().includes('@gmail'))) {
+      setErrorMsg('ប្រអប់ Telegram សូមបញ្ចូល Telegram Username (ឧ. @my_store) ឬលេខទូរស័ព្ទ Telegram មិនមែនជា Gmail ឡើយ!');
+      return;
+    }
     if (!pin.trim() || pin.length < 4) {
-      setErrorMsg('លេខសម្ងាត់ PIN ត្រូវមានយ៉ាងតិច ៤ ខ្ទង់!');
+      setErrorMsg('លេខសម្ងាត់ត្រូវមានយ៉ាងតិច ៤ ខ្ទង់ឡើងទៅ!');
+      return;
+    }
+    if (confirmPin && pin.trim() !== confirmPin.trim()) {
+      setErrorMsg('ការបញ្ជាក់លេខសម្ងាត់មិនត្រូវគ្នាទេ! សូមវាយលេខសម្ងាត់ឱ្យដូចគ្នា។');
       return;
     }
 
@@ -536,6 +547,7 @@ function RegisterStoreForm() {
                   setOwnerEmail('');
                   setPhone('');
                   setPin('');
+                  setConfirmPin('');
                   setPaymentSlipFile(null);
                   setPaymentSlipPreview(null);
                 }}
@@ -687,16 +699,33 @@ function RegisterStoreForm() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Telegram សម្រាប់ទទួលដំណឹង (Username ឬ លេខ)
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span>Telegram សម្រាប់ទំនាក់ទំនង / ទទួលដំណឹង</span>
+                    <span className="text-[10px] text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200">
+                      Telegram Username (កុំដាក់ Gmail)
+                    </span>
                   </label>
-                  <input
-                    type="text"
-                    value={telegram}
-                    onChange={(e) => setTelegram(e.target.value)}
-                    placeholder="ឧ. @mystore_pos ឬ 012345678"
-                    className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-[#ff6a00] rounded-2xl px-4 py-3 text-sm font-bold text-slate-800 outline-none transition"
-                  />
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base select-none">✈️</span>
+                    <input
+                      type="text"
+                      value={telegram}
+                      onChange={(e) => setTelegram(e.target.value)}
+                      placeholder="ឧ. @urbangrabs ឬ 012345678 (ឧ. @username)"
+                      className={`w-full bg-slate-50 hover:bg-white focus:bg-white border ${
+                        telegram.includes('@') && telegram.includes('.') && telegram.toLowerCase().endsWith('.com') ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
+                      } focus:border-[#ff6a00] rounded-2xl pl-10 pr-4 py-3 text-sm font-bold text-slate-800 outline-none transition`}
+                    />
+                  </div>
+                  {telegram.includes('@') && telegram.includes('.') && (telegram.toLowerCase().endsWith('.com') || telegram.toLowerCase().includes('@gmail')) ? (
+                    <p className="text-[11px] text-rose-600 font-bold mt-1.5 flex items-center gap-1">
+                      <span>⚠️</span> សូមកុំដាក់ Gmail/Email នៅទីនេះ! សូមបញ្ចូល Telegram Username (ឧ. @urbangrabs) ឬលេខទូរស័ព្ទ Telegram។
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      💡 ឧទាហរណ៍៖ <strong>@urbangrabs</strong> ឬ <strong>012345678</strong> (មិនមែនអាសយដ្ឋាន Gmail ទេ)
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -767,19 +796,62 @@ function RegisterStoreForm() {
                   />
                 </div>
 
+                {/* ⭐️ Standard Modern Password Input (ជំនាន់ចុងក្រោយ) ⭐️ */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    លេខសម្ងាត់ PIN (៤-៦ ខ្ទង់) <span className="text-rose-500">*</span>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span>លេខសម្ងាត់ / Password <span className="text-rose-500">*</span></span>
+                    <span className="text-[10px] text-slate-400 font-normal">យ៉ាងហោច ៤ ខ្ទង់</span>
                   </label>
-                  <input
-                    type="password"
-                    maxLength={6}
-                    required
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                    placeholder="••••"
-                    className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-blue-500 rounded-2xl px-4 py-3 text-base font-mono font-black text-center tracking-widest text-amber-600 outline-none transition"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={4}
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value)}
+                      placeholder="បញ្ចូលលេខសម្ងាត់ (ឧ. 1234 ឬ Password)..."
+                      className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-blue-500 rounded-2xl pl-4 pr-11 py-3 text-sm font-bold text-slate-800 outline-none transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm cursor-pointer select-none"
+                    >
+                      {showPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* ⭐️ Confirm Password ⭐️ */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span>បញ្ជាក់លេខសម្ងាត់ (Confirm Password) <span className="text-rose-500">*</span></span>
+                    {confirmPin && (
+                      <span className={`text-[10px] font-bold ${pin === confirmPin ? 'text-emerald-600' : 'text-rose-500'}`}>
+                        {pin === confirmPin ? '✓ ត្រូវគ្នា' : '✕ មិនទាន់ត្រូវគ្នា'}
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative max-w-md">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={4}
+                      value={confirmPin}
+                      onChange={(e) => setConfirmPin(e.target.value)}
+                      placeholder="វាយបញ្ជាក់លេខសម្ងាត់ម្តងទៀត..."
+                      className={`w-full bg-slate-50 hover:bg-white focus:bg-white border ${
+                        confirmPin && pin !== confirmPin ? 'border-rose-400 bg-rose-50/20' : confirmPin && pin === confirmPin ? 'border-emerald-400' : 'border-slate-300'
+                      } focus:border-blue-500 rounded-2xl pl-4 pr-11 py-3 text-sm font-bold text-slate-800 outline-none transition`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm cursor-pointer select-none"
+                    >
+                      {showPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
