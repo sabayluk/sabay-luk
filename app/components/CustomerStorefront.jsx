@@ -175,6 +175,7 @@ const DICTIONARY = {
     genuineWarrantyDesc: 'ធានាគុណភាពទំនិញសុទ្ធពិតប្រាកដ',
     support247: 'សេវាកម្ម ២៤/៧ រួសរាយ',
     support247Desc: 'ប្រឹក្សាយោបល់ និងឆ្លើយតបរហ័ស',
+    soldCount: 'លក់បាន',
     feedback: 'Feedback',
     customerFeedback: 'មតិយោបល់អតិថិជន',
     verifiedBuyer: 'បានទិញពិតប្រាកដ',
@@ -260,6 +261,7 @@ const DICTIONARY = {
     genuineWarrantyDesc: 'Guaranteed authentic brand quality',
     support247: '24/7 Friendly Support',
     support247Desc: 'Fast response and expert assistance',
+    soldCount: 'Sold',
     feedback: 'Feedback',
     customerFeedback: 'Customer Reviews',
     verifiedBuyer: 'Verified Buyer',
@@ -593,6 +595,69 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     } catch (e) {
       console.error('Error fetching recent purchases:', e);
     }
+  };
+
+  // ⭐️ ស្ថិតិចំនួនដែលបានលក់ចេញតាមទំនិញ (Sold Count per Product) ⭐️
+  const [productSalesMap, setProductSalesMap] = useState({});
+
+  const fetchProductSalesMap = async (targetStoreId) => {
+    try {
+      const sId = targetStoreId || currentStore?.id || 'store_default_sabayluk';
+      const map = {};
+
+      // ១. គណនាពី stock_movements (ប្រភេទ SALE)
+      const { data: movements } = await supabase
+        .from('stock_movements')
+        .select('product_id, qty_change')
+        .eq('type', 'SALE');
+
+      if (movements && movements.length > 0) {
+        movements.forEach(m => {
+          if (m.product_id) {
+            const pid = String(m.product_id);
+            map[pid] = (map[pid] || 0) + Math.abs(Number(m.qty_change) || 1);
+          }
+        });
+      }
+
+      // ២. គណនាបន្ថែមពី orders
+      const { data: orderList } = await supabase
+        .from('orders')
+        .select('items')
+        .or(`store_id.eq.${sId},store_id.is.null`);
+
+      if (orderList && orderList.length > 0) {
+        orderList.forEach(ord => {
+          let items = [];
+          if (Array.isArray(ord.items)) items = ord.items;
+          else if (typeof ord.items === 'string') {
+            try { items = JSON.parse(ord.items); } catch (e) {}
+          }
+          items.forEach(it => {
+            const qty = Number(it.qty) || 1;
+            if (it.id) {
+              const pid = String(it.id);
+              map[pid] = Math.max(map[pid] || 0, (map[pid] || 0) + qty);
+            }
+            if (it.name) {
+              const nameKey = it.name.trim().toLowerCase();
+              map[nameKey] = (map[nameKey] || 0) + qty;
+            }
+          });
+        });
+      }
+
+      setProductSalesMap(map);
+    } catch (e) {
+      console.warn('Error fetching product sales map:', e);
+    }
+  };
+
+  const getProductSoldCount = (prod) => {
+    if (!prod) return 0;
+    const byId = prod.id && productSalesMap[String(prod.id)];
+    const byName = prod.name && productSalesMap[prod.name.trim().toLowerCase()];
+    return Math.max(Number(byId) || 0, Number(byName) || 0);
   };
 
   // ⭐️ States សម្រាប់ Checkout (កុម្ម៉ង់ទិញទំនិញស្ដង់ដារ)
@@ -1354,6 +1419,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   useEffect(() => {
     if (products.length > 0) {
       fetchRecentPurchases(currentStore?.id);
+      fetchProductSalesMap(currentStore?.id);
     }
   }, [products]);
 
@@ -3022,8 +3088,6 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               const isLowStock = product.stock_qty > 0 && product.stock_qty < 5;
               const badgeText = isOutOfStock ? 'ដាច់ស្តុក' : (isLowStock ? 'ជិតអស់' : 'New');
               const badgeBg = isOutOfStock ? 'bg-red-500' : (isLowStock ? 'bg-[#ff6a00]' : 'bg-[#18181b]');
-              
-              const sizesList = getProductSizeList(product.size);
 
               return (
                 <div 
@@ -3086,29 +3150,18 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                       {/* Title */}
                       <h3 
                         onClick={() => handleAddToCartClick(product)}
-                        className="font-black text-xs sm:text-sm text-gray-900 line-clamp-1 mb-1 group-hover:text-[#ff6a00] transition cursor-pointer"
+                        className="font-black text-xs sm:text-sm text-gray-900 line-clamp-1 mb-1.5 group-hover:text-[#ff6a00] transition cursor-pointer"
                         title={product.name}
                       >
                         {product.name}
                       </h3>
-                      
-                      {/* Available Sizes Pills Preview */}
-                      {sizesList.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {sizesList.map((sz, idx) => (
-                            <span key={idx} className="bg-gray-100 text-gray-600 text-[9px] font-black px-1.5 py-0.5 rounded-md">
-                              {sz}
-                            </span>
-                          ))}
-                          {sizesList.length >= 5 && <span className="text-[9px] text-gray-400 font-bold">+</span>}
-                        </div>
-                      )}
 
-                      {/* Rating & Dynamic Feedback Pill (1 Order = 1 Feedback Verified) */}
+                      {/* Rating & Sold Count Row */}
                       {(() => {
                         const fbStats = getProductFeedbackStats(product.id, product.name);
+                        const soldNum = getProductSoldCount(product);
                         return (
-                          <div className="flex items-center justify-between gap-1 mb-2">
+                          <div className="flex items-center justify-between gap-1 mb-2.5">
                             <div 
                               onClick={(e) => { e.stopPropagation(); openFeedbackModal(product); }}
                               className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition"
@@ -3118,14 +3171,11 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                               <span className="text-xs font-black text-gray-800">{fbStats.avg}</span>
                               <span className="text-[10px] text-gray-400 font-bold">({fbStats.count} មតិ)</span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); openFeedbackModal(product, true); }}
-                              className="text-[10px] font-black text-[#ff6a00] hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-lg transition border border-orange-200/60 flex items-center gap-1 cursor-pointer"
-                              title="សរសេរ Feedback លើទំនិញនេះ (ត្រូវការ Order ID)"
-                            >
-                              <span>✍️</span> Feedback
-                            </button>
+
+                            {/* ⭐️ ចំនួនដែលបានលក់ចេញ (Sold Count) ⭐️ */}
+                            <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 whitespace-nowrap">
+                              {t.soldCount || 'លក់បាន'} <span className="font-black text-gray-800">{soldNum}</span>
+                            </span>
                           </div>
                         );
                       })()}
