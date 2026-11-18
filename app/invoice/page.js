@@ -316,6 +316,29 @@ function InvoiceContent() {
   const exchangeRate = storeSettings.exchangeRate || 4100;
   const totalKHR = Math.round(total * exchangeRate);
 
+  // ⭐️ ទាញយក និងបំប្លែងព័ត៌មានលម្អិតរបស់អតិថិជន ទីតាំង Maps, Telegram, Email, រូបថតផ្ទះ ⭐️
+  const rawAddress = order?.delivery_address || order?.address || '';
+  const cleanDisplayAddress = rawAddress
+    .replace(/\[📍 Maps:.*?\]/gi, '')
+    .replace(/\[🏠 រូបផ្ទះ:.*?\]/gi, '')
+    .replace(/\[✈️ Telegram(?:\/Email)?:.*?\]/gi, '')
+    .replace(/\[✉️ Email:.*?\]/gi, '')
+    .trim();
+
+  const tgMatch = (rawAddress || '').match(/Telegram(?:\/Email)?:\s*([^\s\]]+)/i);
+  const emailMatch = (rawAddress || '').match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+  const rawTelegram = order?.telegram || order?.customer_telegram || (tgMatch ? tgMatch[1] : null);
+  const isTgEmail = rawTelegram && rawTelegram.includes('@') && rawTelegram.includes('.');
+  const finalCustomerTelegram = isTgEmail ? null : rawTelegram;
+  const finalCustomerEmail = order?.email || order?.customer_email || (emailMatch ? emailMatch[1] : null) || (isTgEmail ? rawTelegram : null);
+
+  const mapMatch = (rawAddress || '').match(/Maps:\s*(https?:\/\/[^\s\]]+)/i) || 
+                   (rawAddress || '').match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)[^\s\]]+)/i);
+  const gMapUrl = order?.google_map_url || (mapMatch ? mapMatch[1] : null);
+
+  const photoMatch = (rawAddress || '').match(/រូបផ្ទះ:\s*(https?:\/\/[^\s\]]+)/i);
+  const locPhotoUrl = order?.location_photo_url || (photoMatch ? photoMatch[1] : null);
+
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-3 sm:px-6 print:bg-white print:p-0 print:m-0 text-gray-800">
       
@@ -466,20 +489,100 @@ function InvoiceContent() {
               <p className="text-gray-500 font-mono text-[11px]">លេខអត្តសញ្ញាណកម្ម (VAT TIN): <b>{storeSettings.vatTin || 'K001-902345678'}</b></p>
             </div>
 
-            {/* Customer Information */}
-            <div className="space-y-1.5 text-xs">
-              <span className="font-black text-purple-700 uppercase tracking-wider text-[11px] block">
-                👤 អតិថិជន (Billed To):
-              </span>
-              <p className="font-black text-gray-900 text-sm">{order?.customer_name || order?.customer || 'អតិថិជនទូទៅ'}</p>
-              <p className="text-gray-600 font-medium">📞 ទូរស័ព្ទ: <b>{order?.phone || order?.phone_number || 'N/A'}</b></p>
-              <p className="text-gray-600 font-medium">📍 អាសយដ្ឋានដឹក: <b>{order?.delivery_address || order?.address || 'ភ្នំពេញ'}</b></p>
-              <p className="text-gray-600 font-medium">
-                💳 វិធីទូទាត់: <b className="text-emerald-700">{order?.payment_method || 'Bakong KHQR / Cash'}</b>
-              </p>
-              <p className="text-gray-500 text-[11px]">
-                បុគ្គលិកគិតលុយ: <b>{order?.cashier_name || 'Admin'}</b> • ប៉ុស្តិ៍: <b>{order?.order_type || 'POS'}</b>
-              </p>
+            {/* Customer Information (Billed & Delivery Details) */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-black text-purple-700 uppercase tracking-wider text-[11px] block">
+                  👤 អតិថិជន & ទីតាំងដឹក (Customer & Delivery):
+                </span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                  order?.order_type === 'ONLINE' ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'
+                }`}>
+                  {order?.order_type || 'ONLINE'}
+                </span>
+              </div>
+
+              <div className="bg-white p-3.5 rounded-2xl border border-gray-200/90 shadow-2xs space-y-2">
+                <div className="flex justify-between items-start gap-2">
+                  <div>
+                    <p className="font-black text-gray-900 text-sm">{order?.customer_name || order?.customer || 'អតិថិជនទូទៅ'}</p>
+                    <p className="text-gray-800 font-black text-xs mt-0.5 flex items-center gap-1.5">
+                      <span>📞</span>
+                      <span>ទូរស័ព្ទ: <b>{order?.phone || order?.phone_number || 'N/A'}</b></span>
+                    </p>
+                  </div>
+
+                  {/* Scannable GPS QR Code for Delivery Drivers if Google Maps URL is present */}
+                  {gMapUrl && (
+                    <div className="text-center shrink-0">
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(gMapUrl)}`} 
+                        alt="Maps QR" 
+                        className="w-16 h-16 rounded-lg border border-gray-300 p-0.5 bg-white shadow-2xs mx-auto" 
+                      />
+                      <span className="text-[8px] font-black text-gray-600 block mt-0.5">ស្កេន GPS ទីតាំង</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Telegram, Email & Payment */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] pt-1.5 border-t border-gray-100">
+                  {finalCustomerTelegram && (
+                    <p className="text-gray-700 font-bold flex items-center gap-1">
+                      <span>✈️ Telegram:</span>
+                      <b className="text-sky-700">@{finalCustomerTelegram.replace(/^@/, '')}</b>
+                    </p>
+                  )}
+                  {finalCustomerEmail && (
+                    <p className="text-gray-700 font-bold flex items-center gap-1">
+                      <span>✉️ Email:</span>
+                      <b className="text-slate-800">{finalCustomerEmail}</b>
+                    </p>
+                  )}
+                  <p className="text-gray-700 font-medium flex items-center gap-1">
+                    <span>💳 វិធីទូទាត់:</span>
+                    <b className="text-emerald-700 font-black">{order?.payment_method || 'Bakong KHQR / Cash'}</b>
+                  </p>
+                </div>
+
+                {/* Clean Detailed Delivery Address & Landmark */}
+                <div className="pt-1.5 border-t border-gray-100">
+                  <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider">📍 អាសយដ្ឋានដឹកជញ្ជូនលម្អិត:</p>
+                  <p className="text-gray-900 font-bold text-xs leading-relaxed mt-0.5">
+                    {cleanDisplayAddress || 'រាជធានីភ្នំពេញ'}
+                  </p>
+                  {gMapUrl && (
+                    <a 
+                      href={gMapUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 underline mt-1"
+                    >
+                      <span>🗺️ បើកមើលទីតាំងលើ Google Maps ↗</span>
+                    </a>
+                  )}
+                </div>
+
+                {/* House Photo Preview (if customer attached) */}
+                {locPhotoUrl && (
+                  <div className="pt-1.5 border-t border-gray-100 flex items-center gap-2">
+                    <img 
+                      src={locPhotoUrl} 
+                      alt="House / Location Photo" 
+                      className="w-12 h-12 rounded-lg object-cover border border-gray-300 shadow-2xs shrink-0" 
+                    />
+                    <div className="text-[10px]">
+                      <span className="font-bold text-gray-800 block">🏠 រូបថតទីតាំងផ្ទះ/កន្លែងទទួល:</span>
+                      <span className="text-gray-500">អ្នកដឹកអាចមើលរូបនេះដើម្បីចំណាំទីតាំងជាក់ស្តែង</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-1 border-t border-gray-100 text-[10px] text-gray-500 flex justify-between">
+                  <span>អ្នកគិតលុយ: <b>{order?.cashier_name || 'Admin'}</b></span>
+                  <span>ស្ថានភាព: <b className="text-slate-800">{order?.status || 'Pending'}</b></span>
+                </div>
+              </div>
             </div>
 
           </div>

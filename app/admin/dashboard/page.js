@@ -12038,6 +12038,20 @@ export default function UnifiedAdminDashboard() {
                                 const sub = Number(order.subtotal || order.total || 0);
                                 const disc = Number(order.discount || 0);
                                 const tot = Number(order.total || order.total_amount || 0);
+
+                                const rawAddr = order.delivery_address || order.address || '';
+                                const cleanAddr = rawAddr
+                                  .replace(/\[📍 Maps:.*?\]/gi, '')
+                                  .replace(/\[🏠 រូបផ្ទះ:.*?\]/gi, '')
+                                  .replace(/\[✈️ Telegram(?:\/Email)?:.*?\]/gi, '')
+                                  .replace(/\[✉️ Email:.*?\]/gi, '')
+                                  .trim();
+                                const mapM = (rawAddr || '').match(/Maps:\s*(https?:\/\/[^\s\]]+)/i) || 
+                                             (rawAddr || '').match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)[^\s\]]+)/i);
+                                const gMap = order.google_map_url || (mapM ? mapM[1] : null);
+                                const tgM = (rawAddr || '').match(/Telegram(?:\/Email)?:\s*([^\s\]]+)/i);
+                                const tg = order.telegram || order.customer_telegram || (tgM ? tgM[1] : null);
+
                                 setReceiptData({
                                   orderId: displayId,
                                   date: order.created_at ? new Date(order.created_at).toLocaleString('km-KH') : new Date().toLocaleString('km-KH'),
@@ -12055,7 +12069,10 @@ export default function UnifiedAdminDashboard() {
                                   tendered: tot,
                                   change: 0,
                                   customer: order.customer || order.customer_name || 'អតិថិជនទូទៅ',
-                                  phone: order.phone || order.phone_number || ''
+                                  phone: order.phone || order.phone_number || '',
+                                  address: cleanAddr,
+                                  telegram: tg,
+                                  gMapUrl: gMap
                                 });
                               }}
                               className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-slate-300 transition cursor-pointer inline-flex items-center gap-1 shadow-2xs"
@@ -28653,6 +28670,28 @@ export default function UnifiedAdminDashboard() {
                       <div className="flex justify-between">
                         <span>លេខទូរស័ព្ទ:</span>
                         <span className="font-bold">{receiptData.phone}</span>
+                      </div>
+                    )}
+                    {receiptData.telegram && (
+                      <div className="flex justify-between text-[10px]">
+                        <span>Telegram:</span>
+                        <span className="font-bold">@{receiptData.telegram.replace(/^@/, '')}</span>
+                      </div>
+                    )}
+                    {receiptData.address && receiptData.address !== 'ទូទៅ / នៅហាង' && (
+                      <div className="pt-1 mt-1 border-t border-dashed border-gray-300">
+                        <span className="block text-[9.5px] text-gray-700 font-bold">📍 អាសយដ្ឋានដឹកជញ្ជូន:</span>
+                        <span className="block text-[10px] leading-tight font-medium mt-0.5">{receiptData.address}</span>
+                      </div>
+                    )}
+                    {receiptData.gMapUrl && (
+                      <div className="text-center pt-2 pb-1 border-t border-dashed border-gray-300 mt-1">
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(receiptData.gMapUrl)}`} 
+                          alt="GPS QR" 
+                          className="w-16 h-16 mx-auto p-0.5 border border-black bg-white" 
+                        />
+                        <span className="text-[8px] font-bold block mt-0.5">ស្កេន GPS ទីតាំងដឹក</span>
                       </div>
                     )}
                   </div>
