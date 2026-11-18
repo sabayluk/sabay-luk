@@ -5102,12 +5102,15 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                     href={getInvoiceUrl(completedOrder.order_id)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={(e) => openInvoiceInBrowser(completedOrder.order_id, e)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openInvoiceInBrowser(completedOrder.order_id);
+                    }}
                     className="flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-300 font-black text-xs sm:text-sm py-3 px-4 rounded-2xl shadow-2xs transition active:scale-95 cursor-pointer text-center"
                     title="បើកមើលលើ Web Browser (Google Chrome / Edge)"
                   >
-                    <span className="text-base">🌐</span>
-                    <span>បើកមើលលើ Web Browser ↗</span>
+                    <span className="text-base">📄</span>
+                    <span>បើកមើលវិក្កយបត្រ (Web Browser) ↗</span>
                   </a>
                 </div>
 

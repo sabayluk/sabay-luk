@@ -25,6 +25,23 @@ function InvoiceContent() {
   const [sendingTelegram, setSendingTelegram] = useState(false);
   const [telegramSentMsg, setTelegramSentMsg] = useState('');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [isStandaloneApp, setIsStandaloneApp] = useState(false);
+
+  // ⭐️ Auto-breakout of Chrome PWA Standalone App Window ⭐️
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    setIsStandaloneApp(isStandalone);
+
+    if (isStandalone) {
+      const targetUrl = window.location.href.replace('localhost:', '127.0.0.1:');
+      fetch('/api/open-chrome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl })
+      }).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     // Load store settings
@@ -302,6 +319,31 @@ function InvoiceContent() {
   return (
     <div className="min-h-screen bg-slate-100 py-6 px-3 sm:px-6 print:bg-white print:p-0 print:m-0 text-gray-800">
       
+      {/* PWA Standalone Warning Banner */}
+      {isStandaloneApp && (
+        <div className="max-w-4xl mx-auto mb-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-3.5 rounded-2xl shadow-md flex items-center justify-between gap-3 text-xs font-bold print:hidden">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🌐</span>
+            <span>ដើម្បីមើលក្នុង Google Chrome / Edge ពេញលេញ សូមចុចប៊ូតុងខាងស្តាំនេះ:</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              let targetUrl = window.location.href.replace('localhost:', '127.0.0.1:');
+              fetch('/api/open-chrome', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: targetUrl })
+              }).catch(() => {});
+              window.open(targetUrl, '_blank');
+            }}
+            className="bg-white text-blue-700 font-black px-3.5 py-1.5 rounded-xl hover:bg-blue-50 transition shrink-0 cursor-pointer shadow-xs"
+          >
+            បើកក្នុង Chrome ↗
+          </button>
+        </div>
+      )}
+
       {/* ⭐️ Top Navigation Bar (Hidden when Printing) ⭐️ */}
       <div className="max-w-4xl mx-auto mb-6 print:hidden">
         <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -319,6 +361,23 @@ function InvoiceContent() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                let targetUrl = window.location.href;
+                if (targetUrl.includes('localhost:')) targetUrl = targetUrl.replace('localhost:', '127.0.0.1:');
+                fetch('/api/open-chrome', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ url: targetUrl })
+                }).catch(() => {});
+                window.open(targetUrl, '_blank');
+              }}
+              className="px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="បើកក្នុង Web Browser (Google Chrome / Edge)"
+            >
+              <span>🌐</span> Chrome ↗
+            </button>
             <button
               type="button"
               onClick={handlePrint}
