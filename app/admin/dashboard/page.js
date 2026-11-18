@@ -4439,7 +4439,18 @@ export default function UnifiedAdminDashboard() {
     }
     return 'SL-1001';
   });
-  const [category, setCategory] = useState('ស្បែកជើង');
+  const [category, setCategory] = useState('');
+
+  // ⭐️ Auto-sync category selection with current store's categories (No shoe preset leaks) ⭐️
+  useEffect(() => {
+    if (currentStoreCategories && currentStoreCategories.length > 0) {
+      if (!category || !currentStoreCategories.some(c => c.name === category)) {
+        setCategory(currentStoreCategories[0].name);
+      }
+    } else {
+      setCategory('');
+    }
+  }, [currentStoreCategories, activeStore?.id]);
   
   const [selectedSizes, setSelectedSizes] = useState([]);
   const [customTextSize, setCustomTextSize] = useState('');
@@ -4726,6 +4737,12 @@ export default function UnifiedAdminDashboard() {
     if (guardDemoAction("បញ្ចូលទំនិញថ្មី")) return;
     e.preventDefault();
     if (!name || !sellingPrice) return alert('សូមបំពេញឈ្មោះ និងតម្លៃលក់ឱ្យបានត្រឹមត្រូវ!');
+
+    // ⭐️ ពិនិត្យមើល Category: ប្រសិនបើហាងមិនទាន់បានបង្កើត Category សូមបញ្ជូនទៅបង្កើតជាមុនសិន ⭐️
+    if (!currentStoreCategories || currentStoreCategories.length === 0 || !category) {
+      setActiveTab('categories');
+      return alert('⚠️ ហាងរបស់អ្នកមិនទាន់បានបង្កើតប្រភេទផលិតផល (Category) នៅឡើយទេ! សូមបង្កើត Category យ៉ាងហោចណាស់ ១ ជាមុនសិន ទើបអាចបញ្ចូលទំនិញបាន។');
+    }
 
     // ⭐️ ពិនិត្យមើលកម្រិតកំណត់នៃកញ្ចប់ទំនិញ (Store Plan Limit Check) ⭐️
     if (!editingProductId) {
@@ -5472,25 +5489,59 @@ export default function UnifiedAdminDashboard() {
                 {/* ប្រភេទ & SKU Barcode */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-black text-slate-700 uppercase tracking-wider mb-1.5">
-                      ប្រភេទផលិតផល (Category) <span className="text-rose-500">*</span>
-                    </label>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                        ប្រភេទផលិតផល (Category) <span className="text-rose-500">*</span>
+                      </label>
+                      {currentStoreCategories.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('categories')}
+                          className="text-[11px] font-black text-blue-600 hover:text-blue-700 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span>➕</span> គ្រប់គ្រងប្រភេទ
+                        </button>
+                      )}
+                    </div>
                     <div className="relative">
                       <select 
                         value={category} 
                         onChange={(e) => setCategory(e.target.value)} 
-                        className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-3.5 rounded-2xl text-sm font-bold bg-slate-50/50 focus:bg-white outline-none transition text-slate-800 appearance-none pr-10"
+                        disabled={currentStoreCategories.length === 0}
+                        className={`w-full border-2 p-3.5 rounded-2xl text-sm font-bold outline-none transition appearance-none pr-10 ${
+                          currentStoreCategories.length === 0 
+                            ? 'border-amber-300 bg-amber-50/60 text-amber-900' 
+                            : 'border-slate-200 focus:border-[#ff6a00] bg-slate-50/50 focus:bg-white text-slate-800'
+                        }`}
                       >
-                        {categories.length === 0 ? (
-                          <option value="ស្បែកជើង">ស្បែកជើង (Shoes)</option>
+                        {currentStoreCategories.length === 0 ? (
+                          <option value="">-- មិនទាន់មានប្រភេទផលិតផលនៅឡើយទេ --</option>
                         ) : (
-                          categories.map(c => <option key={c.id || c.name} value={c.name}>{c.name}</option>)
+                          currentStoreCategories.map(c => <option key={c.id || c.name} value={c.name}>{c.name}</option>)
                         )}
                       </select>
                       <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400 font-black">
                         ▼
                       </div>
                     </div>
+
+                    {/* ⭐️ Warning Banner ពេលហាងមិនទាន់មាន Category (សូមបញ្ជាក់អោយ ទៅបង្កើត Category សិន) ⭐️ */}
+                    {currentStoreCategories.length === 0 && (
+                      <div className="mt-2.5 p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+                        <div className="flex items-center gap-2 text-amber-900 text-xs font-bold">
+                          <span className="text-base">⚠️</span>
+                          <span>ហាងនេះមិនទាន់បានបង្កើតប្រភេទផលិតផល (Category) នៅឡើយទេ!</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('categories')}
+                          className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl font-black text-xs transition cursor-pointer shadow-xs shrink-0 flex items-center justify-center gap-1.5"
+                        >
+                          <span>➕</span>
+                          <span>ទៅបង្កើត Category សិន</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -5529,24 +5580,26 @@ export default function UnifiedAdminDashboard() {
                   </div>
                 </div>
 
-                {/* Quick Category Chips */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[11px] font-bold text-slate-400 mr-1">រើសប្រភេទរហ័ស:</span>
-                  {['ស្បែកជើង', 'សម្លៀកបំពាក់', 'កាបូប', 'នាឡិកា', 'ខ្សែក្រវ៉ាត់', 'វ៉ែនតា', 'មួក'].map(catPreset => (
-                    <button
-                      key={catPreset}
-                      type="button"
-                      onClick={() => setCategory(catPreset)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold transition ${
-                        category === catPreset 
-                          ? 'bg-slate-900 text-white shadow-2xs' 
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      {catPreset}
-                    </button>
-                  ))}
-                </div>
+                {/* Quick Category Chips (Only show categories of THIS store) */}
+                {currentStoreCategories.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-slate-400 mr-1">រើសប្រភេទរហ័ស:</span>
+                    {currentStoreCategories.map(cat => (
+                      <button
+                        key={cat.id || cat.name}
+                        type="button"
+                        onClick={() => setCategory(cat.name)}
+                        className={`px-2.5 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                          category === cat.name 
+                            ? 'bg-slate-900 text-white shadow-2xs' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
