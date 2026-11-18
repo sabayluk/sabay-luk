@@ -5,10 +5,9 @@ export async function POST(request) {
     const body = await request.json().catch(() => ({}));
     const targetUrl = (body.url || 'http://localhost:3000').trim();
 
-    // Use Windows ShellExecute via cmd /c start "" "url"
-    // This communicates with the running Chrome browser without ProcessSingleton profile collision!
-    exec(`cmd /c start "" "${targetUrl}"`, (err) => {
-      if (err) console.warn('Failed to start URL:', err);
+    // ⭐️ Explicitly open Google Chrome Browser tab (Standard Browser Web Tab, not App) ⭐️
+    exec(`cmd /c start chrome "${targetUrl}" || cmd /c start msedge "${targetUrl}" || cmd /c start "" "${targetUrl}"`, (err) => {
+      if (err) console.warn('Failed to start browser URL:', err);
     });
 
     return Response.json({ success: true, opened: targetUrl });

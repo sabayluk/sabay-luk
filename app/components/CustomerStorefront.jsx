@@ -2454,21 +2454,6 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               <span>{language === 'km' ? 'ចូលគ្រប់គ្រង' : 'Admin Login'}</span>
             </a>
 
-            {/* 📲 ដំឡើង App (Install PWA) */}
-            <button 
-              type="button"
-              onClick={() => {
-                if (typeof window !== 'undefined' && window.triggerPWAInstall) {
-                  window.triggerPWAInstall();
-                }
-              }}
-              className="cursor-pointer hidden sm:flex items-center gap-1 px-3 py-2 rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/15 to-orange-500/10 hover:from-orange-500/20 hover:to-amber-500/25 text-[#ff6a00] border border-orange-500/25 text-xs font-black transition shadow-2xs active:scale-95"
-              title="ដំឡើង Sabay Luk ជាកម្មវិធីលើទូរស័ព្ទ ឬកុំព្យូទ័រ (Install App)"
-            >
-              <span className="text-sm">📲</span>
-              <span>ដំឡើង App</span>
-            </button>
-
             {/* Cart Button with Total Preview */}
             <button 
               onClick={() => setIsCartOpen(true)}

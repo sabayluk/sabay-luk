@@ -24,16 +24,13 @@ export default function PWAInstaller() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Register offline-capable Service Worker for caching pages and assets
-    if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'development') {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then((reg) => {
-          console.log('✅ Offline Service Worker Registered:', reg.scope);
-        })
-        .catch((err) => {
-          console.warn('SW registration failed:', err);
-        });
+    // ⭐️ Unregister any PWA service worker so browser treats everything as normal web tabs ⭐️
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const reg of registrations) {
+          reg.unregister().catch(() => {});
+        }
+      }).catch(() => {});
     }
 
     return () => {

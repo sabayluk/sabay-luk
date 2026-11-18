@@ -59,6 +59,38 @@ export default function SaaSPlatformLandingPage() {
     return st.settings?.logoUrl || st.settings?.logo || st.logo || null;
   };
 
+  const [copiedSlug, setCopiedSlug] = useState(null);
+
+  // ⭐️ Explicitly open link in standard web browser (Google Chrome / Edge) instead of PWA App ⭐️
+  const handleOpenStoreInBrowser = (e, slug) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const targetUrl = `${origin}/store/${slug}`;
+
+    // 1. Direct browser tab open with noopener
+    try {
+      const win = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      if (win) win.focus();
+    } catch (_) {}
+
+    // 2. Trigger OS shell to explicitly launch Chrome/Edge browser window/tab
+    fetch('/api/open-chrome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl })
+    }).catch(() => {});
+  };
+
+  const handleCopyStoreLink = (slug) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    const targetUrl = `${origin}/store/${slug}`;
+    if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(targetUrl);
+      setCopiedSlug(slug);
+      setTimeout(() => setCopiedSlug(null), 2500);
+    }
+  };
+
   const toggleLanguage = () => {
     const nextLang = lang === 'km' ? 'en' : 'km';
     setLang(nextLang);
@@ -293,10 +325,9 @@ export default function SaaSPlatformLandingPage() {
                     <a
                       key={st.slug || st.id}
                       href={`/store/${st.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-300 shadow-xs hover:shadow-sm transition transform active:scale-95"
-                      title={lang === 'km' ? `ចូលទស្សនាគេហទំព័រ ${st.name}` : `Visit ${st.name} Storefront`}
+                      onClick={(e) => handleOpenStoreInBrowser(e, st.slug)}
+                      className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-300 shadow-xs hover:shadow-sm transition transform active:scale-95 cursor-pointer"
+                      title={lang === 'km' ? `បើកទំព័រ ${st.name} លើ Browser` : `Open ${st.name} in Web Browser`}
                     >
                       {logo ? (
                         <img
@@ -574,21 +605,39 @@ export default function SaaSPlatformLandingPage() {
                       </div>
                     </div>
 
-                    {/* Public Storefront Link Button (STRICTLY Customer View Only) */}
-                    <div className="pt-3 border-t border-slate-100">
-                      <a
-                        href={storefrontUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    {/* Public Storefront Link Button (Standard Browser Web Tab, NOT APP) */}
+                    <div className="pt-3 border-t border-slate-100 space-y-2">
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenStoreInBrowser(e, st.slug)}
                         className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 active:scale-95 transition transform cursor-pointer"
+                        title={lang === 'km' ? 'បើកមើលលើ Browser (Google Chrome / Edge)' : 'Open in Web Browser'}
                       >
-                        <span>🛍️</span>
+                        <span className="text-base">🌐</span>
                         <span>{t.partner_visit_storefront || 'ចូលមើលគេហទំព័រមុខហាង'}</span>
                         <span className="text-base group-hover:translate-x-1 transition-transform">↗</span>
-                      </a>
-                      <p className="text-[10px] text-slate-400 text-center mt-2 font-mono truncate">
-                        sabayluk.com/store/{st.slug}
-                      </p>
+                      </button>
+
+                      {/* Browser Link Address & Quick Copy Button */}
+                      <div className="flex items-center justify-between gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] font-mono text-slate-600">
+                        <a
+                          href={storefrontUrl}
+                          onClick={(e) => handleOpenStoreInBrowser(e, st.slug)}
+                          className="hover:text-orange-600 hover:underline truncate flex items-center gap-1.5"
+                          title="ចុចដើម្បីបើកលើ Web Browser"
+                        >
+                          <span className="text-xs">🔗</span>
+                          <span className="truncate">sabayluk.com/store/{st.slug}</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyStoreLink(st.slug)}
+                          className="px-2 py-0.5 rounded-lg bg-white hover:bg-orange-50 border border-slate-200 text-slate-700 hover:text-orange-600 text-[10px] font-bold shrink-0 transition active:scale-95 shadow-2xs"
+                          title="ចម្លងតំណភ្ជាប់ Link"
+                        >
+                          {copiedSlug === st.slug ? '✓ បានចម្លង' : '📋 Copy Link'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
