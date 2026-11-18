@@ -1996,7 +1996,9 @@ export default function UnifiedAdminDashboard() {
   const currentStoreCategories = useMemo(() => {
     const storeId = activeStore?.id || 'store_default_sabayluk';
     return categories.filter(c => {
-      if (!c.store_id) return true;
+      if (storeId === 'store_default_sabayluk') {
+        return !c.store_id || c.store_id === 'store_default_sabayluk';
+      }
       return c.store_id === storeId;
     });
   }, [categories, activeStore?.id]);
@@ -6874,9 +6876,9 @@ export default function UnifiedAdminDashboard() {
   };
 
   const CategoryView = () => {
-    // គណនាទិន្នន័យស្ថិតិប្រភេទ
-    const totalCatCount = categories.length;
-    const totalProdCount = products.length;
+    // គណនាទិន្នន័យស្ថិតិប្រភេទសម្រាប់ហាងបច្ចុប្បន្ន
+    const totalCatCount = currentStoreCategories.length;
+    const totalProdCount = currentStoreProducts.length;
 
     return (
       <div className="animate-in fade-in max-w-5xl mx-auto pb-16 space-y-6">
@@ -7071,7 +7073,7 @@ export default function UnifiedAdminDashboard() {
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200/90 overflow-hidden">
           <div className="p-5 border-b border-gray-100 flex items-center justify-between">
             <h3 className="font-black text-sm text-gray-900 uppercase tracking-wide flex items-center gap-2">
-              <span>📋</span> បញ្ជីប្រភេទផលិតផលដែលមានស្រាប់ ({categories.length})
+              <span>📋</span> បញ្ជីប្រភេទផលិតផលដែលមានស្រាប់ ({currentStoreCategories.length})
             </h3>
             <span className="text-[11px] text-gray-400 font-bold hidden sm:inline">
               (អាចចុច ▲ / ▼ ឬអូស Drag ដើម្បីរៀបលំដាប់លើមុខហាង)
@@ -7090,18 +7092,18 @@ export default function UnifiedAdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {categories.length === 0 ? (
+                {currentStoreCategories.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="p-12 text-center text-gray-400 font-bold">
-                      មិនទាន់មានប្រភេទផលិតផលទេ។ សូមបន្ថែមនៅផ្នែកខាងលើ!
+                      មិនទាន់មានប្រភេទផលិតផលសម្រាប់ហាងនេះទេ។ សូមបន្ថែមនៅផ្នែកខាងលើ!
                     </td>
                   </tr>
                 ) : (
-                  categories.map((cat, idx) => {
+                  currentStoreCategories.map((cat, idx) => {
                     const isEditing = editingCategoryId === cat.id;
                     const activeIconId = isEditing ? editingCatIcon : (cat.icon || 'shoe');
                     const displayIcon = renderCategorySvg(activeIconId, 'w-5 h-5 text-blue-600');
-                    const pCount = products.filter(p => (p.category || '').trim().toLowerCase() === (cat.name || '').trim().toLowerCase()).length;
+                    const pCount = currentStoreProducts.filter(p => (p.category || '').trim().toLowerCase() === (cat.name || '').trim().toLowerCase()).length;
 
                     return (
                       <tr 

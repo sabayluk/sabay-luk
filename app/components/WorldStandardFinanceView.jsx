@@ -30,28 +30,96 @@ export default function WorldStandardFinanceView({
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
   
-  // Bank balances state (can be saved to localStorage)
-  const [bankBalances, setBankBalances] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const curId = activeStore?.id || 'store_default_sabayluk';
+  // ⭐️ CLEAN MULTI-TENANT BANK & CASH BALANCES (No mock dummy leaks!) ⭐️
+  const EMPTY_BALANCES = {
+    abaUsd: 0,
+    abaKhr: 0,
+    acledaUsd: 0,
+    acledaKhr: 0,
+    posDrawerCash: 0,
+    pettyCash: 0,
+    accountsPayable: 0,
+    accountsReceivableCod: 0,
+    initialCapital: 0,
+    storeEquipment: 0
+  };
+
+  const getCleanBalances = (storeId) => {
+    if (typeof window === 'undefined') return { ...EMPTY_BALANCES };
+    const curId = storeId || 'store_default_sabayluk';
+    try {
       const saved = localStorage.getItem(`sabay_bank_balances_${curId}`);
       if (saved) {
-        try { return JSON.parse(saved); } catch (e) {}
+        const parsed = JSON.parse(saved);
+        // ⭐️ Auto-purge legacy demo mock data ($2,954.63) so it never pollutes stores ⭐️
+        if (Number(parsed.abaUsd) === 1540 && Number(parsed.posDrawerCash) === 280) {
+          localStorage.removeItem(`sabay_bank_balances_${curId}`);
+          return { ...EMPTY_BALANCES };
+        }
+        return {
+          abaUsd: Number(parsed.abaUsd) || 0,
+          abaKhr: Number(parsed.abaKhr) || 0,
+          acledaUsd: Number(parsed.acledaUsd) || 0,
+          acledaKhr: Number(parsed.acledaKhr) || 0,
+          posDrawerCash: Number(parsed.posDrawerCash) || 0,
+          pettyCash: Number(parsed.pettyCash) || 0,
+          accountsPayable: Number(parsed.accountsPayable) || 0,
+          accountsReceivableCod: Number(parsed.accountsReceivableCod) || 0,
+          initialCapital: Number(parsed.initialCapital) || 0,
+          storeEquipment: Number(parsed.storeEquipment) || 0
+        };
       }
-    }
-    return {
-      abaUsd: 1540.00,
-      abaKhr: 1250000,
-      acledaUsd: 620.00,
-      acledaKhr: 450000,
-      posDrawerCash: 280.00,
-      pettyCash: 100.00,
-      accountsPayable: 450.00, // Debts to suppliers
-      accountsReceivableCod: 185.00, // Pending COD collection
-      initialCapital: 3500.00, // Initial investment
-      storeEquipment: 1200.00 // Non-current physical assets
+    } catch (e) {}
+    return { ...EMPTY_BALANCES };
+  };
+
+  const [bankBalances, setBankBalances] = useState(() => getCleanBalances(activeStore?.id));
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
+  const [balanceForm, setBalanceForm] = useState({ ...EMPTY_BALANCES });
+
+  // ⭐️ Realtime sync when activeStore changes ⭐️
+  React.useEffect(() => {
+    const clean = getCleanBalances(activeStore?.id);
+    setBankBalances(clean);
+  }, [activeStore?.id]);
+
+  const openBalanceModal = () => {
+    setBalanceForm({ ...bankBalances });
+    setShowBalanceModal(true);
+  };
+
+  const handleSaveBalances = (e) => {
+    if (e) e.preventDefault();
+    const curId = activeStore?.id || 'store_default_sabayluk';
+    const updated = {
+      abaUsd: Number(balanceForm.abaUsd) || 0,
+      abaKhr: Number(balanceForm.abaKhr) || 0,
+      acledaUsd: Number(balanceForm.acledaUsd) || 0,
+      acledaKhr: Number(balanceForm.acledaKhr) || 0,
+      posDrawerCash: Number(balanceForm.posDrawerCash) || 0,
+      pettyCash: Number(balanceForm.pettyCash) || 0,
+      accountsPayable: Number(balanceForm.accountsPayable) || 0,
+      accountsReceivableCod: Number(balanceForm.accountsReceivableCod) || 0,
+      initialCapital: Number(balanceForm.initialCapital) || 0,
+      storeEquipment: Number(balanceForm.storeEquipment) || 0
     };
-  });
+    setBankBalances(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`sabay_bank_balances_${curId}`, JSON.stringify(updated));
+    }
+    setShowBalanceModal(false);
+  };
+
+  const handleResetBalancesToZero = () => {
+    if (window.confirm('តើបងពិតជាចង់កំណត់សមតុល្យដើមគ្រាទាំងអស់ឡើងវិញទៅ $0.00 មែនទេ?')) {
+      const curId = activeStore?.id || 'store_default_sabayluk';
+      setBankBalances({ ...EMPTY_BALANCES });
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`sabay_bank_balances_${curId}`);
+      }
+      setShowBalanceModal(false);
+    }
+  };
 
   const exchangeRate = Number(storeSettings.exchangeRate) || 4100;
 
@@ -261,25 +329,43 @@ export default function WorldStandardFinanceView({
 
     const potentialInventoryProfit = Math.max(0, totalInventoryRetailValue - totalInventoryCostValue);
 
+    // ⭐️ Real Cash & Bank collections from actual orders for this store ⭐️
+    const orderCashCollected = filteredOrders.reduce((sum, o) => {
+      const pm = (o.payment_method || '').toLowerCase();
+      if (pm.includes('cash') || pm.includes('drawer') || pm.includes('សាច់ប្រាក់')) {
+        return sum + Number(o.total_amount || o.total || 0);
+      }
+      return sum;
+    }, 0);
+
+    const orderBankCollected = filteredOrders.reduce((sum, o) => {
+      const pm = (o.payment_method || '').toLowerCase();
+      if (!pm.includes('cash') && !pm.includes('drawer') && !pm.includes('សាច់ប្រាក់')) {
+        return sum + Number(o.total_amount || o.total || 0);
+      }
+      return sum;
+    }, 0);
+
+    // Effective balances = Opening configured balance + Real-time sales collections
+    const effectiveCashInDrawer = Number(bankBalances.posDrawerCash || 0) + orderCashCollected;
+    const effectiveAbaBank = Number(bankBalances.abaUsd || 0) + (Number(bankBalances.abaKhr || 0) / exchangeRate) + orderBankCollected;
+    const effectiveAcledaBank = Number(bankBalances.acledaUsd || 0) + (Number(bankBalances.acledaKhr || 0) / exchangeRate);
+    const effectivePettyCash = Number(bankBalances.pettyCash || 0);
+
     // Total Liquid Cash in Hand & Bank Accounts
-    const totalCashBank = 
-      Number(bankBalances.abaUsd) + 
-      (Number(bankBalances.abaKhr) / exchangeRate) + 
-      Number(bankBalances.acledaUsd) + 
-      (Number(bankBalances.acledaKhr) / exchangeRate) + 
-      Number(bankBalances.posDrawerCash) + 
-      Number(bankBalances.pettyCash);
+    const totalCashBank = effectiveCashInDrawer + effectiveAbaBank + effectiveAcledaBank + effectivePettyCash;
 
     // Balance Sheet totals
-    const totalCurrentAssets = totalCashBank + totalInventoryCostValue + Number(bankBalances.accountsReceivableCod);
-    const totalNonCurrentAssets = Number(bankBalances.storeEquipment);
+    const totalCurrentAssets = totalCashBank + totalInventoryCostValue + Number(bankBalances.accountsReceivableCod || 0);
+    const totalNonCurrentAssets = Number(bankBalances.storeEquipment || 0);
     const totalAssets = totalCurrentAssets + totalNonCurrentAssets;
 
-    const totalCurrentLiabilities = Number(bankBalances.accountsPayable) + totalTax;
+    const totalCurrentLiabilities = Number(bankBalances.accountsPayable || 0) + totalTax;
     const totalLiabilities = totalCurrentLiabilities;
 
-    const retainedEarnings = totalAssets - totalLiabilities - Number(bankBalances.initialCapital);
-    const totalEquity = Number(bankBalances.initialCapital) + retainedEarnings;
+    const initialCapital = Number(bankBalances.initialCapital || 0);
+    const retainedEarnings = totalAssets - totalLiabilities - initialCapital;
+    const totalEquity = initialCapital + retainedEarnings;
 
     // Financial Ratios
     const inventoryTurnover = totalInventoryCostValue > 0 ? (totalCOGS / totalInventoryCostValue) : 0;
@@ -305,6 +391,12 @@ export default function WorldStandardFinanceView({
       totalInventoryRetailValue,
       potentialInventoryProfit,
       totalCashBank,
+      orderCashCollected,
+      orderBankCollected,
+      effectiveCashInDrawer,
+      effectiveAbaBank,
+      effectiveAcledaBank,
+      effectivePettyCash,
       totalAssets,
       totalCurrentAssets,
       totalNonCurrentAssets,
@@ -727,17 +819,31 @@ export default function WorldStandardFinanceView({
         </div>
 
         {/* Liquid Cash */}
-        <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 text-white shadow-xs">
+        <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 text-white shadow-xs relative group">
           <div className="flex items-center justify-between text-xs text-slate-400 font-bold mb-1">
             <span>សាច់ប្រាក់សរុប (Cash & Bank)</span>
-            <span className="text-emerald-400">🏦</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={openBalanceModal}
+                className="text-[10px] bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 px-2 py-0.5 rounded-lg border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                title="កែសម្រួលសមតុល្យគណនីធនាគារ និងថតបេឡាដើមគ្រា"
+              >
+                <span>⚙️</span>
+                <span>កែប្រែ</span>
+              </button>
+              <span className="text-emerald-400">🏦</span>
+            </div>
           </div>
           <p className="text-lg sm:text-xl font-black text-amber-300 truncate">
             {formatMoney(metrics.totalCashBank)}
           </p>
-          <p className="text-[10px] text-slate-400 mt-0.5">
-            ABA + ACLEDA + POS Drawer
-          </p>
+          <div className="text-[10px] text-slate-400 mt-0.5 flex justify-between items-center">
+            <span>ABA + ACLEDA + POS Drawer</span>
+            {metrics.totalCashBank === 0 && (
+              <span className="text-slate-500 font-medium">សមតុល្យស្អាត $0.00</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1014,17 +1120,17 @@ export default function WorldStandardFinanceView({
                 
                 <div className="flex justify-between py-1.5 border-b border-slate-200 text-slate-600">
                   <span>• សាច់ប្រាក់ក្នុងថត (Cash in POS Drawer)</span>
-                  <span className="font-mono font-bold text-slate-900">{formatMoney(bankBalances.posDrawerCash)}</span>
+                  <span className="font-mono font-bold text-slate-900">{formatMoney(metrics.effectiveCashInDrawer)}</span>
                 </div>
 
                 <div className="flex justify-between py-1.5 border-b border-slate-200 text-slate-600">
                   <span>• សាច់ប្រាក់ក្នុងធនាគារ ABA Bank ($ & ៛)</span>
-                  <span className="font-mono font-bold text-slate-900">{formatMoney(Number(bankBalances.abaUsd) + (Number(bankBalances.abaKhr)/exchangeRate))}</span>
+                  <span className="font-mono font-bold text-slate-900">{formatMoney(metrics.effectiveAbaBank)}</span>
                 </div>
 
                 <div className="flex justify-between py-1.5 border-b border-slate-200 text-slate-600">
                   <span>• សាច់ប្រាក់ក្នុងធនាគារ ACLEDA Bank</span>
-                  <span className="font-mono font-bold text-slate-900">{formatMoney(Number(bankBalances.acledaUsd) + (Number(bankBalances.acledaKhr)/exchangeRate))}</span>
+                  <span className="font-mono font-bold text-slate-900">{formatMoney(metrics.effectiveAcledaBank)}</span>
                 </div>
 
                 <div className="flex justify-between py-1.5 border-b border-slate-200 text-slate-600">
@@ -1252,14 +1358,33 @@ export default function WorldStandardFinanceView({
       {/* ================= TAB 5: BANKS & CASH RECONCILIATION ================= */}
       {activeFinanceTab === 'banks' && (
         <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm space-y-6">
-          <div className="flex justify-between items-center pb-4 border-b border-slate-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-200 gap-3">
             <div>
               <h3 className="text-base font-black text-slate-900">
                 គ្រប់គ្រងសមតុល្យគណនីធនាគារ & ថតសាច់ប្រាក់ (Multi-Bank & Cash Ledger)
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                ផ្ទៀងផ្ទាត់សាច់ប្រាក់ជាក់ស្តែងក្នុងដៃ ថតបេឡា និងគណនីធនាគារនីមួយៗ
+                ផ្ទៀងផ្ទាត់សាច់ប្រាក់ជាក់ស្តែងក្នុងដៃ ថតបេឡា និងគណនីធនាគារនីមួយៗ (គ្មានទិន្នន័យគំរូច្រឡំឡើយ)
               </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={openBalanceModal}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>⚙️</span>
+                <span>កែប្រែសមតុល្យដើមគ្រា</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleResetBalancesToZero}
+                className="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-slate-200"
+                title="កំណត់សមតុល្យគណនីដើមគ្រាទាំងអស់ទៅ $0.00"
+              >
+                <span>🔄</span>
+                <span>សំអាតទៅ $0.00</span>
+              </button>
             </div>
           </div>
 
@@ -1271,7 +1396,7 @@ export default function WorldStandardFinanceView({
                 <span className="px-2 py-0.5 rounded-full bg-blue-200 text-blue-800 text-[10px]">Bakong KHQR</span>
               </div>
               <p className="text-2xl font-black text-blue-950 font-mono">${Number(bankBalances.abaUsd).toFixed(2)}</p>
-              <p className="text-[11px] text-blue-700 mt-1">លេខគណនី: {storeSettings.bankAccountUsd || '010 723 080'}</p>
+              <p className="text-[11px] text-blue-700 mt-1">លេខគណនី: {storeSettings?.bankAccountUsd || activeStore?.phone || (activeStore?.id === 'store_default_sabayluk' ? '010 723 080' : 'មិនទាន់កំណត់')}</p>
             </div>
 
             {/* ABA Bank KHR */}
@@ -1281,7 +1406,7 @@ export default function WorldStandardFinanceView({
                 <span className="px-2 py-0.5 rounded-full bg-blue-200 text-blue-800 text-[10px]">Bakong KHQR</span>
               </div>
               <p className="text-2xl font-black text-blue-950 font-mono">{Number(bankBalances.abaKhr).toLocaleString()} ៛</p>
-              <p className="text-[11px] text-blue-700 mt-1">លេខគណនី: {storeSettings.bankAccountKhr || '004 500 394'}</p>
+              <p className="text-[11px] text-blue-700 mt-1">លេខគណនី: {storeSettings?.bankAccountKhr || (activeStore?.id === 'store_default_sabayluk' ? '004 500 394' : 'មិនទាន់កំណត់')}</p>
             </div>
 
             {/* Cash in Drawer */}
@@ -1290,7 +1415,12 @@ export default function WorldStandardFinanceView({
                 <span>💵 សាច់ប្រាក់ក្នុងថត (POS Drawer)</span>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800 text-[10px]">Daily Cash</span>
               </div>
-              <p className="text-2xl font-black text-emerald-950 font-mono">${Number(bankBalances.posDrawerCash).toFixed(2)}</p>
+              <p className="text-2xl font-black text-emerald-950 font-mono">${metrics.effectiveCashInDrawer.toFixed(2)}</p>
+              {metrics.orderCashCollected > 0 && (
+                <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                  (ដើមគ្រា: ${Number(bankBalances.posDrawerCash || 0).toFixed(2)} + ចំណូលលក់: +${metrics.orderCashCollected.toFixed(2)})
+                </p>
+              )}
               <p className="text-[11px] text-emerald-700 mt-1">លុយជាក់ស្តែងក្នុងកេសលក់ប្រចាំថ្ងៃ</p>
             </div>
           </div>
@@ -1357,6 +1487,217 @@ export default function WorldStandardFinanceView({
         </div>
       )}
 
+
+      {/* ⭐️ MODAL កែប្រែសមតុល្យគណនីធនាគារ និងដើមទុនហាង ⭐️ */}
+      {showBalanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 md:p-8 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto space-y-6">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>🏦</span> កែសម្រួលសមតុល្យគណនីដើមគ្រា & ដើមទុន
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  ហាង: <span className="font-bold text-slate-800">{activeStore?.name || 'SABAY LUK'}</span> (ទិន្នន័យដាច់ដោយឡែកតាមហាងនីមួយៗ)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBalanceModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center cursor-pointer transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBalances} className="space-y-4">
+              <div className="p-3 bg-blue-50/70 rounded-2xl border border-blue-200 text-xs text-blue-900 space-y-1">
+                <p className="font-black">💡 ការណែនាំសមតុល្យដើមគ្រា (Opening Balances):</p>
+                <p className="text-blue-700">
+                  ប្រសិនបើហាងទើបបង្កើតថ្មីមិនទាន់មានលុយក្នុងកុង ឬក្នុងថតបេឡាទេ សូមទុកតម្លៃត្រឹម <span className="font-bold">$0.00</span> ។ ប្រព័ន្ធនឹងបូកសរុបចំណូលលក់ជាក់ស្តែងដោយស្វ័យប្រវត្តិ។
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-sans">
+                {/* ABA Bank USD */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">ធនាគារ ABA (USD) ដើមគ្រា</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={balanceForm.abaUsd}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, abaUsd: e.target.value })}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* ABA Bank KHR */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">ធនាគារ ABA (KHR) ដើមគ្រា</label>
+                  <div className="relative">
+                    <span className="absolute right-3 top-2.5 text-slate-400 font-bold">៛</span>
+                    <input
+                      type="number"
+                      step="100"
+                      value={balanceForm.abaKhr}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, abaKhr: e.target.value })}
+                      className="w-full pl-3 pr-8 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* ACLEDA Bank USD */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">ធនាគារ ACLEDA (USD) ដើមគ្រា</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={balanceForm.acledaUsd}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, acledaUsd: e.target.value })}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* ACLEDA Bank KHR */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">ធនាគារ ACLEDA (KHR) ដើមគ្រា</label>
+                  <div className="relative">
+                    <span className="absolute right-3 top-2.5 text-slate-400 font-bold">៛</span>
+                    <input
+                      type="number"
+                      step="100"
+                      value={balanceForm.acledaKhr}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, acledaKhr: e.target.value })}
+                      className="w-full pl-3 pr-8 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Cash in POS Drawer */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">លុយក្នុងថតបេឡា (POS Cash) ដើមគ្រា</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={balanceForm.posDrawerCash}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, posDrawerCash: e.target.value })}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Petty Cash */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">លុយចាយវាយបន្ទាន់ (Petty Cash)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={balanceForm.pettyCash}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, pettyCash: e.target.value })}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Initial Capital */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">មូលធនវិនិយោគដំបូង (Initial Capital)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={balanceForm.initialCapital}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, initialCapital: e.target.value })}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Store Equipment */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">តម្លៃសម្ភារៈ & ឧបករណ៍ហាង (Equipment)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={balanceForm.storeEquipment}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, storeEquipment: e.target.value })}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Accounts Payable */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">បំណុលជំពាក់អ្នកផ្គត់ផ្គង់ (Payable)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={balanceForm.accountsPayable}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, accountsPayable: e.target.value })}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Accounts Receivable COD */}
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">បំណុល COD ត្រូវទារពីដឹកជញ្ជូន</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={balanceForm.accountsReceivableCod}
+                      onChange={(e) => setBalanceForm({ ...balanceForm, accountsReceivableCod: e.target.value })}
+                      className="w-full pl-7 pr-3 py-2 border border-slate-300 rounded-xl font-mono font-bold text-slate-900 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3">
+                <button
+                  type="button"
+                  onClick={handleResetBalancesToZero}
+                  className="px-4 py-2.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold text-xs cursor-pointer transition"
+                >
+                  🔄 សំអាតទៅ $0.00
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowBalanceModal(false)}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold text-xs cursor-pointer transition"
+                  >
+                    បោះបង់
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-xs shadow-md cursor-pointer transition"
+                  >
+                    💾 រក្សាទុកសមតុល្យ
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
