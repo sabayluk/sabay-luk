@@ -3,11 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LANDING_TRANSLATIONS, getLandingPlans, getLandingFaqs } from '../lib/landingTranslations';
+import { fetchAllStores, DEFAULT_FLAGSHIP_STORE } from '../lib/stores';
 
 export default function SaaSPlatformLandingPage() {
   const [lang, setLang] = useState('km');
   const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
   const [openFaq, setOpenFaq] = useState(null);
+  const [partnerStores, setPartnerStores] = useState([DEFAULT_FLAGSHIP_STORE]);
+  const [loadingStores, setLoadingStores] = useState(true);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -17,6 +20,44 @@ export default function SaaSPlatformLandingPage() {
       }
     }
   }, []);
+
+  // Fetch real active partner stores directly for live showcase
+  useEffect(() => {
+    let isMounted = true;
+    async function loadStores() {
+      try {
+        const list = await fetchAllStores();
+        if (!isMounted) return;
+        // Strictly filter active stores with a valid slug for public storefront
+        const active = (list || []).filter(s => s && s.slug && s.status === 'ACTIVE');
+        if (active.length > 0) {
+          setPartnerStores(active);
+        }
+      } catch (e) {
+        console.warn('Failed to load partner stores:', e);
+      } finally {
+        if (isMounted) setLoadingStores(false);
+      }
+    }
+    loadStores();
+    return () => { isMounted = false; };
+  }, []);
+
+  const getStoreCategoryName = (type) => {
+    const map = {
+      shoes_fashion: lang === 'km' ? 'ស្បែកជើង & ម៉ូដ' : 'Shoes & Fashion',
+      clothing: lang === 'km' ? 'សំលៀកបំពាក់' : 'Clothing & Apparel',
+      cosmetics: lang === 'km' ? 'គ្រឿងសម្អាង' : 'Beauty & Cosmetics',
+      grocery: lang === 'km' ? 'ភេសជ្ជៈ & គ្រឿងទេស' : 'Grocery & Food',
+      electronics: lang === 'km' ? 'គ្រឿងអេឡិចត្រូនិច' : 'Electronics',
+      general: lang === 'km' ? 'ទំនិញទូទៅ' : 'General Merchandise'
+    };
+    return map[type] || (lang === 'km' ? 'ហាងលក់ទំនិញ' : 'Retail Store');
+  };
+
+  const getStoreLogoUrl = (st) => {
+    return st.settings?.logoUrl || st.settings?.logo || st.logo || null;
+  };
 
   const toggleLanguage = () => {
     const nextLang = lang === 'km' ? 'en' : 'km';
@@ -71,6 +112,13 @@ export default function SaaSPlatformLandingPage() {
 
           {/* Desktop Nav Links */}
           <nav className="hidden lg:flex items-center gap-8 text-sm font-bold text-slate-600">
+            <a href="#partner-stores" className="hover:text-orange-600 transition flex items-center gap-1.5 text-slate-800">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>{t.nav_partner_stores || 'ហាងដៃគូសហការ'}</span>
+            </a>
             <a href="#features" className="hover:text-orange-600 transition">{t.nav_features}</a>
             <a href="#solutions" className="hover:text-orange-600 transition">{t.nav_solutions}</a>
             <a href="#pricing" className="hover:text-orange-600 transition">{t.nav_pricing}</a>
@@ -91,14 +139,19 @@ export default function SaaSPlatformLandingPage() {
               <span className="font-black">{lang === 'km' ? 'KH' : 'EN'}</span>
             </button>
 
-            <Link
-              href="/store/sabay-luk?demo=true"
+            {/* Partner Stores Live Button (Replaces Demo button) */}
+            <a
+              href="#partner-stores"
               className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black text-slate-700 hover:text-orange-600 hover:bg-orange-50 border border-slate-200 transition"
-              title={lang === 'km' ? 'មើលគំរូទំព័រលក់ទំនិញមុខហាង (Demo)' : 'View Demo Storefront'}
+              title={lang === 'km' ? 'មើលហាងដៃគូដែលកំពុងដំណើរការ Live' : 'View Live Partner Stores'}
             >
-              <span>🛍️</span>
-              <span>{t.btn_demo_store}</span>
-            </Link>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>🏪</span>
+              <span>{t.btn_partner_stores || 'ហាងដៃគូ Live'}</span>
+            </a>
 
             <Link
               href="/login"
@@ -155,13 +208,18 @@ export default function SaaSPlatformLandingPage() {
               <span>{t.hero_cta_register}</span>
             </Link>
 
-            <Link
-              href="/store/sabay-luk?demo=true"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-base font-black bg-white hover:bg-slate-100 text-slate-800 border-2 border-slate-200 shadow-sm hover:border-orange-300 transition"
+            {/* Replaced Demo Button with Live Partner Stores Link */}
+            <a
+              href="#partner-stores"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-base font-black bg-white hover:bg-orange-50 text-slate-800 border-2 border-slate-200 shadow-sm hover:border-orange-300 transition"
             >
-              <span>🛍️</span>
-              <span>{t.hero_cta_demo_store}</span>
-            </Link>
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span>🏪</span>
+              <span>{t.hero_cta_partner_stores || 'មើលហាងដៃគូសហការ Live'}</span>
+            </a>
 
             <Link
               href="/login"
@@ -212,6 +270,59 @@ export default function SaaSPlatformLandingPage() {
               <div>
                 <p className="text-xs font-black text-slate-900">{t.trust_telegram_title}</p>
                 <p className="text-[11px] text-slate-500 font-semibold">{t.trust_telegram_desc}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ⭐️ Live Partner Stores Quick Strip (Shows Real Stores Live) */}
+          <div className="mt-8 pt-6 border-t border-slate-200/60 max-w-4xl mx-auto">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-xs font-black text-slate-800 tracking-wide uppercase">
+                  {lang === 'km' ? 'ហាងដៃគូសហការផ្ទាល់ (Live):' : 'Active Live Partner Stores:'}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-end">
+                {partnerStores.slice(0, 4).map((st) => {
+                  const logo = getStoreLogoUrl(st);
+                  return (
+                    <a
+                      key={st.slug || st.id}
+                      href={`/store/${st.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-300 shadow-xs hover:shadow-sm transition transform active:scale-95"
+                      title={lang === 'km' ? `ចូលទស្សនាគេហទំព័រ ${st.name}` : `Visit ${st.name} Storefront`}
+                    >
+                      {logo ? (
+                        <img
+                          src={logo}
+                          alt={st.name}
+                          className="w-4 h-4 rounded-full object-cover border border-slate-200"
+                        />
+                      ) : (
+                        <span className="w-4 h-4 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[9px] font-black">
+                          {st.name?.slice(0, 1)?.toUpperCase() || '🛍️'}
+                        </span>
+                      )}
+                      <span className="text-xs font-black text-slate-800 group-hover:text-orange-600 transition">
+                        {st.name}
+                      </span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-[10px] text-slate-400 group-hover:translate-x-0.5 transition-transform">↗</span>
+                    </a>
+                  );
+                })}
+                <a
+                  href="#partner-stores"
+                  className="text-xs font-bold text-orange-600 hover:text-orange-700 underline ml-1"
+                >
+                  {lang === 'km' ? 'មើលទាំងអស់ →' : 'View All →'}
+                </a>
               </div>
             </div>
           </div>
@@ -334,6 +445,178 @@ export default function SaaSPlatformLandingPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ⭐️ Live Partner Stores Showcase (ហាងដែលសហការជាមួយ website យើងផ្ទាល់) */}
+      <section id="partner-stores" className="py-20 sm:py-24 bg-gradient-to-b from-white via-orange-50/20 to-slate-50 border-b border-slate-200 scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-black mb-3 border border-emerald-200 shadow-xs">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>{t.partner_section_eyebrow || '🏪 ដៃគូអាជីវកម្មពិតប្រាកដ • LIVE PARTNER STORES'}</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+              {t.partner_section_title || 'ហាងដែលសហការ & កំពុងដំណើរការលើប្រព័ន្ធ Sabay Luk'}
+            </h2>
+            <p className="mt-4 text-slate-600 text-sm sm:text-base font-medium">
+              {t.partner_section_desc || 'ទស្សនាគេហទំព័រមុខហាងពិតប្រាកដ (Public Storefronts) របស់ដៃគូដែលកំពុងប្រើប្រាស់ Sabay Luk POS Cloud ក្នុងការលក់ទំនិញអនឡាញ និងគ្រប់គ្រងការបញ្ជាទិញ។'}
+            </p>
+            {/* Safety guarantee banner */}
+            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-slate-200 text-slate-600 text-xs font-semibold shadow-xs">
+              <span className="text-emerald-600 text-base">🛡️</span>
+              <span>
+                {lang === 'km'
+                  ? 'រាល់តំណភ្ជាប់ទាំងអស់គឺបើកបង្ហាញតែគេហទំព័រមុខហាង (Customer Storefront) សម្រាប់អតិថិជនប៉ុណ្ណោះ — ផ្ទាំងគ្រប់គ្រងខាងក្នុងត្រូវបានការពារយ៉ាងតឹងរ៉ឹង'
+                  : 'All links strictly open customer storefront websites only — internal administrative dashboards remain private and protected.'}
+              </span>
+            </div>
+          </div>
+
+          {/* Stores Grid */}
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {loadingStores ? (
+              // Loading skeleton
+              [1, 2, 3].map((sk) => (
+                <div key={sk} className="bg-white rounded-3xl p-6 border border-slate-200 animate-pulse space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-200"></div>
+                    <div className="space-y-2 flex-1">
+                      <div className="h-4 bg-slate-200 rounded w-2/3"></div>
+                      <div className="h-3 bg-slate-200 rounded w-1/3"></div>
+                    </div>
+                  </div>
+                  <div className="h-10 bg-slate-100 rounded-xl"></div>
+                  <div className="h-10 bg-slate-200 rounded-xl"></div>
+                </div>
+              ))
+            ) : partnerStores.length === 0 ? (
+              <div className="col-span-full text-center py-12 text-slate-500 font-medium">
+                {lang === 'km' ? 'មិនទាន់មានហាងដៃគូបង្ហាញ' : 'No partner stores to display yet'}
+              </div>
+            ) : (
+              partnerStores.map((st) => {
+                const logo = getStoreLogoUrl(st);
+                const catName = getStoreCategoryName(st.business_type);
+                const storefrontUrl = `/store/${st.slug}`;
+                const desc = st.settings?.storeDescription || st.settings?.announcementText || (lang === 'km' ? 'ហាងលក់ទំនិញគុណភាពខ្ពស់ ផ្ដល់ទំនុកចិត្ត និងការបញ្ជាទិញរហ័សតាមអនឡាញ។' : 'Quality merchandise store offering fast & reliable online shopping.');
+
+                return (
+                  <div
+                    key={st.slug || st.id}
+                    className="bg-white rounded-3xl p-6 border-2 border-slate-200/90 hover:border-orange-400 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group hover:-translate-y-1"
+                  >
+                    <div>
+                      {/* Store Card Header */}
+                      <div className="flex items-start justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-3">
+                          {logo ? (
+                            <img
+                              src={logo}
+                              alt={st.name}
+                              className="w-14 h-14 rounded-2xl object-cover border border-slate-200 shadow-sm group-hover:scale-105 transition"
+                            />
+                          ) : (
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-md shadow-orange-500/20 group-hover:scale-105 transition">
+                              {st.name?.slice(0, 1)?.toUpperCase() || '🛍️'}
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h3 className="font-black text-lg text-slate-900 group-hover:text-orange-600 transition">
+                                {st.name}
+                              </h3>
+                              <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded font-black" title="ដៃគូផ្ទៀងផ្ទាត់ផ្លូវការ">
+                                ✓ Verified
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-orange-600 mt-0.5">
+                              {catName}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>Live</span>
+                        </span>
+                      </div>
+
+                      {/* Store Description */}
+                      <p className="text-slate-600 text-xs leading-relaxed line-clamp-2 font-medium mb-4">
+                        {desc}
+                      </p>
+
+                      {/* Quick Metadata */}
+                      <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-500 font-medium mb-5">
+                        {st.address && (
+                          <div className="flex items-center gap-2 truncate">
+                            <span>📍</span>
+                            <span className="truncate">{st.address}</span>
+                          </div>
+                        )}
+                        {st.phone && (
+                          <div className="flex items-center gap-2">
+                            <span>📞</span>
+                            <span>{st.phone}</span>
+                          </div>
+                        )}
+                        {st.telegram && (
+                          <div className="flex items-center gap-2 text-sky-600">
+                            <span>✈️</span>
+                            <span>{st.telegram.startsWith('@') ? st.telegram : `@${st.telegram}`}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Public Storefront Link Button (STRICTLY Customer View Only) */}
+                    <div className="pt-3 border-t border-slate-100">
+                      <a
+                        href={storefrontUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 active:scale-95 transition transform cursor-pointer"
+                      >
+                        <span>🛍️</span>
+                        <span>{t.partner_visit_storefront || 'ចូលមើលគេហទំព័រមុខហាង'}</span>
+                        <span className="text-base group-hover:translate-x-1 transition-transform">↗</span>
+                      </a>
+                      <p className="text-[10px] text-slate-400 text-center mt-2 font-mono truncate">
+                        sabayluk.com/store/{st.slug}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Bottom Callout to invite more merchants */}
+          <div className="mt-14 p-6 sm:p-8 rounded-3xl bg-white border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4 text-center sm:text-left">
+              <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center text-2xl font-black shrink-0">
+                🚀
+              </div>
+              <div>
+                <h4 className="font-black text-slate-900 text-base">
+                  {lang === 'km' ? 'តើអ្នកចង់ដាក់ហាងរបស់អ្នកលក់លើ Sabay Luk ដែរឬទេ?' : 'Want to launch your store on Sabay Luk?'}
+                </h4>
+                <p className="text-slate-500 text-xs mt-0.5 font-medium">
+                  {lang === 'km' ? 'ចុះឈ្មោះបង្កើតហាងដោយឥតគិតថ្លៃក្នុងរយៈពេល ៦០ វិនាទី និងទទួលបានគេហទំព័រផ្ទាល់ខ្លួនភ្លាមៗ' : 'Register your free store in 60 seconds and get your own branded storefront instantly.'}
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/register?plan=FREE"
+              className="px-6 py-3 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-xs sm:text-sm shadow-md active:scale-95 transition whitespace-nowrap"
+            >
+              {t.btn_create_free} &rarr;
+            </Link>
           </div>
         </div>
       </section>
@@ -685,12 +968,13 @@ export default function SaaSPlatformLandingPage() {
             >
               🚀 {t.cta_btn_start}
             </Link>
-            <Link
-              href="/store/sabay-luk?demo=true"
-              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-black/30 hover:bg-black/40 text-white border border-white/30 font-black text-sm transition cursor-pointer"
+            <a
+              href="#partner-stores"
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-black/30 hover:bg-black/40 text-white border border-white/30 font-black text-sm transition cursor-pointer flex items-center justify-center gap-2"
             >
-              🛍️ {t.hero_cta_demo_store}
-            </Link>
+              <span>🏪</span>
+              <span>{t.hero_cta_partner_stores || 'មើលហាងដៃគូសហការ Live'}</span>
+            </a>
           </div>
         </div>
       </section>
@@ -716,11 +1000,11 @@ export default function SaaSPlatformLandingPage() {
               {lang === 'km' ? 'ផលិតផល & សេវាកម្ម' : 'Products & Services'}
             </h4>
             <ul className="space-y-2">
+              <li><a href="#partner-stores" className="hover:text-white transition">{lang === 'km' ? 'ហាងដៃគូសហការ' : 'Partner Stores'}</a></li>
               <li><a href="#features" className="hover:text-white transition">{t.feat_1_title}</a></li>
               <li><a href="#features" className="hover:text-white transition">{t.feat_2_title}</a></li>
               <li><a href="#features" className="hover:text-white transition">{t.feat_3_title}</a></li>
               <li><a href="#features" className="hover:text-white transition">{t.feat_4_title}</a></li>
-              <li><a href="#features" className="hover:text-white transition">{t.feat_5_title}</a></li>
             </ul>
           </div>
 
@@ -728,8 +1012,7 @@ export default function SaaSPlatformLandingPage() {
             <h4 className="font-black text-white text-xs uppercase tracking-wider mb-3">{t.footer_quick_links}</h4>
             <ul className="space-y-2">
               <li><Link href="/login" className="hover:text-orange-400 font-bold text-orange-400 transition">🔑 {t.btn_login || 'ចូលប្រព័ន្ធ (Store Login)'}</Link></li>
-              <li><Link href="/store/sabay-luk?demo=true" className="hover:text-white transition">🛍️ {t.btn_demo_store} (Storefront)</Link></li>
-              <li><Link href="/admin/dashboard?demo=true" className="hover:text-white transition">📊 {t.btn_admin_pos} (Demo Read-Only)</Link></li>
+              <li><a href="#partner-stores" className="hover:text-white transition">🏪 {lang === 'km' ? 'ហាងដៃគូសហការ (Live Stores)' : 'Partner Stores (Live)'}</a></li>
               <li><Link href="/plans" className="hover:text-white transition">💎 {t.nav_pricing} (Plans)</Link></li>
               <li><Link href="/register" className="hover:text-white transition">🚀 {t.btn_create_free}</Link></li>
             </ul>
