@@ -116,6 +116,170 @@ const getPlanProrationInfo = (store, targetPlanPrice = 0) => {
   };
 };
 
+// ⭐️ គម្រោង MICRO-SAAS ទាំងអស់សម្រាប់ SABAY LUK (PLANS SPECIFICATIONS & PRICING) ⭐️
+export const UPGRADE_PLANS_LIST = [
+  {
+    key: 'FREE',
+    name: '🎁 FREE (សាកល្បង)',
+    priceMonthly: 0,
+    priceYearly: 0,
+    savingsYearly: 0,
+    maxProducts: 15,
+    maxStaff: 1,
+    productsText: '15 មុខទំនិញ',
+    accountsText: '1 Admin',
+    badge: '🎁 ឥតគិតថ្លៃជារៀងរហូត',
+    badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    desc: 'អ្នកលក់ថ្មីថ្មោង ឬអ្នកចង់តេស្តសាកល្បងប្រព័ន្ធ',
+    features: [
+      'ទំនិញរហូតដល់ ១៥ មុខ',
+      'គណនីគ្រប់គ្រង (1 Admin)',
+      'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+      'ចេញវិក្កយបត្រស្កេន ABA KHQR',
+      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ & កុំព្យូទ័រ'
+    ],
+    popular: false
+  },
+  {
+    key: 'STARTER',
+    name: '🌱 STARTER',
+    priceMonthly: 1,
+    priceYearly: 10,
+    savingsYearly: 2,
+    maxProducts: 25,
+    maxStaff: 2,
+    productsText: '25 មុខទំនិញ',
+    accountsText: '1 Admin + 1 បុគ្គលិក',
+    badge: '🌱 ធូរថ្លៃបំផុតត្រឹម $1/ខែ',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+    desc: 'តូបតូចៗ ឬអ្នកលក់ Live តាមផ្ទះ',
+    features: [
+      'ទំនិញរហូតដល់ ២៥ មុខ',
+      'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
+      'កាត់ស្តុក Size & Color លម្អិត',
+      'ចេញវិក្កយបត្រស្កេន KHQR & Thermal',
+      'របាយការណ៍លក់ និងប្រាក់ចំណេញសង្ខេប',
+      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន'
+    ],
+    popular: false
+  },
+  {
+    key: 'BASIC',
+    name: '⚡ BASIC',
+    priceMonthly: 2,
+    priceYearly: 20,
+    savingsYearly: 4,
+    maxProducts: 50,
+    maxStaff: 2,
+    productsText: '50 មុខទំនិញ',
+    accountsText: '1 Admin + 1 បុគ្គលិក',
+    badge: '⚡ សន្សំសំចៃខ្ពស់',
+    badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    desc: 'ហាងខោអាវ ស្បែកជើងខ្នាតតូច',
+    features: [
+      'ទំនិញរហូតដល់ ៥០ មុខ',
+      'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
+      'តារាងស្តុកទំនិញ Variant Matrix (Size/Color)',
+      'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
+      'កត់ត្រាចំណាយ និងរបាយការណ៍ P&L',
+      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ'
+    ],
+    popular: false
+  },
+  {
+    key: 'PRO',
+    name: '🚀 PRO',
+    priceMonthly: 3,
+    priceYearly: 30,
+    savingsYearly: 6,
+    maxProducts: 100,
+    maxStaff: 3,
+    productsText: '100 មុខទំនិញ',
+    accountsText: '1 Admin + 2 បុគ្គលិក',
+    badge: '🔥 ពេញនិយមបំផុត (Best Value)',
+    badgeColor: 'bg-orange-50 text-orange-700 border-orange-200',
+    desc: 'ហាងពេញនិយម មានបុគ្គលិកឆ្លាស់វេន',
+    features: [
+      'ទំនិញរហូតដល់ ១០០ មុខ',
+      'គណនីបុគ្គលិក ៣ នាក់ (Admin + 2 Staff)',
+      'គ្រប់គ្រងបំណុលអតិថិជន & ប្រព័ន្ធ Loyalty Points',
+      'របាយការណ៍វិភាគការលក់ និងប្រាក់ចំណេញកម្រិតខ្ពស់',
+      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot',
+      'វេបសាយ Storefront ជាមួយការទូទាត់ KHQR ស្វ័យប្រវត្ត'
+    ],
+    popular: true
+  },
+  {
+    key: 'BUSINESS',
+    name: '🔥 BUSINESS',
+    priceMonthly: 5,
+    priceYearly: 50,
+    savingsYearly: 10,
+    maxProducts: 200,
+    maxStaff: 4,
+    productsText: '200 មុខទំនិញ',
+    accountsText: '1 Admin + 3 បុគ្គលិក',
+    badge: '🚀 សម្រាប់ហាងធំ',
+    badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
+    desc: 'ហាងធំគួរសម មានស្តុកច្រើន Size/Color',
+    features: [
+      'ទំនិញរហូតដល់ ២០០ មុខ',
+      'គណនីបុគ្គលិក ៤ នាក់',
+      'មុខងារ POS ពេញលេញ គ្មានដែនកំណត់',
+      'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+      'គ្រប់គ្រងសិទ្ធិបុគ្គលិកដាច់ដោយឡែកលម្អិត',
+      'ការគាំទ្របច្ចេកទេសជាអាទិភាព ២៤/៧'
+    ],
+    popular: false
+  },
+  {
+    key: 'PREMIUM',
+    name: '💎 PREMIUM',
+    priceMonthly: 7,
+    priceYearly: 70,
+    savingsYearly: 14,
+    maxProducts: 500,
+    maxStaff: 6,
+    productsText: '500 មុខទំនិញ',
+    accountsText: '1 Admin + 5 បុគ្គលិក',
+    badge: '💎 សម្រាប់ហាងលក់ដុំ & រាយ',
+    badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
+    desc: 'ហាងមានមុខទំនិញច្រើន និងបុគ្គលិកច្រើន',
+    features: [
+      'ទំនិញរហូតដល់ ៥០០ មុខ',
+      'គណនីបុគ្គលិក ៦ នាក់',
+      'មុខងារគ្រប់គ្រងស្តុក និងលក់ដុំ/រាយកម្រិតខ្ពស់',
+      'រៀបចំរបាយការណ៍លក់ប្រចាំខែ & ប្រចាំឆ្នាំ',
+      'ជូនដំណឹងស្វ័យប្រវត្តិតាម Telegram',
+      'ការគាំទ្របច្ចេកទេសពិសេស ២៤/៧'
+    ],
+    popular: false
+  },
+  {
+    key: 'ENTERPRISE',
+    name: '👑 ENTERPRISE',
+    priceMonthly: 10,
+    priceYearly: 100,
+    savingsYearly: 20,
+    maxProducts: 1000,
+    maxStaff: 11,
+    productsText: '1,000 មុខទំនិញ',
+    accountsText: '1 Admin + 10 បុគ្គលិក',
+    badge: '👑 កម្រិតកំពូល Full Option',
+    badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
+    desc: 'ហាងធំៗ សាខា ឬឃ្លាំងស្តុកធំ',
+    features: [
+      'ទំនិញរហូតដល់ ១,០០០ មុខ',
+      'គណនីបុគ្គលិក ១១ នាក់',
+      'មុខងារទាំងអស់លើប្រព័ន្ធ SABAY LUK POS',
+      'តភ្ជាប់ប្រព័ន្ធ API & Telegram Bot ផ្ទាល់ខ្លួន',
+      'Dedicated Server & VIP Support ផ្ទាល់'
+    ],
+    popular: false
+  }
+];
+
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក & បញ្ចុះតម្លៃ ធានាមិនបាត់ ១០០%
 const parseProductMeta = (p) => {
   if (!p) return p;
@@ -1023,6 +1187,11 @@ export default function UnifiedAdminDashboard() {
   const [upgradeSlipPreview, setUpgradeSlipPreview] = useState(null);
   const [upgradeTxRef, setUpgradeTxRef] = useState('');
   const [upgradeSubmitting, setUpgradeSubmitting] = useState(false);
+
+  // ⭐️ CUTTING-EDGE TOP UP / PLAN LIMIT MODAL STATE ⭐️
+  const [planLimitInfo, setPlanLimitInfo] = useState(null);
+  const [limitModalTierKey, setLimitModalTierKey] = useState('STARTER');
+  const [limitModalCycle, setLimitModalCycle] = useState('monthly');
 
   // Edit store modal for master owner
   const [editStoreModalOpen, setEditStoreModalOpen] = useState(false);
@@ -4748,10 +4917,19 @@ export default function UnifiedAdminDashboard() {
     // ⭐️ ពិនិត្យមើលកម្រិតកំណត់នៃកញ្ចប់ទំនិញ (Store Plan Limit Check) ⭐️
     if (!editingProductId) {
       const storeProds = products.filter(p => !p.store_id || p.store_id === activeStore?.id || activeStore?.id === 'store_default_sabayluk');
-      const maxLimit = activeStore?.max_products || 15;
+      const maxLimit = activeStore?.max_products || STORE_PLANS[activeStore?.plan || 'FREE']?.maxProducts || 15;
       if (storeProds.length >= maxLimit) {
-        setUpgradePlanModalOpen(true);
-        return alert(`🎉 ហាងរបស់អ្នកបានប្រើដល់កម្រិតកំណត់ ${maxLimit} មុខទំនិញនៃកញ្ចប់ ${activeStore?.plan || 'FREE'} ហើយ!\n\nសូមដំឡើងកញ្ចប់ (Upgrade Plan) ត្រឹម $1/ខែ ឬ $10/ឆ្នាំ ដើម្បីបន្ថែមទំនិញបន្តទៀត។`);
+        const nextSuggested = (activeStore?.plan === 'FREE' || !activeStore?.plan) ? 'STARTER' : (activeStore?.plan === 'STARTER' ? 'BASIC' : 'PRO');
+        setLimitModalTierKey(nextSuggested);
+        setPlanLimitInfo({
+          type: 'product',
+          currentCount: storeProds.length,
+          maxLimit,
+          title: `ដល់កម្រិតកំណត់មុខទំនិញ ${maxLimit} មុខ`,
+          description: `ហាង "${activeStore?.name}" បានប្រើប្រាស់ដល់កម្រិតកំណត់ ${maxLimit} មុខទំនិញ នៃកញ្ចប់ ${activeStore?.plan || 'FREE'} ហើយ! សូមដំឡើងកញ្ចប់ដើម្បីបន្ថែមមុខទំនិញបន្តទៀត។`,
+          suggestedPlanKey: nextSuggested
+        });
+        return;
       }
     }
     setUploading(true); setMessage('');
@@ -15374,10 +15552,18 @@ export default function UnifiedAdminDashboard() {
             <button
               type="button"
               onClick={() => {
-                const maxStaff = activeStore?.max_staff || 2;
+                const maxStaff = activeStore?.max_staff || STORE_PLANS[activeStore?.plan || 'FREE']?.maxStaff || 1;
                 if (staffList.length >= maxStaff) {
-                  setUpgradePlanModalOpen(true);
-                  alert(`⚠️ ហាង "${activeStore?.name}" បានប្រើប្រាស់ដល់កម្រិតកំណត់បុគ្គលិក ${maxStaff} នាក់ នៃកញ្ចប់ ${activeStore?.plan || 'FREE'} ហើយ!\n\nសូមចុចដំឡើងកញ្ចប់ (Upgrade Plan) ដើម្បីអាចបង្កើតគណនីបុគ្គលិកបន្ថែមទៀត។`);
+                  const nextSuggested = (activeStore?.plan === 'FREE' || !activeStore?.plan) ? 'STARTER' : (activeStore?.plan === 'STARTER' ? 'BASIC' : 'PRO');
+                  setLimitModalTierKey(nextSuggested);
+                  setPlanLimitInfo({
+                    type: 'staff',
+                    currentCount: staffList.length,
+                    maxLimit: maxStaff,
+                    title: `ដល់កម្រិតកំណត់គណនីបុគ្គលិក ${maxStaff} នាក់`,
+                    description: `ហាង "${activeStore?.name}" បានប្រើប្រាស់ដល់កម្រិតកំណត់បុគ្គលិក ${maxStaff} នាក់ នៃកញ្ចប់ ${activeStore?.plan || 'FREE'} ហើយ! សូមដំឡើងកញ្ចប់ដើម្បីបង្កើតគណនីបុគ្គលិកបន្ថែមទៀត។`,
+                    suggestedPlanKey: nextSuggested
+                  });
                   return;
                 }
                 setEditingStaff(null);
@@ -15410,7 +15596,7 @@ export default function UnifiedAdminDashboard() {
                   {STORE_PLANS[activeStore?.plan]?.name || activeStore?.plan || '🎁 FREE (សាកល្បង)'}
                 </span>
                 <span className="text-xs font-bold text-slate-300">
-                  • ចំនួនបុគ្គលិកអនុញ្ញាត: <b className="text-amber-300 font-mono">{staffList.length} / {activeStore?.max_staff || 2} នាក់</b>
+                  • ចំនួនបុគ្គលិកអនុញ្ញាត: <b className="text-amber-300 font-mono">{staffList.length} / {activeStore?.max_staff || STORE_PLANS[activeStore?.plan || 'FREE']?.maxStaff || 1} នាក់</b>
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
@@ -15420,7 +15606,19 @@ export default function UnifiedAdminDashboard() {
           </div>
           <button
             type="button"
-            onClick={() => setUpgradePlanModalOpen(true)}
+            onClick={() => {
+              const maxStaff = activeStore?.max_staff || STORE_PLANS[activeStore?.plan || 'FREE']?.maxStaff || 1;
+              const nextSuggested = (activeStore?.plan === 'FREE' || !activeStore?.plan) ? 'STARTER' : (activeStore?.plan === 'STARTER' ? 'BASIC' : 'PRO');
+              setLimitModalTierKey(nextSuggested);
+              setPlanLimitInfo({
+                type: 'general',
+                currentCount: staffList.length,
+                maxLimit: maxStaff,
+                title: 'ដំឡើងកញ្ចប់សេវា (Top Up / Upgrade Plan)',
+                description: `ដំឡើងកញ្ចប់សេវាកម្មសម្រាប់ហាង "${activeStore?.name}" ដើម្បីពង្រីកចំនួនបុគ្គលិក និងមុខទំនិញកាន់តែច្រើន!`,
+                suggestedPlanKey: nextSuggested
+              });
+            }}
             className="shrink-0 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 active:scale-95 text-white font-black text-xs px-5 py-3 rounded-2xl transition shadow-lg shadow-orange-500/30 flex items-center gap-2 cursor-pointer"
           >
             <span>⚡</span>
@@ -15994,154 +16192,7 @@ export default function UnifiedAdminDashboard() {
       (activeStore?.slug && p.store_name && p.store_name.toLowerCase() === activeStore.slug.toLowerCase())
     );
 
-    const plansList = [
-      {
-        key: 'FREE',
-        name: '🎁 FREE (សាកល្បង)',
-        priceMonthly: 0,
-        priceYearly: 0,
-        savingsYearly: 0,
-        productsText: '15 មុខទំនិញ',
-        accountsText: '1 Admin',
-        badge: '🎁 ឥតគិតថ្លៃជារៀងរហូត',
-        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        desc: 'អ្នកលក់ថ្មីថ្មោង ឬអ្នកចង់តេស្តសាកល្បងប្រព័ន្ធ',
-        features: [
-          'ទំនិញរហូតដល់ ១៥ មុខ',
-          'គណនីគ្រប់គ្រង (1 Admin)',
-          'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
-          'ចេញវិក្កយបត្រស្កេន ABA KHQR',
-          'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
-          'គាំទ្រការប្រើលើទូរស័ព្ទដៃ & កុំព្យូទ័រ'
-        ],
-        popular: false
-      },
-      {
-        key: 'STARTER',
-        name: '🌱 STARTER',
-        priceMonthly: 1,
-        priceYearly: 10,
-        savingsYearly: 2,
-        productsText: '25 មុខទំនិញ',
-        accountsText: '1 Admin + 1 បុគ្គលិក',
-        badge: '🌱 ធូរថ្លៃបំផុតត្រឹម $1/ខែ',
-        badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-        desc: 'តូបតូចៗ ឬអ្នកលក់ Live តាមផ្ទះ',
-        features: [
-          'ទំនិញរហូតដល់ ២៥ មុខ',
-          'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
-          'កាត់ស្តុក Size & Color លម្អិត',
-          'ចេញវិក្កយបត្រស្កេន KHQR & Thermal',
-          'របាយការណ៍លក់ និងប្រាក់ចំណេញសង្ខេប',
-          'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន'
-        ],
-        popular: false
-      },
-      {
-        key: 'BASIC',
-        name: '⚡ BASIC',
-        priceMonthly: 2,
-        priceYearly: 20,
-        savingsYearly: 4,
-        productsText: '50 មុខទំនិញ',
-        accountsText: '1 Admin + 1 បុគ្គលិក',
-        badge: '⚡ សន្សំសំចៃខ្ពស់',
-        badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-        desc: 'ហាងខោអាវ ស្បែកជើងខ្នាតតូច',
-        features: [
-          'ទំនិញរហូតដល់ ៥០ មុខ',
-          'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
-          'តារាងស្តុកទំនិញ Variant Matrix (Size/Color)',
-          'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
-          'កត់ត្រាចំណាយ និងរបាយការណ៍ P&L',
-          'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ'
-        ],
-        popular: false
-      },
-      {
-        key: 'PRO',
-        name: '🚀 PRO',
-        priceMonthly: 3,
-        priceYearly: 30,
-        savingsYearly: 6,
-        productsText: '100 មុខទំនិញ',
-        accountsText: '1 Admin + 2 បុគ្គលិក',
-        badge: '🔥 ពេញនិយមបំផុត (Best Value)',
-        badgeColor: 'bg-orange-50 text-orange-700 border-orange-200',
-        desc: 'ហាងពេញនិយម មានបុគ្គលិកឆ្លាស់វេន',
-        features: [
-          'ទំនិញរហូតដល់ ១០០ មុខ',
-          'គណនីបុគ្គលិក ៣ នាក់ (Admin + 2 Staff)',
-          'គ្រប់គ្រងបំណុលអតិថិជន & ប្រព័ន្ធ Loyalty Points',
-          'របាយការណ៍វិភាគការលក់ និងប្រាក់ចំណេញកម្រិតខ្ពស់',
-          'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot',
-          'វេបសាយ Storefront ជាមួយការទូទាត់ KHQR ស្វ័យប្រវត្ត'
-        ],
-        popular: true
-      },
-      {
-        key: 'BUSINESS',
-        name: '🔥 BUSINESS',
-        priceMonthly: 5,
-        priceYearly: 50,
-        savingsYearly: 10,
-        productsText: '200 មុខទំនិញ',
-        accountsText: '1 Admin + 2 បុគ្គលិក',
-        badge: '🚀 សម្រាប់ហាងធំ',
-        badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
-        desc: 'ហាងធំគួរសម មានស្តុកច្រើន Size/Color',
-        features: [
-          'ទំនិញរហូតដល់ ២០០ មុខ',
-          'គណនីបុគ្គលិក ៣ នាក់',
-          'មុខងារ POS ពេញលេញ គ្មានដែនកំណត់',
-          'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
-          'គ្រប់គ្រងសិទ្ធិបុគ្គលិកដាច់ដោយឡែកលម្អិត',
-          'ការគាំទ្របច្ចេកទេសជាអាទិភាព ២៤/៧'
-        ],
-        popular: false
-      },
-      {
-        key: 'PREMIUM',
-        name: '💎 PREMIUM',
-        priceMonthly: 7,
-        priceYearly: 70,
-        savingsYearly: 14,
-        productsText: '500 មុខទំនិញ',
-        accountsText: '1 Admin + 3 បុគ្គលិក',
-        badge: '💎 សម្រាប់ហាងលក់ដុំ & រាយ',
-        badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
-        desc: 'ហាងមានមុខទំនិញច្រើន និងបុគ្គលិកច្រើន',
-        features: [
-          'ទំនិញរហូតដល់ ៥០០ មុខ',
-          'គណនីបុគ្គលិក ៤ នាក់',
-          'មុខងារគ្រប់គ្រងស្តុក និងលក់ដុំ/រាយកម្រិតខ្ពស់',
-          'រៀបចំរបាយការណ៍លក់ប្រចាំខែ & ប្រចាំឆ្នាំ',
-          'ជូនដំណឹងស្វ័យប្រវត្តិតាម Telegram',
-          'ការគាំទ្របច្ចេកទេសពិសេស ២៤/៧'
-        ],
-        popular: false
-      },
-      {
-        key: 'ENTERPRISE',
-        name: '👑 ENTERPRISE',
-        priceMonthly: 10,
-        priceYearly: 100,
-        savingsYearly: 20,
-        productsText: '1,000 មុខទំនិញ',
-        accountsText: '1 Admin + 5 បុគ្គលិក',
-        badge: '👑 កម្រិតកំពូល Full Option',
-        badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
-        desc: 'ហាងធំៗ សាខា ឬឃ្លាំងស្តុកធំ',
-        features: [
-          'ទំនិញរហូតដល់ ១,០០០ មុខ',
-          'គណនីបុគ្គលិក ៦ នាក់',
-          'មុខងារទាំងអស់លើប្រព័ន្ធ SABAY LUK POS',
-          'តភ្ជាប់ប្រព័ន្ធ API & Telegram Bot ផ្ទាល់ខ្លួន',
-          'Dedicated Server & VIP Support ផ្ទាល់'
-        ],
-        popular: false
-      }
-    ];
+    const plansList = UPGRADE_PLANS_LIST;
 
     return (
       <div className="space-y-8 animate-in fade-in duration-300 pb-20 max-w-7xl mx-auto">
@@ -25212,7 +25263,15 @@ export default function UnifiedAdminDashboard() {
               </div>
               <button
                 type="button"
-                onClick={() => setUpgradePlanModalOpen(true)}
+                onClick={() => {
+                  const curKey = activeStore?.plan || 'STARTER';
+                  const target = UPGRADE_PLANS_LIST.find(p => p.key === curKey) || UPGRADE_PLANS_LIST[1];
+                  setSelectedUpgradePlan(target);
+                  setUpgradeSlipFile(null);
+                  setUpgradeSlipPreview(null);
+                  setUpgradeTxRef('');
+                  setUpgradePlanModalOpen(true);
+                }}
                 className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black text-white shadow-md transition active:scale-95 cursor-pointer ${
                   isExpired ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'
                 }`}
@@ -26325,9 +26384,304 @@ export default function UnifiedAdminDashboard() {
         </div>
       )}
 
+      {/* ⭐️ ULTRA-MODERN MICRO-SAAS TOP UP & PLAN LIMIT MODAL ⭐️ */}
+      {planLimitInfo && (() => {
+        const proration = getPlanProrationInfo(activeStore);
+        const currentPlanKey = activeStore?.plan || 'FREE';
+        
+        // Target plan from selection
+        const targetPlan = UPGRADE_PLANS_LIST.find(p => p.key === limitModalTierKey) || UPGRADE_PLANS_LIST[1]; // default STARTER
+        const isYearly = limitModalCycle === 'yearly';
+        const rawPrice = isYearly ? targetPlan.priceYearly : targetPlan.priceMonthly;
+        const creditDiscount = (targetPlan.key !== 'FREE' && proration.remainingCredit > 0 && rawPrice > 0)
+          ? Math.min(rawPrice, proration.remainingCredit)
+          : 0;
+        const finalPrice = Math.max(0, Number((rawPrice - creditDiscount).toFixed(2)));
+        const finalPriceKHR = Math.round(finalPrice * 4100).toLocaleString();
+        
+        // Meter calculation
+        const isStaff = planLimitInfo.type === 'staff';
+        const isProduct = planLimitInfo.type === 'product';
+        const isGeneral = planLimitInfo.type === 'general';
+        const currentCount = planLimitInfo.currentCount || 0;
+        const maxLimit = planLimitInfo.maxLimit || (isStaff ? (activeStore?.max_staff || 1) : (activeStore?.max_products || 15));
+        const percentUsed = maxLimit > 0 ? Math.min(100, Math.round((currentCount / maxLimit) * 100)) : 100;
+        
+        return (
+          <div 
+            onClick={(e) => { if (e.target === e.currentTarget) setPlanLimitInfo(null); }}
+            className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200"
+          >
+            <div className="relative bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white rounded-3xl max-w-2xl w-full border border-amber-500/30 shadow-2xl shadow-orange-500/10 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col my-auto max-h-[92vh]">
+              
+              {/* Decorative Ambient Radial Glow */}
+              <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-44 bg-gradient-to-r from-orange-500/25 via-amber-500/20 to-purple-500/20 blur-3xl pointer-events-none rounded-full" />
+              
+              {/* ⭐️ MODAL HEADER ⭐️ */}
+              <div className="relative z-10 px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-slate-800/80 flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3.5 min-w-0">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 via-orange-500/20 to-rose-500/20 border border-orange-500/40 text-amber-400 flex items-center justify-center text-2xl shrink-0 shadow-lg shadow-orange-500/10">
+                    {isStaff ? '👥' : isProduct ? '📦' : '⚡'}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                        isGeneral
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                          : 'bg-rose-500/20 text-rose-300 border-rose-500/30 animate-pulse'
+                      }`}>
+                        {isStaff ? '👥 កម្រិតកំណត់បុគ្គលិក (Staff Limit)' : isProduct ? '📦 កម្រិតកំណត់មុខទំនិញ (Product Limit)' : '⚡ ដំឡើងកញ្ចប់សេវា (Upgrade Plan)'}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
+                        {currentPlanKey}
+                      </span>
+                    </div>
+                    <h2 className="text-base sm:text-lg font-black text-white leading-snug">
+                      {planLimitInfo.title || 'ដល់កម្រិតកំណត់នៃកញ្ចប់សេវា'}
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
+                      {planLimitInfo.description || `ហាង "${activeStore?.name}" បានប្រើប្រាស់ដល់កម្រិតកំណត់នៃកញ្ចប់ ${currentPlanKey} ហើយ!`}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPlanLimitInfo(null)}
+                  className="w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-sm transition cursor-pointer shrink-0"
+                  title="បិទ (Close)"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* ⭐️ SCROLLABLE CONTENT BODY ⭐️ */}
+              <div className="p-5 sm:p-7 overflow-y-auto space-y-5 relative z-10">
+                
+                {/* 1. Current Usage Meter Box */}
+                {!isGeneral && (
+                  <div className="bg-slate-950/60 rounded-2xl p-4 border border-slate-800/90 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                        <span>{isStaff ? '👥 បុគ្គលិកបច្ចុប្បន្ន:' : '📦 ទំនិញក្នុងស្តុក:'}</span>
+                        <b className="text-amber-400 font-mono text-sm">{currentCount} / {maxLimit} {isStaff ? 'នាក់' : 'មុខ'}</b>
+                      </span>
+                      <span className="font-black text-xs px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                        ប្រើប្រាស់អស់ {percentUsed}% (ពេញ)
+                      </span>
+                    </div>
+
+                    {/* Progress Bar Track */}
+                    <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden p-0.5">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 shadow-sm shadow-orange-500/50 transition-all duration-500"
+                        style={{ width: `${percentUsed}%` }}
+                      />
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      💡 កញ្ចប់ <b>{currentPlanKey}</b> អនុញ្ញាតត្រឹម {maxLimit} {isStaff ? 'នាក់' : 'មុខ'}។ ដំឡើងទៅកញ្ចប់ <b className="text-amber-300">{targetPlan.name}</b> ត្រឹម <b className="text-emerald-400 font-mono">${isYearly ? targetPlan.priceYearly + '/ឆ្នាំ' : targetPlan.priceMonthly + '/ខែ'}</b> ដើម្បីដោះសោបន្ថែមភ្លាមៗ!
+                    </p>
+                  </div>
+                )}
+
+                {/* 2. Billing Cycle Switch */}
+                <div className="flex items-center justify-between bg-slate-950/40 p-1.5 rounded-2xl border border-slate-800">
+                  <span className="text-xs font-black text-slate-300 px-3 flex items-center gap-1.5">
+                    <span>🗓️</span> វដ្តនៃការទូទាត់ (Billing Cycle):
+                  </span>
+                  <div className="inline-flex p-1 bg-slate-900 rounded-xl border border-slate-800 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setLimitModalCycle('monthly')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                        !isYearly ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      ប្រចាំខែ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLimitModalCycle('yearly')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 ${
+                        isYearly ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>ប្រចាំឆ្នាំ</span>
+                      <span className="text-[9px] px-1 py-0.2 rounded-full bg-emerald-400 text-slate-950 font-black">
+                        -20%
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Tier Selection Pills / Grid */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>💎</span> ជ្រើសរើសកញ្ចប់ដំឡើង (Select Plan):
+                    </label>
+                    <span className="text-[10px] text-amber-400 font-bold">
+                      ចុចជ្រើសរើសដើម្បីប្រៀបធៀបតម្លៃ
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                    {UPGRADE_PLANS_LIST.filter(p => p.key !== 'FREE').map(p => {
+                      const isSelected = targetPlan.key === p.key;
+                      const price = isYearly ? p.priceYearly : p.priceMonthly;
+                      return (
+                        <button
+                          key={p.key}
+                          type="button"
+                          onClick={() => setLimitModalTierKey(p.key)}
+                          className={`p-2.5 rounded-2xl border text-center transition cursor-pointer flex flex-col items-center justify-center gap-0.5 relative ${
+                            isSelected
+                              ? 'border-orange-500 bg-gradient-to-b from-orange-500/20 via-amber-500/15 to-transparent text-white shadow-lg shadow-orange-500/25 ring-2 ring-orange-500/60 scale-[1.02]'
+                              : 'border-slate-800 bg-slate-900/50 hover:bg-slate-800/80 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {p.popular && (
+                            <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-[8px] px-1.5 py-0.2 rounded-full shadow-xs uppercase tracking-tight">
+                              HOT
+                            </span>
+                          )}
+                          <span className="text-[10px] font-black uppercase tracking-wider truncate w-full">
+                            {p.key}
+                          </span>
+                          <span className={`text-sm sm:text-base font-black font-mono ${isSelected ? 'text-amber-400' : 'text-slate-300'}`}>
+                            ${price}
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-medium">
+                            {isYearly ? '/ឆ្នាំ' : '/ខែ'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Target Plan Highlight Box */}
+                <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 rounded-3xl p-5 border-2 border-orange-500/40 shadow-xl relative overflow-hidden space-y-4">
+                  
+                  {/* Glowing Corner Badge */}
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-black text-white">{targetPlan.name}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                        {targetPlan.badge}
+                      </span>
+                    </div>
+                    
+                    {/* Price Tag */}
+                    <div className="text-right">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-2xl font-black text-amber-400 font-mono">
+                          ${finalPrice}
+                        </span>
+                        <span className="text-xs text-slate-400 font-bold">
+                          {isYearly ? '/ឆ្នាំ' : '/ខែ'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">
+                        ≈ {finalPriceKHR} ៛
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Proration Credit Alert (if applicable) */}
+                  {creditDiscount > 0 && (
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 font-bold">
+                        <span>✓</span> បានកាត់កងទឹកប្រាក់នៅសល់ពីកញ្ចប់ចាស់:
+                      </span>
+                      <b className="font-mono text-emerald-400">-${creditDiscount.toFixed(2)}</b>
+                    </div>
+                  )}
+
+                  {/* Key Unlocks Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                    <div className="bg-slate-900/90 rounded-2xl p-2.5 border border-slate-800 text-center">
+                      <span className="text-[10px] text-slate-400 block mb-0.5">👥 គណនីបុគ្គលិក</span>
+                      <span className="text-xs sm:text-sm font-black text-white font-mono">{targetPlan.accountsText}</span>
+                    </div>
+                    <div className="bg-slate-900/90 rounded-2xl p-2.5 border border-slate-800 text-center">
+                      <span className="text-[10px] text-slate-400 block mb-0.5">📦 មុខទំនិញ</span>
+                      <span className="text-xs sm:text-sm font-black text-amber-400 font-mono">{targetPlan.productsText}</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1 bg-slate-900/90 rounded-2xl p-2.5 border border-slate-800 text-center flex flex-col justify-center">
+                      <span className="text-[10px] text-slate-400 block mb-0.5">⚡ KHQR & POS</span>
+                      <span className="text-xs font-black text-emerald-400">ស្កេនបង់ប្រាក់ & Slip</span>
+                    </div>
+                  </div>
+
+                  {/* Feature Bullets */}
+                  <div className="pt-1">
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                      មុខងារសំខាន់ៗដែលទទួលបាន:
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-slate-300">
+                      {targetPlan.features.slice(0, 4).map((f, i) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <span className="text-emerald-400 font-black text-xs">✓</span>
+                          <span className="truncate">{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* ⭐️ MODAL FOOTER ACTIONS ⭐️ */}
+              <div className="px-5 sm:px-7 py-4 bg-slate-950/90 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlanLimitInfo(null);
+                    setActiveTab('upgrade_plan');
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs transition cursor-pointer border border-slate-800 text-center"
+                >
+                  📋 មើលគ្រប់គម្រោងទាំង 7 (View All)
+                </button>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setPlanLimitInfo(null)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-xs transition cursor-pointer"
+                  >
+                    បោះបង់
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedUpgradePlan(targetPlan);
+                      setUpgradeBillingCycle(limitModalCycle);
+                      setUpgradeSlipFile(null);
+                      setUpgradeSlipPreview(null);
+                      setUpgradeTxRef('');
+                      setPlanLimitInfo(null);
+                      setUpgradePlanModalOpen(true);
+                    }}
+                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs transition cursor-pointer shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 active:scale-95"
+                  >
+                    <span>⚡ ដំឡើងកញ្ចប់នេះ (${finalPrice})</span>
+                    <span>➔</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ⭐️ MODAL ដំឡើងកញ្ចប់ UPGRADE PLAN: PREMIUM 2-COLUMN KHQR & SLIP CHECKOUT ⭐️ */}
-      {upgradePlanModalOpen && selectedUpgradePlan && (() => {
-        const plan = selectedUpgradePlan;
+      {upgradePlanModalOpen && (() => {
+        const plan = selectedUpgradePlan || UPGRADE_PLANS_LIST.find(p => p.key === 'STARTER') || UPGRADE_PLANS_LIST[1];
         const proration = getPlanProrationInfo(activeStore);
         const rawAmount = upgradeBillingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly;
         const creditDiscount = (plan.key !== 'FREE' && proration.remainingCredit > 0 && rawAmount > 0)
