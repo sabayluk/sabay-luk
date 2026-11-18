@@ -712,8 +712,21 @@ export default function UnifiedAdminDashboard() {
         }]);
       if (movErr) throw movErr;
 
+      // 1. Optimistic update in products state immediately for zero-lag UI
+      setProducts(prev => prev.map(p => {
+        if (p.id === stockInProduct.id) {
+          return {
+            ...p,
+            stock_qty: newTotalQty,
+            status: newTotalQty > 0 ? 'In Stock' : 'Out of Stock'
+          };
+        }
+        return p;
+      }));
+
       const actionText = stockActionType === 'IN' ? `នាំចូល +${qty}` : `កាត់ស្តុក -${qty}`;
-      alert(`✅ ${actionText} លើទំនិញ [${stockInProduct.name}] បានជោគជ័យ និងបានកត់ត្រាប្រវត្តិចលនា!`);
+      setToastNotification(`✅ ${actionText} លើទំនិញ [${stockInProduct.name}] បានជោគជ័យ! ស្តុកថ្មី: ${newTotalQty}`);
+      setTimeout(() => setToastNotification(null), 4000);
       setStockInModalOpen(false);
       fetchProducts();
       fetchStockMovements();
@@ -2296,16 +2309,25 @@ export default function UnifiedAdminDashboard() {
     return () => clearInterval(timer);
   }, [activeStore?.id, currentStoreProducts?.length]);
 
+  const jumpIndexRef = useRef(0);
   const handleJumpToOutOfStock = (product) => {
-    const target = product || stockAlertData.outOfStock[0] || stockAlertData.lowStock[0];
-    if (!target) return;
+    const list = stockAlertData.allAlertItems || [];
+    if (list.length === 0) return;
+
+    let target = product;
+    if (!target) {
+      const idx = jumpIndexRef.current % list.length;
+      target = list[idx];
+      jumpIndexRef.current = (idx + 1) % list.length;
+    }
+
     setStockAlertDrawerOpen(false);
+    // User request 163: Scroll directly to product without opening any popup modal!
     jumpToProductInInventory(target, {
       setActiveTab,
       setInventorySubTab,
       setFilterStatus,
-      setInvSearch,
-      handleOpenQuickEdit
+      setInvSearch
     });
   };
 
@@ -19860,161 +19882,338 @@ export default function UnifiedAdminDashboard() {
           </div>
         )}
 
-        {/* ⭐️ MODAL គ្រប់គ្រងចលនាស្តុក: នាំចូល (+IN) & កាត់ស្តុកចេញ (-OUT) ⭐️ */}
+        {/* ⭐️ MODAL គ្រប់គ្រងចលនាស្តុក: នាំចូល (+IN) & កាត់ស្តុកចេញ (-OUT) កម្រិតខ្ពស់ ULTRA-MODERN ⭐️ */}
         {stockInModalOpen && stockInProduct && (() => {
           const selectedVar = stockInVariants.find(v => v.id.toString() === stockInSelectedVariant);
-          const currentAvailable = selectedVar ? selectedVar.stock_qty : (stockInProduct.stock_qty || 0);
+          const currentAvailable = selectedVar ? Number(selectedVar.stock_qty || 0) : Number(stockInProduct.stock_qty || 0);
+          const qtyNum = parseInt(stockInQty) || 0;
+          const delta = stockActionType === 'IN' ? qtyNum : -qtyNum;
+          const newProjectedQty = Math.max(0, currentAvailable + delta);
+          const isOverLimit = stockActionType === 'OUT' && qtyNum > currentAvailable;
+          const costPrice = Number(stockInProduct.cost_price || 0);
 
           return (
             <div 
               onClick={() => setStockInModalOpen(false)}
-              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in cursor-pointer"
+              className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
             >
               <div 
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-8 border border-gray-100 animate-in zoom-in-95 cursor-default"
+                className="bg-white w-full max-w-xl rounded-3xl shadow-2xl p-5 sm:p-7 border border-slate-200 animate-in zoom-in-95 duration-200 cursor-default flex flex-col max-h-[92vh] overflow-y-auto"
               >
-                
-                {/* Modal Header */}
-                <div className="flex justify-between items-start mb-5 pb-4 border-b border-gray-100">
-                  <div className="flex items-center gap-3">
-                    <img 
-                      src={stockInProduct.image_url || ''} 
-                      className="w-12 h-12 rounded-xl object-cover bg-gray-100 border shrink-0" 
-                      alt="" 
-                    />
-                    <div>
-                      <h3 className="text-lg font-black text-gray-900 line-clamp-1">{stockInProduct.name}</h3>
-                      <p className="text-xs text-blue-600 font-bold">SKU: {stockInProduct.sku} • ស្តុកសរុប: {stockInProduct.stock_qty}</p>
+                {/* 🌟 1. MODAL HEADER & PRODUCT HERO CARD */}
+                <div className="flex justify-between items-start pb-4 border-b border-gray-150">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    {stockInProduct.image_url ? (
+                      <img 
+                        src={stockInProduct.image_url} 
+                        className="w-14 h-14 rounded-2xl object-cover bg-gray-50 border border-gray-200 shrink-0 shadow-xs" 
+                        alt={stockInProduct.name} 
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center text-2xl shrink-0">
+                        📦
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                          {stockInProduct.category || 'ទំនិញ'}
+                        </span>
+                        <span className="font-mono text-[11px] font-bold text-slate-500">
+                          SKU: {stockInProduct.sku || 'N/A'}
+                        </span>
+                      </div>
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 truncate mt-0.5" title={stockInProduct.name}>
+                        {stockInProduct.name}
+                      </h3>
+                      <p className="text-xs font-bold text-slate-500 mt-0.5">
+                        ស្តុកសរុបក្នុងឃ្លាំង: <span className={`font-mono font-black ${stockInProduct.stock_qty <= 0 ? 'text-rose-600' : 'text-emerald-700'}`}>{stockInProduct.stock_qty}</span> គូ/មុខ
+                      </p>
                     </div>
                   </div>
+
                   <button 
+                    type="button"
                     onClick={() => setStockInModalOpen(false)} 
-                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-black cursor-pointer"
+                    className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 font-black text-sm transition cursor-pointer shrink-0 ml-2 shadow-xs"
+                    title="បិទ (Close)"
                   >
                     ✕
                   </button>
                 </div>
 
-                {/* ⭐️ TABS: នាំចូលស្តុក (+IN) vs កាត់ស្តុកចេញ (-OUT) ⭐️ */}
-                <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-2xl mb-5">
+                {/* 🌟 2. LUXURY MODE SWITCHER (TABS) */}
+                <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 rounded-2xl my-4">
                   <button
                     type="button"
                     onClick={() => {
                       setStockActionType('IN');
                       setStockInReason('នាំចូលបន្ថែមពីមេការ');
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
                       stockActionType === 'IN'
-                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                        : 'text-gray-600 hover:text-emerald-700 hover:bg-white/60'
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/30 scale-[1.02]'
+                        : 'text-slate-600 hover:text-emerald-700 hover:bg-white/70'
                     }`}
                   >
-                    <span>📥</span>
+                    <span className="text-base">📥</span>
                     <span>នាំចូលស្តុក (+ Stock In)</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => {
                       setStockActionType('OUT');
                       setStockInReason('កាត់ស្តុកចេញ / ទំនិញខូចខាត');
                     }}
-                    className={`py-2.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    className={`py-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
                       stockActionType === 'OUT'
-                        ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-                        : 'text-gray-600 hover:text-rose-700 hover:bg-white/60'
+                        ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-lg shadow-rose-600/30 scale-[1.02]'
+                        : 'text-slate-600 hover:text-rose-700 hover:bg-white/70'
                     }`}
                   >
-                    <span>📤</span>
+                    <span className="text-base">📤</span>
                     <span>កាត់ស្តុកចេញ (- Stock Out)</span>
                   </button>
                 </div>
 
-                {/* Banner ព័ត៌មានស្តុកដែលអាចកាត់បាន */}
-                {stockActionType === 'OUT' && (
-                  <div className="mb-4 bg-rose-50 border border-rose-200 text-rose-800 p-3 rounded-2xl text-xs flex items-center justify-between">
-                    <span className="font-bold flex items-center gap-1">
-                      <span>⚠️</span> ស្តុកដែលអាចកាត់បានខ្ពស់បំផុត៖
-                    </span>
-                    <span className="font-black text-rose-700 bg-white px-2 py-0.5 rounded-lg border border-rose-200">
-                      {currentAvailable} គូ/មុខ
-                    </span>
-                  </div>
-                )}
-
                 <form onSubmit={handleConfirmStockIn} className="space-y-4">
-                  {/* បើទំនិញមាន Variants (Sizes) ឱ្យជ្រើសរើស Size */}
+                  
+                  {/* 🌟 3. INTERACTIVE SIZE / VARIANT CHIPS SELECTOR */}
                   {stockInVariants.length > 0 && (
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase mb-2">
-                        ជ្រើសរើសទំហំ (Size) {stockActionType === 'IN' ? 'ដែលត្រូវនាំចូល' : 'ដែលត្រូវកាត់ស្តុក'}
-                      </label>
-                      <select 
-                        value={stockInSelectedVariant}
-                        onChange={(e) => setStockInSelectedVariant(e.target.value)}
-                        className={`w-full border-2 rounded-2xl p-3 text-sm font-bold bg-white outline-none transition ${
-                          stockActionType === 'IN' ? 'focus:border-emerald-500 border-gray-200' : 'focus:border-rose-500 border-gray-200'
-                        }`}
-                      >
-                        {stockInVariants.map(v => (
-                          <option key={v.id} value={v.id}>
-                            Size: {v.size} {v.color ? `(${v.color})` : ''} - ស្តុកបច្ចុប្បន្ន: {v.stock_qty}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>👟</span>
+                          <span>ជ្រើសរើសទំហំ (Size) {stockActionType === 'IN' ? 'ដែលត្រូវនាំចូល' : 'ដែលត្រូវកាត់ស្តុក'}:</span>
+                        </label>
+                        <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-bold">
+                          {stockInVariants.length} Sizes
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {stockInVariants.map(v => {
+                          const isSel = v.id.toString() === stockInSelectedVariant;
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => setStockInSelectedVariant(v.id.toString())}
+                              className={`px-3 py-2 rounded-2xl border-2 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                                isSel
+                                  ? stockActionType === 'IN'
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/25 ring-2 ring-emerald-200'
+                                    : 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/25 ring-2 ring-rose-200'
+                                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200 shadow-2xs'
+                              }`}
+                            >
+                              <span>Size {v.size}</span>
+                              {v.color && <span className="opacity-70 text-[10px]">({v.color})</span>}
+                              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black ${
+                                isSel ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {v.stock_qty}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-2">
-                      {stockActionType === 'IN' ? 'ចំនួនដែលត្រូវនាំចូលបន្ថែម (+Qty) *' : 'ចំនួនដែលត្រូវកាត់ចេញវិញ (-Qty) *'}
-                    </label>
-                    <input 
-                      type="number"
-                      min="1"
-                      max={stockActionType === 'OUT' ? currentAvailable : undefined}
-                      required
-                      value={stockInQty}
-                      onChange={(e) => setStockInQty(e.target.value)}
-                      placeholder="ឧ. 5"
-                      className={`w-full border-2 rounded-2xl p-3.5 text-xl font-black outline-none transition ${
-                        stockActionType === 'IN'
-                          ? 'border-gray-200 text-emerald-700 focus:border-emerald-500 bg-emerald-50/20'
-                          : 'border-gray-200 text-rose-700 focus:border-rose-500 bg-rose-50/20'
-                      }`}
-                    />
+                  {/* 🌟 4. QUANTITY INPUT WITH STEPPER & PRESET PILLS */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        {stockActionType === 'IN' ? '📥 បញ្ចូលចំនួននាំចូលបន្ថែម (+Qty) *' : '📤 បញ្ចូលចំនួនកាត់ស្តុកចេញ (-Qty) *'}
+                      </label>
+                      <span className="text-[11px] font-bold text-slate-500">
+                        ស្តុកបច្ចុប្បន្ន: <b className="font-mono text-slate-900">{currentAvailable}</b>
+                      </span>
+                    </div>
+
+                    {/* Big Numeric Stepper */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const curr = parseInt(stockInQty) || 0;
+                          if (curr > 1) setStockInQty((curr - 1).toString());
+                        }}
+                        className="w-13 h-13 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-2xl flex items-center justify-center transition active:scale-90 cursor-pointer shadow-xs border border-slate-200"
+                        title="បន្ថយ ១"
+                      >
+                        -
+                      </button>
+
+                      <div className="relative flex-1">
+                        <input 
+                          type="number"
+                          min="1"
+                          max={stockActionType === 'OUT' ? currentAvailable : undefined}
+                          required
+                          value={stockInQty}
+                          onChange={(e) => setStockInQty(e.target.value)}
+                          placeholder="0"
+                          className={`w-full border-2 rounded-2xl py-3 px-4 text-2xl font-black text-center outline-none transition font-mono ${
+                            stockActionType === 'IN'
+                              ? 'border-emerald-300 text-emerald-900 focus:border-emerald-600 bg-emerald-50/20 shadow-inner'
+                              : 'border-rose-300 text-rose-900 focus:border-rose-600 bg-rose-50/20 shadow-inner'
+                          }`}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const curr = parseInt(stockInQty) || 0;
+                          const max = stockActionType === 'OUT' ? currentAvailable : Infinity;
+                          if (curr < max) setStockInQty((curr + 1).toString());
+                        }}
+                        className="w-13 h-13 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-2xl flex items-center justify-center transition active:scale-90 cursor-pointer shadow-xs border border-slate-200"
+                        title="បន្ថែម ១"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Quick Preset Pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[10px] font-bold text-slate-400 mr-1">បរិមាណរហ័ស:</span>
+                      {(stockActionType === 'IN' ? [1, 5, 10, 20, 50, 100] : [1, 2, 5, 10]).map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => {
+                            const base = parseInt(stockInQty) || 0;
+                            const next = base + num;
+                            const finalVal = stockActionType === 'OUT' ? Math.min(next, currentAvailable) : next;
+                            setStockInQty(finalVal.toString());
+                          }}
+                          className="text-xs font-black px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer active:scale-95 border border-slate-200/60 shadow-2xs"
+                        >
+                          +{num}
+                        </button>
+                      ))}
+
+                      {stockActionType === 'OUT' && currentAvailable > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setStockInQty(currentAvailable.toString())}
+                          className="text-xs font-black px-3 py-1 rounded-xl bg-rose-100 text-rose-700 hover:bg-rose-200 transition cursor-pointer active:scale-95 border border-rose-200"
+                        >
+                          កាត់ទាំងអស់ ({currentAvailable})
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setStockInQty('')}
+                        className="text-[11px] font-bold text-slate-400 hover:text-slate-700 ml-auto underline cursor-pointer"
+                      >
+                        ជម្រះ (Clear)
+                      </button>
+                    </div>
                   </div>
 
+                  {/* 🌟 5. LIVE STOCK SIMULATION CARD (BEFORE ➔ DELTA ➔ AFTER) */}
+                  <div className={`p-4 rounded-2xl border transition-all ${
+                    isOverLimit 
+                      ? 'bg-rose-50 border-rose-300 text-rose-950' 
+                      : stockActionType === 'IN'
+                        ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-emerald-300 text-emerald-950'
+                        : 'bg-gradient-to-r from-rose-50 via-amber-50 to-rose-50 border-rose-300 text-rose-950'
+                  }`}>
+                    <div className="flex items-center justify-between text-xs font-bold mb-2">
+                      <span className="flex items-center gap-1.5">
+                        <span>{isOverLimit ? '⚠️' : '📊'}</span>
+                        <span className="font-black">
+                          {isOverLimit ? 'មិនអាចកាត់ស្តុកបានទេ (លើសចំនួនដែលមាន)!' : 'ការប្រែប្រួលស្តុកជាក់ស្តែង (Live Simulation):'}
+                        </span>
+                      </span>
+                      <span className="text-[10px] font-mono uppercase bg-white/80 px-2 py-0.5 rounded-full border border-slate-200">
+                        Real-time Preview
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-around font-mono bg-white/80 p-3 rounded-xl border border-slate-200/80">
+                      <div className="text-center">
+                        <span className="text-[10px] text-slate-500 block font-sans font-bold">ស្តុកបច្ចុប្បន្ន</span>
+                        <span className="text-lg font-black text-slate-800">{currentAvailable}</span>
+                      </div>
+
+                      <div className="text-center font-black text-sm">
+                        {stockActionType === 'IN' ? (
+                          <span className="text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-xl">➔ +{qtyNum} ➔</span>
+                        ) : (
+                          <span className="text-rose-600 bg-rose-100 px-2.5 py-1 rounded-xl">➔ -{qtyNum} ➔</span>
+                        )}
+                      </div>
+
+                      <div className="text-center">
+                        <span className="text-[10px] text-slate-500 block font-sans font-bold">
+                          {stockActionType === 'IN' ? 'ស្តុកថ្មីក្រោយនាំចូល' : 'ស្តុកនៅសល់'}
+                        </span>
+                        <span className={`text-xl font-black ${
+                          isOverLimit 
+                            ? 'text-rose-600 underline' 
+                            : stockActionType === 'IN' 
+                              ? 'text-emerald-700' 
+                              : newProjectedQty <= 0 
+                                ? 'text-rose-600' 
+                                : 'text-slate-900'
+                        }`}>
+                          {isOverLimit ? 'ERROR' : newProjectedQty}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Unit Cost Valuation for Stock In */}
+                    {stockActionType === 'IN' && costPrice > 0 && qtyNum > 0 && (
+                      <div className="mt-2.5 pt-2 border-t border-emerald-200/70 flex items-center justify-between text-xs font-bold text-emerald-900">
+                        <span>💵 ដើមទុននាំចូលសរុបលើកនេះ ({qtyNum} x ${costPrice.toFixed(2)}):</span>
+                        <span className="font-black font-mono text-sm bg-white px-2 py-0.5 rounded-md border border-emerald-300">
+                          ${(qtyNum * costPrice).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 🌟 6. REASON / NOTE WITH 1-CLICK SMART TAGS */}
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase mb-2">សម្គាល់ / មូលហេតុ (Reason / Note)</label>
+                    <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">
+                      សម្គាល់ / មូលហេតុ (Reason / Note)
+                    </label>
                     <input 
                       type="text"
                       value={stockInReason}
                       onChange={(e) => setStockInReason(e.target.value)}
                       placeholder={stockActionType === 'IN' ? 'ឧ. នាំចូលបន្ថែមពីមេការ ឬទិញបន្ថែម' : 'ឧ. ទំនិញខូចខាត, បាត់បង់, ឬកែតម្រូវស្តុក'}
-                      className="w-full border-2 border-gray-200 rounded-2xl p-3 text-sm font-medium focus:border-blue-500 outline-none"
+                      className="w-full border-2 border-slate-200 rounded-2xl p-3 text-xs font-bold focus:border-blue-500 outline-none transition bg-white"
                     />
                     
-                    {/* ប៊ូតុងមូលហេតុលឿនៗ (Quick Reasons) */}
+                    {/* Quick Smart Tags */}
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {stockActionType === 'IN' ? (
-                        ['នាំចូលបន្ថែមពីមេការ', 'រោងចក្រដឹកមកដល់', 'ទិញចូលស្តុកថ្មី'].map((r, i) => (
+                        ['📦 នាំចូលបន្ថែមពីមេការ', '🏭 រោងចក្រដឹកមកដល់', '🛒 ទិញចូលស្តុកថ្មី', '🔄 អតិថិជនប្តូរចូលវិញ'].map((r, i) => (
                           <button
                             key={i}
                             type="button"
                             onClick={() => setStockInReason(r)}
-                            className="text-[10px] font-bold bg-gray-100 hover:bg-emerald-50 hover:text-emerald-700 text-gray-600 px-2 py-0.5 rounded-lg border border-gray-200 transition cursor-pointer"
+                            className="text-[11px] font-bold bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-700 px-2.5 py-1 rounded-xl border border-slate-200 transition cursor-pointer active:scale-95"
                           >
                             + {r}
                           </button>
                         ))
                       ) : (
-                        ['ទំនិញខូចខាត', 'បាត់បង់/បាក់បែក', 'ប្តូរទំនិញសងម៉ូយ', 'កែសម្រួលស្តុកជាក់ស្តែង'].map((r, i) => (
+                        ['⚠️ ទំនិញខូចខាត/បាក់បែក', '🔍 បាត់បង់/រកមិនឃើញ', '🎁 ទំនិញថែមជូន/តាំងបង្ហាញ', '🔄 កែតម្រូវស្តុកជាក់ស្តែង'].map((r, i) => (
                           <button
                             key={i}
                             type="button"
                             onClick={() => setStockInReason(r)}
-                            className="text-[10px] font-bold bg-gray-100 hover:bg-rose-50 hover:text-rose-700 text-gray-600 px-2 py-0.5 rounded-lg border border-gray-200 transition cursor-pointer"
+                            className="text-[11px] font-bold bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 px-2.5 py-1 rounded-xl border border-slate-200 transition cursor-pointer active:scale-95"
                           >
                             - {r}
                           </button>
@@ -20023,28 +20222,37 @@ export default function UnifiedAdminDashboard() {
                     </div>
                   </div>
 
-                  <div className="pt-4 flex gap-3">
+                  {/* 🌟 7. MODAL FOOTER BUTTONS */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center gap-3">
                     <button 
                       type="button" 
                       onClick={() => setStockInModalOpen(false)}
-                      className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3.5 rounded-2xl font-bold text-sm transition cursor-pointer"
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3.5 rounded-2xl font-bold text-xs sm:text-sm transition cursor-pointer"
                     >
                       បោះបង់
                     </button>
                     <button 
                       type="submit" 
-                      disabled={stockInLoading}
-                      className={`flex-1 py-3.5 rounded-2xl font-black text-sm shadow-lg transition cursor-pointer disabled:bg-gray-300 text-white ${
+                      disabled={stockInLoading || qtyNum <= 0 || isOverLimit}
+                      className={`flex-1 py-3.5 rounded-2xl font-black text-xs sm:text-sm shadow-lg transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2 active:scale-98 ${
                         stockActionType === 'IN'
-                          ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30'
-                          : 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/30'
+                          ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-600/30'
+                          : 'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 shadow-rose-600/30'
                       }`}
                     >
-                      {stockInLoading 
-                        ? 'កំពុងរក្សាទុក...' 
-                        : stockActionType === 'IN' 
-                        ? '📥 បញ្ជាក់ការនាំចូល' 
-                        : '📤 បញ្ជាក់ការកាត់ស្តុក'}
+                      {stockInLoading ? (
+                        <span>កំពុងរក្សាទុក...</span>
+                      ) : stockActionType === 'IN' ? (
+                        <>
+                          <span>📥</span>
+                          <span>បញ្ជាក់ការនាំចូល (+{qtyNum})</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>📤</span>
+                          <span>បញ្ជាក់ការកាត់ស្តុក (-{qtyNum})</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>
