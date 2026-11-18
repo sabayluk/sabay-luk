@@ -514,6 +514,13 @@ function InvoiceContent() {
                 </div>
               )}
 
+              {(parseFloat(order?.delivery_fee || order?.shipping_fee || 0) > 0) && (
+                <div className="flex justify-between items-center text-gray-600">
+                  <span>សេវាដឹកជញ្ជូន (Delivery Fee):</span>
+                  <span className="font-mono font-bold">+${parseFloat(order?.delivery_fee || order?.shipping_fee || 0).toFixed(2)}</span>
+                </div>
+              )}
+
               {tax > 0 && (
                 <div className="flex justify-between items-center text-gray-600">
                   <span>ពន្ធអាករ (VAT 10%):</span>
