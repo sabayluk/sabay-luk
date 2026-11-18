@@ -578,6 +578,7 @@ export default function UnifiedAdminDashboard() {
   const [stockInReason, setStockInReason] = useState('នាំចូលបន្ថែមពីមេការ');
   const [stockInLoading, setStockInLoading] = useState(false);
   const [stockActionType, setStockActionType] = useState('IN'); // 'IN' = នាំចូល, 'OUT' = កាត់ស្តុកចេញ
+  const [stockInSuccessMsg, setStockInSuccessMsg] = useState(null);
 
   // Filters សម្រាប់ Audit Log ចលនាស្តុក
   const [movementFilterType, setMovementFilterType] = useState('ALL'); // 'ALL' | 'PURCHASE' | 'SALE' | 'ADJUSTMENT'
@@ -628,6 +629,7 @@ export default function UnifiedAdminDashboard() {
     setStockInProduct(product);
     setStockActionType(mode);
     setStockInQty('');
+    setStockInSuccessMsg(null);
     setStockInReason(mode === 'IN' ? 'នាំចូលបន្ថែមពីមេការ' : 'កាត់ស្តុកចេញ / ទំនិញខូចខាត');
     setStockInModalOpen(true);
 
@@ -724,10 +726,44 @@ export default function UnifiedAdminDashboard() {
         return p;
       }));
 
+      // 2. Optimistic update in stockInProduct & stockInVariants so modal stays live
+      setStockInProduct(prev => prev ? {
+        ...prev,
+        stock_qty: newTotalQty,
+        status: newTotalQty > 0 ? 'In Stock' : 'Out of Stock'
+      } : null);
+
+      if (variantId) {
+        setStockInVariants(prev => prev.map(v => 
+          v.id.toString() === variantId.toString() 
+            ? { ...v, stock_qty: newVariantQty } 
+            : v
+        ));
+      }
+
+      // Check if there is a next size in sequence (e.g. Size 39 -> 40 -> 41 -> ...)
+      let nextVarPrompt = '';
+      if (variantId && stockInVariants.length > 1) {
+        const currIdx = stockInVariants.findIndex(v => v.id.toString() === variantId.toString());
+        if (currIdx !== -1 && currIdx < stockInVariants.length - 1) {
+          const nextVar = stockInVariants[currIdx + 1];
+          setStockInSelectedVariant(nextVar.id.toString());
+          nextVarPrompt = ` ➔ បានប្តូរទៅ Size ${nextVar.size} បន្ទាប់`;
+        }
+      }
+
       const actionText = stockActionType === 'IN' ? `នាំចូល +${qty}` : `កាត់ស្តុក -${qty}`;
-      setToastNotification(`✅ ${actionText} លើទំនិញ [${stockInProduct.name}] បានជោគជ័យ! ស្តុកថ្មី: ${newTotalQty}`);
+      const varText = selectedVar ? ` Size ${selectedVar.size}` : '';
+      const successMsg = `✅ ${actionText}${varText} ជោគជ័យ! (ស្តុក Size: ${variantId ? newVariantQty : newTotalQty} | ស្តុកសរុប: ${newTotalQty})${nextVarPrompt}`;
+
+      setStockInSuccessMsg(successMsg);
+      setToastNotification(successMsg);
       setTimeout(() => setToastNotification(null), 4000);
-      setStockInModalOpen(false);
+
+      // Reset Qty input for the next size entry
+      setStockInQty('');
+
+      // Keep modal OPEN for continuous batch size entry (do NOT close modal)!
       fetchProducts();
       fetchStockMovements();
 
@@ -19894,7 +19930,10 @@ export default function UnifiedAdminDashboard() {
 
           return (
             <div 
-              onClick={() => setStockInModalOpen(false)}
+              onClick={() => {
+                setStockInModalOpen(false);
+                setStockInSuccessMsg(null);
+              }}
               className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
             >
               <div 
@@ -19935,9 +19974,12 @@ export default function UnifiedAdminDashboard() {
 
                   <button 
                     type="button"
-                    onClick={() => setStockInModalOpen(false)} 
+                    onClick={() => {
+                      setStockInModalOpen(false);
+                      setStockInSuccessMsg(null);
+                    }} 
                     className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 font-black text-sm transition cursor-pointer shrink-0 ml-2 shadow-xs"
-                    title="បិទ (Close)"
+                    title="រួចរាល់ / បិទ (Close)"
                   >
                     ✕
                   </button>
@@ -19977,6 +20019,23 @@ export default function UnifiedAdminDashboard() {
                     <span>កាត់ស្តុកចេញ (- Stock Out)</span>
                   </button>
                 </div>
+
+                {/* 🌟 2.5 INLINE SUCCESS BANNER (MULTI-SIZE BATCH FEEDBACK) */}
+                {stockInSuccessMsg && (
+                  <div className="mb-4 p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl text-emerald-900 flex items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center gap-2.5 text-xs sm:text-sm font-black min-w-0">
+                      <span className="text-lg shrink-0">🎉</span>
+                      <span className="leading-snug">{stockInSuccessMsg}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setStockInSuccessMsg(null)}
+                      className="text-emerald-700 hover:text-emerald-950 font-black text-xs px-2 py-1 rounded-lg hover:bg-emerald-200/50 transition cursor-pointer shrink-0"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
 
                 <form onSubmit={handleConfirmStockIn} className="space-y-4">
                   
@@ -20226,10 +20285,13 @@ export default function UnifiedAdminDashboard() {
                   <div className="pt-3 border-t border-slate-100 flex items-center gap-3">
                     <button 
                       type="button" 
-                      onClick={() => setStockInModalOpen(false)}
+                      onClick={() => {
+                        setStockInModalOpen(false);
+                        setStockInSuccessMsg(null);
+                      }}
                       className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3.5 rounded-2xl font-bold text-xs sm:text-sm transition cursor-pointer"
                     >
-                      បោះបង់
+                      រួចរាល់ / បិទ (Done)
                     </button>
                     <button 
                       type="submit" 
@@ -20245,12 +20307,12 @@ export default function UnifiedAdminDashboard() {
                       ) : stockActionType === 'IN' ? (
                         <>
                           <span>📥</span>
-                          <span>បញ្ជាក់ការនាំចូល (+{qtyNum})</span>
+                          <span>រក្សាទុកនាំចូល (+{qtyNum})</span>
                         </>
                       ) : (
                         <>
                           <span>📤</span>
-                          <span>បញ្ជាក់ការកាត់ស្តុក (-{qtyNum})</span>
+                          <span>រក្សាទុកកាត់ស្តុក (-{qtyNum})</span>
                         </>
                       )}
                     </button>
