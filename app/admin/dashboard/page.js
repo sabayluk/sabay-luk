@@ -26422,36 +26422,36 @@ export default function UnifiedAdminDashboard() {
         return (
           <div 
             onClick={(e) => { if (e.target === e.currentTarget) setPlanLimitInfo(null); }}
-            className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200"
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200"
           >
-            <div className="relative bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white rounded-3xl max-w-2xl w-full border border-amber-500/30 shadow-2xl shadow-orange-500/10 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col my-auto max-h-[92vh]">
+            <div className="relative bg-white text-slate-900 rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col my-auto max-h-[92vh]">
               
-              {/* Decorative Ambient Radial Glow */}
-              <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-44 bg-gradient-to-r from-orange-500/25 via-amber-500/20 to-purple-500/20 blur-3xl pointer-events-none rounded-full" />
+              {/* Subtle Warm Amber Top Accent */}
+              <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-44 bg-gradient-to-r from-orange-400/15 via-amber-400/15 to-orange-500/15 blur-3xl pointer-events-none rounded-full" />
               
-              {/* ⭐️ MODAL HEADER ⭐️ */}
-              <div className="relative z-10 px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-slate-800/80 flex items-start justify-between gap-4">
+              {/* ⭐️ MODAL HEADER (WHITE THEME) ⭐️ */}
+              <div className="relative z-10 px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-slate-100 flex items-start justify-between gap-4 bg-white">
                 <div className="flex items-start gap-3.5 min-w-0">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 via-orange-500/20 to-rose-500/20 border border-orange-500/40 text-amber-400 flex items-center justify-center text-2xl shrink-0 shadow-lg shadow-orange-500/10">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-100 border border-orange-200 text-[#ff6a00] flex items-center justify-center text-2xl shrink-0 shadow-xs">
                     {isStaff ? '👥' : isProduct ? '📦' : '⚡'}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
                         isGeneral
-                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                          : 'bg-rose-500/20 text-rose-300 border-rose-500/30 animate-pulse'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse'
                       }`}>
                         {isStaff ? '👥 កម្រិតកំណត់បុគ្គលិក (Staff Limit)' : isProduct ? '📦 កម្រិតកំណត់មុខទំនិញ (Product Limit)' : '⚡ ដំឡើងកញ្ចប់សេវា (Upgrade Plan)'}
                       </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
                         {currentPlanKey}
                       </span>
                     </div>
-                    <h2 className="text-base sm:text-lg font-black text-white leading-snug">
+                    <h2 className="text-base sm:text-lg font-black text-slate-900 leading-snug">
                       {planLimitInfo.title || 'ដល់កម្រិតកំណត់នៃកញ្ចប់សេវា'}
                     </h2>
-                    <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
+                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-2 font-medium">
                       {planLimitInfo.description || `ហាង "${activeStore?.name}" បានប្រើប្រាស់ដល់កម្រិតកំណត់នៃកញ្ចប់ ${currentPlanKey} ហើយ!`}
                     </p>
                   </div>
@@ -26460,54 +26460,54 @@ export default function UnifiedAdminDashboard() {
                 <button
                   type="button"
                   onClick={() => setPlanLimitInfo(null)}
-                  className="w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-sm transition cursor-pointer shrink-0"
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-sm font-bold transition cursor-pointer shrink-0"
                   title="បិទ (Close)"
                 >
                   ✕
                 </button>
               </div>
 
-              {/* ⭐️ SCROLLABLE CONTENT BODY ⭐️ */}
-              <div className="p-5 sm:p-7 overflow-y-auto space-y-5 relative z-10">
+              {/* ⭐️ SCROLLABLE CONTENT BODY (CLEAN WHITE / LIGHT BG) ⭐️ */}
+              <div className="p-5 sm:p-7 overflow-y-auto space-y-4 relative z-10 bg-slate-50/60">
                 
                 {/* 1. Current Usage Meter Box */}
                 {!isGeneral && (
-                  <div className="bg-slate-950/60 rounded-2xl p-4 border border-slate-800/90 space-y-2.5">
+                  <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-sm space-y-2.5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                      <span className="font-bold text-slate-700 flex items-center gap-1.5">
                         <span>{isStaff ? '👥 បុគ្គលិកបច្ចុប្បន្ន:' : '📦 ទំនិញក្នុងស្តុក:'}</span>
-                        <b className="text-amber-400 font-mono text-sm">{currentCount} / {maxLimit} {isStaff ? 'នាក់' : 'មុខ'}</b>
+                        <b className="text-[#ff6a00] font-mono text-sm">{currentCount} / {maxLimit} {isStaff ? 'នាក់' : 'មុខ'}</b>
                       </span>
-                      <span className="font-black text-xs px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                      <span className="font-black text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
                         ប្រើប្រាស់អស់ {percentUsed}% (ពេញ)
                       </span>
                     </div>
 
                     {/* Progress Bar Track */}
-                    <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden p-0.5">
+                    <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden p-0.5 border border-slate-200">
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 shadow-sm shadow-orange-500/50 transition-all duration-500"
+                        className="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 shadow-xs transition-all duration-500"
                         style={{ width: `${percentUsed}%` }}
                       />
                     </div>
 
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      💡 កញ្ចប់ <b>{currentPlanKey}</b> អនុញ្ញាតត្រឹម {maxLimit} {isStaff ? 'នាក់' : 'មុខ'}។ ដំឡើងទៅកញ្ចប់ <b className="text-amber-300">{targetPlan.name}</b> ត្រឹម <b className="text-emerald-400 font-mono">${isYearly ? targetPlan.priceYearly + '/ឆ្នាំ' : targetPlan.priceMonthly + '/ខែ'}</b> ដើម្បីដោះសោបន្ថែមភ្លាមៗ!
+                    <p className="text-[11px] text-slate-600 leading-relaxed font-medium">
+                      💡 កញ្ចប់ <b>{currentPlanKey}</b> អនុញ្ញាតត្រឹម {maxLimit} {isStaff ? 'នាក់' : 'មុខ'}។ ដំឡើងទៅកញ្ចប់ <b className="text-[#ff6a00]">{targetPlan.name}</b> ត្រឹម <b className="text-emerald-700 font-mono">${isYearly ? targetPlan.priceYearly + '/ឆ្នាំ' : targetPlan.priceMonthly + '/ខែ'}</b> ដើម្បីដោះសោបន្ថែមភ្លាមៗ!
                     </p>
                   </div>
                 )}
 
                 {/* 2. Billing Cycle Switch */}
-                <div className="flex items-center justify-between bg-slate-950/40 p-1.5 rounded-2xl border border-slate-800">
-                  <span className="text-xs font-black text-slate-300 px-3 flex items-center gap-1.5">
+                <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+                  <span className="text-xs font-black text-slate-700 px-2 flex items-center gap-1.5">
                     <span>🗓️</span> វដ្តនៃការទូទាត់ (Billing Cycle):
                   </span>
-                  <div className="inline-flex p-1 bg-slate-900 rounded-xl border border-slate-800 shrink-0">
+                  <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 shrink-0">
                     <button
                       type="button"
                       onClick={() => setLimitModalCycle('monthly')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
-                        !isYearly ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30' : 'text-slate-400 hover:text-white'
+                        !isYearly ? 'bg-gradient-to-r from-[#ff6a00] to-orange-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       ប្រចាំខែ
@@ -26516,11 +26516,11 @@ export default function UnifiedAdminDashboard() {
                       type="button"
                       onClick={() => setLimitModalCycle('yearly')}
                       className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 ${
-                        isYearly ? 'bg-orange-500 text-white shadow-md shadow-orange-500/30' : 'text-slate-400 hover:text-white'
+                        isYearly ? 'bg-gradient-to-r from-[#ff6a00] to-orange-500 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
                       <span>ប្រចាំឆ្នាំ</span>
-                      <span className="text-[9px] px-1 py-0.2 rounded-full bg-emerald-400 text-slate-950 font-black">
+                      <span className="text-[9px] px-1 py-0.2 rounded-full bg-emerald-600 text-white font-black">
                         -20%
                       </span>
                     </button>
@@ -26530,10 +26530,10 @@ export default function UnifiedAdminDashboard() {
                 {/* 3. Tier Selection Pills / Grid */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <label className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                       <span>💎</span> ជ្រើសរើសកញ្ចប់ដំឡើង (Select Plan):
                     </label>
-                    <span className="text-[10px] text-amber-400 font-bold">
+                    <span className="text-[10px] text-orange-600 font-bold">
                       ចុចជ្រើសរើសដើម្បីប្រៀបធៀបតម្លៃ
                     </span>
                   </div>
@@ -26549,8 +26549,8 @@ export default function UnifiedAdminDashboard() {
                           onClick={() => setLimitModalTierKey(p.key)}
                           className={`p-2.5 rounded-2xl border text-center transition cursor-pointer flex flex-col items-center justify-center gap-0.5 relative ${
                             isSelected
-                              ? 'border-orange-500 bg-gradient-to-b from-orange-500/20 via-amber-500/15 to-transparent text-white shadow-lg shadow-orange-500/25 ring-2 ring-orange-500/60 scale-[1.02]'
-                              : 'border-slate-800 bg-slate-900/50 hover:bg-slate-800/80 text-slate-400 hover:text-slate-200'
+                              ? 'border-[#ff6a00] bg-orange-50/90 text-slate-900 shadow-md shadow-orange-500/15 ring-2 ring-[#ff6a00] scale-[1.02]'
+                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-2xs'
                           }`}
                         >
                           {p.popular && (
@@ -26561,10 +26561,10 @@ export default function UnifiedAdminDashboard() {
                           <span className="text-[10px] font-black uppercase tracking-wider truncate w-full">
                             {p.key}
                           </span>
-                          <span className={`text-sm sm:text-base font-black font-mono ${isSelected ? 'text-amber-400' : 'text-slate-300'}`}>
+                          <span className={`text-sm sm:text-base font-black font-mono ${isSelected ? 'text-[#ff6a00]' : 'text-slate-800'}`}>
                             ${price}
                           </span>
-                          <span className="text-[9px] text-slate-500 font-medium">
+                          <span className="text-[9px] text-slate-400 font-medium">
                             {isYearly ? '/ឆ្នាំ' : '/ខែ'}
                           </span>
                         </button>
@@ -26573,14 +26573,14 @@ export default function UnifiedAdminDashboard() {
                   </div>
                 </div>
 
-                {/* 4. Target Plan Highlight Box */}
-                <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 rounded-3xl p-5 border-2 border-orange-500/40 shadow-xl relative overflow-hidden space-y-4">
+                {/* 4. Target Plan Highlight Box (White Theme Card) */}
+                <div className="bg-white rounded-3xl p-5 border-2 border-orange-400 shadow-md relative overflow-hidden space-y-4">
                   
-                  {/* Glowing Corner Badge */}
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  {/* Top Row: Plan Name & Price */}
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-black text-white">{targetPlan.name}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                      <span className="text-lg font-black text-slate-900">{targetPlan.name}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
                         {targetPlan.badge}
                       </span>
                     </div>
@@ -26588,14 +26588,14 @@ export default function UnifiedAdminDashboard() {
                     {/* Price Tag */}
                     <div className="text-right">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-2xl font-black text-amber-400 font-mono">
+                        <span className="text-2xl sm:text-3xl font-black text-[#ff6a00] font-mono">
                           ${finalPrice}
                         </span>
-                        <span className="text-xs text-slate-400 font-bold">
+                        <span className="text-xs text-slate-500 font-bold">
                           {isYearly ? '/ឆ្នាំ' : '/ខែ'}
                         </span>
                       </div>
-                      <span className="text-[10px] text-slate-500 block">
+                      <span className="text-[10px] text-slate-500 block font-medium">
                         ≈ {finalPriceKHR} ៛
                       </span>
                     </div>
@@ -26603,39 +26603,39 @@ export default function UnifiedAdminDashboard() {
 
                   {/* Proration Credit Alert (if applicable) */}
                   {creditDiscount > 0 && (
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between">
+                    <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between">
                       <span className="flex items-center gap-1.5 font-bold">
                         <span>✓</span> បានកាត់កងទឹកប្រាក់នៅសល់ពីកញ្ចប់ចាស់:
                       </span>
-                      <b className="font-mono text-emerald-400">-${creditDiscount.toFixed(2)}</b>
+                      <b className="font-mono text-emerald-700 font-black">-${creditDiscount.toFixed(2)}</b>
                     </div>
                   )}
 
                   {/* Key Unlocks Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-                    <div className="bg-slate-900/90 rounded-2xl p-2.5 border border-slate-800 text-center">
-                      <span className="text-[10px] text-slate-400 block mb-0.5">👥 គណនីបុគ្គលិក</span>
-                      <span className="text-xs sm:text-sm font-black text-white font-mono">{targetPlan.accountsText}</span>
+                    <div className="bg-slate-50 rounded-2xl p-2.5 border border-slate-200 text-center">
+                      <span className="text-[10px] text-slate-500 block mb-0.5 font-bold">👥 គណនីបុគ្គលិក</span>
+                      <span className="text-xs sm:text-sm font-black text-slate-900 font-mono">{targetPlan.accountsText}</span>
                     </div>
-                    <div className="bg-slate-900/90 rounded-2xl p-2.5 border border-slate-800 text-center">
-                      <span className="text-[10px] text-slate-400 block mb-0.5">📦 មុខទំនិញ</span>
-                      <span className="text-xs sm:text-sm font-black text-amber-400 font-mono">{targetPlan.productsText}</span>
+                    <div className="bg-slate-50 rounded-2xl p-2.5 border border-slate-200 text-center">
+                      <span className="text-[10px] text-slate-500 block mb-0.5 font-bold">📦 មុខទំនិញ</span>
+                      <span className="text-xs sm:text-sm font-black text-[#ff6a00] font-mono">{targetPlan.productsText}</span>
                     </div>
-                    <div className="col-span-2 sm:col-span-1 bg-slate-900/90 rounded-2xl p-2.5 border border-slate-800 text-center flex flex-col justify-center">
-                      <span className="text-[10px] text-slate-400 block mb-0.5">⚡ KHQR & POS</span>
-                      <span className="text-xs font-black text-emerald-400">ស្កេនបង់ប្រាក់ & Slip</span>
+                    <div className="col-span-2 sm:col-span-1 bg-slate-50 rounded-2xl p-2.5 border border-slate-200 text-center flex flex-col justify-center">
+                      <span className="text-[10px] text-slate-500 block mb-0.5 font-bold">⚡ KHQR & POS</span>
+                      <span className="text-xs font-black text-emerald-600">ស្កេនបង់ប្រាក់ & Slip</span>
                     </div>
                   </div>
 
                   {/* Feature Bullets */}
                   <div className="pt-1">
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
                       មុខងារសំខាន់ៗដែលទទួលបាន:
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-slate-300">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-slate-700 font-medium">
                       {targetPlan.features.slice(0, 4).map((f, i) => (
                         <div key={i} className="flex items-center gap-1.5">
-                          <span className="text-emerald-400 font-black text-xs">✓</span>
+                          <span className="text-emerald-600 font-black text-xs">✓</span>
                           <span className="truncate">{f}</span>
                         </div>
                       ))}
@@ -26645,15 +26645,15 @@ export default function UnifiedAdminDashboard() {
 
               </div>
 
-              {/* ⭐️ MODAL FOOTER ACTIONS ⭐️ */}
-              <div className="px-5 sm:px-7 py-4 bg-slate-950/90 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
+              {/* ⭐️ MODAL FOOTER ACTIONS (WHITE THEME) ⭐️ */}
+              <div className="px-5 sm:px-7 py-4 bg-white border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
                 <button
                   type="button"
                   onClick={() => {
                     setPlanLimitInfo(null);
                     setActiveTab('upgrade_plan');
                   }}
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs transition cursor-pointer border border-slate-800 text-center"
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer border border-slate-200 text-center"
                 >
                   📋 មើលគ្រប់គម្រោងទាំង 7 (View All)
                 </button>
@@ -26662,7 +26662,7 @@ export default function UnifiedAdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setPlanLimitInfo(null)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-xs transition cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 font-bold text-xs transition cursor-pointer"
                   >
                     បោះបង់
                   </button>
@@ -26678,7 +26678,7 @@ export default function UnifiedAdminDashboard() {
                       setPlanLimitInfo(null);
                       setUpgradePlanModalOpen(true);
                     }}
-                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs transition cursor-pointer shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 active:scale-95"
+                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-2xl bg-gradient-to-r from-[#ff6a00] to-orange-500 hover:from-orange-600 hover:to-[#ff6a00] text-white font-black text-xs transition cursor-pointer shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 active:scale-95"
                   >
                     <span>⚡ ដំឡើងកញ្ចប់នេះ (${finalPrice})</span>
                     <span>➔</span>
