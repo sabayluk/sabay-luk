@@ -4779,6 +4779,17 @@ export default function UnifiedAdminDashboard() {
   const [paymentFilterStatus, setPaymentFilterStatus] = useState('ALL');
   const [paymentSearchQuery, setPaymentSearchQuery] = useState('');
   const [zoomSlipModalUrl, setZoomSlipModalUrl] = useState(null);
+
+  // ⭐️ Payment Slips Advanced Standard Filters, Date Controls & Viewer (Requests 142 & 143) ⭐️
+  const [paymentDateFilterPreset, setPaymentDateFilterPreset] = useState('ALL'); // 'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM'
+  const [paymentDateRangeStart, setPaymentDateRangeStart] = useState('');
+  const [paymentDateRangeEnd, setPaymentDateRangeEnd] = useState('');
+  const [paymentFilterMethod, setPaymentFilterMethod] = useState('ALL'); // 'ALL' | 'BAKONG' | 'ABA' | 'WING' | 'MANUAL'
+  const [storePaymentHistoryModalStore, setStorePaymentHistoryModalStore] = useState(null); // Store selected for viewing payment history
+  const [viewingPaymentSlipDetail, setViewingPaymentSlipDetail] = useState(null); // Full payment object for standardized viewer
+  const [slipImageRotation, setSlipImageRotation] = useState(0);
+  const [slipImageZoom, setSlipImageZoom] = useState(1);
+  const [viewingSubscriptionReceipt, setViewingSubscriptionReceipt] = useState(null);
   
   // 🔐 Password Confirmation State for Changing Plan in Platform Stores Manager
   const [pendingPlanChange, setPendingPlanChange] = useState(null); // { store, newPlanKey }
@@ -13406,6 +13417,38 @@ export default function UnifiedAdminDashboard() {
       setPlanPasswordError('');
     };
 
+    // 📥 Export Payment Slips History to Excel (.xlsx)
+    const handleExportPaymentSlipsToExcel = (paymentsToExport) => {
+      try {
+        const rows = (paymentsToExport || []).map((p, idx) => ({
+          'ល.រ (No.)': idx + 1,
+          'កាលបរិច្ឆេទ (Date)': p.created_at ? new Date(p.created_at).toLocaleDateString('km-KH') + ' ' + new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
+          'លេខកូដសម្គាល់ (Payment ID)': p.id || '—',
+          'ឈ្មោះហាង (Store Name)': p.store_name || '—',
+          'លេខទូរស័ព្ទ (Phone)': p.phone || '—',
+          'កញ្ចប់សេវា (Plan)': p.plan_name || p.plan_key || '—',
+          'វដ្តនៃការបង់ (Cycle)': p.billing_cycle === 'yearly' ? 'ប្រចាំឆ្នាំ (Yearly)' : 'ប្រចាំខែ (Monthly)',
+          'ចំនួនទឹកប្រាក់ ($ USD)': parseFloat(p.amount || 0).toFixed(2),
+          'ចំនួនទឹកប្រាក់ (៛ KHR)': (parseFloat(p.amount || 0) * 4100).toLocaleString(),
+          'វិធីសាស្ត្រទូទាត់ (Method)': p.payment_method || 'Bakong KHQR',
+          'ស្ថានភាព (Status)': p.status === 'APPROVED' ? 'បានយល់ព្រម (Approved)' : p.status === 'PENDING' ? 'រង់ចាំពិនិត្យ (Pending)' : 'បានបដិសេធ (Rejected)',
+          'អ្នកអនុម័ត (Approved By)': p.approved_by || '—',
+          'កំណត់ចំណាំ (Notes)': p.notes || ''
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Payment_Slips_History');
+        
+        const fileName = `sabayluk_payment_slips_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+        setToastNotification(`📥 បានទាញយករបាយការណ៍បង់ប្រាក់ (${paymentsToExport.length} ប្រតិបត្តិការ) ជា Excel ជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 3500);
+      } catch (err) {
+        alert('មានបញ្ហាក្នុងការ Export: ' + err.message);
+      }
+    };
+
     // 💳 Payment Approvals & Rejections
     const handleApprovePayment = async (paymentId) => {
     if (guardDemoAction("អនុម័តការបង់ប្រាក់")) return;
@@ -14011,22 +14054,17 @@ export default function UnifiedAdminDashboard() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (slipUrl) {
-                                    setZoomSlipModalUrl(slipUrl);
-                                  } else {
-                                    setStoresManagerSubTab('payments');
-                                    setPaymentFilterStore(st.id);
-                                  }
+                                  setStorePaymentHistoryModalStore(st);
                                 }}
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black border transition cursor-pointer ${
+                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black border transition cursor-pointer active:scale-95 shadow-2xs ${
                                   count > 0 
-                                    ? 'bg-orange-500 text-white border-orange-600 shadow-2xs hover:bg-orange-600' 
-                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white border-orange-600 hover:from-orange-600 hover:to-amber-600' 
+                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                                 }`}
-                                title={slipUrl ? "ចុចដើម្បីពង្រីកមើល Slip បង់ប្រាក់" : "មើលប្រវត្តិបង់ប្រាក់ & Slip របស់ហាងនេះ"}
+                                title="ចុចដើម្បីពិនិត្យប្រវត្តិបង់ប្រាក់ & Slip ទាំងអស់របស់ហាងនេះ"
                               >
-                                <span>🧾 Slip ({count})</span>
-                                {slipUrl && <span>🔍</span>}
+                                <span>🧾 Slip & ប្រវត្តិ ({count})</span>
+                                <span>↗</span>
                               </button>
                             );
                           })()}
@@ -14317,16 +14355,71 @@ export default function UnifiedAdminDashboard() {
         {/* ⭐️ SUB-TAB 2: 💳 ផ្ទាំងពិនិត្យ និងតាមដានការបង់ប្រាក់ & SLIP ពីម្ចាស់ហាង ⭐️ */}
         {/* ========================================================================= */}
         {storesManagerSubTab === 'payments' && (() => {
-          const pendingCount = allSubscriptionPayments.filter(p => p.status === 'PENDING').length;
-          const approvedCount = allSubscriptionPayments.filter(p => p.status === 'APPROVED').length;
-          const rejectedCount = allSubscriptionPayments.filter(p => p.status === 'REJECTED').length;
-          const totalRevenue = allSubscriptionPayments
-            .filter(p => p.status === 'APPROVED')
-            .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+          // ⭐️ Helper ត្រួតពិនិត្យកាលបរិច្ឆេទ តាម Preset ឬ Custom Date Range ⭐️
+          const isPaymentInDateRange = (paymentDateStr) => {
+            if (!paymentDateStr) return paymentDateFilterPreset === 'ALL';
+            const pDate = new Date(paymentDateStr);
+            if (isNaN(pDate.getTime())) return true;
+
+            const now = new Date();
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+            const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+            if (paymentDateFilterPreset === 'ALL') return true;
+
+            if (paymentDateFilterPreset === 'TODAY') {
+              return pDate >= startOfToday && pDate <= endOfToday;
+            }
+
+            if (paymentDateFilterPreset === 'YESTERDAY') {
+              const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+              const endOfYesterday = new Date(endOfToday.getTime() - 24 * 60 * 60 * 1000);
+              return pDate >= startOfYesterday && pDate <= endOfYesterday;
+            }
+
+            if (paymentDateFilterPreset === 'THIS_WEEK') {
+              const dayOfWeek = now.getDay();
+              const diffToMonday = (dayOfWeek === 0 ? 6 : dayOfWeek - 1);
+              const startOfWeek = new Date(startOfToday.getTime() - diffToMonday * 24 * 60 * 60 * 1000);
+              return pDate >= startOfWeek && pDate <= endOfToday;
+            }
+
+            if (paymentDateFilterPreset === 'THIS_MONTH') {
+              const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+              return pDate >= startOfMonth && pDate <= endOfToday;
+            }
+
+            if (paymentDateFilterPreset === 'LAST_MONTH') {
+              const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+              const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+              return pDate >= startOfLastMonth && pDate <= endOfLastMonth;
+            }
+
+            if (paymentDateFilterPreset === 'CUSTOM') {
+              if (paymentDateRangeStart) {
+                const sDate = new Date(paymentDateRangeStart + 'T00:00:00');
+                if (pDate < sDate) return false;
+              }
+              if (paymentDateRangeEnd) {
+                const eDate = new Date(paymentDateRangeEnd + 'T23:59:59.999');
+                if (pDate > eDate) return false;
+              }
+              return true;
+            }
+
+            return true;
+          };
 
           const filteredPayments = allSubscriptionPayments.filter(p => {
             const matchStatus = paymentFilterStatus === 'ALL' || p.status === paymentFilterStatus;
             const matchStore = paymentFilterStore === 'ALL' || p.store_id === paymentFilterStore;
+            const matchDate = isPaymentInDateRange(p.created_at);
+            const matchMethod = paymentFilterMethod === 'ALL' ||
+              (paymentFilterMethod === 'BAKONG' && (p.payment_method?.toLowerCase().includes('bakong') || p.payment_method?.toLowerCase().includes('khqr'))) ||
+              (paymentFilterMethod === 'ABA' && p.payment_method?.toLowerCase().includes('aba')) ||
+              (paymentFilterMethod === 'WING' && p.payment_method?.toLowerCase().includes('wing')) ||
+              (paymentFilterMethod === 'MANUAL' && (p.payment_method?.toLowerCase().includes('manual') || p.payment_method?.toLowerCase().includes('ផ្ទាល់') || !p.payment_method));
+
             const q = paymentSearchQuery.toLowerCase().trim();
             const matchSearch = !q ||
               (p.store_name || '').toLowerCase().includes(q) ||
@@ -14335,18 +14428,31 @@ export default function UnifiedAdminDashboard() {
               (p.plan_key || '').toLowerCase().includes(q) ||
               (p.plan_name || '').toLowerCase().includes(q) ||
               (p.notes || '').toLowerCase().includes(q);
-            return matchStatus && matchStore && matchSearch;
+
+            return matchStatus && matchStore && matchDate && matchMethod && matchSearch;
           });
+
+          const pendingCount = filteredPayments.filter(p => p.status === 'PENDING').length;
+          const approvedCount = filteredPayments.filter(p => p.status === 'APPROVED').length;
+          const rejectedCount = filteredPayments.filter(p => p.status === 'REJECTED').length;
+          const totalRevenue = filteredPayments
+            .filter(p => p.status === 'APPROVED')
+            .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
 
           return (
             <div className="space-y-6 animate-in fade-in duration-150">
               
-              {/* Payment KPI Analytics */}
+              {/* Payment KPI Analytics (Dynamic based on selected Date & Filters) */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white p-4 rounded-2xl shadow-sm space-y-1">
-                  <span className="text-[10px] font-black text-emerald-100 uppercase tracking-wider block">💰 ចំណូលសរុបអនុម័ត</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-emerald-100 uppercase tracking-wider block">💰 ចំណូលសរុបអនុម័ត</span>
+                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">
+                      {paymentDateFilterPreset === 'ALL' ? 'គ្រប់ពេល' : paymentDateFilterPreset === 'TODAY' ? 'ថ្ងៃនេះ' : paymentDateFilterPreset === 'THIS_MONTH' ? 'ខែនេះ' : 'តាមចន្លោះ'}
+                    </span>
+                  </div>
                   <span className="text-2xl font-black text-white">${totalRevenue.toFixed(2)}</span>
-                  <span className="text-[10px] text-emerald-100 block">ពីការបង់ប្រាក់កញ្ចប់សេវា</span>
+                  <span className="text-[10px] text-emerald-100 block">≈ {(totalRevenue * 4100).toLocaleString()} ៛</span>
                 </div>
 
                 <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
@@ -14373,79 +14479,174 @@ export default function UnifiedAdminDashboard() {
                 </div>
               </div>
 
-              {/* Filter Toolbar */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col lg:flex-row items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-                  {/* Status Pills */}
-                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-black">
+              {/* ⭐️ Standard Advanced Filter & Date Range Toolbar ⭐️ */}
+              <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-2xs space-y-3">
+                
+                {/* Row 1: Status, Store, Payment Method, and Search */}
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Status Pills */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-black">
+                      {[
+                        { key: 'ALL', label: `ទាំងអស់ (${allSubscriptionPayments.length})` },
+                        { key: 'PENDING', label: `⏳ រង់ចាំ (${allSubscriptionPayments.filter(p => p.status === 'PENDING').length})` },
+                        { key: 'APPROVED', label: `🟢 យល់ព្រម (${allSubscriptionPayments.filter(p => p.status === 'APPROVED').length})` },
+                        { key: 'REJECTED', label: `🔴 បដិសេធ (${allSubscriptionPayments.filter(p => p.status === 'REJECTED').length})` }
+                      ].map(f => (
+                        <button
+                          key={f.key}
+                          type="button"
+                          onClick={() => setPaymentFilterStatus(f.key)}
+                          className={`px-3 py-1.5 rounded-lg transition cursor-pointer text-xs ${
+                            paymentFilterStatus === f.key
+                              ? 'bg-slate-900 text-white shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Filter by Store */}
+                    <select
+                      value={paymentFilterStore}
+                      onChange={(e) => setPaymentFilterStore(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                    >
+                      <option value="ALL">🏬 គ្រប់ហាងទាំងអស់ (All Stores)</option>
+                      {registeredStores.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.owner_name || s.slug})
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Filter by Payment Method */}
+                    <select
+                      value={paymentFilterMethod}
+                      onChange={(e) => setPaymentFilterMethod(e.target.value)}
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
+                    >
+                      <option value="ALL">💳 គ្រប់វិធីសាស្ត្រទូទាត់</option>
+                      <option value="BAKONG">🏦 Bakong KHQR</option>
+                      <option value="ABA">📱 ABA Pay / Mobile</option>
+                      <option value="WING">💸 Wing Bank</option>
+                      <option value="MANUAL">💵 បង់ផ្ទាល់ / សាច់ប្រាក់</option>
+                    </select>
+
+                    {/* Search query */}
+                    <input
+                      type="text"
+                      value={paymentSearchQuery}
+                      onChange={(e) => setPaymentSearchQuery(e.target.value)}
+                      placeholder="🔍 ស្វែងរកហាង, ទូរស័ព្ទ, Ref ID..."
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none w-full sm:w-52 focus:border-[#ff6a00]"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end lg:self-center">
+                    <button
+                      type="button"
+                      onClick={() => handleExportPaymentSlipsToExcel(filteredPayments)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                      title="ទាញយកបញ្ជីប្រវត្តិបង់ប្រាក់ជាឯកសារ Excel"
+                    >
+                      <span>📥</span>
+                      <span>Export Excel</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualPaymentStoreId(registeredStores[0]?.id || '');
+                        setManualPaymentPlanKey('PRO');
+                        setManualPaymentCycle('monthly');
+                        setManualPaymentAmount('3');
+                        setManualPaymentSlipFile(null);
+                        setManualPaymentSlipPreview(null);
+                        setManualPaymentNotes('');
+                        setManualPaymentModalOpen(true);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                    >
+                      <span>➕</span>
+                      <span>កត់ត្រា Slip ជំនួស</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: Standard Date & Time Range Controls (ត្រួតពិនិត្យថ្ងៃខែឆ្នាំ តាមចិត្ត) */}
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-black text-slate-500 mr-1 flex items-center gap-1">
+                      <span>🗓️</span> កាលបរិច្ឆេទ:
+                    </span>
                     {[
-                      { key: 'ALL', label: `ទាំងអស់ (${allSubscriptionPayments.length})` },
-                      { key: 'PENDING', label: `⏳ រង់ចាំ (${pendingCount})` },
-                      { key: 'APPROVED', label: `🟢 យល់ព្រម (${approvedCount})` },
-                      { key: 'REJECTED', label: `🔴 បដិសេធ (${rejectedCount})` }
-                    ].map(f => (
+                      { key: 'ALL', label: 'គ្រប់កាលបរិច្ឆេទ' },
+                      { key: 'TODAY', label: 'ថ្ងៃនេះ' },
+                      { key: 'YESTERDAY', label: 'ម្សិលមិញ' },
+                      { key: 'THIS_WEEK', label: '៧ ថ្ងៃចុងក្រោយ' },
+                      { key: 'THIS_MONTH', label: 'ខែនេះ' },
+                      { key: 'LAST_MONTH', label: 'ខែមុន' },
+                      { key: 'CUSTOM', label: 'ចន្លោះកាលបរិច្ឆេទ...' }
+                    ].map(dp => (
                       <button
-                        key={f.key}
+                        key={dp.key}
                         type="button"
-                        onClick={() => setPaymentFilterStatus(f.key)}
-                        className={`px-3 py-1.5 rounded-lg transition cursor-pointer text-xs ${
-                          paymentFilterStatus === f.key
-                            ? 'bg-slate-900 text-white shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900'
+                        onClick={() => setPaymentDateFilterPreset(dp.key)}
+                        className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition cursor-pointer border ${
+                          paymentDateFilterPreset === dp.key
+                            ? 'bg-[#ff6a00] text-white border-orange-600 shadow-2xs'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
                         }`}
                       >
-                        {f.label}
+                        {dp.label}
                       </button>
                     ))}
                   </div>
 
-                  {/* Filter by Store */}
-                  <select
-                    value={paymentFilterStore}
-                    onChange={(e) => setPaymentFilterStore(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
-                  >
-                    <option value="ALL">🏬 គ្រប់ហាងទាំងអស់ (All Stores)</option>
-                    {registeredStores.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.owner_name || s.slug})
-                      </option>
-                    ))}
-                  </select>
+                  {/* Custom Date Range Pickers (បង្ហាញនៅពេលជ្រើសរើស CUSTOM) */}
+                  {paymentDateFilterPreset === 'CUSTOM' && (
+                    <div className="flex flex-wrap items-center gap-2 bg-orange-50/70 p-2 rounded-2xl border border-orange-200 animate-in fade-in duration-150">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-black text-orange-800">ចាប់ពី:</span>
+                        <input
+                          type="date"
+                          value={paymentDateRangeStart}
+                          onChange={(e) => setPaymentDateRangeStart(e.target.value)}
+                          className="bg-white border border-orange-300 rounded-xl px-2 py-1 text-xs font-bold text-slate-800 outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-black text-orange-800">ដល់:</span>
+                        <input
+                          type="date"
+                          value={paymentDateRangeEnd}
+                          onChange={(e) => setPaymentDateRangeEnd(e.target.value)}
+                          className="bg-white border border-orange-300 rounded-xl px-2 py-1 text-xs font-bold text-slate-800 outline-none"
+                        />
+                      </div>
+                      {(paymentDateRangeStart || paymentDateRangeEnd) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentDateRangeStart('');
+                            setPaymentDateRangeEnd('');
+                          }}
+                          className="text-[10px] font-bold text-rose-600 hover:underline px-1 cursor-pointer"
+                          title="កំណត់ឡើងវិញ"
+                        >
+                          ✕ សម្អាត
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-                  {/* Search query */}
-                  <input
-                    type="text"
-                    value={paymentSearchQuery}
-                    onChange={(e) => setPaymentSearchQuery(e.target.value)}
-                    placeholder="🔍 ស្វែងរកហាង, ទូរស័ព្ទ, លេខកូដ..."
-                    className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none w-full sm:w-56 focus:border-[#ff6a00]"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 self-end lg:self-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setManualPaymentStoreId(registeredStores[0]?.id || '');
-                      setManualPaymentPlanKey('PRO');
-                      setManualPaymentCycle('monthly');
-                      setManualPaymentAmount('3');
-                      setManualPaymentSlipFile(null);
-                      setManualPaymentSlipPreview(null);
-                      setManualPaymentNotes('');
-                      setManualPaymentModalOpen(true);
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-                  >
-                    <span>➕</span>
-                    <span>កត់ត្រា Slip ជំនួស</span>
-                  </button>
-
-                  <span className="text-xs font-bold text-slate-500">
+                  <span className="text-xs font-bold text-slate-500 ml-auto">
                     បង្ហាញ <b>{filteredPayments.length}</b> ប្រតិបត្តិការ
                   </span>
                 </div>
+
               </div>
 
               {/* Payments & Slips Table */}
@@ -14453,8 +14654,8 @@ export default function UnifiedAdminDashboard() {
                 {filteredPayments.length === 0 ? (
                   <div className="p-12 text-center space-y-2">
                     <span className="text-4xl block">🧾</span>
-                    <p className="font-black text-sm text-slate-700">មិនទាន់មានទិន្នន័យបង់ប្រាក់ ឬ Slip ក្នុងជម្រើសនេះទេ</p>
-                    <p className="text-xs text-slate-400">នៅពេលម្ចាស់ហាងណាមួយបង់ប្រាក់ ឬ Upload Slip វានឹងបង្ហាញនៅទីនេះភ្លាមៗ!</p>
+                    <p className="font-black text-sm text-slate-700">មិនទាន់មានទិន្នន័យបង់ប្រាក់ ឬ Slip ក្នុងកាលបរិច្ឆេទ និងជម្រើសនេះទេ</p>
+                    <p className="text-xs text-slate-400">សូមសាកល្បងជ្រើសរើស "គ្រប់កាលបរិច្ឆេទ" ឬប្តូរការច្រោះទិន្នន័យផ្សេងទៀត!</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -14479,13 +14680,17 @@ export default function UnifiedAdminDashboard() {
                           return (
                             <tr key={item.id} className={`hover:bg-slate-50/70 transition ${isPending ? 'bg-amber-50/20' : ''}`}>
                               
-                              {/* Slip Thumbnail */}
+                              {/* Slip Thumbnail (Click to open Standard High-Resolution Viewer) */}
                               <td className="px-5 py-4 whitespace-nowrap">
                                 {item.slip_url ? (
                                   <div 
-                                    onClick={() => setZoomSlipModalUrl(item.slip_url)}
+                                    onClick={() => {
+                                      setSlipImageRotation(0);
+                                      setSlipImageZoom(1);
+                                      setViewingPaymentSlipDetail(item);
+                                    }}
                                     className="group relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 cursor-pointer shadow-2xs hover:border-[#ff6a00] transition transform hover:scale-105"
-                                    title="ចុចដើម្បីពង្រីកមើល Slip ពេញទំហំ"
+                                    title="ចុចដើម្បីពិនិត្យ និងពង្រីកមើល Slip ពេញទំហំ (Standard HD Viewer)"
                                   >
                                     <img src={item.slip_url} alt="Payment Slip" className="w-full h-full object-cover" />
                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
@@ -14515,7 +14720,7 @@ export default function UnifiedAdminDashboard() {
                                   )}
                                 </p>
                                 <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                                  ID: {item.id}
+                                  Ref: {item.id}
                                 </p>
                                 <div className="text-[10px] text-slate-600 mt-1 flex items-center gap-2">
                                   {item.phone && (
@@ -14574,7 +14779,7 @@ export default function UnifiedAdminDashboard() {
                                   💳 {item.payment_method || 'Bakong KHQR'}
                                 </span>
                                 {item.notes && (
-                                  <p className="text-[10px] text-slate-500 italic max-w-xs truncate mt-0.5">
+                                  <p className="text-[10px] text-slate-500 italic max-w-xs truncate mt-0.5" title={item.notes}>
                                     "{item.notes}"
                                   </p>
                                 )}
@@ -14601,7 +14806,7 @@ export default function UnifiedAdminDashboard() {
                                       <span>✕</span> បានបដិសេធ
                                     </span>
                                     {item.reject_reason && (
-                                      <span className="text-[9px] text-rose-500 block max-w-xs truncate">"{item.reject_reason}"</span>
+                                      <span className="text-[9px] text-rose-500 block max-w-xs truncate" title={item.reject_reason}>"{item.reject_reason}"</span>
                                     )}
                                   </div>
                                 )}
@@ -14627,15 +14832,48 @@ export default function UnifiedAdminDashboard() {
                                     >
                                       ✕ បដិសេធ
                                     </button>
+                                    {item.slip_url && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSlipImageRotation(0);
+                                          setSlipImageZoom(1);
+                                          setViewingPaymentSlipDetail(item);
+                                        }}
+                                        className="px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
+                                        title="មើល Slip ពេញទំហំ"
+                                      >
+                                        🔍
+                                      </button>
+                                    )}
                                   </>
                                 ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => item.slip_url && setZoomSlipModalUrl(item.slip_url)}
-                                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
-                                  >
-                                    🔍 មើល Slip
-                                  </button>
+                                  <>
+                                    {item.slip_url && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setSlipImageRotation(0);
+                                          setSlipImageZoom(1);
+                                          setViewingPaymentSlipDetail(item);
+                                        }}
+                                        className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
+                                        title="ពិនិត្យមើលរូបភាព Slip ពេញទំហំ"
+                                      >
+                                        🔍 មើល Slip
+                                      </button>
+                                    )}
+                                    {isApproved && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setViewingSubscriptionReceipt(item)}
+                                        className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-[11px] transition cursor-pointer"
+                                        title="មើល និងបោះពុម្ពវិក្កយបត្រជាវសេវាផ្លូវការ"
+                                      >
+                                        🧾 បង្កាន់ដៃ
+                                      </button>
+                                    )}
+                                  </>
                                 )}
                               </td>
 
@@ -15281,8 +15519,774 @@ export default function UnifiedAdminDashboard() {
         })()}
 
         {/* ========================================================================= */}
-        {/* 🔍 LIGHTBOX MODAL: មើល SLIP ពេញអេក្រង់ (FULL SCREEN SLIP PREVIEW) 🔍 */}
+        {/* 🏬 MODAL 1: ប្រវត្តិបង់ប្រាក់ & គ្រប់គ្រង SLIP របស់ហាង (REQUEST 142) 🏬 */}
         {/* ========================================================================= */}
+        {storePaymentHistoryModalStore && (() => {
+          const st = storePaymentHistoryModalStore;
+          const storePayments = (allSubscriptionPayments || []).filter(p => 
+            p.store_id === st.id || 
+            (st.slug && p.store_id === st.slug) ||
+            (st.slug && p.store_name?.toLowerCase() === st.slug.toLowerCase()) ||
+            (st.name && p.store_name?.toLowerCase() === st.name.toLowerCase())
+          );
+
+          const initialSlip = st.settings?.slip_url || st.settings?.slipUrl || st.slip_url;
+          const hasInitialSlipInPayments = storePayments.some(p => p.slip_url === initialSlip);
+
+          const totalPaid = storePayments
+            .filter(p => p.status === 'APPROVED')
+            .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
+          return (
+            <div 
+              onClick={() => setStorePaymentHistoryModalStore(null)}
+              className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200"
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200"
+              >
+                {/* Modal Header */}
+                <div className="p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl shrink-0 shadow-inner">
+                      {st.settings?.logoUrl ? (
+                        <img src={st.settings.logoUrl} alt="Logo" className="w-9 h-9 object-contain rounded-xl" />
+                      ) : '🏬'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-black text-base sm:text-lg text-white truncate">{st.name}</h3>
+                        <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-orange-500/30 text-orange-300 border border-orange-500/40">
+                          {st.plan || 'STARTER'}
+                        </span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                          st.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        }`}>
+                          {st.status === 'ACTIVE' ? '🟢 សកម្ម' : '⏳ រង់ចាំអនុម័ត'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5 truncate">
+                        ប្រវត្តិបង់ប្រាក់ & គ្រប់គ្រង Slip ទាំងអស់ • ID: {st.id} • Slug: {st.slug}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setStorePaymentHistoryModalStore(null)}
+                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm transition cursor-pointer shrink-0"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Quick Info Bar */}
+                <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-4 text-slate-600 font-bold">
+                    <span>👤 ម្ចាស់ហាង: <b className="text-slate-900">{st.owner_name || st.name}</b></span>
+                    <span>📞 ទូរស័ព្ទ: <b className="text-slate-900">{st.phone || '—'}</b></span>
+                    {st.telegram && (
+                      <span>✈️ Telegram: <a href={`https://t.me/${st.telegram.replace('@','')}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">@{st.telegram.replace('@','')}</a></span>
+                    )}
+                    <span>🗓️ ផុតកំណត់: <b className="text-orange-600">{st.plan_expires_at ? new Date(st.plan_expires_at).toLocaleDateString('km-KH') : 'អចិន្ត្រៃយ៍'}</b></span>
+                  </div>
+                  <div className="bg-emerald-50 text-emerald-800 px-3 py-1 rounded-xl border border-emerald-200 font-black text-xs">
+                    💰 ចំណូលសរុបបានអនុម័ត: ${totalPaid.toFixed(2)}
+                  </div>
+                </div>
+
+                {/* Modal Body / Payments List */}
+                <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+                  {storePayments.length === 0 && !initialSlip ? (
+                    <div className="p-12 text-center space-y-3 bg-slate-50 rounded-3xl border border-dashed border-slate-300">
+                      <span className="text-4xl block">🧾</span>
+                      <h4 className="font-black text-slate-700 text-sm">មិនទាន់មានប្រវត្តិបង់ប្រាក់ ឬ Slip សម្រាប់ហាងនេះនៅឡើយទេ</h4>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                        នៅពេលហាងនេះធ្វើការ Upgrade Plan ឬផ្ញើ Slip បង់ប្រាក់ ប្រព័ន្ធនឹងកត់ត្រា និងបង្ហាញនៅទីនេះដោយស្វ័យប្រវត្តិ។
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStorePaymentHistoryModalStore(null);
+                          setManualPaymentStoreId(st.id);
+                          setManualPaymentPlanKey(st.plan || 'PRO');
+                          setManualPaymentCycle('monthly');
+                          setManualPaymentAmount('3');
+                          setManualPaymentSlipFile(null);
+                          setManualPaymentSlipPreview(null);
+                          setManualPaymentNotes(`កត់ត្រាការបង់ប្រាក់ជូនហាង ${st.name}`);
+                          setManualPaymentModalOpen(true);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2.5 rounded-2xl shadow-xs transition cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <span>➕</span>
+                        <span>កត់ត្រា Slip ថ្មីជូនហាងនេះ</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-black text-slate-800 text-xs flex items-center gap-1.5">
+                          <span>📋</span> បញ្ជីប្រតិបត្តិការបង់ប្រាក់ទាំងអស់ ({storePayments.length + (!hasInitialSlipInPayments && initialSlip ? 1 : 0)})
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStorePaymentHistoryModalStore(null);
+                            setManualPaymentStoreId(st.id);
+                            setManualPaymentPlanKey(st.plan || 'PRO');
+                            setManualPaymentCycle('monthly');
+                            setManualPaymentAmount('3');
+                            setManualPaymentSlipFile(null);
+                            setManualPaymentSlipPreview(null);
+                            setManualPaymentNotes(`កត់ត្រាការបង់ប្រាក់ជូនហាង ${st.name}`);
+                            setManualPaymentModalOpen(true);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] px-3 py-1.5 rounded-xl shadow-2xs transition cursor-pointer flex items-center gap-1"
+                        >
+                          <span>➕</span>
+                          <span>កត់ត្រា Slip ថ្មី</span>
+                        </button>
+                      </div>
+
+                      {/* Fallback Initial Registration Slip if not in storePayments */}
+                      {!hasInitialSlipInPayments && initialSlip && (
+                        <div className="p-4 rounded-2xl border-2 border-orange-200 bg-orange-50/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div 
+                              onClick={() => {
+                                setSlipImageRotation(0);
+                                setSlipImageZoom(1);
+                                setViewingPaymentSlipDetail({
+                                  id: `SUB_REG_${st.id}`,
+                                  store_id: st.id,
+                                  store_name: st.name,
+                                  plan_key: st.plan,
+                                  plan_name: `កញ្ចប់ ${st.plan}`,
+                                  amount: '1.00',
+                                  billing_cycle: 'monthly',
+                                  slip_url: initialSlip,
+                                  status: st.status === 'ACTIVE' ? 'APPROVED' : 'PENDING',
+                                  notes: 'បង្កាន់ដៃបង់ប្រាក់ពេលចុះឈ្មោះហាងដំបូង',
+                                  created_at: st.created_at
+                                });
+                              }}
+                              className="w-16 h-16 rounded-2xl bg-white border border-slate-300 overflow-hidden shrink-0 cursor-pointer shadow-2xs hover:border-[#ff6a00] transition transform hover:scale-105"
+                            >
+                              <img src={initialSlip} alt="Slip" className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-slate-900 text-xs">បង្កាន់ដៃបង់ប្រាក់ចុះឈ្មោះហាងដំបូង</span>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                  st.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {st.status === 'ACTIVE' ? '✓ បានយល់ព្រម' : '⏳ រង់ចាំពិនិត្យ'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-0.5 font-bold">
+                                កញ្ចប់ {st.plan} • {st.created_at ? new Date(st.created_at).toLocaleDateString('km-KH') : '—'}
+                              </p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Bakong KHQR / ABA Pay</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSlipImageRotation(0);
+                                setSlipImageZoom(1);
+                                setViewingPaymentSlipDetail({
+                                  id: `SUB_REG_${st.id}`,
+                                  store_id: st.id,
+                                  store_name: st.name,
+                                  plan_key: st.plan,
+                                  plan_name: `កញ្ចប់ ${st.plan}`,
+                                  amount: '1.00',
+                                  billing_cycle: 'monthly',
+                                  slip_url: initialSlip,
+                                  status: st.status === 'ACTIVE' ? 'APPROVED' : 'PENDING',
+                                  notes: 'បង្កាន់ដៃបង់ប្រាក់ពេលចុះឈ្មោះហាងដំបូង',
+                                  created_at: st.created_at
+                                });
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                            >
+                              🔍 មើល Slip
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Store Payments List */}
+                      {storePayments.map(p => {
+                        const isPend = p.status === 'PENDING';
+                        const isAppr = p.status === 'APPROVED';
+
+                        return (
+                          <div 
+                            key={p.id}
+                            className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                              isPend ? 'bg-amber-50/60 border-amber-300 shadow-2xs' : 'bg-white hover:bg-slate-50/80 border-slate-200 shadow-2xs'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {p.slip_url ? (
+                                <div 
+                                  onClick={() => {
+                                    setSlipImageRotation(0);
+                                    setSlipImageZoom(1);
+                                    setViewingPaymentSlipDetail(p);
+                                  }}
+                                  className="w-16 h-16 rounded-2xl bg-slate-100 border-2 border-slate-200 overflow-hidden shrink-0 cursor-pointer shadow-2xs hover:border-[#ff6a00] transition transform hover:scale-105"
+                                  title="ចុចដើម្បីពង្រីកមើល Slip ពេញទំហំ"
+                                >
+                                  <img src={p.slip_url} alt="Slip" className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold shrink-0">
+                                  គ្មាន Slip
+                                </div>
+                              )}
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-black text-slate-900 text-xs">
+                                    {p.plan_name || p.plan_key}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 font-bold">
+                                    ({p.billing_cycle === 'yearly' ? '១ ឆ្នាំ' : '១ ខែ'})
+                                  </span>
+                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                    isPend ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                                    isAppr ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                                    'bg-rose-100 text-rose-800 border border-rose-300'
+                                  }`}>
+                                    {isPend ? '⏳ រង់ចាំពិនិត្យ' : isAppr ? '✓ បានយល់ព្រម' : '✕ បានបដិសេធ'}
+                                  </span>
+                                </div>
+
+                                <p className="text-[11px] text-slate-600 mt-0.5 font-bold">
+                                  ទឹកប្រាក់: <b className="text-slate-900 font-black">${parseFloat(p.amount || 0).toFixed(2)}</b> (≈ {(parseFloat(p.amount || 0) * 4100).toLocaleString()} ៛)
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                                  កាលបរិច្ឆេទ: {p.created_at ? new Date(p.created_at).toLocaleDateString('km-KH') + ' ' + new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'} • វិធីសាស្ត្រ: {p.payment_method || 'Bakong KHQR'}
+                                </p>
+                                {p.notes && (
+                                  <p className="text-[10px] text-slate-500 italic mt-0.5 max-w-md truncate">
+                                    "{p.notes}"
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                              {isPend ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApprovePayment(p.id)}
+                                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition active:scale-95 cursor-pointer"
+                                  >
+                                    ✓ យល់ព្រម (Approve)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectPayment(p.id)}
+                                    className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs border border-rose-200 transition cursor-pointer"
+                                  >
+                                    ✕ បដិសេធ
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  {isAppr && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingSubscriptionReceipt(p)}
+                                      className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs transition cursor-pointer"
+                                    >
+                                      🧾 បង្កាន់ដៃ
+                                    </button>
+                                  )}
+                                </>
+                              )}
+
+                              {p.slip_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSlipImageRotation(0);
+                                    setSlipImageZoom(1);
+                                    setViewingPaymentSlipDetail(p);
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                                >
+                                  🔍 មើល Slip
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStoresManagerSubTab('payments');
+                      setPaymentFilterStore(st.id);
+                      setStorePaymentHistoryModalStore(null);
+                    }}
+                    className="text-xs font-black text-orange-600 hover:text-orange-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>🔗</span>
+                    <span>មើលក្នុងផ្ទាំងពិនិត្យប្រវត្តិទូទៅ (Open in Payments Tab) ↗</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStorePaymentHistoryModalStore(null)}
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-5 py-2.5 rounded-xl text-xs transition cursor-pointer"
+                  >
+                    បិទ (Close)
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ========================================================================= */}
+        {/* 🔍 MODAL 2: STANDARD HD SLIP VIEWER (REQUEST 143) 🔍 */}
+        {/* ========================================================================= */}
+        {viewingPaymentSlipDetail && (() => {
+          const item = viewingPaymentSlipDetail;
+          const targetStore = registeredStores.find(s => s.id === item.store_id);
+          const isPending = item.status === 'PENDING';
+          const isApproved = item.status === 'APPROVED';
+
+          return (
+            <div 
+              onClick={() => {
+                setViewingPaymentSlipDetail(null);
+                setSlipImageRotation(0);
+                setSlipImageZoom(1);
+              }}
+              className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200"
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-slate-900 rounded-3xl max-w-5xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-700 overflow-hidden animate-in zoom-in-95 duration-200"
+              >
+                {/* Viewer Header with Zoom/Rotate/Download toolbar */}
+                <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3 text-white">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-8 h-8 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-sm font-bold border border-orange-500/30">
+                      🧾
+                    </span>
+                    <div className="min-w-0">
+                      <h4 className="font-black text-xs sm:text-sm text-white truncate">
+                        {item.store_name} • ត្រួតពិនិត្យបង្កាន់ដៃ Slip ({item.plan_name || item.plan_key})
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        Ref: {item.id} • {item.created_at ? new Date(item.created_at).toLocaleDateString('km-KH') + ' ' + new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Viewer Toolbar Controls */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Zoom In */}
+                    <button
+                      type="button"
+                      onClick={() => setSlipImageZoom(z => Math.min(3, +(z + 0.25).toFixed(2)))}
+                      className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-sm flex items-center justify-center border border-slate-700 transition"
+                      title="ពង្រីក (Zoom In)"
+                    >
+                      +
+                    </button>
+                    {/* Zoom Reset */}
+                    <button
+                      type="button"
+                      onClick={() => setSlipImageZoom(1)}
+                      className="px-2 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono text-[10px] font-bold flex items-center justify-center border border-slate-700 transition"
+                      title="ទំហំដើម (Reset Zoom)"
+                    >
+                      {Math.round(slipImageZoom * 100)}%
+                    </button>
+                    {/* Zoom Out */}
+                    <button
+                      type="button"
+                      onClick={() => setSlipImageZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))}
+                      className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-black text-sm flex items-center justify-center border border-slate-700 transition"
+                      title="បង្រួម (Zoom Out)"
+                    >
+                      -
+                    </button>
+                    {/* Rotate */}
+                    <button
+                      type="button"
+                      onClick={() => setSlipImageRotation(r => (r + 90) % 360)}
+                      className="px-2.5 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1 border border-slate-700 transition"
+                      title="បង្វិល 90 ដឺក្រេ (Rotate)"
+                    >
+                      <span>🔄</span>
+                      <span className="hidden sm:inline">បង្វិល</span>
+                    </button>
+                    {/* Download */}
+                    {item.slip_url && (
+                      <a
+                        href={item.slip_url}
+                        download={`payment_slip_${item.id || 'sabayluk'}.jpg`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1 border border-slate-700 transition"
+                        title="ទាញយករូបភាព Slip"
+                      >
+                        <span>⬇️</span>
+                        <span className="hidden sm:inline">ទាញយក</span>
+                      </a>
+                    )}
+                    {/* Close */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingPaymentSlipDetail(null);
+                        setSlipImageRotation(0);
+                        setSlipImageZoom(1);
+                      }}
+                      className="w-8 h-8 rounded-xl bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white font-bold text-xs flex items-center justify-center transition ml-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* Viewer Body: Split into Image Display (Left) + Details Card (Right) */}
+                <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-12 max-h-[calc(94vh-130px)]">
+                  
+                  {/* Left: HD Image Viewer with Transform */}
+                  <div className="md:col-span-8 bg-black/60 flex items-center justify-center p-4 overflow-auto relative select-none">
+                    {item.slip_url ? (
+                      <div className="transition-transform duration-200 ease-out" style={{ transform: `scale(${slipImageZoom}) rotate(${slipImageRotation}deg)` }}>
+                        <img 
+                          src={item.slip_url} 
+                          alt="Slip Preview" 
+                          className="max-h-[68vh] max-w-full w-auto object-contain rounded-2xl shadow-2xl border border-white/10"
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-slate-500 text-center py-20 space-y-2">
+                        <span className="text-5xl block">📷</span>
+                        <p className="font-bold text-xs">គ្មានរូបភាពបង្កាន់ដៃ Slip</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right: Slip Metadata & Store Details */}
+                  <div className="md:col-span-4 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 p-5 overflow-y-auto space-y-4 text-xs text-slate-300">
+                    <div>
+                      <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-1">
+                        ព័ត៌មានប្រតិបត្តិការ (Payment Information)
+                      </span>
+                      <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">ចំនួនទឹកប្រាក់:</span>
+                          <span className="text-base font-black text-emerald-400">
+                            ${parseFloat(item.amount || 0).toFixed(2)} (≈ {(parseFloat(item.amount || 0) * 4100).toLocaleString()} ៛)
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">កញ្ចប់សេវា:</span>
+                          <span className="font-black text-white">{item.plan_name || item.plan_key}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">រយៈពេល:</span>
+                          <span className="text-slate-200">{item.billing_cycle === 'yearly' ? '🗓️ ប្រចាំឆ្នាំ (៣៦៥ ថ្ងៃ)' : '🗓️ ប្រចាំខែ (៣០ ថ្ងៃ)'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">វិធីសាស្ត្រ:</span>
+                          <span className="text-blue-400 font-bold">{item.payment_method || 'Bakong KHQR'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">ស្ថានភាព:</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                            isPending ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                            isApproved ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                            'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          }`}>
+                            {isPending ? '⏳ រង់ចាំពិនិត្យ' : isApproved ? '✓ បានយល់ព្រម' : '✕ បានបដិសេធ'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-1">
+                        ព័ត៌មានហាង & ម្ចាស់ហាង (Store Profile)
+                      </span>
+                      <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">ឈ្មោះហាង:</span>
+                          <span className="font-black text-white">{item.store_name}</span>
+                        </div>
+                        {item.phone && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">ទូរស័ព្ទ:</span>
+                            <a href={`tel:${item.phone}`} className="text-blue-400 hover:underline font-mono">{item.phone}</a>
+                          </div>
+                        )}
+                        {targetStore?.telegram && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">Telegram:</span>
+                            <a href={`https://t.me/${targetStore.telegram.replace('@','')}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">
+                              @{targetStore.telegram.replace('@','')}
+                            </a>
+                          </div>
+                        )}
+                        {targetStore?.slug && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">Store URL:</span>
+                            <a href={`/store/${targetStore.slug}`} target="_blank" rel="noreferrer" className="text-orange-400 hover:underline">
+                              /store/{targetStore.slug} ↗
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {item.notes && (
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block mb-1">
+                          កំណត់ចំណាំពីអតិថិជន (Notes)
+                        </span>
+                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-slate-300 italic text-[11px]">
+                          "{item.notes}"
+                        </div>
+                      </div>
+                    )}
+
+                    {isApproved && item.approved_by && (
+                      <div className="bg-emerald-950/40 p-3 rounded-xl border border-emerald-800/40 text-[11px] text-emerald-300 space-y-0.5">
+                        <p className="font-bold">✓ ត្រូវបានអនុម័តដោយ {item.approved_by}</p>
+                        <p className="text-[10px] text-emerald-400/80">កាលបរិច្ឆេទអនុម័ត: {item.approved_at ? new Date(item.approved_at).toLocaleDateString('km-KH') : '—'}</p>
+                      </div>
+                    )}
+
+                    {/* Actions in Sidebar */}
+                    <div className="pt-2 space-y-2">
+                      {isPending ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleApprovePayment(item.id);
+                              setViewingPaymentSlipDetail(null);
+                            }}
+                            className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <span>✓</span>
+                            <span>យល់ព្រមអនុម័ត (Approve Plan)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleRejectPayment(item.id);
+                              setViewingPaymentSlipDetail(null);
+                            }}
+                            className="w-full bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white font-bold py-2 rounded-xl text-xs border border-rose-500/30 transition cursor-pointer"
+                          >
+                            ✕ បដិសេធការបង់ប្រាក់
+                          </button>
+                        </>
+                      ) : (
+                        isApproved && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewingPaymentSlipDetail(null);
+                              setViewingSubscriptionReceipt(item);
+                            }}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 rounded-xl text-xs shadow-lg shadow-blue-600/30 transition cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <span>🧾</span>
+                            <span>មើល / ព្រីនវិក្កយបត្រផ្លូវការ (Print Receipt)</span>
+                          </button>
+                        )
+                      )}
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ========================================================================= */}
+        {/* 🧾 MODAL 3: OFFICIAL PLATFORM SAAS SUBSCRIPTION RECEIPT 🧾 */}
+        {/* ========================================================================= */}
+        {viewingSubscriptionReceipt && (() => {
+          const item = viewingSubscriptionReceipt;
+          const targetStore = registeredStores.find(s => s.id === item.store_id);
+
+          return (
+            <div 
+              onClick={() => setViewingSubscriptionReceipt(null)}
+              className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200"
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 overflow-hidden relative animate-in zoom-in-95 duration-200"
+              >
+                {/* Print Header Controls (Hidden on Print) */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-200 mb-6 print:hidden">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-sm font-bold">
+                      🧾
+                    </span>
+                    <h4 className="font-black text-sm text-slate-800">បង្កាន់ដៃទទួលប្រាក់ជាវសេវាផ្លូវការ</h4>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="bg-slate-900 hover:bg-slate-800 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>🖨️</span>
+                      <span>បោះពុម្ព (Print)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewingSubscriptionReceipt(null)}
+                      className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold text-xs flex items-center justify-center transition cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {/* Printable Receipt Paper */}
+                <div className="bg-white p-2 text-slate-900 space-y-6">
+                  {/* Brand & Receipt Title */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-1.5">
+                        <span>🛍️</span>
+                        <span>SABAY LUK PLATFORM</span>
+                      </h2>
+                      <p className="text-[11px] text-slate-500 mt-0.5">ប្រព័ន្ធគ្រប់គ្រងការលក់ និងហាងអនឡាញទំនើប</p>
+                      <p className="text-[10px] text-slate-400">Telegram: @sabay_luk • Web: sabayluk.com</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="inline-block bg-emerald-50 text-emerald-800 font-black text-[10px] px-2.5 py-1 rounded-lg border border-emerald-200 uppercase tracking-wider">
+                        ✓ PAID & APPROVED
+                      </span>
+                      <p className="text-xs font-mono font-bold text-slate-700 mt-1">
+                        Receipt No: {item.id || 'RCP-001'}
+                      </p>
+                      <p className="text-[10px] text-slate-400">
+                        {item.created_at ? new Date(item.created_at).toLocaleDateString('km-KH') : '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Customer / Store Details Box */}
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">អតិថិជន / ហាង:</span>
+                      <span className="font-black text-slate-900 text-sm block">{item.store_name}</span>
+                      <span className="text-[11px] text-slate-500 font-mono block">ID: {item.store_id}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 block uppercase">ទំនាក់ទំនង:</span>
+                      <span className="font-bold text-slate-800 block">📞 {item.phone || targetStore?.phone || '—'}</span>
+                      {targetStore?.telegram && (
+                        <span className="text-[11px] text-blue-600 block">TG: @{targetStore.telegram.replace('@','')}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Items Breakdown Table */}
+                  <div className="rounded-2xl border border-slate-200 overflow-hidden text-xs">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">បរិយាយសេវាកម្ម</th>
+                          <th className="p-3 text-center">វដ្តនៃការបង់</th>
+                          <th className="p-3 text-right">តម្លៃ ($)</th>
+                          <th className="p-3 text-right">តម្លៃ (៛)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        <tr>
+                          <td className="p-3 font-bold text-slate-800">
+                            ការជាវកញ្ចប់សេវា {item.plan_name || item.plan_key}
+                            <span className="block text-[10px] text-slate-400 font-normal">
+                              សិទ្ធិប្រើប្រាស់មុខងារប្រព័ន្ធ Sabay Luk Cloud SaaS
+                            </span>
+                          </td>
+                          <td className="p-3 text-center text-slate-600 font-bold">
+                            {item.billing_cycle === 'yearly' ? '១ ឆ្នាំ (៣៦៥ ថ្ងៃ)' : '១ ខែ (៣០ ថ្ងៃ)'}
+                          </td>
+                          <td className="p-3 text-right font-black text-slate-900">
+                            ${parseFloat(item.amount || 0).toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right font-bold text-slate-600">
+                            {(parseFloat(item.amount || 0) * 4100).toLocaleString()} ៛
+                          </td>
+                        </tr>
+                      </tbody>
+                      <tfoot className="bg-slate-50 font-black border-t border-slate-200 text-xs">
+                        <tr>
+                          <td colSpan={2} className="p-3 text-right text-slate-600">សរុបរួម (Grand Total):</td>
+                          <td className="p-3 text-right text-emerald-600 text-sm">
+                            ${parseFloat(item.amount || 0).toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right text-slate-700">
+                            {(parseFloat(item.amount || 0) * 4100).toLocaleString()} ៛
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Payment Method & Verification Seal */}
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="text-[11px] text-slate-500 space-y-0.5">
+                      <p>វិធីសាស្ត្រទូទាត់: <b className="text-slate-800">{item.payment_method || 'Bakong KHQR'}</b></p>
+                      <p>ស្ថានភាព: <b className="text-emerald-700">អនុម័តជោគជ័យ (Verified & Active)</b></p>
+                      {item.approved_by && <p>ត្រួតពិនិត្យដោយ: {item.approved_by}</p>}
+                    </div>
+
+                    <div className="w-24 h-24 rounded-full border-4 border-emerald-600/30 flex flex-col items-center justify-center text-center p-1 transform rotate-[-8deg] select-none">
+                      <span className="text-[8px] font-black text-emerald-700 uppercase tracking-tighter">SABAY LUK</span>
+                      <span className="text-xs">⭐</span>
+                      <span className="text-[8px] font-black text-emerald-800 uppercase tracking-tighter">OFFICIAL VERIFIED</span>
+                    </div>
+                  </div>
+
+                  <p className="text-center text-[10px] text-slate-400 pt-4 border-t border-slate-100">
+                    សូមអរគុណចំពោះការជាវសេវាប្រព័ន្ធ Sabay Luk! • ឯកសារនេះត្រូវបានបង្កើតឡើងដោយស្វ័យប្រវត្តិតាមប្រព័ន្ធកុំព្យូទ័រ
+                  </p>
+                </div>
+
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Fallback Lightbox for simple image URL */}
         {zoomSlipModalUrl && (
           <div 
             onClick={() => setZoomSlipModalUrl(null)}
