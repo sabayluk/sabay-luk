@@ -26456,28 +26456,44 @@ export default function UnifiedAdminDashboard() {
 
       {/* Modern Sleek Sidebar */}
       <aside className={`${isSidebarOpen ? 'w-72' : 'w-0 -translate-x-full overflow-hidden opacity-0 pointer-events-none'} transition-all duration-300 ease-in-out bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col shadow-2xl z-30 shrink-0 h-full border-r border-slate-800/60 relative`}>
-        {/* Sidebar Header */}
-        <div className="p-4 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/60">
-          <div className="overflow-hidden min-w-0">
-            {storeSettings.logoUrl ? (
-              <img src={storeSettings.logoUrl} alt="Store Logo" className="h-8 max-w-[130px] object-contain" />
-            ) : (
-              <h2 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-400 tracking-wider truncate">
+        {/* Sidebar Header (Luxury Brand & Workspace Badge) */}
+        <div className="p-3.5 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/80">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {/* Luxury Logo / Brand Avatar Frame */}
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-800 via-slate-850 to-slate-900 border border-slate-700/90 p-1 flex items-center justify-center shrink-0 shadow-lg shadow-black/40 relative overflow-hidden group">
+              {storeSettings.logoUrl ? (
+                <img 
+                  src={storeSettings.logoUrl} 
+                  alt="Store Logo" 
+                  className="w-full h-full object-contain rounded-xl" 
+                />
+              ) : (
+                <div className="w-full h-full rounded-xl bg-gradient-to-tr from-orange-500 to-amber-400 flex items-center justify-center text-white font-black text-lg shadow-inner">
+                  {(storeSettings.storeName || 'S').trim().charAt(0).toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            {/* Store Name & Workspace Live Indicator */}
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-black text-white tracking-wide truncate" title={storeSettings.storeName || 'SABAY LUK'}>
                 {storeSettings.storeName || 'SABAY LUK'}
               </h2>
-            )}
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]"></span>
-              <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest truncate">Admin Workspace</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399] shrink-0"></span>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">
+                  Admin Workspace
+                </p>
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
             {/* ⭐️ ប៊ូតុងរុញបិទរបារម៉ឺនុយ (Collapse Button) ⭐️ */}
             <button 
-              type="button"
+              type="button" 
               onClick={toggleSidebar}
-              className="w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-blue-600 text-slate-300 hover:text-white flex items-center justify-center transition-all duration-200 shadow-xs cursor-pointer border border-slate-700/80 active:scale-90 group"
+              className="w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all duration-200 shadow-xs cursor-pointer border border-slate-700/80 active:scale-90 group shrink-0"
               title="រុញបិទរបារម៉ឺនុយ (Collapse Sidebar)"
             >
               <span className="text-xs font-black group-hover:-translate-x-0.5 transition-transform">◀</span>
