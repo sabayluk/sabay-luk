@@ -314,7 +314,7 @@ const DEFAULT_STORE_SETTINGS = {
   logoUrl: '',
   phone: '096 720 5522',
   phone2: '012 345 678',
-  telegram: 'Sabayluk',
+  telegram: 'sabay_luk',
   facebook: 'https://facebook.com',
   tiktok: 'https://tiktok.com',
   address: 'ភ្នំពេញ, ព្រះរាជាណាចក្រកម្ពុជា',
@@ -341,7 +341,20 @@ const DEFAULT_STORE_SETTINGS = {
 
 export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   // ⭐️ Store States & Multi-Tenant Isolation ⭐️
-  const [storeSettings, setStoreSettings] = useState(DEFAULT_STORE_SETTINGS);
+  const [storeSettings, setStoreSettings] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sabay_store_settings');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          let tg = (parsed.telegram || 'sabay_luk').replace(/^@/, '').trim();
+          if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
+          return { ...DEFAULT_STORE_SETTINGS, ...parsed, telegram: tg };
+        }
+      } catch (_) {}
+    }
+    return { ...DEFAULT_STORE_SETTINGS, telegram: 'sabay_luk' };
+  });
   const [currentStore, setCurrentStore] = useState(() => {
     if (propStoreSlug && propStoreSlug !== 'sabay-luk') {
       const clean = decodeURIComponent(propStoreSlug).trim();
@@ -1378,7 +1391,11 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         storeName: scopedSettings.storeName || active.name || prev.storeName,
         phone: scopedSettings.phone || active.phone || prev.phone,
         phone2: scopedSettings.phone2 || prev.phone2,
-        telegram: (scopedSettings.telegram || active.telegram || prev.telegram || '').replace(/^@/, ''),
+        telegram: (() => {
+          let tg = (scopedSettings.telegram || active.telegram || prev.telegram || (active.id === 'store_default_sabayluk' ? 'sabay_luk' : '')).replace(/^@/, '').trim();
+          if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
+          return tg;
+        })(),
         facebook: scopedSettings.facebook || active.facebook || prev.facebook,
         tiktok: scopedSettings.tiktok || active.tiktok || prev.tiktok,
         address: scopedSettings.address || active.address || prev.address,
@@ -2194,7 +2211,10 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             storeName: parsedSettings.storeName || storeSettings.storeName || currentStore?.name || 'SABAY LUK',
             storePhone: parsedSettings.phone || storeSettings.phone || currentStore?.phone || '096 720 5522',
             storeAddress: parsedSettings.address || storeSettings.address || currentStore?.address || 'Street 271, Phnom Penh, Cambodia',
-            storeTelegram: parsedSettings.telegram || storeSettings.telegram || currentStore?.telegram || 'Sabayluk',
+            storeTelegram: (() => {
+              const tg = (parsedSettings.telegram || storeSettings.telegram || currentStore?.telegram || 'sabay_luk').replace(/^@/, '').trim();
+              return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
+            })(),
             action: 'new_order',
             order: {
               order_id: generatedOrderId,
@@ -3376,7 +3396,11 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             {/* Telegram Button */}
             {storeSettings.telegram && (
               <a 
-                href={storeSettings.telegram.startsWith('http') ? storeSettings.telegram : `https://t.me/${storeSettings.telegram.replace(/^@/, '')}`}
+                href={(() => {
+                  const rawTg = (storeSettings.telegram || '').replace(/^@/, '').trim();
+                  const cleanTg = rawTg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : rawTg;
+                  return cleanTg.startsWith('http') ? cleanTg : `https://t.me/${cleanTg}`;
+                })()}
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="bg-[#229ED9] hover:bg-[#1d8bc0] text-white px-3.5 py-2 rounded-2xl shadow-xl flex items-center gap-2 hover:scale-105 active:scale-95 transition text-xs font-black"
@@ -5386,13 +5410,20 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                       {/* ⭐️ Quick Contact & Support Buttons ⭐️ */}
                       <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-100">
                         <a 
-                          href={`https://t.me/${(storeSettings?.telegram || currentStore?.telegram || 'Sabayluk').replace(/^@/, '')}?text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរនាំពីការកុម្ម៉ង់លេខ #${order.order_id} របស់ខ្ញុំ`)}`}
+                          href={(() => {
+                            const raw = (storeSettings?.telegram || currentStore?.telegram || 'sabay_luk').replace(/^@/, '').trim();
+                            const clean = raw.toLowerCase() === 'sabayluk' ? 'sabay_luk' : raw;
+                            return `https://t.me/${clean}?text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរនាំពីការកុម្ម៉ង់លេខ #${order.order_id} របស់ខ្ញុំ`)}`;
+                          })()}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-600 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-3 py-1.5 rounded-xl transition"
                         >
                           <span>💬</span>
-                          <span>ឆាតតាម Telegram (@{(storeSettings?.telegram || currentStore?.telegram || 'Sabayluk').replace(/^@/, '')})</span>
+                          <span>ឆាតតាម Telegram (@{(() => {
+                            const raw = (storeSettings?.telegram || currentStore?.telegram || 'sabay_luk').replace(/^@/, '').trim();
+                            return raw.toLowerCase() === 'sabayluk' ? 'sabay_luk' : raw;
+                          })()})</span>
                         </a>
                         <a 
                           href={`tel:${(storeSettings?.phone || currentStore?.phone || '0967205522').replace(/\s+/g, '')}`} 

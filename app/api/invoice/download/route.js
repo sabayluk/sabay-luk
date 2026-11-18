@@ -37,7 +37,7 @@ export async function GET(request) {
       storeName: 'SABAY LUK SHOES STORE',
       address: 'Street 271, Sangkat Boeng Tumpun, Phnom Penh',
       phone: '096 720 5522',
-      telegram: 'Sabayluk',
+      telegram: 'sabay_luk',
       vatTin: 'K001-902345678',
       exchangeRate: 4100
     };
@@ -52,7 +52,10 @@ export async function GET(request) {
             ...sSettings,
             storeName: sSettings.storeName || stData.name || storeSettings.storeName,
             phone: sSettings.phone || stData.phone || storeSettings.phone,
-            telegram: (sSettings.telegram || stData.telegram || storeSettings.telegram || '').replace(/^@/, ''),
+            telegram: (() => {
+              const tg = (sSettings.telegram || stData.telegram || storeSettings.telegram || 'sabay_luk').replace(/^@/, '').trim();
+              return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
+            })(),
             address: sSettings.address || stData.address || storeSettings.address
           };
         }
@@ -116,7 +119,7 @@ export async function POST(request) {
       storeName: 'SABAY LUK SHOES STORE',
       address: 'Street 271, Phnom Penh, Cambodia',
       phone: '096 720 5522',
-      telegram: 'Sabayluk',
+      telegram: 'sabay_luk',
       vatTin: 'K001-902345678',
       exchangeRate: 4100
     };

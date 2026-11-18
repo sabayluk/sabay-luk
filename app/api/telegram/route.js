@@ -336,7 +336,10 @@ export async function POST(request) {
           storeName: storeName || 'SABAY LUK SHOES STORE',
           phone: body.storePhone || '096 720 5522',
           address: body.storeAddress || 'Street 271, Phnom Penh, Cambodia',
-          telegram: body.storeTelegram || 'Sabayluk',
+          telegram: (() => {
+            const tg = (body.storeTelegram || 'sabay_luk').replace(/^@/, '').trim();
+            return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
+          })(),
           vatTin: body.vatTin || 'K001-902345678',
           exchangeRate
         });

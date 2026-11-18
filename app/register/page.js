@@ -529,7 +529,7 @@ function RegisterStoreForm() {
                 <span>ទៅកាន់ទំព័រ Login (Go to Login)</span>
               </Link>
               <a
-                href="https://t.me/Sabayluk"
+                href="https://t.me/sabay_luk"
                 target="_blank"
                 rel="noreferrer"
                 className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-xs transition shadow-md active:scale-95 text-center flex items-center justify-center gap-2"

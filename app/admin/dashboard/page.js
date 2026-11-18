@@ -2434,7 +2434,7 @@ export default function UnifiedAdminDashboard() {
     logoUrl: '',
     phone: '096 720 5522',
     phone2: '012 345 678',
-    telegram: 'Sabayluk',
+    telegram: 'sabay_luk',
     telegramBotToken: '',
     telegramChatId: '',
     enableLowStockAlert: true,
@@ -2479,7 +2479,11 @@ export default function UnifiedAdminDashboard() {
       ...merged,
       storeName: merged.storeName || store?.name || 'SABAY LUK',
       phone: merged.phone || store?.phone || (storeId === 'store_default_sabayluk' ? '096 720 5522' : ''),
-      telegram: (merged.telegram || store?.telegram || (storeId === 'store_default_sabayluk' ? 'Sabayluk' : '')).replace(/^@/, ''),
+      telegram: (() => {
+        let tg = (merged.telegram || store?.telegram || (storeId === 'store_default_sabayluk' ? 'sabay_luk' : '')).replace(/^@/, '').trim();
+        if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
+        return tg;
+      })(),
       address: merged.address || store?.address || (storeId === 'store_default_sabayluk' ? 'Street 271, Phnom Penh, Cambodia' : '')
     };
   };
@@ -2576,14 +2580,16 @@ export default function UnifiedAdminDashboard() {
     saveLocalStores(updatedStores);
 
     // Update activeStore state immediately
-    setActiveStore(prev => ({
-      ...prev,
-      name: updatedSettings.storeName || prev?.name,
-      phone: updatedSettings.phone || prev?.phone,
-      telegram: cleanTg || prev?.telegram,
-      address: updatedSettings.address || prev?.address,
-      settings: { ...(prev?.settings || {}), ...updatedSettings }
-    }));
+    const nextActive = {
+      ...activeStore,
+      name: updatedSettings.storeName || activeStore?.name,
+      phone: updatedSettings.phone || activeStore?.phone,
+      telegram: cleanTg || activeStore?.telegram,
+      address: updatedSettings.address || activeStore?.address,
+      settings: { ...(activeStore?.settings || {}), ...updatedSettings }
+    };
+    setActiveStore(nextActive);
+    setActiveStoreState(nextActive);
     
     // Auto-sync ទៅ invoiceSettings
     const updatedInvoice = {
@@ -3211,7 +3217,10 @@ export default function UnifiedAdminDashboard() {
           storeName: storeSettings.storeName || activeStore?.name || 'SABAY LUK',
           storePhone: storeSettings.phone || activeStore?.phone || '096 720 5522',
           storeAddress: storeSettings.address || activeStore?.address || '',
-          storeTelegram: storeSettings.telegram || activeStore?.telegram || 'Sabayluk',
+          storeTelegram: (() => {
+            const raw = (storeSettings.telegram || activeStore?.telegram || 'sabay_luk').replace(/^@/, '').trim();
+            return raw.toLowerCase() === 'sabayluk' ? 'sabay_luk' : raw;
+          })(),
           action,
           items,
           message,
@@ -14810,7 +14819,7 @@ export default function UnifiedAdminDashboard() {
                       type="text"
                       value={storeFormToEdit.telegram || ''}
                       onChange={(e) => setStoreFormToEdit({ ...storeFormToEdit, telegram: e.target.value })}
-                      placeholder="Sabayluk"
+                      placeholder="sabay_luk"
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-medium outline-none"
                     />
                   </div>
@@ -22222,7 +22231,7 @@ export default function UnifiedAdminDashboard() {
                       type="text"
                       value={storeSettings.telegram}
                       onChange={(e) => setStoreSettings({ ...storeSettings, telegram: e.target.value.replace(/^@/, '') })}
-                      placeholder="Sabayluk"
+                      placeholder="sabay_luk"
                       className="w-full border-2 border-gray-200 pl-8 pr-4 py-3 rounded-2xl text-sm font-bold focus:border-[#ff6a00] outline-none transition bg-white"
                     />
                   </div>
@@ -23345,7 +23354,10 @@ export default function UnifiedAdminDashboard() {
                     {storeSettings.telegram && (
                       <div className="bg-[#229ED9] text-white text-[11px] font-black px-3 py-1.5 rounded-xl flex items-center justify-between shadow-xs">
                         <span className="flex items-center gap-1.5"><span>✈️</span> ឆាត Telegram</span>
-                        <span className="font-mono text-[10px] opacity-90">@{storeSettings.telegram.replace(/^@/, '')}</span>
+                        <span className="font-mono text-[10px] opacity-90">@{(() => {
+                          const tg = storeSettings.telegram.replace(/^@/, '').trim();
+                          return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
+                        })()}</span>
                       </div>
                     )}
                     {storeSettings.facebook && (

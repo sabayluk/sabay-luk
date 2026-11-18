@@ -744,7 +744,14 @@ export default function SaaSPlatformLandingPage() {
               </li>
               <li className="flex items-center gap-2">
                 <span>✈️</span>
-                <span>Telegram: @Sabay_luk</span>
+                <a
+                  href="https://t.me/sabay_luk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-white transition font-medium"
+                >
+                  Telegram: @sabay_luk
+                </a>
               </li>
               <li className="flex items-center gap-2">
                 <span>📍</span>

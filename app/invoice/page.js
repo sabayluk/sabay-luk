@@ -16,7 +16,7 @@ function InvoiceContent() {
     storeNameKh: 'សប្បាយលក់ ស្បែកជើងម៉ាកល្បីៗ',
     address: 'ផ្លូវ ២៧១ សង្កាត់បឹងទំពុន ខណ្ឌមានជ័យ រាជធានីភ្នំពេញ',
     phone: '096 720 5522',
-    telegram: 'Sabayluk',
+    telegram: 'sabay_luk',
     vatTin: 'K001-902345678',
     exchangeRate: 4100
   });
@@ -52,7 +52,10 @@ function InvoiceContent() {
             ...data.settings,
             storeName: data.name || data.settings.storeName || prev.storeName,
             phone: data.phone || data.settings.phone || prev.phone,
-            telegram: data.telegram || data.settings.telegram || prev.telegram,
+            telegram: (() => {
+              const tg = (data.telegram || data.settings.telegram || prev.telegram || 'sabay_luk').replace(/^@/, '').trim();
+              return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
+            })(),
             address: data.address || data.settings.address || prev.address
           }));
         }
@@ -254,7 +257,10 @@ function InvoiceContent() {
           order,
           storePhone: storeSettings.phone || '096 720 5522',
           storeAddress: storeSettings.address || 'Street 271, Phnom Penh, Cambodia',
-          storeTelegram: storeSettings.telegram || 'Sabayluk',
+          storeTelegram: (() => {
+            const tg = (storeSettings.telegram || 'sabay_luk').replace(/^@/, '').trim();
+            return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
+          })(),
           vatTin: storeSettings.vatTin,
           exchangeRate: storeSettings.exchangeRate || 4100
         })

@@ -268,7 +268,7 @@ export default function OrderTrackingPage() {
                 </p>
                 <div className="pt-2">
                   <a
-                    href="https://t.me/Sabayluk"
+                    href="https://t.me/sabay_luk"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 bg-[#24A1DE] hover:bg-[#1f8ec4] text-white text-xs font-black px-5 py-2.5 rounded-xl transition shadow-md shadow-blue-500/20"
@@ -597,15 +597,21 @@ export default function OrderTrackingPage() {
                           <span>វិក្កយបត្រ PDF ផ្លូវការ</span>
                         </a>
 
-                        <a
-                          href={`https://t.me/${(orderStoreInfo?.settings?.telegram || orderStoreInfo?.telegram || 'Sabayluk').replace(/^@/, '')}?text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរពីការកុម្ម៉ង់លេខ #${selectedOrder.order_id || selectedOrder.id}`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 bg-[#24A1DE] hover:bg-[#1f8ec4] text-white py-3 rounded-2xl font-black text-xs text-center transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20"
-                        >
-                          <span>💬</span>
-                          <span>ឆាតសួរក្នុង Telegram (@{(orderStoreInfo?.settings?.telegram || orderStoreInfo?.telegram || 'Sabayluk').replace(/^@/, '')})</span>
-                        </a>
+                        {(() => {
+                          const rawTg = (orderStoreInfo?.settings?.telegram || orderStoreInfo?.telegram || 'sabay_luk').replace(/^@/, '').trim();
+                          const cleanTg = rawTg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : rawTg;
+                          return (
+                            <a
+                              href={`https://t.me/${cleanTg}?text=${encodeURIComponent(`សួស្តីបង! ខ្ញុំចង់សួរពីការកុម្ម៉ង់លេខ #${selectedOrder.order_id || selectedOrder.id}`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 bg-[#24A1DE] hover:bg-[#1f8ec4] text-white py-3 rounded-2xl font-black text-xs text-center transition flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20"
+                            >
+                              <span>💬</span>
+                              <span>ឆាតសួរក្នុង Telegram (@{cleanTg})</span>
+                            </a>
+                          );
+                        })()}
 
                         <Link
                           href="/"
