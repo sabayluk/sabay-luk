@@ -669,6 +669,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const [showMapPickerModal, setShowMapPickerModal] = useState(false);
   const [customerProvince, setCustomerProvince] = useState('ភ្នំពេញ');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [confirmedLocationDetails, setConfirmedLocationDetails] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('COD'); // 'COD' | 'ABA KHQR'
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
@@ -4224,8 +4225,11 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       <LocationPickerModal
         isOpen={showMapPickerModal}
         onClose={() => setShowMapPickerModal(false)}
-        onConfirm={({ mapUrl }) => {
+        onConfirm={({ mapUrl, addressDetails, fullFormattedAddress, province }) => {
           setGoogleMapUrl(mapUrl);
+          if (province) setCustomerProvince(province);
+          if (fullFormattedAddress) setCustomerAddress(fullFormattedAddress);
+          if (addressDetails) setConfirmedLocationDetails(addressDetails);
         }}
         initialUrl={googleMapUrl}
         selectedProvince={customerProvince}
@@ -4466,9 +4470,56 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                           )}
                         </div>
                         {googleMapUrl && (
-                          <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                            <span>✅</span> បានកំណត់ Link ទីតាំង Google Maps រួចរាល់!
-                          </p>
+                          <div className="space-y-2 pt-1">
+                            <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                              <span>✅</span> បានកំណត់ Link ទីតាំង Google Maps រួចរាល់!
+                            </p>
+
+                            {/* ⭐️ ការបញ្ជាក់ទីតាំងច្បាស់លាស់ (ផ្លូវ, ភូមិ, សង្កាត់, ឃុំ, ខណ្ឌ, ក្រុង) ⭐️ */}
+                            {confirmedLocationDetails && (
+                              <div className="p-3 bg-emerald-50/90 rounded-2xl border border-emerald-200 text-xs space-y-1.5 animate-in fade-in">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-black text-emerald-900 text-[11px] flex items-center gap-1.5">
+                                    <span>📍</span> ព័ត៌មានទីតាំងបញ្ជាក់លម្អិត៖
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowMapPickerModal(true)}
+                                    className="text-[10px] text-emerald-700 hover:text-emerald-950 font-bold underline cursor-pointer"
+                                  >
+                                    ✏️ កែប្រែ
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                                  <div>
+                                    <span className="text-gray-500 font-bold">ផ្លូវ/ផ្ទះលេខ:</span>{' '}
+                                    <span className="font-black text-gray-800">{confirmedLocationDetails.street || 'N/A'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 font-bold">ភូមិ:</span>{' '}
+                                    <span className="font-black text-gray-800">{confirmedLocationDetails.village || 'N/A'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 font-bold">សង្កាត់/ឃុំ:</span>{' '}
+                                    <span className="font-black text-gray-800">{confirmedLocationDetails.sangkat || 'N/A'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 font-bold">ខណ្ឌ/ស្រុក:</span>{' '}
+                                    <span className="font-black text-gray-800">{confirmedLocationDetails.district || 'N/A'}</span>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <span className="text-gray-500 font-bold">រាជធានី/ខេត្ត:</span>{' '}
+                                    <span className="font-black text-emerald-800">{confirmedLocationDetails.province || customerProvince}</span>
+                                  </div>
+                                  {confirmedLocationDetails.landmark && (
+                                    <div className="col-span-2 text-[10px] text-gray-600 bg-white/70 p-1.5 rounded-lg border border-emerald-100">
+                                      <span className="font-bold">ចំណាំ:</span> {confirmedLocationDetails.landmark}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
 
