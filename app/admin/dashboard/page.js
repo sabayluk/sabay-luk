@@ -694,6 +694,9 @@ export default function UnifiedAdminDashboard() {
   const searchInputRef = useRef(null);
   // ⭐️ Buffer សម្រាប់ចាប់សញ្ញាពីកាំភ្លើងស្កេនបាកូដ USB / Wireless Scanner Gun គ្រប់ពេល (Global Gun Listener) ⭐️
   const barcodeGunBufferRef = useRef('');
+  const displayBcRef = useRef(null);
+  const displayWindowRef = useRef(null);
+  const latestDisplayPayloadRef = useRef(null);
   const lastBarcodeKeyTimeRef = useRef(0);
 
   useEffect(() => {
@@ -19028,6 +19031,37 @@ export default function UnifiedAdminDashboard() {
     } catch (e) {}
   };
 
+  // ⭐️ PERSISTENT BROADCASTCHANNEL LISTENER (DUAL MONITOR DISPLAY HANDSHAKE) ⭐️
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('sabay_pos_customer_display');
+      displayBcRef.current = bc;
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'REQUEST_LATEST_STATE') {
+          if (latestDisplayPayloadRef.current && bc) {
+            try {
+              bc.postMessage(latestDisplayPayloadRef.current);
+            } catch (e) {}
+          } else {
+            try {
+              const raw = localStorage.getItem('sabay_pos_customer_display_state');
+              if (raw && bc) bc.postMessage(JSON.parse(raw));
+            } catch (e) {}
+          }
+        }
+      };
+    } catch (e) {}
+
+    return () => {
+      if (bc) {
+        try { bc.close(); } catch(e) {}
+        displayBcRef.current = null;
+      }
+    };
+  }, []);
+
   // ⭐️ REALTIME BROADCAST ទៅកាន់អេក្រង់ភ្ញៀវ (DUAL CUSTOMER DISPLAY SYNC) ⭐️
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -19062,28 +19096,42 @@ export default function UnifiedAdminDashboard() {
       grandTotal: posTotal,
       exchangeRate: exchangeRate || 4100,
       paymentMethod: paymentMethod || 'Cash',
-      qrCodeUrl: '/khqr-aba.jpg',
+      qrCodeUrl: storeSettings?.abaQrUrl || storeSettings?.khqrUrl || '/khqr-aba.jpg',
       cashReceived: Number(amountTendered) || 0,
       changeAmount: receiptData?.change || (Number(amountTendered) > posTotal ? Number(amountTendered) - posTotal : 0),
       receiptNo: receiptData?.orderId || receiptData?.receiptNo || '',
       customerName: customerName || 'អតិថិជនទូទៅ',
+      storeName: storeSettings?.storeName || 'SABAY LUK',
       lastUpdated: Date.now()
     };
 
-    // 1. BroadcastChannel (0ms sync for dual monitor on same machine)
+    latestDisplayPayloadRef.current = payload;
+
+    // 1. BroadcastChannel (keep channel open, NEVER close immediately!)
     try {
-      const bc = new BroadcastChannel('sabay_pos_customer_display');
-      bc.postMessage(payload);
-      bc.close();
+      if (displayBcRef.current) {
+        displayBcRef.current.postMessage(payload);
+      } else {
+        const bc = new BroadcastChannel('sabay_pos_customer_display');
+        displayBcRef.current = bc;
+        bc.postMessage(payload);
+      }
     } catch (e) {}
 
-    // 2. LocalStorage (Cross-tab/Cross-window sync)
+    // 2. Direct postMessage to popup window reference if open
+    try {
+      if (displayWindowRef.current && !displayWindowRef.current.closed) {
+        displayWindowRef.current.postMessage({ type: 'POS_STATE_UPDATE', payload }, '*');
+      }
+    } catch (e) {}
+
+    // 3. LocalStorage (Cross-tab/Cross-window sync)
     try {
       localStorage.setItem('sabay_pos_customer_display_state', JSON.stringify(payload));
       window.dispatchEvent(new Event('storage'));
     } catch (e) {}
 
-    // 3. Supabase Realtime broadcast (For wireless iPad on counter)
+    // 4. Supabase Realtime broadcast (For wireless iPad on counter)
     try {
       supabase.channel('pos_customer_display_realtime').send({
         type: 'broadcast',
@@ -19091,7 +19139,7 @@ export default function UnifiedAdminDashboard() {
         payload
       });
     } catch (e) {}
-  }, [posCart, posSubtotal, posDiscountValue, posTaxAmount, posTotal, paymentModalOpen, receiptData, amountTendered, exchangeRate, effectiveTaxRate, paymentMethod, customerName]);
+  }, [posCart, posSubtotal, posDiscountValue, posTaxAmount, posTotal, paymentModalOpen, receiptData, amountTendered, exchangeRate, effectiveTaxRate, paymentMethod, customerName, storeSettings]);
 
   // ⭐️ ផ្ទាំង POS ⭐️
     const PosView = () => {
@@ -19141,7 +19189,16 @@ export default function UnifiedAdminDashboard() {
             <button
               type="button"
               onClick={() => {
-                window.open('/pos-display', 'SabayCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
+                const win = window.open('/pos-display', 'SabayCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
+                displayWindowRef.current = win;
+                setTimeout(() => {
+                  try {
+                    const raw = localStorage.getItem('sabay_pos_customer_display_state');
+                    if (raw && win && !win.closed) {
+                      win.postMessage({ type: 'POS_STATE_UPDATE', payload: JSON.parse(raw) }, '*');
+                    }
+                  } catch(e) {}
+                }, 500);
               }}
               className="bg-gradient-to-r from-slate-900 to-slate-800 hover:from-black hover:to-slate-900 text-amber-300 border border-slate-700 hover:border-amber-400/60 px-4 py-2.5 rounded-2xl text-xs font-black shadow-md flex items-center gap-2 cursor-pointer transition transform hover:scale-[1.02] active:scale-95 shrink-0"
               title="បើកផ្ទាំងបង្ហាញតម្លៃទៅកាន់ភ្ញៀវលើ iPad ឬអេក្រង់ទី ២ (Customer Display)"
