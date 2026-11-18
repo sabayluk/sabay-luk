@@ -4033,8 +4033,14 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
       {/* ⭐️ 9. CART DRAWER (កន្រ្តកទំនិញស្តង់ដារ) ⭐️ */}
       {isCartOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md h-full p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+        <div 
+          onClick={() => setIsCartOpen(false)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white w-full max-w-md h-full p-6 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 cursor-default"
+          >
             <div className="flex justify-between items-center mb-5 pb-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <span className="text-xl">🛒</span>
@@ -4177,8 +4183,14 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
 {/* ⭐️ 10. FULL-OPTION CHECKOUT MODAL (REDESIGNED LUXURY E-COMMERCE STANDARD) ⭐️ */}
       {checkoutModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl relative max-h-[94vh] flex flex-col overflow-hidden border border-slate-150 animate-in zoom-in-95 duration-200">
+        <div 
+          onClick={() => setCheckoutModalOpen(false)}
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl relative max-h-[94vh] flex flex-col overflow-hidden border border-slate-150 animate-in zoom-in-95 duration-200 cursor-default"
+          >
             
             {/* 🌟 1. MODAL HEADER WITH PROGRESS BAR */}
             <div className="px-6 py-4.5 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
@@ -4847,8 +4859,29 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
       {/* ⭐️ 11. ORDER SUCCESS MODAL (ENHANCED WITH DETAILED PRODUCT LIST & MAP) ⭐️ */}
       {orderSuccessModalOpen && completedOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+        <div 
+          onClick={() => {
+            setOrderSuccessModalOpen(false);
+            setCompletedOrder(null);
+          }}
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 cursor-default"
+          >
+            {/* Direct Close Button at Top Right */}
+            <button
+              type="button"
+              onClick={() => {
+                setOrderSuccessModalOpen(false);
+                setCompletedOrder(null);
+              }}
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm transition z-20 cursor-pointer shadow-xs"
+              title="បិទផ្ទាំង (Close)"
+            >
+              ✕
+            </button>
             
             {/* Header Banner */}
             <div className="text-center pb-4 shrink-0 border-b border-slate-100">
@@ -5167,8 +5200,14 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
       {/* ⭐️ 12. TRACK ORDER MODAL ⭐️ */}
       {trackModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col">
+        <div 
+          onClick={() => setTrackModalOpen(false)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl relative max-h-[92vh] flex flex-col cursor-default"
+          >
             
             <div className="flex justify-between items-center pb-4 border-b border-gray-100 mb-5">
               <div className="flex items-center gap-2.5">
@@ -5670,8 +5709,14 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     
 {/* ⭐️ 11. VERIFIED CUSTOMER FEEDBACK & REVIEWS MODAL (1 Order = 1 Feedback) ⭐️ */}
       {feedbackModalOpen && feedbackProduct && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className={`rounded-3xl max-w-2xl w-full shadow-2xl relative max-h-[92vh] overflow-hidden flex flex-col border animate-in zoom-in-95 transition-colors ${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-100 text-gray-900'}`}>
+        <div 
+          onClick={() => setFeedbackModalOpen(false)}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className={`rounded-3xl max-w-2xl w-full shadow-2xl relative max-h-[92vh] overflow-hidden flex flex-col border animate-in zoom-in-95 transition-colors cursor-default ${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-100 text-gray-900'}`}
+          >
             
             {/* Modal Header */}
             <div className={`p-5 sm:p-6 border-b flex items-center justify-between gap-4 transition-colors ${themeMode === 'dark' ? 'bg-slate-950/60 border-slate-800' : 'bg-gray-50/70 border-gray-100'}`}>

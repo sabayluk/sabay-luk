@@ -10,6 +10,14 @@ import BarcodeCameraModal from '../../components/BarcodeCameraModal';
 import BarcodeScannerSettingsModal from '../../components/BarcodeScannerSettingsModal';
 import { cacheProductsOffline, getCachedProductsOffline, queueOfflineOrder, syncOfflineOrdersToCloud, getOfflineOrdersQueue } from '../../../lib/offlinePos';
 import { getInvoiceUrl, openInvoiceInBrowser } from '../../../lib/openInvoice';
+import { 
+  getPhnomPenhNow, 
+  filterLowAndOutOfStock, 
+  isStockAlertSnoozedToday, 
+  snoozeStockAlertForToday, 
+  sendDailyTelegramStockAlert, 
+  jumpToProductInInventory 
+} from '../../../lib/stockAlertEngine';
 
 // ⭐️ Helper: គណនាកាលបរិច្ឆេទផុតកំណត់ Plan និងចំនួនថ្ងៃនៅសល់ ⭐️
 const computePlanExpiry = (expiresAt) => {
@@ -466,6 +474,11 @@ export default function UnifiedAdminDashboard() {
   const [quickEditLowStockAlert, setQuickEditLowStockAlert] = useState('5');
   const [quickEditReason, setQuickEditReason] = useState('កែតម្រូវស្តុកជាក់ស្តែង');
   const [quickEditSaving, setQuickEditSaving] = useState(false);
+
+  // ⭐️ States សម្រាប់ប្រព័ន្ធ Alert ទំនិញជិតអស់ស្តុក & អស់ស្តុក (Daily 8AM Telegram + Bouncing Admin Alert) ⭐️
+  const [stockAlertSnoozed, setStockAlertSnoozed] = useState(false);
+  const [stockAlertDrawerOpen, setStockAlertDrawerOpen] = useState(false);
+  const [sendingManualStockAlert, setSendingManualStockAlert] = useState(false);
 
   const handleOpenQuickEdit = (product) => {
     setQuickEditProduct(product);
@@ -2257,6 +2270,73 @@ export default function UnifiedAdminDashboard() {
       return pStore === storeId;
     });
   }, [products, activeStore?.id]);
+
+  // ⭐️ Filtered out-of-stock and low-stock items for current store ⭐️
+  const stockAlertData = useMemo(() => {
+    return filterLowAndOutOfStock(currentStoreProducts);
+  }, [currentStoreProducts]);
+
+  // ⭐️ Auto Check & Trigger Daily 8:00 AM Telegram Stock Alert & Sync Snooze State ⭐️
+  useEffect(() => {
+    if (!activeStore) return;
+    const snoozed = isStockAlertSnoozedToday(activeStore.id);
+    setStockAlertSnoozed(snoozed);
+
+    const runStockTgCheck = async () => {
+      if (!currentStoreProducts || currentStoreProducts.length === 0) return;
+      try {
+        await sendDailyTelegramStockAlert(activeStore, currentStoreProducts);
+      } catch (err) {
+        console.warn('Auto stock alert check error:', err);
+      }
+    };
+
+    runStockTgCheck();
+    const timer = setInterval(runStockTgCheck, 15 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [activeStore?.id, currentStoreProducts?.length]);
+
+  const handleJumpToOutOfStock = (product) => {
+    const target = product || stockAlertData.outOfStock[0] || stockAlertData.lowStock[0];
+    if (!target) return;
+    setStockAlertDrawerOpen(false);
+    jumpToProductInInventory(target, {
+      setActiveTab,
+      setInventorySubTab,
+      setFilterStatus,
+      setInvSearch,
+      handleOpenQuickEdit
+    });
+  };
+
+  const handleSnoozeAlertToday = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    snoozeStockAlertForToday(activeStore?.id);
+    setStockAlertSnoozed(true);
+    setStockAlertDrawerOpen(false);
+    setToastNotification('💤 បានលាក់ការ Alert សម្រាប់ថ្ងៃនេះ! ប្រសិនបើមិនទាន់ដោះស្រាយ វានឹងលោតជូនដំណឹងឡើងវិញនៅថ្ងៃស្អែក។');
+    setTimeout(() => setToastNotification(null), 4000);
+  };
+
+  const handleSendManualStockTgAlert = async () => {
+    setSendingManualStockAlert(true);
+    try {
+      const res = await sendDailyTelegramStockAlert(activeStore, currentStoreProducts, { force: true });
+      if (res.sent) {
+        setToastNotification(`✅ បានផ្ញើដំណឹងស្តុក ${res.count} មុខ ទៅកាន់ Telegram រួចរាល់!`);
+      } else {
+        const reasonText = res.reason === 'no_low_stock_items' 
+          ? 'ទំនិញទាំងអស់មានស្តុកគ្រប់គ្រាន់ គ្មានទំនិញអស់ស្តុកទេ!' 
+          : (res.error || res.reason || 'បរាជ័យ');
+        setToastNotification(`⚠️ មិនអាចផ្ញើបាន: ${reasonText}`);
+      }
+    } catch (err) {
+      setToastNotification(`❌ កំហុសបណ្តាញ: ${err.message}`);
+    } finally {
+      setSendingManualStockAlert(false);
+      setTimeout(() => setToastNotification(null), 4500);
+    }
+  };
 
   const currentStoreOrders = useMemo(() => {
     const storeId = activeStore?.id || 'store_default_sabayluk';
@@ -12108,8 +12188,14 @@ export default function UnifiedAdminDashboard() {
           const discountAmt = Number(ord.discount || 0);
 
           return (
-            <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
-              <div className="bg-white w-full max-w-xl rounded-3xl shadow-2xl p-5 sm:p-6 border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200">
+            <div 
+              onClick={() => setSelectedOrderDetails(null)}
+              className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white w-full max-w-xl rounded-3xl shadow-2xl p-5 sm:p-6 border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200 cursor-default"
+              >
                 
                 {/* Header */}
                 <div className="flex justify-between items-start pb-3.5 mb-3.5 border-b border-slate-100 shrink-0">
@@ -18344,6 +18430,18 @@ export default function UnifiedAdminDashboard() {
               <span>📋</span>
               <span>កំណត់ត្រាចលនាស្តុក (Audit Log)</span>
             </button>
+
+            {/* Telegram 8AM Alert Quick Trigger Button */}
+            <button
+              type="button"
+              onClick={handleSendManualStockTgAlert}
+              disabled={sendingManualStockAlert}
+              className="px-3.5 py-2 rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs active:scale-95 disabled:opacity-50"
+              title="ផ្ញើដំណឹងស្តុកទំនិញជិតអស់/ដាច់ស្តុក ទៅកាន់ Telegram ភ្លាមៗ (Auto ម៉ោង 8 ព្រឹក)"
+            >
+              <span>{sendingManualStockAlert ? '⏳' : '✈️'}</span>
+              <span>{sendingManualStockAlert ? 'កំពុងផ្ញើ...' : 'ផ្ញើ Alert ទៅ Telegram (8AM)'}</span>
+            </button>
           </div>
 
           {/* View Switcher: Table View vs Grid Cards */}
@@ -18585,6 +18683,7 @@ export default function UnifiedAdminDashboard() {
                           return (
                             <tr 
                               key={product.id} 
+                              id={`product-row-${product.id}`}
                               className={`transition-colors duration-150 ${
                                 isSelected ? 'bg-blue-50/50' : 'hover:bg-gray-50/80'
                               }`}
@@ -18837,6 +18936,7 @@ export default function UnifiedAdminDashboard() {
                     return (
                       <div 
                         key={product.id}
+                        id={`product-card-${product.id}`}
                         className={`bg-white rounded-3xl overflow-hidden border transition-all duration-200 flex flex-col group hover:shadow-xl hover:-translate-y-1 ${
                           isSelected ? 'border-blue-500 ring-2 ring-blue-300 shadow-md' : 'border-gray-200 shadow-xs'
                         }`}
@@ -19515,8 +19615,14 @@ export default function UnifiedAdminDashboard() {
 
         {/* ⭐️ STANDARD MODAL កែប្រែស្តុក និងតម្លៃស្តង់ដាអន្តរជាតិ (In-Place Stock & Price Quick Edit Modal) ⭐️ */}
         {quickEditProduct && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-7 border border-gray-100 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+          <div 
+            onClick={() => setQuickEditProduct(null)}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-7 border border-gray-100 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto cursor-default"
+            >
               
               {/* Modal Header */}
               <div className="flex justify-between items-start mb-5 pb-4 border-b border-gray-100">
@@ -19760,8 +19866,14 @@ export default function UnifiedAdminDashboard() {
           const currentAvailable = selectedVar ? selectedVar.stock_qty : (stockInProduct.stock_qty || 0);
 
           return (
-            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-              <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-8 border border-gray-100 animate-in zoom-in-95">
+            <div 
+              onClick={() => setStockInModalOpen(false)}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in cursor-pointer"
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 sm:p-8 border border-gray-100 animate-in zoom-in-95 cursor-default"
+              >
                 
                 {/* Modal Header */}
                 <div className="flex justify-between items-start mb-5 pb-4 border-b border-gray-100">
@@ -28145,8 +28257,14 @@ export default function UnifiedAdminDashboard() {
 
       {/* ⭐️ MODAL វិក្កយបត្រកម្តៅស្តង់ដារ (THERMAL RECEIPT 80MM / 58MM WITH KHQR) ⭐️ */}
         {receiptData && (
-          <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-            <div className="bg-white rounded-3xl shadow-2xl p-5 flex flex-col max-h-[92vh] font-mono text-black border border-gray-300 max-w-sm w-full animate-in zoom-in-95">
+          <div 
+            onClick={() => setReceiptData(null)}
+            className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl shadow-2xl p-5 flex flex-col max-h-[92vh] font-mono text-black border border-gray-300 max-w-sm w-full animate-in zoom-in-95 cursor-default"
+            >
               
               {/* Top Controls: Paper Size Switcher & Quick QR Toggle Button */}
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-gray-200">
@@ -28525,6 +28643,192 @@ export default function UnifiedAdminDashboard() {
             </div>
           </div>
         )}
+
+      {/* ⭐️ FLOATING BOUNCING STOCK ALERT (លោតចុះលោតឡើង ជិតអស់ស្តុក & អស់ស្តុក) ⭐️ */}
+      {stockAlertData.total > 0 && !stockAlertSnoozed && (
+        <div className="fixed bottom-6 left-4 sm:bottom-8 sm:left-8 z-[80] max-w-sm animate-bounce hover:animate-none transition-all duration-300">
+          <div 
+            onClick={() => handleJumpToOutOfStock()}
+            className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white p-3.5 sm:p-4 rounded-3xl shadow-2xl shadow-rose-600/40 border-2 border-white/40 cursor-pointer flex items-center gap-3 backdrop-blur-md group hover:scale-102 transition-transform"
+            title="ចុចដើម្បីទៅកាន់ទំនិញដែលអស់ស្តុកភ្លាមៗ (Jump to Out of Stock Item)"
+          >
+            <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl shrink-0 shadow-inner">
+              🚨
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-black bg-white text-rose-700 px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
+                  អាសន្នស្តុក!
+                </span>
+                {stockAlertData.outOfStock.length > 0 && (
+                  <span className="text-[10px] font-black bg-black/40 text-rose-200 px-2 py-0.5 rounded-full">
+                    🔴 អស់ស្តុក: {stockAlertData.outOfStock.length}
+                  </span>
+                )}
+                {stockAlertData.lowStock.length > 0 && (
+                  <span className="text-[10px] font-black bg-black/40 text-amber-200 px-2 py-0.5 rounded-full">
+                    🟠 ជិតអស់: {stockAlertData.lowStock.length}
+                  </span>
+                )}
+              </div>
+              
+              <p className="text-xs font-black text-white mt-1 truncate">
+                {stockAlertData.outOfStock[0]?.name || stockAlertData.lowStock[0]?.name}
+                {stockAlertData.total > 1 ? ` និង ${stockAlertData.total - 1} មុខទៀត` : ''}
+              </p>
+              <p className="text-[10px] text-rose-100 font-bold mt-0.5 flex items-center gap-1">
+                <span>👉</span> ចុចទីនេះទៅកែស្តុកភ្លាម ➔
+              </p>
+            </div>
+
+            {/* Controls */}
+            <div className="flex flex-col gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setStockAlertDrawerOpen(true);
+                }}
+                className="text-[10px] font-black bg-white/25 hover:bg-white text-white hover:text-rose-700 px-2.5 py-1 rounded-xl transition cursor-pointer"
+                title="មើលបញ្ជីទំនិញទាំងអស់"
+              >
+                📋 បញ្ជី ({stockAlertData.total})
+              </button>
+              <button
+                type="button"
+                onClick={handleSnoozeAlertToday}
+                className="text-[10px] font-bold bg-black/30 hover:bg-black/60 text-white/90 px-2.5 py-1 rounded-xl transition cursor-pointer"
+                title="លាក់ការ Alert នេះសម្រាប់ថ្ងៃនេះ (ស្អែកនឹងលោតមកវិញបើមិនទាន់ដោះស្រាយ)"
+              >
+                💤 លាក់ថ្ងៃនេះ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐️ MODAL បង្ហាញបញ្ជីទំនិញអស់ស្តុក & ជិតអស់ស្តុក (STOCK ALERT MODAL) ⭐️ */}
+      {stockAlertDrawerOpen && (
+        <div 
+          onClick={() => setStockAlertDrawerOpen(false)}
+          className="fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-xl w-full shadow-2xl p-5 sm:p-6 border border-slate-200 flex flex-col max-h-[88vh] overflow-hidden animate-in zoom-in-95 cursor-default"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl font-bold border border-rose-200">
+                  🚨
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-gray-900 leading-tight">
+                    ទំនិញអស់ស្តុក & ជិតអស់ស្តុក ({stockAlertData.total} មុខ)
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    សូមបំពេញស្តុកទំនិញឡើងវិញ ដើម្បីកុំឱ្យខកខានការលក់ជូនអតិថិជន
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setStockAlertDrawerOpen(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Action Bar */}
+            <div className="flex items-center justify-between gap-2 py-3 border-b border-gray-100">
+              <button
+                type="button"
+                onClick={handleSendManualStockTgAlert}
+                disabled={sendingManualStockAlert}
+                className="text-xs font-black text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>{sendingManualStockAlert ? '⏳' : '✈️'}</span>
+                <span>ផ្ញើ Alert ទៅ Telegram ឥឡូវនេះ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSnoozeAlertToday}
+                className="text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-xl transition cursor-pointer"
+              >
+                💤 លាក់សម្រាប់ថ្ងៃនេះ
+              </button>
+            </div>
+
+            {/* Items List */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-2 pr-1">
+              {stockAlertData.allAlertItems.map((p) => {
+                const qty = Number(p.stock_qty ?? p.stock ?? 0);
+                const isOut = qty <= 0;
+                return (
+                  <div 
+                    key={p.id}
+                    className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-gray-100 bg-gray-50/60 hover:bg-blue-50/40 hover:border-blue-200 transition"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img 
+                        src={p.image_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=80'} 
+                        alt={p.name}
+                        className="w-12 h-12 rounded-xl object-cover bg-white border border-gray-200 shrink-0"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=80';
+                        }}
+                      />
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-black text-gray-900 truncate">{p.name}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="font-mono text-[10px] text-gray-500">SKU: {p.sku || 'N/A'}</span>
+                          {isOut ? (
+                            <span className="text-[10px] font-black bg-rose-100 text-rose-700 px-2 py-0.2 rounded-md">
+                              🔴 ដាច់ស្តុក (0)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-0.2 rounded-md">
+                              🟠 នៅសល់ {qty}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleJumpToOutOfStock(p)}
+                      className="shrink-0 bg-slate-900 hover:bg-black text-white text-xs font-black px-3 py-2 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-xs active:scale-95"
+                    >
+                      <span>⚡</span>
+                      <span>កែស្តុក</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-[11px] text-gray-400 font-bold">
+                💡 ចុច "កែស្តុក" ដើម្បីនាំអេក្រង់ទៅកាន់ទំនិញនោះភ្លាមៗ
+              </span>
+              <button
+                type="button"
+                onClick={() => setStockAlertDrawerOpen(false)}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+              >
+                បិទ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ⭐️ GLOBAL TOAST NOTIFICATION ⭐️ */}
       {toastNotification && (
