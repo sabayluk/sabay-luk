@@ -60,25 +60,39 @@ export default function SaaSPlatformLandingPage() {
   };
 
   const [copiedSlug, setCopiedSlug] = useState(null);
+  const [openingSlug, setOpeningSlug] = useState(null);
+  const [browserToast, setBrowserToast] = useState(null);
 
-  // ⭐️ Explicitly open link in standard web browser (Google Chrome / Edge) instead of PWA App ⭐️
-  const handleOpenStoreInBrowser = (e, slug) => {
+  // ⭐️ Explicitly open link in standard Google Chrome / Edge Web Browser ⭐️
+  const handleOpenStoreInBrowser = async (e, slug) => {
     if (e && e.preventDefault) e.preventDefault();
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
     const targetUrl = `${origin}/store/${slug}`;
 
-    // 1. Direct browser tab open with noopener
+    setOpeningSlug(slug);
+    setBrowserToast(lang === 'km' ? '🌐 កំពុងបើកលើ Google Chrome...' : '🌐 Opening in Google Chrome...');
+
+    // 1. Trigger OS shell to explicitly launch Chrome/Edge browser window/tab
     try {
-      const win = window.open(targetUrl, '_blank', 'noopener,noreferrer');
-      if (win) win.focus();
+      await fetch('/api/open-chrome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl })
+      });
+      setBrowserToast(lang === 'km' ? '✅ បានបើកលើ Google Chrome រួចរាល់!' : '✅ Opened in Google Chrome!');
     } catch (_) {}
 
-    // 2. Trigger OS shell to explicitly launch Chrome/Edge browser window/tab
-    fetch('/api/open-chrome', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: targetUrl })
-    }).catch(() => {});
+    // 2. Also open window in browser (fallback)
+    try {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    } catch (_) {}
+
+    setTimeout(() => {
+      setOpeningSlug(null);
+    }, 2000);
+    setTimeout(() => {
+      setBrowserToast(null);
+    }, 4000);
   };
 
   const handleCopyStoreLink = (slug) => {
@@ -610,11 +624,16 @@ export default function SaaSPlatformLandingPage() {
                       <button
                         type="button"
                         onClick={(e) => handleOpenStoreInBrowser(e, st.slug)}
-                        className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 active:scale-95 transition transform cursor-pointer"
-                        title={lang === 'km' ? 'បើកមើលលើ Browser (Google Chrome / Edge)' : 'Open in Web Browser'}
+                        disabled={openingSlug === st.slug}
+                        className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 active:scale-95 transition transform cursor-pointer disabled:opacity-80"
+                        title={lang === 'km' ? 'បើកលើ Web Browser (Google Chrome / Edge)' : 'Open in Web Browser'}
                       >
-                        <span className="text-base">🌐</span>
-                        <span>{t.partner_visit_storefront || 'ចូលមើលគេហទំព័រមុខហាង'}</span>
+                        <span className="text-base">{openingSlug === st.slug ? '⏳' : '🌐'}</span>
+                        <span>
+                          {openingSlug === st.slug
+                            ? (lang === 'km' ? 'កំពុងបើកលើ Browser...' : 'Opening in Browser...')
+                            : (t.partner_visit_storefront || 'ចូលមើលគេហទំព័រមុខហាង')}
+                        </span>
                         <span className="text-base group-hover:translate-x-1 transition-transform">↗</span>
                       </button>
 
@@ -1093,6 +1112,14 @@ export default function SaaSPlatformLandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* ⭐️ Floating Toast Notification for Web Browser Launch */}
+      {browserToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 text-white px-5 py-3 rounded-2xl shadow-2xl border-2 border-orange-500 flex items-center gap-3 backdrop-blur-md animate-in fade-in slide-in-from-bottom-4">
+          <span className="text-xl">🌐</span>
+          <span className="text-xs sm:text-sm font-black tracking-wide">{browserToast}</span>
+        </div>
+      )}
     </div>
   );
 }
