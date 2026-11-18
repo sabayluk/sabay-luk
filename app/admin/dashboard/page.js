@@ -1363,13 +1363,19 @@ export default function UnifiedAdminDashboard() {
       const hasOwner = strictlyThisStore.some(s => s.role === 'ADMIN' || s.id === ownerAccount?.id);
       const finalList = hasOwner ? strictlyThisStore : [ownerAccount, ...strictlyThisStore];
       try {
-        localStorage.setItem(storeKey, JSON.stringify(finalList));
+        const jsonStr = JSON.stringify(finalList);
+        if (saved !== jsonStr) {
+          localStorage.setItem(storeKey, jsonStr);
+        }
       } catch (_) {}
       return finalList;
     }
 
     try {
-      localStorage.setItem(storeKey, JSON.stringify(defaultStaff));
+      const defStr = JSON.stringify(defaultStaff);
+      if (saved !== defStr) {
+        localStorage.setItem(storeKey, defStr);
+      }
     } catch (_) {}
     return defaultStaff;
   };
@@ -1388,30 +1394,7 @@ export default function UnifiedAdminDashboard() {
       }
     } catch (_) {}
 
-    // 2. Update activeStore state & registeredStores cache
-    try {
-      setActiveStoreState(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          settings: { ...(prev.settings || {}), staff_list: updatedList }
-        };
-      });
-      const localStores = getLocalStores();
-      const updatedStores = localStores.map(st => {
-        if (st.id === storeId) {
-          return {
-            ...st,
-            settings: { ...(st.settings || {}), staff_list: updatedList }
-          };
-        }
-        return st;
-      });
-      saveLocalStores(updatedStores);
-      setRegisteredStores(updatedStores);
-    } catch (_) {}
-
-    // 3. Persist to Supabase Cloud Database (stores table -> settings.staff_list)
+    // 2. Persist to Supabase Cloud Database (stores table -> settings.staff_list)
     try {
       const { data: stRow } = await supabase
         .from('stores')
@@ -1452,13 +1435,6 @@ export default function UnifiedAdminDashboard() {
       localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(staffList));
       if (storeId === 'store_default_sabayluk') {
         localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
-      }
-
-      if (Array.isArray(staffList) && staffList.length > 0) {
-        const timer = setTimeout(() => {
-          syncStoreStaffToDatabase(storeId, staffList);
-        }, 1200);
-        return () => clearTimeout(timer);
       }
     }
   }, [staffList, activeStore?.id]);
@@ -2048,7 +2024,11 @@ export default function UnifiedAdminDashboard() {
             if (syncedActive) {
               setActiveStoreState(syncedActive);
               const freshStaff = getStoreStaffList(syncedActive);
-              setStaffList(freshStaff);
+              setStaffList(prev => {
+                if (!prev || prev.length === 0) return freshStaff;
+                if (JSON.stringify(prev) === JSON.stringify(freshStaff)) return prev;
+                return freshStaff;
+              });
             }
           }
         } else if (currentActive) {
@@ -2056,7 +2036,11 @@ export default function UnifiedAdminDashboard() {
           if (flagshipSynced) {
             setActiveStoreState(flagshipSynced);
             const freshStaff = getStoreStaffList(flagshipSynced);
-            setStaffList(freshStaff);
+            setStaffList(prev => {
+              if (!prev || prev.length === 0) return freshStaff;
+              if (JSON.stringify(prev) === JSON.stringify(freshStaff)) return prev;
+              return freshStaff;
+            });
           }
         }
       }
@@ -2355,12 +2339,16 @@ export default function UnifiedAdminDashboard() {
 
       storesChannel = supabase
         .channel('admin_stores_realtime')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, () => {
-          playNewOrderSound();
-          fetchAllStores().then(stores => setRegisteredStores(stores));
-          setPaymentAlertDismissed(false);
-          setToastNotification('🔔 ទទួលបានការចុះឈ្មោះហាងថ្មីលើប្រព័ន្ធ!');
-          setTimeout(() => setToastNotification(null), 4000);
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, (payload) => {
+          if (payload?.eventType === 'INSERT') {
+            playNewOrderSound();
+            fetchAllStores().then(stores => setRegisteredStores(stores));
+            setPaymentAlertDismissed(false);
+            setToastNotification('🔔 ទទួលបានការចុះឈ្មោះហាងថ្មីលើប្រព័ន្ធ!');
+            setTimeout(() => setToastNotification(null), 4000);
+          } else if (payload?.eventType === 'DELETE') {
+            fetchAllStores().then(stores => setRegisteredStores(stores));
+          }
         })
         .subscribe();
 
