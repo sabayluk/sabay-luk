@@ -1304,32 +1304,137 @@ export default function UnifiedAdminDashboard() {
     ];
   };
 
-  // Helper ទាញយក staff list របស់ហាងនីមួយៗ (Isolated per Store)
+  // Helper ទាញយក staff list របស់ហាងនីមួយៗ (Isolated per Store) ធានា Sync ជាមួយ Cloud Database និង Local Cache
   const getStoreStaffList = (store) => {
-    if (typeof window === 'undefined') return getStoreDefaultStaff(store);
     const storeId = store?.id || 'store_default_sabayluk';
+    const defaultStaff = getStoreDefaultStaff(store);
+    if (typeof window === 'undefined') return defaultStaff;
+
     const storeKey = `sabay_staff_list_${storeId}`;
     const saved = localStorage.getItem(storeKey) || (storeId === 'store_default_sabayluk' ? localStorage.getItem('sabay_staff_list') : null);
+    let localParsed = null;
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Strict isolation: មិនឱ្យឆ្លងចូលគណនីហាងផ្សេងឡើយ
-          const strictlyThisStore = parsed.filter(s => {
-            if (storeId === 'store_default_sabayluk') {
-              return !s.store_id || s.store_id === 'store_default_sabayluk';
-            }
-            // Tenant store: MUST match store_id and MUST NOT be Seng Soveasna / Sokha / Dara from flagship
-            if (s.id === 'STAFF-1' || s.id === 'STAFF-2' || s.id === 'STAFF-3' || s.email?.toLowerCase() === 'sengsoveasna93@gmail.com') {
-              return false;
-            }
-            return s.store_id === storeId;
-          });
-          if (strictlyThisStore.length > 0) return strictlyThisStore;
-        }
+        const p = JSON.parse(saved);
+        if (Array.isArray(p) && p.length > 0) localParsed = p;
       } catch (e) {}
     }
-    return getStoreDefaultStaff(store);
+
+    // Check database settings
+    const dbStaff = Array.isArray(store?.settings?.staff_list) && store.settings.staff_list.length > 0
+      ? store.settings.staff_list
+      : null;
+
+    let candidateList = [];
+    if (dbStaff && dbStaff.length > 0) {
+      candidateList = [...dbStaff];
+      // Merge with localParsed if localParsed has items not yet in dbStaff
+      if (localParsed && localParsed.length > 0) {
+        const dbIds = new Set(dbStaff.map(s => s.id));
+        localParsed.forEach(s => {
+          if (s && s.id && !dbIds.has(s.id)) {
+            candidateList.push(s);
+          }
+        });
+      }
+    } else if (localParsed && localParsed.length > 0) {
+      candidateList = [...localParsed];
+    } else {
+      candidateList = [...defaultStaff];
+    }
+
+    // Strict isolation & store_id auto-tagging
+    const strictlyThisStore = candidateList
+      .map(s => (!s.store_id && storeId !== 'store_default_sabayluk' ? { ...s, store_id: storeId } : s))
+      .filter(s => {
+        if (storeId === 'store_default_sabayluk') {
+          return !s.store_id || s.store_id === 'store_default_sabayluk';
+        }
+        // Tenant store: MUST NOT be flagship Seng Soveasna / Sokha / Dara
+        if (s.id === 'STAFF-1' || s.id === 'STAFF-2' || s.id === 'STAFF-3' || s.email?.toLowerCase() === 'sengsoveasna93@gmail.com') {
+          return false;
+        }
+        return !s.store_id || s.store_id === storeId;
+      });
+
+    if (strictlyThisStore.length > 0) {
+      // Ensure owner account exists
+      const ownerAccount = defaultStaff[0];
+      const hasOwner = strictlyThisStore.some(s => s.role === 'ADMIN' || s.id === ownerAccount?.id);
+      const finalList = hasOwner ? strictlyThisStore : [ownerAccount, ...strictlyThisStore];
+      try {
+        localStorage.setItem(storeKey, JSON.stringify(finalList));
+      } catch (_) {}
+      return finalList;
+    }
+
+    try {
+      localStorage.setItem(storeKey, JSON.stringify(defaultStaff));
+    } catch (_) {}
+    return defaultStaff;
+  };
+
+  // ⭐️ Sync staff list to Supabase Cloud Database (stores.settings.staff_list) & Local Cache ⭐️
+  const syncStoreStaffToDatabase = async (targetStoreId, updatedList) => {
+    const storeId = targetStoreId || activeStore?.id || 'store_default_sabayluk';
+    if (!storeId || !Array.isArray(updatedList)) return;
+
+    // 1. Immediately cache in localStorage
+    try {
+      const storeKey = `sabay_staff_list_${storeId}`;
+      localStorage.setItem(storeKey, JSON.stringify(updatedList));
+      if (storeId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_staff_list', JSON.stringify(updatedList));
+      }
+    } catch (_) {}
+
+    // 2. Update activeStore state & registeredStores cache
+    try {
+      setActiveStoreState(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          settings: { ...(prev.settings || {}), staff_list: updatedList }
+        };
+      });
+      const localStores = getLocalStores();
+      const updatedStores = localStores.map(st => {
+        if (st.id === storeId) {
+          return {
+            ...st,
+            settings: { ...(st.settings || {}), staff_list: updatedList }
+          };
+        }
+        return st;
+      });
+      saveLocalStores(updatedStores);
+      setRegisteredStores(updatedStores);
+    } catch (_) {}
+
+    // 3. Persist to Supabase Cloud Database (stores table -> settings.staff_list)
+    try {
+      const { data: stRow } = await supabase
+        .from('stores')
+        .select('settings')
+        .eq('id', storeId)
+        .maybeSingle();
+      const curSettings = stRow?.settings || {};
+      const { error: upErr } = await supabase
+        .from('stores')
+        .update({
+          settings: {
+            ...curSettings,
+            staff_list: updatedList
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', storeId);
+      if (upErr) {
+        console.warn('⚠️ Supabase staff sync notice:', upErr.message);
+      }
+    } catch (dbErr) {
+      console.warn('⚠️ Supabase staff sync network error:', dbErr);
+    }
   };
 
   const [staffList, setStaffList] = useState(() => getStoreStaffList(getActiveStore()));
@@ -1347,6 +1452,13 @@ export default function UnifiedAdminDashboard() {
       localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(staffList));
       if (storeId === 'store_default_sabayluk') {
         localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
+      }
+
+      if (Array.isArray(staffList) && staffList.length > 0) {
+        const timer = setTimeout(() => {
+          syncStoreStaffToDatabase(storeId, staffList);
+        }, 1200);
+        return () => clearTimeout(timer);
       }
     }
   }, [staffList, activeStore?.id]);
@@ -1930,6 +2042,21 @@ export default function UnifiedAdminDashboard() {
             } catch (_) {}
             setToastNotification(`⚠️ ហាង "${currentActive.name}" ត្រូវបានលុបចេញពីប្រព័ន្ធរួចរាល់ហើយ! ប្រព័ន្ធបានបញ្ជូនលោកអ្នកមកកាន់ហាងមេវិញ។`);
             setTimeout(() => setToastNotification(null), 4000);
+          } else {
+            // ⭐️ Sync ហាងសកម្ម និង Staff List ចេញពី Cloud Database ⭐️
+            const syncedActive = synced.find(s => s.id === currentActive.id || s.slug === currentActive.slug);
+            if (syncedActive) {
+              setActiveStoreState(syncedActive);
+              const freshStaff = getStoreStaffList(syncedActive);
+              setStaffList(freshStaff);
+            }
+          }
+        } else if (currentActive) {
+          const flagshipSynced = synced.find(s => s.id === 'store_default_sabayluk');
+          if (flagshipSynced) {
+            setActiveStoreState(flagshipSynced);
+            const freshStaff = getStoreStaffList(flagshipSynced);
+            setStaffList(freshStaff);
           }
         }
       }
@@ -15393,36 +15520,50 @@ export default function UnifiedAdminDashboard() {
         'CUSTOM': { label: 'កំណត់ដោយខ្លួនឯង (Custom)', avatar: '⚙️', color: 'from-slate-600 to-gray-700' }
       }[staffFormRole] || { label: staffFormRole, avatar: '👤', color: 'from-gray-500 to-slate-600' };
 
+      const storeId = activeStore?.id || 'store_default_sabayluk';
+      let updatedList = [];
+
       if (editingStaff) {
-        setStaffList(prev => prev.map(s => s.id === editingStaff.id ? {
+        updatedList = staffList.map(s => s.id === editingStaff.id ? {
           ...s,
           name: staffFormName.trim(),
           username: staffFormUsername.trim().toLowerCase(),
           pin: staffFormPin.trim(),
+          password: staffFormPin.trim(),
           role: staffFormRole,
           roleLabel: roleObj.label,
           avatar: roleObj.avatar,
           color: roleObj.color,
           phone: staffFormPhone.trim(),
-          permissions: { ...staffFormPermissions }
-        } : s));
+          permissions: { ...staffFormPermissions },
+          store_id: storeId
+        } : s);
+
+        setStaffList(updatedList);
 
         // If editing currently active staff, sync state
         if (currentStaff?.id === editingStaff.id) {
-          setCurrentStaff(prev => ({
-            ...prev,
+          const updatedCur = {
+            ...currentStaff,
             name: staffFormName.trim(),
             username: staffFormUsername.trim().toLowerCase(),
             pin: staffFormPin.trim(),
+            password: staffFormPin.trim(),
             role: staffFormRole,
             roleLabel: roleObj.label,
             avatar: roleObj.avatar,
             color: roleObj.color,
             phone: staffFormPhone.trim(),
-            permissions: { ...staffFormPermissions }
-          }));
+            permissions: { ...staffFormPermissions },
+            store_id: storeId
+          };
+          setCurrentStaff(updatedCur);
+          try {
+            localStorage.setItem(`sabay_active_staff_${storeId}`, JSON.stringify(updatedCur));
+          } catch (_) {}
         }
 
+        syncStoreStaffToDatabase(storeId, updatedList);
         setToastNotification(`✅ បានកែប្រែគណនី និងសិទ្ធិបុគ្គលិក "${staffFormName}" ជោគជ័យ!`);
       } else {
         const newStaff = {
@@ -15430,6 +15571,7 @@ export default function UnifiedAdminDashboard() {
           name: staffFormName.trim(),
           username: staffFormUsername.trim().toLowerCase(),
           pin: staffFormPin.trim(),
+          password: staffFormPin.trim(),
           role: staffFormRole,
           roleLabel: roleObj.label,
           avatar: roleObj.avatar,
@@ -15437,9 +15579,12 @@ export default function UnifiedAdminDashboard() {
           phone: staffFormPhone.trim(),
           permissions: { ...staffFormPermissions },
           active: true,
+          store_id: storeId,
           created_at: new Date().toISOString()
         };
-        setStaffList(prev => [...prev, newStaff]);
+        updatedList = [...staffList, newStaff];
+        setStaffList(updatedList);
+        syncStoreStaffToDatabase(storeId, updatedList);
         setToastNotification(`🎉 បានបង្កើតគណនីបុគ្គលិកថ្មី "${staffFormName}" និងកំណត់លក្ខខណ្ឌសិទ្ធិរួចរាល់!`);
       }
 
@@ -15464,7 +15609,7 @@ export default function UnifiedAdminDashboard() {
     };
 
     const handleDeleteStaff = (staff) => {
-    if (guardDemoAction("លុបបុគ្គលិក")) return;
+      if (guardDemoAction("លុបបុគ្គលិក")) return;
       if (staffList.length <= 1) {
         alert('មិនអាចលុបគណនីបុគ្គលិកចុងក្រោយបានទេ!');
         return;
@@ -15474,7 +15619,10 @@ export default function UnifiedAdminDashboard() {
         return;
       }
       if (!window.confirm(`តើបងពិតជាចង់លុបគណនីបុគ្គលិក "${staff.name}" នេះមែនទេ?`)) return;
-      setStaffList(prev => prev.filter(s => s.id !== staff.id));
+      const storeId = activeStore?.id || 'store_default_sabayluk';
+      const updatedList = staffList.filter(s => s.id !== staff.id);
+      setStaffList(updatedList);
+      syncStoreStaffToDatabase(storeId, updatedList);
       setToastNotification(`🗑️ បានលុបគណនី "${staff.name}" រួចរាល់!`);
       setTimeout(() => setToastNotification(null), 3000);
     };
@@ -15484,7 +15632,10 @@ export default function UnifiedAdminDashboard() {
         alert('មិនអាចផ្អាកគណនីដែលកំពុងដំណើរការនេះបានទេ!');
         return;
       }
-      setStaffList(prev => prev.map(s => s.id === staff.id ? { ...s, active: !s.active } : s));
+      const storeId = activeStore?.id || 'store_default_sabayluk';
+      const updatedList = staffList.map(s => s.id === staff.id ? { ...s, active: !s.active } : s);
+      setStaffList(updatedList);
+      syncStoreStaffToDatabase(storeId, updatedList);
     };
 
     // Helper apply role preset
