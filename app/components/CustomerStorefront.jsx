@@ -341,20 +341,10 @@ const DEFAULT_STORE_SETTINGS = {
 
 export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   // ⭐️ Store States & Multi-Tenant Isolation ⭐️
-  const [storeSettings, setStoreSettings] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('sabay_store_settings');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          let tg = (parsed.telegram || 'sabay_luk').replace(/^@/, '').trim();
-          if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
-          return { ...DEFAULT_STORE_SETTINGS, ...parsed, telegram: tg };
-        }
-      } catch (_) {}
-    }
-    return { ...DEFAULT_STORE_SETTINGS, telegram: 'sabay_luk' };
-  });
+  const [storeSettings, setStoreSettings] = useState(() => ({
+    ...DEFAULT_STORE_SETTINGS,
+    telegram: 'sabay_luk'
+  }));
   const [currentStore, setCurrentStore] = useState(() => {
     if (propStoreSlug && propStoreSlug !== 'sabay-luk') {
       const clean = decodeURIComponent(propStoreSlug).trim();
@@ -374,10 +364,20 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const [isMounted, setIsMounted] = useState(false);
   const [isDemoStore, setIsDemoStore] = useState(false);
 
-  // Load language & theme from localStorage after mount to prevent SSR hydration mismatch
+  // Load store settings, language & theme from localStorage after mount to prevent SSR hydration mismatch
   useEffect(() => {
     setIsMounted(true);
     if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sabay_store_settings');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          let tg = (parsed.telegram || 'sabay_luk').replace(/^@/, '').trim();
+          if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
+          setStoreSettings(prev => ({ ...prev, ...parsed, telegram: tg }));
+        }
+      } catch (_) {}
+
       try {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('demo') === 'true') {
@@ -2353,7 +2353,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             onClick={() => { setSelectedCategory('all'); setSearchQuery(''); }}
             className="flex items-center gap-2.5 cursor-pointer group select-none"
           >
-            {storeSettings.logoUrl ? (
+            {isMounted && storeSettings.logoUrl ? (
               <img src={storeSettings.logoUrl} alt={storeSettings.storeName} className="h-10 w-auto max-w-[160px] object-contain group-hover:scale-105 transition" />
             ) : (
               <div suppressHydrationWarning style={{ backgroundColor: brandColor }} className="w-10 h-10 rounded-2xl text-white flex items-center justify-center font-black text-xl shadow-md group-hover:scale-105 transition">
