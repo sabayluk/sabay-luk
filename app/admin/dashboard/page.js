@@ -4514,14 +4514,9 @@ export default function UnifiedAdminDashboard() {
   const pendingSubscriptionPaymentsList = useMemo(() => {
     return (allSubscriptionPayments || []).filter(p => {
       if (p.status !== 'PENDING' || p.store_id === 'store_default_sabayluk') return false;
-      const associatedStore = (registeredStores || []).find(s => 
-        s.id === p.store_id || 
-        (s.slug && p.store_name && s.slug.toLowerCase() === p.store_name.toLowerCase())
-      );
-      if (associatedStore && associatedStore.status === 'ACTIVE') return false;
       return true;
     });
-  }, [allSubscriptionPayments, registeredStores]);
+  }, [allSubscriptionPayments]);
 
   const totalPendingActionCount = useMemo(() => {
     const pStores = pendingApprovalStores.length;
@@ -4536,7 +4531,13 @@ export default function UnifiedAdminDashboard() {
     const storeToInspect = targetStore || targetPendingStore;
     setPaymentAlertDismissed(true);
     setActiveTab('stores');
-    setStoresManagerSubTab('stores');
+    // If there is a pending subscription payment, open directly to payments subtab so Admin can approve immediately!
+    if (pendingSubscriptionPaymentsList.length > 0) {
+      setStoresManagerSubTab('payments');
+      setPaymentFilterStatus('PENDING');
+    } else {
+      setStoresManagerSubTab('stores');
+    }
 
     if (storeToInspect) {
       setHighlightedStoreId(storeToInspect.id);
@@ -13702,7 +13703,7 @@ export default function UnifiedAdminDashboard() {
                         </p>
                         <div className="flex items-center gap-1.5 pt-1.5">
                           {(() => {
-                            const slipUrl = st.settings?.slip_url || st.settings?.slipUrl || st.slip_url || (st.id === 'store_438909_nwf7' || st.slug === 'urbangrabs' ? '/urbangrabs_slip.jpg' : null);
+                            const slipUrl = st.settings?.slip_url || st.settings?.slipUrl || st.settings?.pending_payment?.slip_url || st.slip_url || null;
                             const count = allSubscriptionPayments.filter(p => p.store_id === st.id).length || (slipUrl ? 1 : 0);
                             return (
                               <button
@@ -13903,6 +13904,27 @@ export default function UnifiedAdminDashboard() {
                             <span>អនុម័ត (Approve)</span>
                           </button>
                         )}
+
+                        {/* ⭐️ ប៊ូតុង Approve ដំឡើងគម្រោង (សម្រាប់ហាងដែលកំពុងដំណើរការហើយសុំដំឡើងគម្រោង) ⭐️ */}
+                        {(() => {
+                          const pendingUpgrade = pendingSubscriptionPaymentsList.find(p => p.store_id === st.id);
+                          if (!pendingUpgrade) return null;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStoresManagerSubTab('payments');
+                                setPaymentFilterStore(st.id);
+                                setPaymentFilterStatus('PENDING');
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-[11px] shadow-md transition active:scale-95 cursor-pointer inline-flex items-center gap-1 animate-bounce"
+                              title="ហាងនេះបានបង់ប្រាក់ស្នើសុំដំឡើងគម្រោង! ចុចដើម្បីពិនិត្យ Slip & Approve"
+                            >
+                              <span>💎</span>
+                              <span>Approve ដំឡើង ${pendingUpgrade.plan_name || pendingUpgrade.plan_key}</span>
+                            </button>
+                          );
+                        })()}
 
                         <button
                           type="button"
