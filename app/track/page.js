@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../supabase';
+import { getInvoiceUrl, openInvoiceInBrowser } from '../../lib/openInvoice';
 
 export default function OrderTrackingPage() {
   const [searchInput, setSearchInput] = useState('');
@@ -588,13 +589,15 @@ export default function OrderTrackingPage() {
                       {/* Action Buttons: PDF Invoice, Telegram, Shop More */}
                       <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
                         <a
-                          href={`/invoice?id=${encodeURIComponent(selectedOrder.order_id || selectedOrder.id)}`}
+                          href={getInvoiceUrl(selectedOrder.order_id || selectedOrder.id)}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={(e) => openInvoiceInBrowser(selectedOrder.order_id || selectedOrder.id, e)}
                           className="flex-1 bg-purple-50 hover:bg-purple-100 text-purple-700 py-3 rounded-2xl font-black text-xs text-center transition flex items-center justify-center gap-1.5 border border-purple-200 shadow-2xs"
+                          title="បើកមើលលើ Web Browser (Google Chrome / Edge)"
                         >
-                          <span>📄</span>
-                          <span>វិក្កយបត្រ PDF ផ្លូវការ</span>
+                          <span>🌐</span>
+                          <span>វិក្កយបត្រ Browser ↗</span>
                         </a>
 
                         {(() => {

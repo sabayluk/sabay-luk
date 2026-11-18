@@ -9,6 +9,7 @@ import WorldStandardFinanceView from '../../components/WorldStandardFinanceView'
 import BarcodeCameraModal from '../../components/BarcodeCameraModal';
 import BarcodeScannerSettingsModal from '../../components/BarcodeScannerSettingsModal';
 import { cacheProductsOffline, getCachedProductsOffline, queueOfflineOrder, syncOfflineOrdersToCloud, getOfflineOrdersQueue } from '../../../lib/offlinePos';
+import { getInvoiceUrl, openInvoiceInBrowser } from '../../../lib/openInvoice';
 
 // ⭐️ Helper: គណនាកាលបរិច្ឆេទផុតកំណត់ Plan និងចំនួនថ្ងៃនៅសល់ ⭐️
 const computePlanExpiry = (expiresAt) => {
@@ -11145,11 +11146,12 @@ export default function UnifiedAdminDashboard() {
                             🖨️
                           </button>
                           <a
-                            href={`/invoice?id=${order.order_id || order.id}`}
+                            href={getInvoiceUrl(order.order_id || order.id)}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={(e) => openInvoiceInBrowser(order.order_id || order.id, e)}
                             className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-purple-200 transition inline-flex items-center"
-                            title="មើល និងទាញយកវិក្កយបត្រ PDF ផ្លូវការ"
+                            title="មើល និងទាញយកវិក្កយបត្រ PDF លើ Web Browser"
                           >
                             📄
                           </a>
@@ -11926,14 +11928,15 @@ export default function UnifiedAdminDashboard() {
                             </button>
 
                             <a
-                              href={`/invoice?id=${encodeURIComponent(order.order_id || order.id)}`}
+                              href={getInvoiceUrl(order.order_id || order.id)}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={(e) => openInvoiceInBrowser(order.order_id || order.id, e)}
                               className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-2.5 py-1.5 rounded-xl border border-purple-200 transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                              title="មើល និងទាញយកវិក្កយបត្រ PDF ផ្លូវការ"
+                              title="មើល និងទាញយកវិក្កយបត្រ PDF លើ Web Browser"
                             >
-                              <span>📄</span>
-                              <span>PDF</span>
+                              <span>🌐</span>
+                              <span>PDF Browser</span>
                             </a>
 
                             <button
@@ -12401,12 +12404,14 @@ export default function UnifiedAdminDashboard() {
                     </button>
 
                     <a
-                      href={`/invoice?id=${encodeURIComponent(ord.order_id || ord.id)}`}
+                      href={getInvoiceUrl(ord.order_id || ord.id)}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={(e) => openInvoiceInBrowser(ord.order_id || ord.id, e)}
                       className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-3 py-2.5 rounded-xl border border-purple-200 transition inline-flex items-center gap-1 cursor-pointer"
+                      title="មើល និងទាញយកវិក្កយបត្រ PDF លើ Web Browser"
                     >
-                      <span>📄</span> PDF
+                      <span>🌐</span> PDF Browser
                     </a>
 
                     <button
@@ -28373,14 +28378,15 @@ export default function UnifiedAdminDashboard() {
                 {/* Official PDF & Telegram Dispatch Row */}
                 <div className="grid grid-cols-2 gap-2">
                   <a
-                    href={`/invoice?id=${receiptData.orderId}`}
+                    href={getInvoiceUrl(receiptData.orderId)}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => openInvoiceInBrowser(receiptData.orderId, e)}
                     className="bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-xl font-black text-xs transition shadow-md shadow-purple-600/20 flex items-center justify-center gap-1.5 cursor-pointer text-center"
-                    title="បើកមើល និងទាញយកវិក្កយបត្រ PDF ផ្លូវការ"
+                    title="បើកមើល និងទាញយកវិក្កយបត្រ PDF លើ Web Browser"
                   >
-                    <span>📄</span>
-                    <span>វិក្កយបត្រ PDF</span>
+                    <span>🌐</span>
+                    <span>វិក្កយបត្រ Browser</span>
                   </a>
 
                   <button

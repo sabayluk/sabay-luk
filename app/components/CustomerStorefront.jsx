@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { supabase } from '../../supabase';
 import { renderCategorySvg } from '../../lib/categoryIcons';
 import { getActiveStore, isItemBelongsToStore, fetchStoreBySlug, DEFAULT_FLAGSHIP_STORE } from '../../lib/stores';
+import { getInvoiceUrl, openInvoiceInBrowser } from '../../lib/openInvoice';
 import LocationPickerModal from './LocationPickerModal';
 
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក បញ្ចុះតម្លៃ & វីដេអូ YouTube ធានាមិនបាត់ ១០០%
@@ -5065,14 +5066,34 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                     <span>ទាញយកវិក្កយបត្រ PDF ទុក</span>
                   </a>
                   <a
-                    href={`/invoice?id=${encodeURIComponent(completedOrder.order_id)}`}
+                    href={getInvoiceUrl(completedOrder.order_id)}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => openInvoiceInBrowser(completedOrder.order_id, e)}
                     className="flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-300 font-black text-xs sm:text-sm py-3 px-4 rounded-2xl shadow-2xs transition active:scale-95 cursor-pointer text-center"
+                    title="បើកមើលលើ Web Browser (Google Chrome / Edge)"
                   >
-                    <span className="text-base">📄</span>
-                    <span>បើកមើលវិក្កយបត្រពេញលេញ ↗</span>
+                    <span className="text-base">🌐</span>
+                    <span>បើកមើលលើ Web Browser ↗</span>
                   </a>
+                </div>
+
+                {/* Direct Browser Link Copy Button */}
+                <div className="pt-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = getInvoiceUrl(completedOrder.order_id);
+                      if (navigator.clipboard) {
+                        navigator.clipboard.writeText(url);
+                        alert('✅ បានចម្លង Link វិក្កយបត្ររួចរាល់!\nអ្នកអាច Paste ចូលក្នុង Browser ណាមួយបាន: ' + url);
+                      }
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:text-emerald-700 inline-flex items-center gap-1.5 transition underline cursor-pointer"
+                  >
+                    <span>📋</span>
+                    <span>ចម្លង Link វិក្កយបត្រ (សម្រាប់ Paste ក្នុង Chrome/Edge)</span>
+                  </button>
                 </div>
               </div>
 

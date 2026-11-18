@@ -289,8 +289,11 @@ export async function POST(request) {
         `⏰ <b>ពេលវេលា:</b> ${new Date().toLocaleString('km-KH')}\n` +
         `📄 <i>ឯកសារវិក្កយបត្រ PDF ផ្លូវការត្រូវបានភ្ជាប់ជូនខាងក្រោម!</i>`;
 
-      // Origin host for links
-      const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      // Origin host for links (use 127.0.0.1 on local dev to prevent Chrome PWA app capturing)
+      let origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+      if (origin.includes('localhost:')) {
+        origin = origin.replace('localhost:', '127.0.0.1:');
+      }
       const invoiceUrl = `${origin}/invoice?id=${ord.order_id || ''}`;
       const trackUrl = `${origin}/track?q=${ord.order_id || ''}`;
 
