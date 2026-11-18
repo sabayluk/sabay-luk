@@ -11183,10 +11183,11 @@ export default function UnifiedAdminDashboard() {
                             {(order.payment_slip_url || (items[0] && items[0].payment_slip_url)) && (
                               <button
                                 onClick={() => setViewingSlipUrl(order.payment_slip_url || items[0].payment_slip_url)}
-                                className="bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-black"
-                                title="មើល Slip ផ្ទេរប្រាក់"
+                                className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs px-2 py-1 rounded-lg text-[10px] font-black flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                                title="ពិនិត្យមើលរូបភាព Slip ផ្ទេរប្រាក់"
                               >
-                                🧾 Slip
+                                <span>🔍</span>
+                                <span>ពិនិត្យ Slip</span>
                               </button>
                             )}
                           </div>
@@ -14855,17 +14856,28 @@ export default function UnifiedAdminDashboard() {
                                       setSlipImageZoom(1);
                                       setViewingPaymentSlipDetail(item);
                                     }}
-                                    className="group relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 cursor-pointer shadow-2xs hover:border-[#ff6a00] transition transform hover:scale-105"
-                                    title="ចុចដើម្បីពិនិត្យ និងពង្រីកមើល Slip ពេញទំហំ (Standard HD Viewer)"
+                                    className="group relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 cursor-pointer shadow-2xs hover:border-blue-500 transition transform hover:scale-105"
+                                    title="ចុចដើម្បីពិនិត្យ និងផ្ទៀងផ្ទាត់ Slip ពេញទំហំ HD"
                                   >
                                     <img src={item.slip_url} alt="Payment Slip" className="w-full h-full object-cover" />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                      <span className="text-white text-xs">🔍</span>
+                                    <div className="absolute inset-0 bg-slate-900/50 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center text-white">
+                                      <span className="text-xs">🔍</span>
+                                      <span className="text-[8px] font-black uppercase">ពិនិត្យ</span>
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
-                                    គ្មាន Slip
+                                  <div 
+                                    onClick={() => {
+                                      setSlipImageRotation(0);
+                                      setSlipImageZoom(1);
+                                      setViewingPaymentSlipDetail(item);
+                                    }}
+                                    className="w-16 h-16 rounded-2xl bg-amber-50/70 border-2 border-dashed border-amber-300 flex flex-col items-center justify-center text-amber-700 text-xs font-bold cursor-pointer hover:bg-amber-100 hover:border-amber-400 transition shadow-2xs hover:scale-105 p-1 text-center"
+                                    title="ចុចដើម្បីពិនិត្យព័ត៌មានប្រតិបត្តិការនេះ (មិនទាន់មានរូបភាព Slip)"
+                                  >
+                                    <span className="text-base">⚠️</span>
+                                    <span className="text-[9px] font-black leading-tight mt-0.5">គ្មាន Slip</span>
+                                    <span className="text-[8px] text-blue-600 font-black underline mt-0.5">ចុចពិនិត្យ</span>
                                   </div>
                                 )}
                               </td>
@@ -14979,68 +14991,60 @@ export default function UnifiedAdminDashboard() {
                               </td>
 
                               {/* Actions */}
-                              <td className="px-5 py-4 whitespace-nowrap text-right pr-6 space-x-1.5">
-                                {isPending ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleApprovePayment(item.id)}
-                                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[11px] shadow-sm transition active:scale-95 cursor-pointer"
-                                      title="យល់ព្រម និងដំឡើងកញ្ចប់សេវាជូនហាងនេះ"
-                                    >
-                                      ✓ យល់ព្រម (Approve)
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRejectPayment(item.id)}
-                                      className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] border border-rose-200 transition cursor-pointer"
-                                      title="បដិសេធការបង់ប្រាក់នេះ"
-                                    >
-                                      ✕ បដិសេធ
-                                    </button>
-                                    {item.slip_url && (
+                              <td className="px-5 py-4 whitespace-nowrap text-right pr-6">
+                                <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                  {/* ⭐️ Dedicated Prominent Verify Slip Button ⭐️ */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSlipImageRotation(0);
+                                      setSlipImageZoom(1);
+                                      setViewingPaymentSlipDetail(item);
+                                    }}
+                                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                                    title="ចុចដើម្បីផ្ទៀងផ្ទាត់ និងពិនិត្យ Slip ពេញលេញ"
+                                  >
+                                    <span>🔍</span>
+                                    <span>ពិនិត្យ Slip</span>
+                                  </button>
+
+                                  {isPending ? (
+                                    <>
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          setSlipImageRotation(0);
-                                          setSlipImageZoom(1);
-                                          setViewingPaymentSlipDetail(item);
-                                        }}
-                                        className="px-2 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
-                                        title="មើល Slip ពេញទំហំ"
+                                        onClick={() => handleApprovePayment(item.id)}
+                                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1"
+                                        title="យល់ព្រម និងដំឡើងកញ្ចប់សេវាជូនហាងនេះ"
                                       >
-                                        🔍
+                                        <span>✓</span>
+                                        <span>យល់ព្រម</span>
                                       </button>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    {item.slip_url && (
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          setSlipImageRotation(0);
-                                          setSlipImageZoom(1);
-                                          setViewingPaymentSlipDetail(item);
-                                        }}
-                                        className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
-                                        title="ពិនិត្យមើលរូបភាព Slip ពេញទំហំ"
+                                        onClick={() => handleRejectPayment(item.id)}
+                                        className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs border border-rose-200 transition cursor-pointer flex items-center gap-1"
+                                        title="បដិសេធការបង់ប្រាក់នេះ"
                                       >
-                                        🔍 មើល Slip
+                                        <span>✕</span>
+                                        <span>បដិសេធ</span>
                                       </button>
-                                    )}
-                                    {isApproved && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setViewingSubscriptionReceipt(item)}
-                                        className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-[11px] transition cursor-pointer"
-                                        title="មើល និងបោះពុម្ពវិក្កយបត្រជាវសេវាផ្លូវការ"
-                                      >
-                                        🧾 បង្កាន់ដៃ
-                                      </button>
-                                    )}
-                                  </>
-                                )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {isApproved && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setViewingSubscriptionReceipt(item)}
+                                          className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold text-xs transition cursor-pointer flex items-center gap-1"
+                                          title="មើល និងបោះពុម្ពវិក្កយបត្រជាវសេវាផ្លូវការ"
+                                        >
+                                          <span>🧾</span>
+                                          <span>បង្កាន់ដៃ</span>
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
                               </td>
 
                             </tr>
@@ -15949,6 +15953,21 @@ export default function UnifiedAdminDashboard() {
                             </div>
 
                             <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                              {/* ⭐️ Dedicated Prominent Verify Slip Button ⭐️ */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSlipImageRotation(0);
+                                  setSlipImageZoom(1);
+                                  setViewingPaymentSlipDetail(p);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1.5"
+                                title="ចុចដើម្បីផ្ទៀងផ្ទាត់ និងពិនិត្យ Slip"
+                              >
+                                <span>🔍</span>
+                                <span>ពិនិត្យ Slip</span>
+                              </button>
+
                               {isPend ? (
                                 <>
                                   <button
@@ -15956,7 +15975,7 @@ export default function UnifiedAdminDashboard() {
                                     onClick={() => handleApprovePayment(p.id)}
                                     className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition active:scale-95 cursor-pointer"
                                   >
-                                    ✓ យល់ព្រម (Approve)
+                                    ✓ យល់ព្រម
                                   </button>
                                   <button
                                     type="button"
@@ -15972,26 +15991,12 @@ export default function UnifiedAdminDashboard() {
                                     <button
                                       type="button"
                                       onClick={() => setViewingSubscriptionReceipt(p)}
-                                      className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs transition cursor-pointer"
+                                      className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 font-bold text-xs transition cursor-pointer"
                                     >
                                       🧾 បង្កាន់ដៃ
                                     </button>
                                   )}
                                 </>
-                              )}
-
-                              {p.slip_url && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSlipImageRotation(0);
-                                    setSlipImageZoom(1);
-                                    setViewingPaymentSlipDetail(p);
-                                  }}
-                                  className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
-                                >
-                                  🔍 មើល Slip
-                                </button>
                               )}
                             </div>
                           </div>
@@ -16273,21 +16278,41 @@ export default function UnifiedAdminDashboard() {
                             ✕ បដិសេធការបង់ប្រាក់
                           </button>
                         </>
+                      ) : isApproved ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewingPaymentSlipDetail(null);
+                            setViewingSubscriptionReceipt(item);
+                          }}
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 rounded-xl text-xs shadow-lg shadow-blue-600/30 transition cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <span>🧾</span>
+                          <span>មើល / ព្រីនវិក្កយបត្រផ្លូវការ (Print Receipt)</span>
+                        </button>
                       ) : (
-                        isApproved && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setViewingPaymentSlipDetail(null);
-                              setViewingSubscriptionReceipt(item);
-                            }}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 rounded-xl text-xs shadow-lg shadow-blue-600/30 transition cursor-pointer flex items-center justify-center gap-1.5"
-                          >
-                            <span>🧾</span>
-                            <span>មើល / ព្រីនវិក្កយបត្រផ្លូវការ (Print Receipt)</span>
-                          </button>
-                        )
+                        <div className="bg-rose-950/40 p-3 rounded-2xl border border-rose-800/40 text-[11px] text-rose-300 space-y-1">
+                          <p className="font-bold flex items-center gap-1">
+                            <span>✕</span>
+                            <span>ការបង់ប្រាក់នេះត្រូវបានបដិសេធ</span>
+                          </p>
+                          {item.reject_reason && (
+                            <p className="text-[10px] text-rose-400">មូលហេតុ: "{item.reject_reason}"</p>
+                          )}
+                        </div>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewingPaymentSlipDetail(null);
+                          setSlipImageRotation(0);
+                          setSlipImageZoom(1);
+                        }}
+                        className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer"
+                      >
+                        បិទផ្ទាំងពិនិត្យ (Close)
+                      </button>
                     </div>
 
                   </div>
