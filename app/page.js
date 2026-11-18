@@ -63,28 +63,34 @@ export default function SaaSPlatformLandingPage() {
   const [openingSlug, setOpeningSlug] = useState(null);
   const [browserToast, setBrowserToast] = useState(null);
 
-  // ⭐️ Explicitly open link in standard Google Chrome / Edge Web Browser ⭐️
+  // ⭐️ Explicitly open link in standard Google Chrome / Edge Web Browser (Bypassing PWA) ⭐️
   const handleOpenStoreInBrowser = async (e, slug) => {
     if (e && e.preventDefault) e.preventDefault();
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    
+    // Convert localhost to 127.0.0.1 so Chrome NEVER intercepts the URL to open in the PWA app window!
+    let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
+    if (origin.includes('localhost:')) {
+      origin = origin.replace('localhost:', '127.0.0.1:');
+    }
     const targetUrl = `${origin}/store/${slug}`;
 
     setOpeningSlug(slug);
-    setBrowserToast(lang === 'km' ? '🌐 កំពុងបើកលើ Google Chrome...' : '🌐 Opening in Google Chrome...');
+    setBrowserToast(lang === 'km' ? '🌐 កំពុងបើកលើ Web Browser (Google Chrome)...' : '🌐 Opening in Google Chrome Browser...');
 
-    // 1. Trigger OS shell to explicitly launch Chrome/Edge browser window/tab
+    // 1. Trigger OS shell to explicitly launch Chrome/Edge browser with --new-window
     try {
       await fetch('/api/open-chrome', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: targetUrl })
       });
-      setBrowserToast(lang === 'km' ? '✅ បានបើកលើ Google Chrome រួចរាល់!' : '✅ Opened in Google Chrome!');
+      setBrowserToast(lang === 'km' ? '✅ បានបើកលើ Google Chrome Browser រួចរាល់!' : '✅ Opened in Google Chrome Browser!');
     } catch (_) {}
 
-    // 2. Also open window in browser (fallback)
+    // 2. Also open window in browser (with 127.0.0.1 to avoid PWA interception)
     try {
-      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      const win = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      if (win) win.focus();
     } catch (_) {}
 
     setTimeout(() => {
@@ -96,7 +102,10 @@ export default function SaaSPlatformLandingPage() {
   };
 
   const handleCopyStoreLink = (slug) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+    let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
+    if (origin.includes('localhost:')) {
+      origin = origin.replace('localhost:', '127.0.0.1:');
+    }
     const targetUrl = `${origin}/store/${slug}`;
     if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(targetUrl);
