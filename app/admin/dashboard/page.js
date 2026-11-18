@@ -26658,9 +26658,6 @@ export default function UnifiedAdminDashboard() {
                             type="button"
                             onClick={() => {
                               setActiveTab(tab.id);
-                              if (tab.id === 'upgrade_plan') {
-                                setUpgradePlanModalOpen(true);
-                              }
                               if (tab.id === 'feedbacks') {
                                 markFeedbacksAsRead();
                               }
