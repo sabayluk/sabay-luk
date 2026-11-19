@@ -2509,22 +2509,27 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
           {/* Brand Logo with Luxury Slogan */}
           <div 
             onClick={() => { setSelectedCategory('all'); setSearchQuery(''); }}
-            className="flex items-center gap-2.5 cursor-pointer group select-none"
+            className="flex items-center gap-2.5 cursor-pointer group select-none min-w-0 flex-1 sm:flex-initial"
           >
             {isMounted && storeSettings.logoUrl ? (
-              <img src={storeSettings.logoUrl} alt={storeSettings.storeName} className="h-10 w-auto max-w-[160px] object-contain group-hover:scale-105 transition" />
+              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl bg-white dark:bg-slate-800 p-1 flex items-center justify-center shadow-xs border border-gray-100 dark:border-slate-700/60 shrink-0 group-hover:scale-105 transition">
+                <img src={storeSettings.logoUrl} alt={storeSettings.storeName} className="h-full w-full object-contain rounded-xl" />
+              </div>
             ) : (
-              <div suppressHydrationWarning style={{ backgroundColor: brandColor }} className="w-10 h-10 rounded-2xl text-white flex items-center justify-center font-black text-xl shadow-md group-hover:scale-105 transition">
+              <div suppressHydrationWarning style={{ backgroundColor: brandColor }} className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-md shrink-0 group-hover:scale-105 transition ring-2 ring-orange-500/20">
                 {(storeSettings.storeName || 'S').trim().charAt(0).toUpperCase()}
               </div>
             )}
-            <div>
-              <div suppressHydrationWarning className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none group-hover:text-[#ff6a00] transition">
+            <div className="min-w-0">
+              <div suppressHydrationWarning className="text-base sm:text-xl font-black text-gray-900 dark:text-white tracking-tight leading-tight group-hover:text-[#ff6a00] transition truncate max-w-[150px] xs:max-w-[200px] sm:max-w-none">
                 {storeSettings.storeName || 'SABAY LUK'}
               </div>
-              <p suppressHydrationWarning className="text-[9px] font-extrabold text-gray-400 tracking-widest uppercase mt-0.5">
-                {storeSettings.storeSlogan || 'Premium Store'}
-              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                <p suppressHydrationWarning className="text-[9px] sm:text-[10px] font-extrabold text-gray-400 dark:text-gray-400 tracking-wider uppercase truncate leading-none">
+                  {storeSettings.storeSlogan || 'Premium Store'}
+                </p>
+              </div>
             </div>
           </div>
           
@@ -2551,13 +2556,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
           </div>
 
           {/* User & Cart Actions (Language, Day/Night Theme, Track, Cart) */}
-          <div className="flex items-center space-x-1.5 sm:space-x-2 text-sm font-semibold">
+          <div className="flex items-center space-x-1 sm:space-x-2 text-sm font-semibold shrink-0">
             
             {/* 🌐 Bilingual Switcher (ភាសាខ្មែរ / English) */}
             <button 
               type="button"
               onClick={() => toggleLanguage()}
-              className={`cursor-pointer flex items-center gap-1 px-2.5 sm:px-3 py-2 rounded-2xl transition text-xs font-black border shadow-2xs ${
+              className={`cursor-pointer flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl transition text-xs font-black border shadow-2xs ${
                 themeMode === 'dark' 
                   ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700' 
                   : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
@@ -2565,14 +2570,14 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               title={language === 'km' ? 'Switch to English' : 'ប្តូរជាភាសាខ្មែរ'}
             >
               <span className="text-sm">{language === 'km' ? '🇰🇭' : '🇺🇸'}</span>
-              <span>{language === 'km' ? 'ខ្មែរ' : 'EN'}</span>
+              <span className="text-[11px] sm:text-xs">{language === 'km' ? 'ខ្មែរ' : 'EN'}</span>
             </button>
 
             {/* ☀️ Day / Night Theme Switcher (ពន្លឺថ្ងៃ និងយប់) */}
             <button 
               type="button"
               onClick={toggleThemeMode}
-              className={`cursor-pointer flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-2xl transition text-xs font-black border shadow-2xs ${
+              className={`cursor-pointer flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl transition text-xs font-black border shadow-2xs ${
                 themeMode === 'dark' 
                   ? 'bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border-amber-400/30' 
                   : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
@@ -2588,7 +2593,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             {/* ប៊ូតុង តាមដានការកុម្ម៉ង់ */}
             <button 
               onClick={() => setTrackModalOpen(true)}
-              className={`cursor-pointer flex items-center gap-1.5 px-3 py-2 rounded-2xl transition text-xs font-bold border shadow-2xs ${
+              className={`cursor-pointer flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl transition text-xs font-bold border shadow-2xs ${
                 themeMode === 'dark'
                   ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                   : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-[#ff6a00] border-gray-200 hover:border-orange-200'
@@ -2612,10 +2617,10 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               <span>{language === 'km' ? 'ចូលគ្រប់គ្រង' : 'Admin Login'}</span>
             </a>
 
-            {/* Cart Button with Total Preview */}
+            {/* Cart Button with Total Preview (Hidden on Mobile because Bottom Nav has Cart) */}
             <button 
               onClick={() => setIsCartOpen(true)}
-              className="cursor-pointer bg-gradient-to-r from-[#312c5b] to-[#c85f2d] hover:from-[#252248] hover:to-[#b65426] text-white flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl transition shadow-md group active:scale-95 text-xs font-black"
+              className="cursor-pointer hidden md:flex bg-gradient-to-r from-[#312c5b] to-[#c85f2d] hover:from-[#252248] hover:to-[#b65426] text-white items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl transition shadow-md group active:scale-95 text-xs font-black"
             >
               <span>🛒</span>
               <span className="hidden sm:inline">${totalPrice.toFixed(2)}</span>
@@ -2802,7 +2807,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
           {/* ⭐️ Hero Banner Auto-Slide (Ultra-Modern Cinematic Cover) ⭐️ */}
           <div 
-            className="lg:col-span-9 rounded-3xl relative overflow-hidden min-h-[400px] sm:min-h-[440px] shadow-xl bg-gray-950 flex items-center group select-none"
+            className="lg:col-span-9 rounded-2xl sm:rounded-3xl relative overflow-hidden h-[180px] xs:h-[210px] sm:h-[280px] md:h-[340px] lg:h-[390px] shadow-lg sm:shadow-xl bg-gray-950 flex items-center group select-none"
             onMouseEnter={() => setIsPaused(true)}
             onMouseLeave={() => setIsPaused(false)}
           >
@@ -2840,7 +2845,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               return (
                 <div
                   key={slide.id || index}
-                  className={`absolute inset-0 transition-all duration-1000 ease-in-out bg-cover bg-center flex flex-col justify-center p-8 sm:p-12 md:p-16 text-white ${
+                  className={`absolute inset-0 transition-all duration-1000 ease-in-out bg-cover bg-center flex flex-col justify-center p-4 xs:p-6 sm:p-8 md:p-12 text-white ${
                     isCurrent ? 'opacity-100 scale-100 z-10 pointer-events-auto' : 'opacity-0 scale-105 z-0 pointer-events-none'
                   }`}
                   style={{ backgroundImage: bgImg }}
@@ -2851,7 +2856,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                     {slide.badge && (
                       <span 
                         style={{ backgroundColor: brandColor }} 
-                        className="inline-flex items-center gap-2 text-white text-[11px] sm:text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest mb-4 shadow-xl shadow-black/30 backdrop-blur-md border border-white/20 transform transition duration-500 hover:scale-105"
+                        className="inline-flex items-center gap-1.5 text-white text-[9px] sm:text-xs font-black px-2.5 sm:px-4 py-0.5 sm:py-1.5 rounded-full uppercase tracking-wider mb-1.5 sm:mb-3 shadow-md backdrop-blur-md border border-white/20 transform transition duration-500 hover:scale-105"
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
                         {slide.badge}
@@ -2860,14 +2865,14 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                     
                     {/* Main Title */}
                     {slide.title && (
-                      <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-[42px] font-black mb-3 leading-tight text-white drop-shadow-xl tracking-tight">
+                      <h1 className="text-base xs:text-lg sm:text-3xl md:text-4xl lg:text-[40px] font-black mb-1 sm:mb-2 leading-tight text-white drop-shadow-md tracking-tight line-clamp-2">
                         {slide.title}
                       </h1>
                     )}
                     
-                    {/* Description */}
+                    {/* Description (Hidden on mobile to keep banner compact, visible on sm+) */}
                     {slide.desc && (
-                      <p className="text-gray-100/90 text-xs sm:text-sm md:text-base mb-7 leading-relaxed font-medium line-clamp-2 sm:line-clamp-3 drop-shadow-md max-w-xl">
+                      <p className="hidden sm:block text-gray-100/90 text-xs sm:text-sm md:text-base mb-3 sm:mb-5 leading-relaxed font-medium line-clamp-2 drop-shadow-md max-w-xl">
                         {slide.desc}
                       </p>
                     )}
@@ -2877,10 +2882,10 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                       <button 
                         type="button"
                         onClick={() => handleHeroBannerCta(slide)}
-                        className="bg-white hover:bg-orange-50 text-gray-900 px-6 sm:px-7 py-3 sm:py-3.5 rounded-2xl font-black text-xs sm:text-sm w-max transition-all shadow-2xl hover:scale-105 active:scale-95 flex items-center gap-2.5 cursor-pointer border border-white/40 hover:shadow-orange-500/20"
+                        className="bg-white hover:bg-orange-50 text-gray-900 px-3.5 sm:px-6 py-1.5 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-[11px] sm:text-xs w-max transition-all shadow-md hover:scale-105 active:scale-95 flex items-center gap-1.5 sm:gap-2.5 cursor-pointer border border-white/40 mt-0.5 sm:mt-0"
                       >
                         <span>{slide.btnText}</span>
-                        <span className="text-base transition-transform group-hover:translate-x-1">→</span>
+                        <span className="text-xs sm:text-base transition-transform group-hover:translate-x-1">→</span>
                       </button>
                     )}
 
@@ -2889,13 +2894,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               );
             })}
 
-            {/* Interactive Left & Right Floating Arrows */}
+            {/* Interactive Left & Right Floating Arrows (Hidden on mobile) */}
             {displaySlides.length > 1 && (
               <>
                 <button
                   type="button"
                   onClick={prevHeroSlide}
-                  className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-2xl bg-black/40 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 active:scale-90 border border-white/20 shadow-xl cursor-pointer"
+                  className="hidden md:flex absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-2xl bg-black/40 hover:bg-black/80 backdrop-blur-md text-white items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 active:scale-90 border border-white/20 shadow-xl cursor-pointer"
                   title="Slide មុន"
                   aria-label="Previous Slide"
                 >
@@ -2904,7 +2909,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                 <button
                   type="button"
                   onClick={nextHeroSlide}
-                  className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-2xl bg-black/40 hover:bg-black/80 backdrop-blur-md text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 active:scale-90 border border-white/20 shadow-xl cursor-pointer"
+                  className="hidden md:flex absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-2xl bg-black/40 hover:bg-black/80 backdrop-blur-md text-white items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 active:scale-90 border border-white/20 shadow-xl cursor-pointer"
                   title="Slide បន្ទាប់"
                   aria-label="Next Slide"
                 >
@@ -2915,7 +2920,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
             {/* Dots Indicators */}
             {displaySlides.length > 1 && (
-              <div className="absolute bottom-5 right-6 sm:right-8 z-20 flex items-center gap-2 bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
+              <div className="absolute bottom-2.5 right-3 sm:bottom-4 sm:right-6 z-20 flex items-center gap-1.5 sm:gap-2 bg-black/35 backdrop-blur-md px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-white/10 shadow-lg">
                 {displaySlides.map((_, idx) => {
                   const isCurrent = (currentSlide % displaySlides.length) === idx;
                   return (
@@ -2926,8 +2931,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                       aria-label={`Slide ${idx + 1}`}
                       className={`transition-all duration-300 rounded-full cursor-pointer ${
                         isCurrent 
-                          ? 'w-7 sm:w-8 h-2.5 shadow-md' 
-                          : 'w-2.5 h-2.5 bg-white/50 hover:bg-white hover:scale-110'
+                          ? 'w-5 sm:w-8 h-2 sm:h-2.5 shadow-md' 
+                          : 'w-2 sm:w-2.5 h-2 sm:h-2.5 bg-white/50 hover:bg-white hover:scale-110'
                       }`}
                       style={{ backgroundColor: isCurrent ? brandColor : undefined }}
                     />
