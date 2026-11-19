@@ -65,6 +65,9 @@ export default function SaaSPlatformLandingPage() {
   };
 
   const getStoreLogoUrl = (st) => {
+    if (st.id === 'store_default_sabayluk' || st.slug === 'sabay-luk') {
+      return '/sabayluk_icon.png';
+    }
     return st.settings?.logoUrl || st.settings?.logo || st.logo || null;
   };
 
@@ -148,8 +151,12 @@ export default function SaaSPlatformLandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           {/* Brand Logo */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-md shadow-orange-500/20 group-hover:scale-105 transition transform">
-              👟
+            <div className="w-12 h-12 rounded-2xl overflow-hidden border border-slate-200/90 bg-white p-1 flex items-center justify-center shadow-md shadow-orange-500/15 group-hover:scale-105 transition transform">
+              <img 
+                src="/sabayluk_icon.png" 
+                alt="Sabay Luk Logo" 
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1129,8 +1136,10 @@ export default function SaaSPlatformLandingPage() {
       <footer className="bg-slate-950 text-slate-400 py-12 border-t border-slate-800 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">👟</span>
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl overflow-hidden bg-white p-0.5 border border-slate-700 shrink-0 shadow-xs flex items-center justify-center">
+                <img src="/sabayluk_icon.png" alt="Sabay Luk Logo" className="w-full h-full object-contain" />
+              </div>
               <span className="font-black text-lg text-white">SABAY LUK POS</span>
             </div>
             <p className="text-slate-400 leading-relaxed text-xs">
