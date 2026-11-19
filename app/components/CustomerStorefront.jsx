@@ -3161,15 +3161,26 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                       {(() => {
                         const fbStats = getProductFeedbackStats(product.id, product.name);
                         const soldNum = getProductSoldCount(product);
+                        const ratingRound = Math.round(Number(fbStats.avg) || 5);
                         return (
                           <div className="flex items-center justify-between gap-1 mb-2.5">
                             <div 
                               onClick={(e) => { e.stopPropagation(); openFeedbackModal(product); }}
-                              className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition"
-                              title="ចុចដើម្បីមើល Feedback"
+                              className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition group/rating"
+                              title="ចុចដើម្បីមើល ឬសរសេរ Feedback"
                             >
-                              <span className="text-amber-400 text-xs font-black">★</span>
-                              <span className="text-xs font-black text-gray-800">{fbStats.avg}</span>
+                              {/* ⭐️ Standard 5-Star Rating ⭐️ */}
+                              <div className="flex items-center text-amber-400 text-[11px] sm:text-xs tracking-tighter">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <span 
+                                    key={star} 
+                                    className={star <= ratingRound ? "text-amber-400 drop-shadow-[0_1px_1px_rgba(245,158,11,0.2)]" : "text-gray-200"}
+                                  >
+                                    ★
+                                  </span>
+                                ))}
+                              </div>
+                              <span className="text-[11px] sm:text-xs font-black text-gray-800">{fbStats.avg}</span>
                               <span className="text-[10px] text-gray-400 font-bold">({fbStats.count} មតិ)</span>
                             </div>
 
@@ -5842,9 +5853,20 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                   <div className="flex items-center gap-2 mt-0.5">
                     {(() => {
                       const stats = getProductFeedbackStats(feedbackProduct.id, feedbackProduct.name);
+                      const ratingRound = Math.round(Number(stats.avg) || 5);
                       return (
                         <div className="flex items-center gap-1.5 text-xs">
-                          <span className="text-amber-400 font-black">★ {stats.avg}</span>
+                          <div className="flex items-center text-amber-400 text-xs tracking-tighter">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <span 
+                                key={star} 
+                                className={star <= ratingRound ? "text-amber-400" : "text-gray-200"}
+                              >
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                          <span className="text-amber-600 font-black">{stats.avg}</span>
                           <span className="text-gray-400 font-bold">({stats.count} Feedback ផ្ទៀងផ្ទាត់រួច)</span>
                         </div>
                       );
