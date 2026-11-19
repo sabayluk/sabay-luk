@@ -4048,6 +4048,7 @@ export default function UnifiedAdminDashboard() {
   });
 
 
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [zReportModalOpen, setZReportModalOpen] = useState(false);
   const [shiftStartingCash, setShiftStartingCash] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -20892,7 +20893,7 @@ export default function UnifiedAdminDashboard() {
     });
 
     return (
-      <div className="flex h-[calc(100vh-80px)] animate-in fade-in bg-gray-100 -m-10">
+      <div className="flex flex-col lg:flex-row h-full min-h-[calc(100vh-140px)] animate-in fade-in bg-gray-100 -m-3 sm:-m-6 md:-m-10 pb-20 lg:pb-0 relative">
         
         {/* ផ្នែកខាងឆ្វេង: បញ្ជីទំនិញ និង Categories */}
         <div className="flex-1 flex flex-col h-full p-6">
@@ -21193,8 +21194,8 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
-        {/* ផ្នែកខាងស្តាំ: កន្រ្តកលក់ (Cart Management) */}
-        <div className="w-[440px] bg-white border-l border-gray-200 shadow-2xl flex flex-col h-full z-10 shrink-0">
+        {/* ផ្នែកខាងស្តាំ: កន្រ្តកលក់ (Cart Management - Desktop docked, Mobile Drawer) */}
+        <div className="hidden lg:flex w-[420px] xl:w-[440px] bg-white border-l border-gray-200 shadow-2xl flex-col h-full z-10 shrink-0">
           <div className="p-4 border-b border-gray-100 bg-slate-900 text-white flex justify-between items-center">
             <div>
               <div className="flex items-center gap-2">
@@ -21618,6 +21619,173 @@ export default function UnifiedAdminDashboard() {
             </button>
           </div>
         </div>
+
+        {/* ⭐️ MOBILE FLOATING CART ACTION BAR (Shown on Mobile when Cart has items) ⭐️ */}
+        {posCart.length > 0 && (
+          <div className="lg:hidden fixed bottom-16 left-3 right-3 z-30 animate-in slide-in-from-bottom-2">
+            <button
+              type="button"
+              onClick={() => setIsMobileCartOpen(true)}
+              className="w-full bg-slate-950 hover:bg-black text-white p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center justify-between gap-3 active:scale-[0.98] transition cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center text-lg font-black shadow-md shrink-0">
+                  🛒
+                </span>
+                <div className="text-left min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-xs text-white block truncate">
+                      {posCart.reduce((s, it) => s + (it.quantity || 1), 0)} មុខក្នុងកន្ត្រក
+                    </span>
+                    {posPriceMode === 'wholesale' && (
+                      <span className="text-[9px] bg-purple-500/30 text-purple-200 px-1.5 py-0.2 rounded font-bold">ដុំ</span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-amber-300 font-black">
+                    ${posTotal.toFixed(2)} ≈ {posTotalKHR.toLocaleString()} ៛
+                  </span>
+                </div>
+              </div>
+              <span className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 shrink-0">
+                <span>មើលកន្ត្រក & គិតលុយ</span>
+                <span>➔</span>
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* ⭐️ MOBILE CART BOTTOM SHEET DRAWER (Full Cart on Phone) ⭐️ */}
+        {isMobileCartOpen && (
+          <div 
+            onClick={() => setIsMobileCartOpen(false)}
+            className="lg:hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex flex-col justify-end animate-in fade-in duration-200"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-t-3xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border-t border-slate-200 animate-in slide-in-from-bottom duration-300"
+            >
+              {/* Mobile Cart Header */}
+              <div className="p-3.5 border-b border-gray-100 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🛒</span>
+                  <div>
+                    <h3 className="font-black text-xs sm:text-sm">កន្រ្តកទំនិញ ({posCart.length} មុខ)</h3>
+                    <p className="text-[10px] text-slate-400">
+                      អតិថិជន: <span className="text-white font-bold">{customerName || 'អតិថិជនទូទៅ'}</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {posCart.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearCart();
+                        setIsMobileCartOpen(false);
+                      }}
+                      className="text-red-400 hover:text-red-300 text-xs font-bold bg-white/10 px-2 py-1 rounded-lg"
+                    >
+                      🗑️ សម្អាត
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileCartOpen(false)}
+                    className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Mobile Cart Scrollable Body */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                {/* Customer quick button */}
+                <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
+                  <span className="font-bold text-slate-700">👤 អតិថិជន: <b>{customerName || 'ទូទៅ'}</b></span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomerName('អតិថិជនទូទៅ');
+                      setCustomerPhone('');
+                    }}
+                    className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-md"
+                  >
+                    ទូទៅ
+                  </button>
+                </div>
+
+                {/* Items */}
+                <div className="space-y-2">
+                  {posCart.map(item => (
+                    <div key={item.cartItemId} className="p-2.5 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-xs text-gray-900 truncate">{item.name}</p>
+                        <p className="text-[10px] text-gray-500 font-mono">
+                          {item.selectedSize ? `Size: ${item.selectedSize}` : ''} {item.selectedColor ? `• ${item.selectedColor}` : ''} • ${(item.price || 0).toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
+                          className="w-6 h-6 rounded-lg bg-white border border-gray-300 flex items-center justify-center text-xs font-bold"
+                        >-</button>
+                        <span className="text-xs font-black min-w-[16px] text-center">{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
+                          className="w-6 h-6 rounded-lg bg-white border border-gray-300 flex items-center justify-center text-xs font-bold"
+                        >+</button>
+                        <button
+                          type="button"
+                          onClick={() => removeFromCart(item.cartItemId)}
+                          className="text-rose-500 hover:text-rose-700 text-xs font-bold ml-1"
+                        >✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Totals */}
+                <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200/80 space-y-2 text-xs">
+                  <div className="flex justify-between items-center font-bold text-gray-600">
+                    <span>តម្លៃដើមសរុប:</span>
+                    <span>${(posSubtotal || 0).toFixed(2)}</span>
+                  </div>
+                  {posDiscountAmount > 0 && (
+                    <div className="flex justify-between items-center font-bold text-rose-600">
+                      <span>បញ្ចុះតម្លៃ:</span>
+                      <span>-${(posDiscountAmount || 0).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
+                    <div>
+                      <span className="font-black text-gray-900 text-sm block">ទឹកប្រាក់សរុប (Total):</span>
+                      <span className="text-[11px] text-orange-600 font-black">{posTotalKHR.toLocaleString()} ៛</span>
+                    </div>
+                    <span className="text-2xl font-black text-blue-600">${posTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Mobile Pay CTA */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAmountTendered(posTotal.toString());
+                    setIsMobileCartOpen(false);
+                    setPaymentModalOpen(true);
+                  }}
+                  disabled={posCart.length === 0}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                >
+                  <span>💳</span>
+                  <span>ទូទាត់ប្រាក់ឥឡូវនេះ (PAY)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
                 {/* ⭐️ MODAL ជ្រើសរើសទំហំ & ពណ៌ FULL OPTION ⭐️ */}
         {variantModalOpen && selectedProductForVariant && (
@@ -26501,8 +26669,16 @@ export default function UnifiedAdminDashboard() {
         </div>
       )}
 
-      {/* Modern Sleek Sidebar */}
-      <aside className={`${isSidebarOpen ? 'w-72' : 'w-0 -translate-x-full overflow-hidden opacity-0 pointer-events-none'} transition-all duration-300 ease-in-out bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col shadow-2xl z-30 shrink-0 h-full border-r border-slate-800/60 relative`}>
+      {/* ⭐️ Mobile Backdrop for Sidebar Drawer ⭐️ */}
+      {isSidebarOpen && (
+        <div 
+          onClick={() => setIsSidebarOpen(false)}
+          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer"
+        />
+      )}
+
+      {/* Modern Sleek Sidebar (Slide-over drawer on mobile, relative on desktop) */}
+      <aside className={`${isSidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full overflow-hidden opacity-0 pointer-events-none'} transition-all duration-300 ease-in-out bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white flex flex-col shadow-2xl z-50 md:z-30 shrink-0 h-full border-r border-slate-800/60 fixed inset-y-0 left-0 md:relative`}>
         {/* Sidebar Header (Luxury Brand & Workspace Badge) */}
         <div className="p-3.5 border-b border-slate-800/80 flex items-center justify-between gap-3 bg-slate-950/80">
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -26680,6 +26856,9 @@ export default function UnifiedAdminDashboard() {
                             type="button"
                             onClick={() => {
                               setActiveTab(tab.id);
+                              if (typeof window !== 'undefined' && window.innerWidth < 768) {
+                                setIsSidebarOpen(false);
+                              }
                               if (tab.id === 'feedbacks') {
                                 markFeedbacksAsRead();
                               }
@@ -26832,12 +27011,12 @@ export default function UnifiedAdminDashboard() {
         </nav>
       </aside>
 
-      {/* ⭐️ Floating Toggle Button ពេល Sidebar ត្រូវបិទ (ងាយស្រួលចុចបើកវិញ) ⭐️ */}
+      {/* ⭐️ Floating Toggle Button ពេល Sidebar ត្រូវបិទ (បង្ហាញតែលើ Tablet & PC) ⭐️ */}
       {!isSidebarOpen && (
         <button
           type="button"
           onClick={toggleSidebar}
-          className="fixed top-4 left-4 z-50 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 hover:from-blue-600 hover:to-blue-500 text-white px-3.5 py-2.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-2.5 text-xs font-black transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer group animate-in slide-in-from-left-4 fade-in"
+          className="hidden md:flex fixed top-4 left-4 z-50 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 hover:from-blue-600 hover:to-blue-500 text-white px-3.5 py-2.5 rounded-2xl shadow-2xl border border-slate-700/80 items-center gap-2.5 text-xs font-black transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer group animate-in slide-in-from-left-4 fade-in"
           title="ចុចដើម្បីបើករបារម៉ឺនុយ (Open Sidebar Menu)"
         >
           <span className="text-base group-hover:rotate-12 transition-transform">☰</span>
@@ -26847,7 +27026,56 @@ export default function UnifiedAdminDashboard() {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-6 md:p-10 bg-gray-50 h-full relative">
+      <main className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-10 pb-28 md:pb-10 bg-gray-50 h-full relative">
+        {/* ⭐️ MOBILE APP HEADER BAR (Sticky Top Bar on Mobile) ⭐️ */}
+        <div className="md:hidden sticky top-0 -mt-3 -mx-3 mb-3 z-30 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-3.5 py-2.5 flex items-center justify-between text-white shadow-md">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-white flex items-center justify-center text-sm shrink-0 active:scale-95 transition cursor-pointer"
+              title="បើកម៉ឺនុយ"
+            >
+              ☰
+            </button>
+            <div className="min-w-0">
+              <h3 className="font-black text-xs text-white truncate leading-tight">
+                {storeSettings.storeName || 'SABAY LUK'}
+              </h3>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-[10px] text-amber-400 font-bold truncate">
+                  {activeTab === 'pos' ? 'ប្រព័ន្ធលក់ (POS)' :
+                   activeTab === 'inventory' ? 'ស្តុកទំនិញ' :
+                   activeTab === 'orders' ? 'បញ្ជីកុម្ម៉ង់ទិញ' :
+                   activeTab === 'analytics' ? 'វិភាគទិន្នន័យ P&L' :
+                   activeTab === 'finance' ? 'ហិរញ្ញវត្ថុ IFRS' :
+                   activeTab === 'customers' ? 'អតិថិជន CRM' :
+                   activeTab === 'expenses' ? 'កត់ត្រាចំណាយ' :
+                   activeTab === 'settings' ? 'ការកំណត់ហាង' :
+                   activeTab === 'upgrade_plan' ? 'ដំឡើងគម្រោង' :
+                   'ផ្ទាំងគ្រប់គ្រង'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {activeTab === 'pos' && (
+              <button
+                type="button"
+                onClick={() => setZReportModalOpen(true)}
+                className="w-8 h-8 rounded-xl bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xs font-black cursor-pointer active:scale-95"
+                title="បិទវេនលក់ Z-Report"
+              >
+                📋
+              </button>
+            )}
+            <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-black shadow-inner">
+              {currentStaff?.avatar || '👑'}
+            </div>
+          </div>
+        </div>
         {/* ⭐️ PLAN EXPIRATION & RENEWAL REMINDER BANNER ⭐️ */}
         {(() => {
           if (!activeStore || activeStore.id === 'store_default_sabayluk') return null;
@@ -29195,9 +29423,82 @@ export default function UnifiedAdminDashboard() {
         </div>
       )}
 
+      {/* ⭐️ WORLD-CLASS MOBILE APP BOTTOM DOCK (NAVIGATION BAR) ⭐️ */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800/90 shadow-[0_-4px_25px_rgba(0,0,0,0.5)] px-2 py-1 flex items-center justify-around select-none pb-safe">
+        {/* 1. POS */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('pos')}
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 transition active:scale-95 cursor-pointer ${
+            activeTab === 'pos' ? 'text-orange-400 font-black' : 'text-slate-400 font-bold'
+          }`}
+        >
+          <span className="text-lg leading-none">🛒</span>
+          <span className="text-[10px] leading-tight">លក់ (POS)</span>
+          {posCart.length > 0 && (
+            <span className="absolute -top-1 right-2 w-4 h-4 rounded-full bg-orange-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse shadow-sm">
+              {posCart.reduce((s, it) => s + (it.quantity || 1), 0)}
+            </span>
+          )}
+        </button>
+
+        {/* 2. Stock / Inventory */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('inventory')}
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 transition active:scale-95 cursor-pointer ${
+            activeTab === 'inventory' ? 'text-orange-400 font-black' : 'text-slate-400 font-bold'
+          }`}
+        >
+          <span className="text-lg leading-none">📦</span>
+          <span className="text-[10px] leading-tight">ស្តុក</span>
+        </button>
+
+        {/* 3. Orders */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('orders')}
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 transition active:scale-95 cursor-pointer ${
+            activeTab === 'orders' ? 'text-orange-400 font-black' : 'text-slate-400 font-bold'
+          }`}
+        >
+          <span className="text-lg leading-none">📋</span>
+          <span className="text-[10px] leading-tight">កុម្ម៉ង់</span>
+          {totalPendingActionCount > 0 && (
+            <span className="absolute -top-1 right-2 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-ping">
+              {totalPendingActionCount}
+            </span>
+          )}
+        </button>
+
+        {/* 4. Reports / Analytics */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('analytics')}
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 transition active:scale-95 cursor-pointer ${
+            activeTab === 'analytics' || activeTab === 'finance' ? 'text-orange-400 font-black' : 'text-slate-400 font-bold'
+          }`}
+        >
+          <span className="text-lg leading-none">📊</span>
+          <span className="text-[10px] leading-tight">របាយការណ៍</span>
+        </button>
+
+        {/* 5. Full Menu */}
+        <button
+          type="button"
+          onClick={() => setIsSidebarOpen(true)}
+          className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1 transition active:scale-95 cursor-pointer ${
+            isSidebarOpen ? 'text-orange-400 font-black' : 'text-slate-400 font-bold'
+          }`}
+        >
+          <span className="text-lg leading-none">☰</span>
+          <span className="text-[10px] leading-tight">ម៉ឺនុយ</span>
+        </button>
+      </nav>
+
       {/* ⭐️ GLOBAL TOAST NOTIFICATION ⭐️ */}
       {toastNotification && (
-        <div className="fixed bottom-6 right-6 z-[9999] bg-slate-900/95 backdrop-blur-md text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 text-xs font-black flex items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-200">
+        <div className="fixed bottom-16 md:bottom-6 right-4 sm:right-6 z-[9999] bg-slate-900/95 backdrop-blur-md text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 text-xs font-black flex items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-200">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
           <span>{toastNotification}</span>
         </div>

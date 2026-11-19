@@ -15,6 +15,7 @@ export const viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }) {
@@ -24,6 +25,12 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#ff6a00" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/png" href="/favicon.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Sabay Luk" />
+        <meta name="format-detection" content="telephone=no" />
 
                 {/* 🛡️ ការពារកុំឱ្យ Browser Extension & QuotaExceededError បង្កជា Runtime Error រំខានដល់ App 🛡️ */}
         <script

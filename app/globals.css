@@ -84,3 +84,25 @@ html.dark body {
 .animate-marquee-left:hover {
   animation-play-state: paused;
 }
+
+/* ⭐️ WORLD-CLASS MOBILE APP & TOUCH OPTIMIZATIONS ⭐️ */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+button, a, input, select, textarea {
+  touch-action: manipulation;
+}
+
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.pt-safe {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
+.bottom-safe {
+  bottom: env(safe-area-inset-bottom, 0px);
+}

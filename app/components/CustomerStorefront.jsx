@@ -5732,7 +5732,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       </footer>
 
       {/* ⭐️ 13. MOBILE BOTTOM NAVIGATION BAR (របារម៉ឺនុយជាប់បាតក្រោមទូរស័ព្ទដៃ) ⭐️ */}
-      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-40 ${themeMode === 'dark' ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-gray-200/90 text-gray-800'} backdrop-blur-lg border-t shadow-[0_-4px_20px_rgba(0,0,0,0.2)] px-2 py-1.5 flex items-center justify-around select-none transition-colors`}>
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-40 ${themeMode === 'dark' ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-gray-200/90 text-gray-800'} backdrop-blur-lg border-t shadow-[0_-4px_20px_rgba(0,0,0,0.2)] px-2 py-1 flex items-center justify-around select-none transition-colors pb-safe`}>
         
         {/* 1. Home */}
         <button

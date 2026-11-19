@@ -62,6 +62,7 @@ export default function SaaSPlatformLandingPage() {
   const [copiedSlug, setCopiedSlug] = useState(null);
   const [openingSlug, setOpeningSlug] = useState(null);
   const [browserToast, setBrowserToast] = useState(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // ⭐️ បើកគេហទំព័រមុខហាងតែ ១ Tab គត់ (Single Tab Web Browser) ⭐️
   const handleOpenStoreInBrowser = (e, slug) => {
@@ -201,13 +202,85 @@ export default function SaaSPlatformLandingPage() {
 
             <Link
               href="/register?plan=FREE"
-              className="inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md shadow-orange-500/25 active:scale-95 transition transform"
+              className="inline-flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md shadow-orange-500/25 active:scale-95 transition transform"
             >
               <span>🚀</span>
-              <span>{t.btn_create_free}</span>
+              <span className="hidden xs:inline sm:inline">{t.btn_create_free}</span>
+              <span className="xs:hidden sm:hidden">បង្កើតហាង</span>
             </Link>
+
+            {/* Mobile Hamburger Menu Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 flex items-center justify-center text-base transition active:scale-95 cursor-pointer border border-slate-200 shrink-0 ml-0.5"
+              aria-label="Toggle Mobile Menu"
+            >
+              {isMobileMenuOpen ? '✕' : '☰'}
+            </button>
           </div>
         </div>
+
+        {/* ⭐️ Mobile Navigation Slide-Down Drawer ⭐️ */}
+        {isMobileMenuOpen && (
+          <div className="lg:hidden bg-white/95 backdrop-blur-xl border-b border-slate-200 px-4 py-4 space-y-3 shadow-2xl animate-in slide-in-from-top-2">
+            <nav className="flex flex-col space-y-1.5 text-xs font-bold text-slate-700">
+              <a 
+                href="#partner-stores" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>{t.nav_partner_stores || 'ហាងដៃគូសហការ (Live)'}</span>
+              </a>
+              <a 
+                href="#features" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="px-3 py-2.5 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition"
+              >
+                {t.nav_features}
+              </a>
+              <a 
+                href="#solutions" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="px-3 py-2.5 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition"
+              >
+                {t.nav_solutions}
+              </a>
+              <a 
+                href="#pricing" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="px-3 py-2.5 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition"
+              >
+                {t.nav_pricing}
+              </a>
+              <a 
+                href="#how-it-works" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="px-3 py-2.5 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition"
+              >
+                {t.nav_how_it_works}
+              </a>
+              <a 
+                href="#faq" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="px-3 py-2.5 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition"
+              >
+                {t.nav_faq}
+              </a>
+            </nav>
+            <div className="pt-2.5 border-t border-slate-100 flex flex-col gap-2">
+              <Link
+                href="/login"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-100 text-slate-900 font-black text-center text-xs flex items-center justify-center gap-1.5 border border-slate-200"
+              >
+                <span>🔑</span>
+                <span>{t.btn_login || 'ចូលប្រព័ន្ធ (Store Login)'}</span>
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ⭐️ Hero Section */}
