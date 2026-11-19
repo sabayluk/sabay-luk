@@ -18,6 +18,7 @@ import {
   sendDailyTelegramStockAlert, 
   jumpToProductInInventory 
 } from '../../../lib/stockAlertEngine';
+import { compressImage, compressImageToDataUrl, compressMediaFile } from '../../../lib/imageOptimizer';
 
 // ⭐️ Helper: គណនាកាលបរិច្ឆេទផុតកំណត់ Plan និងចំនួនថ្ងៃនៅសល់ ⭐️
 const computePlanExpiry = (expiresAt) => {
@@ -342,62 +343,7 @@ const parseProductMeta = (p) => {
   };
 };
 
-// ⭐️ Helper: បង្រួមទំហំរូបភាព (Client-side Compression) ស៊ីមេតិច គុណភាពច្បាស់ដដែល
-const compressMediaFile = async (file, maxWidth = 1400, quality = 0.84) => {
-  if (!file) return file;
-  if (!file.type || !file.type.startsWith('image/')) return file;
-  if (file.size < 120 * 1024) return file; // បើតូចជាង 120KB មិនបាច់បង្រួមទេ
-
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth || height > maxWidth) {
-          if (width > height) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          } else {
-            width = Math.round((width * maxWidth) / height);
-            height = maxWidth;
-          }
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob(
-          (blob) => {
-            if (blob && blob.size < file.size) {
-              const ext = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0 ? 'webp' : 'jpg';
-              const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, `.${ext}`), {
-                type: ext === 'webp' ? 'image/webp' : 'image/jpeg',
-                lastModified: Date.now()
-              });
-              resolve(newFile);
-            } else {
-              resolve(file);
-            }
-          },
-          'image/webp',
-          quality
-        );
-      };
-      img.onerror = () => resolve(file);
-      img.src = e.target.result;
-    };
-    reader.onerror = () => resolve(file);
-    reader.readAsDataURL(file);
-  });
-};
+// (compressMediaFile, compressImage, compressImageToDataUrl are imported from lib/imageOptimizer)
 
 // ⭐️ Helper: ស្វែងរកលេខកូដ SKU ចុងក្រោយបង្អស់ និងបង្កើត SKU បន្ទាប់ដោយស្វ័យប្រវត្តិ (+1)
 const computeNextSku = (productList) => {
@@ -820,8 +766,10 @@ export default function UnifiedAdminDashboard() {
     try {
       let publicUrl = editingProduct.image_url;
       if (file) {
-        const fileName = `${Date.now()}.${file.name.split('.').pop()}`;
-        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
+        const compressed = await compressImage(file, 'product');
+        const ext = compressed.name ? (compressed.name.split('.').pop() || 'jpg') : 'jpg';
+        const fileName = `${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, compressed);
         if (uploadError) throw uploadError;
         const { data: publicData } = supabase.storage.from('products').getPublicUrl(fileName);
         publicUrl = publicData.publicUrl;
@@ -3112,12 +3060,11 @@ export default function UnifiedAdminDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const compressed = await compressMediaFile(file, 800, 0.9);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setStoreSettings(prev => ({ ...prev, logoUrl: event.target.result }));
-      };
-      reader.readAsDataURL(compressed);
+      const dataUrl = await compressImageToDataUrl(file, 'logo');
+      if (dataUrl) {
+        setStoreSettings(prev => ({ ...prev, logoUrl: dataUrl }));
+        setInvoiceSettings(prev => ({ ...prev, logoUrl: dataUrl }));
+      }
     } catch (err) {
       alert('❌ បរាជ័យក្នុងការ Upload Logo: ' + err.message);
     }
@@ -3841,15 +3788,11 @@ export default function UnifiedAdminDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const compressed = await compressMediaFile(file, 800, 0.9);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const url = event.target.result;
-        // ⭐️ sync ទៅ ទាំង storeSettings និង invoiceSettings
-        setStoreSettings(prev => ({ ...prev, khqrImageUrl: url }));
-        setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: url }));
-      };
-      reader.readAsDataURL(compressed);
+      const dataUrl = await compressImageToDataUrl(file, 'logo');
+      if (dataUrl) {
+        setStoreSettings(prev => ({ ...prev, khqrImageUrl: dataUrl }));
+        setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: dataUrl }));
+      }
     } catch (err) {
       alert('❌ បរាជ័យក្នុងការ Upload KHQR: ' + err.message);
     }
@@ -5406,11 +5349,11 @@ export default function UnifiedAdminDashboard() {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length === 0) return;
 
-    // ⚡ បង្រួមទំហំរូបភាពស្វ័យប្រវត្តិតាម Canvas (កាត់បន្ថយទំហំ MB មកសល់ត្រឹម KB តែគុណភាពច្បាស់ល្អ)
+    // ⚡ បង្រួមទំហំរូបភាពស្វ័យប្រវត្តិតាម Smart Image Optimizer (សន្សំ Memory Server & Phone)
     const processedFiles = await Promise.all(
       selectedFiles.map(async (f) => {
         if (f.type.startsWith('image/')) {
-          return await compressMediaFile(f, 1400, 0.84);
+          return await compressImage(f, 'product');
         }
         return f;
       })
@@ -5457,7 +5400,7 @@ export default function UnifiedAdminDashboard() {
     const processedFiles = await Promise.all(
       selectedFiles.map(async (f) => {
         if (f.type.startsWith('image/')) {
-          return await compressMediaFile(f, 1400, 0.84);
+          return await compressImage(f, 'product');
         }
         return f;
       })
@@ -5550,8 +5493,10 @@ export default function UnifiedAdminDashboard() {
       }
 
       if (uploadedImageUrls.length === 0 && file) {
-        const fileName = `${Date.now()}.${file.name.split('.').pop()}`;
-        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
+        const compressed = await compressImage(file, 'product');
+        const ext = compressed.name ? (compressed.name.split('.').pop() || 'jpg') : 'jpg';
+        const fileName = `${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, compressed);
         if (uploadError) throw uploadError;
         const { data: publicData } = supabase.storage.from('products').getPublicUrl(fileName);
         uploadedImageUrls.push(publicData.publicUrl);
@@ -8398,10 +8343,12 @@ export default function UnifiedAdminDashboard() {
     const file = e.target.files[0];
     if (file) {
       setIsUploadingSlide(true);
-      setCoverMessage('⏳ កំពុង Upload រូបភាពចូលក្នុង Server...');
+      setCoverMessage('⏳ កំពុងបង្រួមទំហំរូប និង Upload ចូលក្នុង Server...');
       try {
-        const fileName = `slide_${activeSlideIndex}_${Date.now()}.${file.name.split('.').pop()}`;
-        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, file);
+        const compressed = await compressImage(file, 'banner');
+        const ext = compressed.name ? (compressed.name.split('.').pop() || 'jpg') : 'jpg';
+        const fileName = `slide_${activeSlideIndex}_${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from('products').upload(fileName, compressed);
         if (uploadError) throw uploadError;
 
         const { data: publicData } = supabase.storage.from('products').getPublicUrl(fileName);
@@ -17173,13 +17120,20 @@ export default function UnifiedAdminDashboard() {
                   <input
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        setManualPaymentSlipFile(file);
-                        const reader = new FileReader();
-                        reader.onload = (ev) => setManualPaymentSlipPreview(ev.target?.result);
-                        reader.readAsDataURL(file);
+                        try {
+                          const compressed = await compressImage(file, 'slip');
+                          setManualPaymentSlipFile(compressed);
+                          const dataUrl = await compressImageToDataUrl(compressed, 'slip');
+                          setManualPaymentSlipPreview(dataUrl);
+                        } catch (_) {
+                          setManualPaymentSlipFile(file);
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setManualPaymentSlipPreview(ev.target?.result);
+                          reader.readAsDataURL(file);
+                        }
                       }
                     }}
                     className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer"
@@ -23178,15 +23132,23 @@ export default function UnifiedAdminDashboard() {
                         type="file" 
                         accept="image/*" 
                         className="hidden" 
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              setStoreSettings(prev => ({ ...prev, logoUrl: event.target.result }));
-                              setInvoiceSettings(prev => ({ ...prev, logoUrl: event.target.result }));
-                            };
-                            reader.readAsDataURL(file);
+                            try {
+                              const dataUrl = await compressImageToDataUrl(file, 'logo');
+                              if (dataUrl) {
+                                setStoreSettings(prev => ({ ...prev, logoUrl: dataUrl }));
+                                setInvoiceSettings(prev => ({ ...prev, logoUrl: dataUrl }));
+                              }
+                            } catch (_) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                setStoreSettings(prev => ({ ...prev, logoUrl: event.target.result }));
+                                setInvoiceSettings(prev => ({ ...prev, logoUrl: event.target.result }));
+                              };
+                              reader.readAsDataURL(file);
+                            }
                           }
                         }} 
                       />
@@ -23256,16 +23218,24 @@ export default function UnifiedAdminDashboard() {
                         type="file" 
                         accept="image/*" 
                         className="hidden" 
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              const url = event.target.result;
-                              setStoreSettings(prev => ({ ...prev, khqrImageUrl: url }));
-                              setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: url }));
-                            };
-                            reader.readAsDataURL(file);
+                            try {
+                              const dataUrl = await compressImageToDataUrl(file, 'logo');
+                              if (dataUrl) {
+                                setStoreSettings(prev => ({ ...prev, khqrImageUrl: dataUrl }));
+                                setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: dataUrl }));
+                              }
+                            } catch (_) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                const url = event.target.result;
+                                setStoreSettings(prev => ({ ...prev, khqrImageUrl: url }));
+                                setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: url }));
+                              };
+                              reader.readAsDataURL(file);
+                            }
                           }
                         }} 
                       />
@@ -29429,15 +29399,22 @@ export default function UnifiedAdminDashboard() {
                               type="file"
                               accept="image/*"
                               required
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  setUpgradeSlipFile(file);
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => {
-                                    setUpgradeSlipPreview(ev.target?.result);
-                                  };
-                                  reader.readAsDataURL(file);
+                                  try {
+                                    const compressed = await compressImage(file, 'slip');
+                                    setUpgradeSlipFile(compressed);
+                                    const dataUrl = await compressImageToDataUrl(compressed, 'slip');
+                                    setUpgradeSlipPreview(dataUrl);
+                                  } catch (_) {
+                                    setUpgradeSlipFile(file);
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => {
+                                      setUpgradeSlipPreview(ev.target?.result);
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
                                 }
                               }}
                               className="hidden"

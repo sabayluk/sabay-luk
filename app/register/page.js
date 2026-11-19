@@ -12,6 +12,7 @@ import {
   submitSubscriptionPayment 
 } from '../../lib/stores';
 import { supabase } from '../../supabase';
+import { compressImage, compressImageToDataUrl } from '../../lib/imageOptimizer';
 
 function RegisterStoreForm() {
   const router = useRouter();
@@ -1380,16 +1381,24 @@ function RegisterStoreForm() {
                               type="file"
                               accept="image/*"
                               required
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                  setPaymentSlipFile(file);
-                                  const reader = new FileReader();
-                                  reader.onload = (ev) => {
-                                    setPaymentSlipPreview(ev.target?.result);
+                                  try {
+                                    const compressed = await compressImage(file, 'slip');
+                                    setPaymentSlipFile(compressed);
+                                    const dataUrl = await compressImageToDataUrl(compressed, 'slip');
+                                    setPaymentSlipPreview(dataUrl);
                                     setPaymentError('');
-                                  };
-                                  reader.readAsDataURL(file);
+                                  } catch (_) {
+                                    setPaymentSlipFile(file);
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => {
+                                      setPaymentSlipPreview(ev.target?.result);
+                                      setPaymentError('');
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
                                 }
                               }}
                               className="hidden"

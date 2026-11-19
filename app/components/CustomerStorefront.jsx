@@ -6,6 +6,7 @@ import { renderCategorySvg } from '../../lib/categoryIcons';
 import { getActiveStore, isItemBelongsToStore, fetchStoreBySlug, DEFAULT_FLAGSHIP_STORE } from '../../lib/stores';
 import { getInvoiceUrl, openInvoiceInBrowser } from '../../lib/openInvoice';
 import LocationPickerModal from './LocationPickerModal';
+import { compressImage, compressImageToDataUrl, compressMediaFile } from '../../lib/imageOptimizer';
 
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក បញ្ចុះតម្លៃ & វីដេអូ YouTube ធានាមិនបាត់ ១០០%
 const parseProductMeta = (p) => {
@@ -76,62 +77,7 @@ const getYouTubeEmbedUrl = (url) => {
   return null;
 };
 
-// ⭐️ Helper: បង្រួមទំហំរូបភាព (Client-side Image Compression)
-const compressMediaFile = async (file, maxWidth = 1200, quality = 0.82) => {
-  if (!file) return file;
-  if (!file.type || !file.type.startsWith('image/')) return file;
-  if (file.type === 'image/gif' || file.type === 'image/svg+xml') return file;
-  if (file.size < 120 * 1024) return file;
-
-  return new Promise((resolve) => {
-    const blobUrl = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(blobUrl);
-      let width = img.naturalWidth || img.width;
-      let height = img.naturalHeight || img.height;
-      if (width > maxWidth || height > maxWidth) {
-        if (width > height) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        } else {
-          width = Math.round((width * maxWidth) / height);
-          height = maxWidth;
-        }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return resolve(file);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(
-        (blob) => {
-          if (blob && blob.size < file.size) {
-            const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
-            const cleanBaseName = file.name.replace(/\.[^/.]+$/, '');
-            const newFile = new File([blob], `${cleanBaseName}.${ext}`, {
-              type: blob.type || 'image/jpeg',
-              lastModified: Date.now()
-            });
-            resolve(newFile);
-          } else {
-            resolve(file);
-          }
-        },
-        'image/jpeg',
-        quality
-      );
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(blobUrl);
-      resolve(file);
-    };
-    img.src = blobUrl;
-  });
-};
+// (compressMediaFile, compressImage, compressImageToDataUrl are imported from lib/imageOptimizer)
 
 // ⭐️ វចនានុក្រម ២ ភាសា (ខ្មែរ & English Dictionary) ⭐️
 const DICTIONARY = {
@@ -875,7 +821,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const handleLocationPhotoChange = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      const compressed = await compressMediaFile(file, 1200, 0.82);
+      const compressed = await compressImage(file, 'location');
       setLocationPhotoFile(compressed);
       setLocationPhotoPreview(URL.createObjectURL(compressed));
     }
@@ -954,7 +900,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const [reviewZoomPhoto, setReviewZoomPhoto] = useState(null);
 
   // Helper compress & select customer review photo
-  const handleFeedbackPhotoSelect = (e) => {
+  const handleFeedbackPhotoSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
@@ -963,32 +909,16 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     }
     setFeedbackPhotoLoading(true);
     setFeedbackPhotoName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1200;
-        const scale = Math.min(1, MAX_WIDTH / img.width);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-        setFeedbackPhoto(dataUrl);
-        setFeedbackPhotoLoading(false);
-      };
-      img.onerror = () => {
-        setFeedbackPhoto(event.target.result);
-        setFeedbackPhotoLoading(false);
-      };
-      img.src = event.target.result;
-    };
-    reader.onerror = () => {
+    try {
+      const dataUrl = await compressImageToDataUrl(file, 'product');
+      setFeedbackPhoto(dataUrl);
+    } catch (_) {
+      const reader = new FileReader();
+      reader.onload = (event) => setFeedbackPhoto(event.target.result);
+      reader.readAsDataURL(file);
+    } finally {
       setFeedbackPhotoLoading(false);
-      alert('មានបញ្ហាក្នុងការអានរូបភាព!');
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   // Helper retrieve all active coupons (Default + Admin Custom)
@@ -2228,9 +2158,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
           if (!slipErr) {
             const { data: slipData } = supabase.storage.from('products').getPublicUrl(slipFileName);
             uploadedSlipUrl = slipData.publicUrl;
+          } else {
+            console.warn('Storage upload error, falling back to compressed base64 slip:', slipErr);
+            uploadedSlipUrl = await compressImageToDataUrl(slipFile, 'slip');
           }
         } catch (sErr) {
           console.error('Slip upload error:', sErr);
+          uploadedSlipUrl = await compressImageToDataUrl(slipFile, 'slip');
         }
       }
 
@@ -2244,9 +2178,12 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
           if (!locErr) {
             const { data: locData } = supabase.storage.from('products').getPublicUrl(locFileName);
             uploadedLocationPhotoUrl = locData.publicUrl;
+          } else {
+            uploadedLocationPhotoUrl = await compressImageToDataUrl(locationPhotoFile, 'location');
           }
         } catch (pErr) {
           console.error('Location photo upload error:', pErr);
+          uploadedLocationPhotoUrl = await compressImageToDataUrl(locationPhotoFile, 'location');
         }
       }
 
@@ -4972,7 +4909,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                                 onChange={async (e) => {
                                   const f = e.target.files?.[0];
                                   if (f) {
-                                    const compressed = await compressMediaFile(f, 1200, 0.82);
+                                    const compressed = await compressImage(f, 'slip');
                                     setSlipFile(compressed);
                                     setSlipPreviewUrl(URL.createObjectURL(compressed));
                                   }
