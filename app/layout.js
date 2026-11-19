@@ -1,5 +1,6 @@
 import './globals.css';
 import PWAInstaller from './components/PWAInstaller';
+import TelegramWebAppIntegration from './components/TelegramWebAppIntegration';
 
 export const metadata = {
   title: 'Sabay Luk POS • ប្រព័ន្ធគ្រប់គ្រងការលក់ និងស្តុកទំនិញទំនើប',
@@ -129,8 +130,12 @@ export default function RootLayout({ children }) {
         />
               {/* Script សម្រាប់ទាញយករូប Icon ស្វ័យប្រវត្តិពី Iconify API */}
         <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+
+        {/* 🤖 Telegram Mini Apps (TMA) Official WebApp SDK 🤖 */}
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
       </head>
       <body suppressHydrationWarning>
+        <TelegramWebAppIntegration />
         {children}
         <PWAInstaller />
       </body>

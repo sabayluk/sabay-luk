@@ -673,6 +673,35 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const [paymentMethod, setPaymentMethod] = useState('COD'); // 'COD' | 'ABA KHQR'
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
+  // 🤖 Telegram Mini App (TMA): Auto-fill customer details from Telegram Account
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const applyTgUser = (tgUser) => {
+      if (!tgUser) return;
+      if (tgUser.fullName) {
+        setCustomerName(prev => prev || tgUser.fullName);
+      }
+      if (tgUser.username) {
+        setCustomerTelegram(prev => prev || `@${tgUser.username}`);
+      }
+    };
+
+    try {
+      const raw = localStorage.getItem('sabay_tg_user');
+      if (raw) {
+        applyTgUser(JSON.parse(raw));
+      }
+    } catch (_) {}
+
+    const handleTgReady = (e) => {
+      if (e.detail) applyTgUser(e.detail);
+    };
+
+    window.addEventListener('sabay_tg_user_ready', handleTgReady);
+    return () => window.removeEventListener('sabay_tg_user_ready', handleTgReady);
+  }, []);
+
   // ⭐️ States សម្រាប់ Order Success Modal (ជោគជ័យ)
   const [orderSuccessModalOpen, setOrderSuccessModalOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
@@ -1984,6 +2013,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         qty: 1
       }];
     });
+    try { window.sabayHaptic?.medium?.(); } catch (_) {}
     setIsCartOpen(true);
   };
 
@@ -2041,6 +2071,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       ];
     });
 
+    try { window.sabayHaptic?.medium?.(); } catch (_) {}
     setVariantModalOpen(false);
     setIsCartOpen(true);
   };
@@ -2369,6 +2400,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       setCheckoutModalOpen(false);
       setIsCartOpen(false);
       setOrderSuccessModalOpen(true);
+      try { window.sabayHaptic?.success?.(); } catch (_) {}
 
       fetchProducts();
 
