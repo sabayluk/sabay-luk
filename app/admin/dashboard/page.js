@@ -5045,53 +5045,120 @@ export default function UnifiedAdminDashboard() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // មុខងាររក្សាទុកទិន្នន័យ Form ព្រាង មិនឱ្យបាត់ពេល Refresh
+  // ⭐️ Helper សម្រាប់ Load Custom Sizes/Colors តាម Store (World-Class Store Attribute Isolation) ⭐️
+  const getInitialStoreSizes = (storeId) => {
+    if (typeof window === 'undefined') return [];
+    const sid = storeId || 'store_default_sabayluk';
+    const saved = localStorage.getItem(`sabay_custom_sizes_${sid}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (_) {}
+    }
+    // មានតែហាង Demo ដំបូង (Sabay Shoes) ប៉ុណ្ណោះដែលផ្ដល់ Size ស្បែកជើង 35-48
+    // រាល់ហាងថ្មីទាំងអស់ (Tenant Stores) ត្រូវទុកឱ្យទទេស្អាត (Clean Slate) ដើម្បីឱ្យហាងបង្កើត Size ខ្លួនឯង!
+    if (sid === 'store_default_sabayluk') {
+      return ['35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48'];
+    }
+    return [];
+  };
+
+  const getInitialStoreColors = (storeId) => {
+    if (typeof window === 'undefined') return [];
+    const sid = storeId || 'store_default_sabayluk';
+    const saved = localStorage.getItem(`sabay_custom_colors_${sid}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (_) {}
+    }
+    if (sid === 'store_default_sabayluk') {
+      return ['ខ្មៅ (Black)', 'សូកូឡា (Chocolate)', 'ស (White)', 'ប្រផេះ (Grey)', 'ត្នោត (Brown)', 'ខៀវ (Blue)', 'ក្រហម (Red)'];
+    }
+    return [];
+  };
+
+  // មុខងាររក្សាទុកទិន្នន័យ Form ព្រាង មិនឱ្យបាត់ពេល Refresh (Store-scoped & No Leaks)
   useEffect(() => {
-    const draft = localStorage.getItem('sabay_product_draft');
+    if (typeof window === 'undefined') return;
+    const sid = activeStore?.id || 'store_default_sabayluk';
+    const draft = localStorage.getItem(`sabay_product_draft_${sid}`);
     if (draft) {
-      const parsed = JSON.parse(draft);
-      setName(parsed.name || '');
-      setSku(parsed.sku || `SL-${Math.floor(1000 + Math.random() * 9000)}`);
-      setCategory(parsed.category || 'ស្បែកជើង');
-      setSelectedSizes(parsed.selectedSizes || []);
-      setCustomTextSize(parsed.customTextSize || '');
-      setColor(parsed.color || '');
-      setStockQty(parsed.stockQty !== undefined ? parsed.stockQty : '0');
-      setCostPrice(parsed.costPrice || '');
-      setWholesalePrice(parsed.wholesalePrice || '');
-      setWholesaleDiscount(parsed.wholesaleDiscount || '');
-      setSellingPrice(parsed.sellingPrice || '');
-      setRetailDiscount(parsed.retailDiscount || '');
-      setLowStockAlert(parsed.lowStockAlert || '5');
+      try {
+        const parsed = JSON.parse(draft);
+        if (parsed.name || parsed.sellingPrice) {
+          setName(parsed.name || '');
+          setSku(parsed.sku || computeNextSku(products));
+          setCategory(parsed.category || '');
+          setSelectedSizes(parsed.selectedSizes || []);
+          setCustomTextSize(parsed.customTextSize || '');
+          setColor(parsed.color || '');
+          setSelectedColors(parsed.selectedColors || (parsed.color ? parsed.color.split(',').map(c => c.trim()).filter(Boolean) : []));
+          setStockQty(parsed.stockQty !== undefined ? parsed.stockQty : '10');
+          setCostPrice(parsed.costPrice || '');
+          setWholesalePrice(parsed.wholesalePrice || '');
+          setWholesaleDiscount(parsed.wholesaleDiscount || '');
+          setSellingPrice(parsed.sellingPrice || '');
+          setRetailDiscount(parsed.retailDiscount || '');
+          setLowStockAlert(parsed.lowStockAlert || '5');
+        }
+      } catch (_) {}
     }
-  }, []);
+  }, [activeStore?.id]);
 
   useEffect(() => {
-    const draft = { name, sku, category, selectedSizes, customTextSize, color, stockQty, costPrice, wholesalePrice, wholesaleDiscount, sellingPrice, retailDiscount, lowStockAlert };
-    localStorage.setItem('sabay_product_draft', JSON.stringify(draft));
-  }, [name, sku, category, selectedSizes, customTextSize, color, stockQty, costPrice, sellingPrice, lowStockAlert]);
-
-  // States សម្រាប់ Array ប៊ូតុង Size & Color (Load ពី localStorage)
-  const [availableSizes, setAvailableSizes] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_custom_sizes');
-      return saved ? JSON.parse(saved) : ['35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48'];
+    if (typeof window === 'undefined') return;
+    const sid = activeStore?.id || 'store_default_sabayluk';
+    // រក្សាទុក Draft តែពេលដែលទម្រង់មានព័ត៌មាន (ឈ្មោះ ឬតម្លៃ) និងមិនមែនកំពុង Edit ទំនិញចាស់
+    if (!editingProductId && (name.trim() !== '' || sellingPrice.trim() !== '')) {
+      const draft = { name, sku, category, selectedSizes, selectedColors, customTextSize, color, stockQty, costPrice, wholesalePrice, wholesaleDiscount, sellingPrice, retailDiscount, lowStockAlert };
+      try {
+        localStorage.setItem(`sabay_product_draft_${sid}`, JSON.stringify(draft));
+      } catch (_) {}
+    } else if (!editingProductId && name.trim() === '' && sellingPrice.trim() === '') {
+      try {
+        localStorage.removeItem(`sabay_product_draft_${sid}`);
+        localStorage.removeItem('sabay_product_draft');
+      } catch (_) {}
     }
-    return ['35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48'];
-  });
+  }, [name, sku, category, selectedSizes, selectedColors, customTextSize, color, stockQty, costPrice, sellingPrice, lowStockAlert, editingProductId, activeStore?.id]);
+
+  // States សម្រាប់ Array ប៊ូតុង Size & Color (ផ្ទុកដាច់ដោយឡែកតាម Store ID)
+  const [availableSizes, setAvailableSizes] = useState(() => getInitialStoreSizes(activeStore?.id));
   const [newSizeInput, setNewSizeInput] = useState('');
 
-  const [availableColors, setAvailableColors] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_custom_colors');
-      return saved ? JSON.parse(saved) : ['ខ្មៅ (Black)', 'សូកូឡា (Chocolate)', 'ស (White)', 'ប្រផេះ (Grey)', 'ត្នោត (Brown)', 'ខៀវ (Blue)', 'ក្រហម (Red)'];
-    }
-    return ['ខ្មៅ (Black)', 'សូកូឡា (Chocolate)', 'ស (White)', 'ប្រផេះ (Grey)', 'ត្នោត (Brown)', 'ខៀវ (Blue)', 'ក្រហម (Red)'];
-  });
+  const [availableColors, setAvailableColors] = useState(() => getInitialStoreColors(activeStore?.id));
   const [newColorInput, setNewColorInput] = useState('');
 
-  useEffect(() => { try { localStorage.setItem('sabay_custom_sizes', JSON.stringify(availableSizes)); } catch (_) {} }, [availableSizes]);
-  useEffect(() => { try { localStorage.setItem('sabay_custom_colors', JSON.stringify(availableColors)); } catch (_) {} }, [availableColors]);
+  // ⭐️ ពេលផ្លាស់ប្តូរ Store: Load Size និង Color របស់ហាងនោះមកប្រើ និង Reset ជម្រើសចាស់ៗកុំឱ្យជាន់គ្នា ⭐️
+  useEffect(() => {
+    const sid = activeStore?.id || 'store_default_sabayluk';
+    setAvailableSizes(getInitialStoreSizes(sid));
+    setAvailableColors(getInitialStoreColors(sid));
+    // Reset ជម្រើសដែលបានរើសសម្រាប់ Product កុំឱ្យជាប់ឆ្លងហាង
+    setSelectedSizes([]);
+    setSelectedColors([]);
+    setColor('');
+    setCustomTextSize('');
+    setVariantStock({});
+    setDisabledVariants([]);
+  }, [activeStore?.id]);
+
+  useEffect(() => {
+    const sid = activeStore?.id || 'store_default_sabayluk';
+    try {
+      localStorage.setItem(`sabay_custom_sizes_${sid}`, JSON.stringify(availableSizes));
+    } catch (_) {}
+  }, [availableSizes, activeStore?.id]);
+
+  useEffect(() => {
+    const sid = activeStore?.id || 'store_default_sabayluk';
+    try {
+      localStorage.setItem(`sabay_custom_colors_${sid}`, JSON.stringify(availableColors));
+    } catch (_) {}
+  }, [availableColors, activeStore?.id]);
 
   // មុខងាររំកិលទីតាំង Size (Reorder Left/Right)
   const moveSize = (index, direction) => {
@@ -5505,16 +5572,35 @@ export default function UnifiedAdminDashboard() {
         setDisabledVariants([]);
       }
 
-      localStorage.removeItem('sabay_product_draft'); 
+      // ⭐️ RESET គ្រប់ Attributes និង Selections ទាំងអស់ ដើម្បីកុំឱ្យជាប់ឆ្លងទៅទំនិញថ្មីបន្ទាប់ (Fresh Attributes Guaranteed) ⭐️
+      setEditingProductId(null);
+      setName('');
+      setSelectedSizes([]);
+      setSelectedColors([]);
+      setColor('');
+      setCustomTextSize('');
+      setVariantStock({});
+      setDisabledVariants([]);
+      setSellingPrice('');
+      setCostPrice('');
+      setWholesalePrice('');
+      setWholesaleDiscount('');
+      setRetailDiscount('');
+      setStockQty('10');
+      setLowStockAlert('5');
       setFile(null);
       setPreviewUrl(null);
       setProductImages([]);
       setSelectedCoverIndex(0);
       setDetailImages([]);
       setDetailImageUrlInput('');
-      setWholesalePrice('');
-      setWholesaleDiscount('');
-      setRetailDiscount('');
+      setVideoUrl('');
+
+      if (typeof window !== 'undefined') {
+        const sid = activeStore?.id || 'store_default_sabayluk';
+        localStorage.removeItem(`sabay_product_draft_${sid}`);
+        localStorage.removeItem('sabay_product_draft');
+      }
       fetchProducts();
 
     } catch (error) {
@@ -5522,6 +5608,41 @@ export default function UnifiedAdminDashboard() {
     } finally {
       setUploading(false);
     }
+  };
+
+  // ⭐️ មុខងារបើក Form បញ្ចូលទំនិញថ្មីដោយចាប់ផ្ដើមពីទំព័រទទេស្អាត (Clean Slate & Fresh Attributes) ⭐️
+  const handleOpenNewProductForm = () => {
+    setEditingProductId(null);
+    setName('');
+    const nextSkuVal = computeNextSku(products);
+    setSku(nextSkuVal);
+    setSelectedSizes([]);
+    setSelectedColors([]);
+    setColor('');
+    setCustomTextSize('');
+    setVariantStock({});
+    setDisabledVariants([]);
+    setSellingPrice('');
+    setCostPrice('');
+    setWholesalePrice('');
+    setWholesaleDiscount('');
+    setRetailDiscount('');
+    setStockQty('10');
+    setLowStockAlert('5');
+    setFile(null);
+    setPreviewUrl(null);
+    setProductImages([]);
+    setSelectedCoverIndex(0);
+    setVideoUrl('');
+    setDetailImages([]);
+    setDetailImageUrlInput('');
+    if (typeof window !== 'undefined') {
+      const sid = activeStore?.id || 'store_default_sabayluk';
+      localStorage.removeItem(`sabay_product_draft_${sid}`);
+      localStorage.removeItem('sabay_product_draft');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setActiveTab('upload');
   };
 
   //⭐️️ State សម្រាប់ដឹងថាប៊ូតុងណាកំពុងត្រូវបានអូស (Drag)⭐️️
@@ -5749,7 +5870,7 @@ export default function UnifiedAdminDashboard() {
       setBulkVariantStockInput('');
     };
 
-        // ⚡ មុខងាររើស Size តាម Preset
+        // ⚡ មុខងាររើស Size តាម Preset (World-Class Category Templates)
     const applySizePreset = (type) => {
       if (type === 'men') {
         const menSizes = ['39', '40', '41', '42', '43', '44', '45'];
@@ -5767,18 +5888,78 @@ export default function UnifiedAdminDashboard() {
           return next;
         });
         setSelectedSizes(womenSizes);
+      } else if (type === 'shoes') {
+        const shoeSizes = ['35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45'];
+        setAvailableSizes(prev => {
+          const next = [...prev];
+          shoeSizes.forEach(s => { if (!next.includes(s)) next.push(s); });
+          return next;
+        });
+        setSelectedSizes(shoeSizes);
       } else if (type === 'clothes') {
-        const clothSizes = ['S', 'M', 'L', 'XL', '2XL'];
+        const clothSizes = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
         setAvailableSizes(prev => {
           const next = [...prev];
           clothSizes.forEach(s => { if (!next.includes(s)) next.push(s); });
           return next;
         });
         setSelectedSizes(clothSizes);
+      } else if (type === 'drinks') {
+        const drinkSizes = ['កែវតូច (S)', 'កែវកណ្តាល (M)', 'កែវធំ (L)'];
+        setAvailableSizes(prev => {
+          const next = [...prev];
+          drinkSizes.forEach(s => { if (!next.includes(s)) next.push(s); });
+          return next;
+        });
+        setSelectedSizes(drinkSizes);
+      } else if (type === 'weight') {
+        const weightSizes = ['100g', '250g', '500g', '1kg'];
+        setAvailableSizes(prev => {
+          const next = [...prev];
+          weightSizes.forEach(s => { if (!next.includes(s)) next.push(s); });
+          return next;
+        });
+        setSelectedSizes(weightSizes);
+      } else if (type === 'freesize') {
+        setAvailableSizes(prev => prev.includes('Free Size') ? prev : [...prev, 'Free Size']);
+        setSelectedSizes(prev => prev.includes('Free Size') ? prev : [...prev, 'Free Size']);
       } else if (type === 'all') {
         setSelectedSizes([...availableSizes]);
       } else if (type === 'none') {
         setSelectedSizes([]);
+      } else if (type === 'clear_available') {
+        if (window.confirm('តើអ្នកពិតជាចង់លុបទំហំ Size ទាំងអស់របស់ហាងនេះមែនទេ?')) {
+          setAvailableSizes([]);
+          setSelectedSizes([]);
+        }
+      }
+    };
+
+    // ⚡ មុខងាររើស Color តាម Preset
+    const applyColorPreset = (type) => {
+      if (type === 'standard') {
+        const stdColors = ['ខ្មៅ (Black)', 'ស (White)', 'ប្រផេះ (Grey)', 'ខៀវ (Blue)', 'ក្រហម (Red)', 'បៃតង (Green)', 'លឿង (Yellow)'];
+        setAvailableColors(prev => {
+          const next = [...prev];
+          stdColors.forEach(c => { if (!next.includes(c)) next.push(c); });
+          return next;
+        });
+      } else if (type === 'fashion') {
+        const fashColors = ['សូកូឡា (Chocolate)', 'ត្នោត (Brown)', 'ផ្កាឈូក (Pink)', 'ទឹកក្រូច (Orange)', 'ស្វាយ (Purple)'];
+        setAvailableColors(prev => {
+          const next = [...prev];
+          fashColors.forEach(c => { if (!next.includes(c)) next.push(c); });
+          return next;
+        });
+      } else if (type === 'none') {
+        setSelectedColors([]);
+        setColor('');
+      } else if (type === 'clear_available') {
+        if (window.confirm('តើអ្នកពិតជាចង់លុបពណ៌ Colors ទាំងអស់របស់ហាងនេះមែនទេ?')) {
+          setAvailableColors([]);
+          setSelectedColors([]);
+          setColor('');
+        }
       }
     };
 
@@ -6190,111 +6371,163 @@ export default function UnifiedAdminDashboard() {
               )}
             </div>
 
-            {/* ៣. ជម្រើសទំហំ និងពណ៌ (Size & Color Attributes) */}
+            {/* ៣. ជម្រើសទំហំ និងពណ៌ (Size & Color Attributes) - WORLD-CLASS STORE-SCOPED ATTRIBUTES */}
             <div className="bg-white rounded-3xl p-6 sm:p-7 shadow-sm border border-slate-100 space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2.5">
                   <span className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-base font-black">🎨</span>
                   <div>
                     <h3 className="text-base font-black text-slate-900">៣. ជម្រើសទំហំ និងពណ៌ (Size & Color Attributes)</h3>
-                    <p className="text-[11px] text-slate-400">ជ្រើសរើសទំហំ និងពណ៌ដើម្បីបង្កើតតារាងស្តុកស្វ័យប្រវត្តិ</p>
+                    <p className="text-[11px] text-slate-400">កំណត់ទំហំ និងពណ៌ដាច់ដោយឡែកសម្រាប់ហាងរបស់អ្នក</p>
                   </div>
+                </div>
+                <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                  <span className="text-[10px] font-bold text-slate-400">ហាង:</span>
+                  <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-2.5 py-1 rounded-xl border border-blue-100 flex items-center gap-1">
+                    <span>🏪</span>
+                    <span>{activeStore?.name || 'ហាងដើម Sabay Store'}</span>
+                  </span>
                 </div>
               </div>
 
               {/* ផ្នែកទំហំ (Size) */}
               <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <label className="block text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>👟</span>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>📐</span>
                     <span>ទំហំផលិតផល (Product Sizes)</span>
                   </label>
-                  {/* Preset Buttons */}
+
+                  {/* Preset Buttons & Quick Controls */}
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] font-bold text-slate-400">ជ្រើសរើសរហ័ស:</span>
-                    <button
-                      type="button"
-                      onClick={() => applySizePreset('men')}
-                      className="px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-bold transition border border-blue-100 cursor-pointer shadow-2xs"
-                    >
-                      👟 39-45 (ប្រុស)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applySizePreset('women')}
-                      className="px-2.5 py-1 rounded-xl bg-pink-50 text-pink-700 hover:bg-pink-100 text-[11px] font-bold transition border border-pink-100 cursor-pointer shadow-2xs"
-                    >
-                      👠 35-40 (ស្រី)
-                    </button>
+                    <span className="text-[10px] font-bold text-slate-400">គំរូទូទៅ (Presets):</span>
                     <button
                       type="button"
                       onClick={() => applySizePreset('clothes')}
-                      className="px-2.5 py-1 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold transition border border-purple-100 cursor-pointer shadow-2xs"
+                      className="px-2.5 py-1 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold transition border border-purple-200 cursor-pointer shadow-2xs active:scale-95"
+                      title="បន្ថែមទំហំ XS ដល់ 3XL"
                     >
-                      👕 S-2XL (ខោអាវ)
+                      👕 ខោអាវ (S-3XL)
                     </button>
                     <button
                       type="button"
-                      onClick={() => applySizePreset('all')}
-                      className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition cursor-pointer shadow-2xs"
+                      onClick={() => applySizePreset('shoes')}
+                      className="px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-bold transition border border-blue-200 cursor-pointer shadow-2xs active:scale-95"
+                      title="បន្ថែមទំហំ 35 ដល់ 45"
                     >
-                      ✓ ទាំងអស់
+                      👟 ស្បែកជើង (35-45)
                     </button>
                     <button
                       type="button"
-                      onClick={() => applySizePreset('none')}
-                      className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-rose-600 text-[11px] font-bold transition cursor-pointer shadow-2xs"
+                      onClick={() => applySizePreset('drinks')}
+                      className="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-800 hover:bg-amber-100 text-[11px] font-bold transition border border-amber-200 cursor-pointer shadow-2xs active:scale-95"
+                      title="កែវតូច កណ្តាល ធំ"
                     >
-                      ✕ ដោះចេញ
+                      🥤 ភេសជ្ជៈ (S/M/L)
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset('weight')}
+                      className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 text-[11px] font-bold transition border border-emerald-200 cursor-pointer shadow-2xs active:scale-95"
+                      title="100g, 250g, 500g, 1kg"
+                    >
+                      ⚖️ ទម្ងន់
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applySizePreset('freesize')}
+                      className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition border border-slate-300 cursor-pointer shadow-2xs active:scale-95"
+                    >
+                      🏷️ Free Size
+                    </button>
+                    {availableSizes.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => applySizePreset('all')}
+                          className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition cursor-pointer shadow-2xs"
+                        >
+                          ✓ រើសទាំងអស់
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applySizePreset('none')}
+                          className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold transition cursor-pointer shadow-2xs"
+                        >
+                          ដោះរើស
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => applySizePreset('clear_available')}
+                          className="px-2 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] font-bold transition border border-rose-200 cursor-pointer shadow-2xs"
+                          title="លុប Size ទាំងអស់របស់ហាងនេះ"
+                        >
+                          🗑️ លុប Size ហាង
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Available Sizes List & Inline Creator (Always Available for All Products/Categories) */}
+                {/* Available Sizes List & Inline Creator */}
                 <div>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {availableSizes.map((sz, idx) => {
-                      const isSelected = selectedSizes.includes(sz);
-                      return (
-                        <div 
-                          key={sz} 
-                          draggable
-                          onDragStart={() => handleSizeDragStart(idx)}
-                          onDragOver={(e) => handleSizeDragOver(e, idx)}
-                          onDragEnd={handleSizeDragEnd}
-                          className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => toggleSize(sz)}
-                            className={`px-3.5 py-2.5 rounded-2xl font-black text-xs transition-all border-2 flex items-center gap-1.5 shadow-2xs cursor-pointer ${
-                              isSelected
-                                ? 'bg-[#ff6a00] text-white border-[#ff6a00] shadow-md shadow-orange-500/20 scale-105'
-                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                            }`}
+                  {availableSizes.length === 0 ? (
+                    <div className="border-2 border-dashed border-slate-200 rounded-2xl p-5 text-center bg-slate-50/70 mb-3 space-y-2">
+                      <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto text-lg shadow-2xs">
+                        📐
+                      </div>
+                      <h5 className="text-xs font-black text-slate-800">
+                        កន្លែងទំនេរស្អាតសម្រាប់ហាងថ្មី (មិនជាប់ Size ពីហាងដើមឡើយ)
+                      </h5>
+                      <p className="text-[11px] text-slate-500 font-medium max-w-lg mx-auto">
+                        ហាងរបស់អ្នកមានសិទ្ធិបង្កើត Size ផ្ទាល់ខ្លួនបានដោយសេរី! អ្នកអាចវាយបញ្ចូល Size ផ្ទាល់ខ្លួនខាងក្រោម (ឧ. S, M, L, XL ឬ 500g) ឬចុចលើគំរូរហ័សខាងលើ។
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {availableSizes.map((sz, idx) => {
+                        const isSelected = selectedSizes.includes(sz);
+                        return (
+                          <div 
+                            key={sz} 
+                            draggable
+                            onDragStart={() => handleSizeDragStart(idx)}
+                            onDragOver={(e) => handleSizeDragOver(e, idx)}
+                            onDragEnd={handleSizeDragEnd}
+                            className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
                           >
-                            {isSelected && <span>✓</span>}
-                            <span>{sz}</span>
-                          </button>
-                          
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (window.confirm(`តើអ្នកពិតជាចង់លុបទំហំ [${sz}] នេះមែនទេ?`)) {
-                                setAvailableSizes(availableSizes.filter(s => s !== sz));
-                                setSelectedSizes(selectedSizes.filter(s => s !== sz));
-                              }
-                            }}
-                            className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-xs opacity-0 group-hover:opacity-100 transition duration-200 z-10 cursor-pointer"
-                            title="លុបទំហំនេះ"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleSize(sz)}
+                              className={`px-3.5 py-2.5 rounded-2xl font-black text-xs transition-all border-2 flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+                                isSelected
+                                  ? 'bg-[#ff6a00] text-white border-[#ff6a00] shadow-md shadow-orange-500/20 scale-105'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              {isSelected && <span>✓</span>}
+                              <span>{sz}</span>
+                            </button>
+                            
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`តើអ្នកពិតជាចង់លុបទំហំ [${sz}] នេះចេញពីហាងមែនទេ?`)) {
+                                  setAvailableSizes(availableSizes.filter(s => s !== sz));
+                                  setSelectedSizes(selectedSizes.filter(s => s !== sz));
+                                }
+                              }}
+                              className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-xs opacity-0 group-hover:opacity-100 transition duration-200 z-10 cursor-pointer"
+                              title="លុបទំហំនេះចេញពីហាង"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Inline Create / Add Size */}
                   <div className="flex items-center gap-2 max-w-md">
@@ -6313,7 +6546,7 @@ export default function UnifiedAdminDashboard() {
                           }
                         }
                       }}
-                      placeholder="បន្ថែម Size ថ្មី (ឧ. 49, XL, XXL ឬ Free Size)..." 
+                      placeholder="បន្ថែម Size ផ្ទាល់ខ្លួន (ឧ. 49, XL, XXL, 500g)..." 
                       className="flex-1 border-2 border-slate-200 focus:border-[#ff6a00] px-3.5 py-2.5 rounded-xl text-xs font-bold bg-slate-50 focus:bg-white outline-none transition"
                     />
                     <button 
@@ -6326,7 +6559,7 @@ export default function UnifiedAdminDashboard() {
                           setNewSizeInput('');
                         }
                       }}
-                      className="bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-black transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      className="bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-xl text-xs font-black transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
                     >
                       <span>➕</span>
                       <span>បង្កើត Size</span>
@@ -6334,7 +6567,7 @@ export default function UnifiedAdminDashboard() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 mt-2.5 text-xs">
-                    <span className="text-slate-400 font-bold">ទំហំបានជ្រើសរើស ({selectedSizes.length}):</span>
+                    <span className="text-slate-400 font-bold">ទំហំបានជ្រើសរើសសម្រាប់ទំនិញនេះ ({selectedSizes.length}):</span>
                     {selectedSizes.length > 0 ? (
                       <span className="font-black text-[#ff6a00] bg-orange-50 px-2.5 py-0.5 rounded-lg border border-orange-100">
                         {selectedSizes.join(', ')}
@@ -6348,55 +6581,112 @@ export default function UnifiedAdminDashboard() {
                 </div>
               </div>
 
+              {/* ផ្នែកពណ៌ (Color) */}
               <div className="border-t border-slate-100 pt-5 space-y-3">
-                <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
-                  ពណ៌ផលិតផល (Colors) - រើសបានច្រើន
-                </label>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                  <label className="block text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🎨</span>
+                    <span>ពណ៌ផលិតផល (Colors) - រើសបានច្រើន</span>
+                  </label>
 
-                <div className="flex flex-wrap gap-2.5 mb-3">
-                  {availableColors.map((col, idx) => {
-                    const isSelected = selectedColors.includes(col) || color === col;
-                    return (
-                      <div 
-                        key={col} 
-                        draggable
-                        onDragStart={() => handleColorDragStart(idx)}
-                        onDragOver={(e) => handleColorDragOver(e, idx)}
-                        onDragEnd={handleColorDragEnd}
-                        className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
-                      >
+                  {/* Color Preset Pills */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400">គំរូពណ៌ (Presets):</span>
+                    <button
+                      type="button"
+                      onClick={() => applyColorPreset('standard')}
+                      className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold transition border border-slate-200 cursor-pointer shadow-2xs active:scale-95"
+                    >
+                      🎨 ពណ៌ស្តង់ដារ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyColorPreset('fashion')}
+                      className="px-2.5 py-1 rounded-xl bg-pink-50 hover:bg-pink-100 text-pink-700 text-[11px] font-bold transition border border-pink-200 cursor-pointer shadow-2xs active:scale-95"
+                    >
+                      👗 ពណ៌ទាន់សម័យ
+                    </button>
+                    {availableColors.length > 0 && (
+                      <>
                         <button
                           type="button"
-                          onClick={() => toggleColor(col)}
-                          className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold border-2 transition-all flex items-center gap-2 shadow-2xs ${
-                            isSelected
-                              ? 'bg-slate-900 text-white border-slate-900 shadow-md scale-105'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                          }`}
+                          onClick={() => applyColorPreset('none')}
+                          className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold transition cursor-pointer shadow-2xs"
                         >
-                          <span className={`w-3.5 h-3.5 rounded-full border ${getColorDotClass(col)}`}></span>
-                          <span>{col}</span>
-                          {isSelected && <span className="text-emerald-400 font-black ml-0.5">✓</span>}
+                          ដោះរើស
                         </button>
-                        
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`តើអ្នកពិតជាចង់លុបពណ៌ [${col}] នេះមែនទេ?`)) {
-                              setAvailableColors(availableColors.filter(c => c !== col));
-                              if (color === col) setColor('');
-                            }
-                          }}
-                          className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-xs opacity-0 group-hover:opacity-100 transition duration-200 z-10"
-                          title="លុប Color នេះ"
+                          onClick={() => applyColorPreset('clear_available')}
+                          className="px-2 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] font-bold transition border border-rose-200 cursor-pointer shadow-2xs"
+                          title="លុប Color ទាំងអស់របស់ហាងនេះ"
                         >
-                          ✕
+                          🗑️ លុប Color ហាង
                         </button>
-                      </div>
-                    );
-                  })}
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {availableColors.length === 0 ? (
+                  <div className="border-2 border-dashed border-slate-200 rounded-2xl p-5 text-center bg-slate-50/70 mb-3 space-y-2">
+                    <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto text-lg shadow-2xs">
+                      🎨
+                    </div>
+                    <h5 className="text-xs font-black text-slate-800">
+                      កន្លែងទំនេរស្អាតសម្រាប់ហាងថ្មី (មិនជាប់ពណ៌ពីហាងដើមឡើយ)
+                    </h5>
+                    <p className="text-[11px] text-slate-500 font-medium max-w-lg mx-auto">
+                      អ្នកអាចវាយបញ្ចូលពណ៌ផ្ទាល់ខ្លួនខាងក្រោម ឬចុចលើគំរូពណ៌ស្តង់ដារខាងលើ ដើម្បីចាប់ផ្តើម!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2.5 mb-3">
+                    {availableColors.map((col, idx) => {
+                      const isSelected = selectedColors.includes(col) || color === col;
+                      return (
+                        <div 
+                          key={col} 
+                          draggable
+                          onDragStart={() => handleColorDragStart(idx)}
+                          onDragOver={(e) => handleColorDragOver(e, idx)}
+                          onDragEnd={handleColorDragEnd}
+                          className="relative inline-flex items-center cursor-grab active:cursor-grabbing group"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => toggleColor(col)}
+                            className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold border-2 transition-all flex items-center gap-2 shadow-2xs cursor-pointer ${
+                              isSelected
+                                ? 'bg-slate-900 text-white border-slate-900 shadow-md scale-105'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className={`w-3.5 h-3.5 rounded-full border ${getColorDotClass(col)}`}></span>
+                            <span>{col}</span>
+                            {isSelected && <span className="text-emerald-400 font-black ml-0.5">✓</span>}
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`តើអ្នកពិតជាចង់លុបពណ៌ [${col}] នេះចេញពីហាងមែនទេ?`)) {
+                                setAvailableColors(availableColors.filter(c => c !== col));
+                                setSelectedColors(selectedColors.filter(c => c !== col));
+                                if (color === col) setColor('');
+                              }
+                            }}
+                            className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center shadow-xs opacity-0 group-hover:opacity-100 transition duration-200 z-10 cursor-pointer"
+                            title="លុប Color នេះចេញពីហាង"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Inline Add Color */}
                 <div className="flex items-center gap-2 max-w-sm">
@@ -6404,7 +6694,18 @@ export default function UnifiedAdminDashboard() {
                     type="text" 
                     value={newColorInput}
                     onChange={(e) => setNewColorInput(e.target.value)}
-                    placeholder="បន្ថែមពណ៌ថ្មី (ឧ. ទឹកក្រូច)" 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newColorInput.trim() && !availableColors.includes(newColorInput.trim())) {
+                          const trimmed = newColorInput.trim();
+                          setAvailableColors(prev => [...prev, trimmed]);
+                          toggleColor(trimmed);
+                          setNewColorInput('');
+                        }
+                      }
+                    }}
+                    placeholder="បន្ថែមពណ៌ផ្ទាល់ខ្លួន (ឧ. ទឹកក្រូច, បៃតង)..." 
                     className="flex-1 border-2 border-slate-200 focus:border-slate-900 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-50 focus:bg-white outline-none"
                   />
                   <button 
@@ -6412,25 +6713,29 @@ export default function UnifiedAdminDashboard() {
                     onClick={() => {
                       if (newColorInput.trim() && !availableColors.includes(newColorInput.trim())) {
                         const trimmed = newColorInput.trim();
-                        setAvailableColors([...availableColors, trimmed]);
+                        setAvailableColors(prev => [...prev, trimmed]);
                         toggleColor(trimmed);
                         setNewColorInput('');
                       }
                     }}
-                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black transition shrink-0"
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black transition shrink-0 cursor-pointer active:scale-95"
                   >
                     + បន្ថែម Color
                   </button>
                 </div>
 
-                {selectedColors.length > 0 && (
-                  <div className="flex items-center gap-2 mt-2 text-xs">
-                    <span className="text-slate-400 font-bold">ពណ៌បានជ្រើសរើស ({selectedColors.length}):</span>
+                <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                  <span className="text-slate-400 font-bold">ពណ៌បានជ្រើសរើសសម្រាប់ទំនិញនេះ ({selectedColors.length}):</span>
+                  {selectedColors.length > 0 ? (
                     <span className="font-black text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
                       {selectedColors.join(', ')}
                     </span>
-                  </div>
-                )}
+                  ) : (
+                    <span className="text-slate-400 italic">
+                      មិនទាន់បានជ្រើសរើសពណ៌ (ទំនិញគ្មានពណ៌ផ្សេងគ្នា)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -10607,7 +10912,7 @@ export default function UnifiedAdminDashboard() {
       </div>
       <button
         type="button"
-        onClick={() => setActiveTab('upload')}
+        onClick={handleOpenNewProductForm}
         className="px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs shadow-md shadow-orange-500/20 transition cursor-pointer shrink-0 active:scale-95"
       >
         ➕ កុម្ម៉ង់ទំនិញចូលស្តុក
@@ -18332,7 +18637,7 @@ export default function UnifiedAdminDashboard() {
             {/* ប៊ូតុង បន្ថែមផលិតផលថ្មី */}
             <button 
               type="button"
-              onClick={() => setActiveTab('upload')} 
+              onClick={handleOpenNewProductForm} 
               className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-blue-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center gap-2 cursor-pointer"
             >
               <span>+ បន្ថែមទំនិញថ្មី</span>
@@ -19272,7 +19577,7 @@ export default function UnifiedAdminDashboard() {
                       if (storeProducts && storeProducts.length > 0) {
                         handleOpenStockIn(storeProducts[0], 'IN');
                       } else {
-                        setActiveTab('upload');
+                        handleOpenNewProductForm();
                       }
                     }}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-2xl text-xs font-black shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
@@ -21112,7 +21417,7 @@ export default function UnifiedAdminDashboard() {
                 {!posSearch && (
                   <button
                     type="button"
-                    onClick={() => setActiveTab('upload')}
+                    onClick={handleOpenNewProductForm}
                     className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs shadow-lg shadow-blue-500/25 transition cursor-pointer flex items-center gap-2"
                   >
                     <span>➕</span>
@@ -26855,7 +27160,11 @@ export default function UnifiedAdminDashboard() {
                             key={tab.id}
                             type="button"
                             onClick={() => {
-                              setActiveTab(tab.id);
+                              if (tab.id === 'upload' && !editingProductId) {
+                                handleOpenNewProductForm();
+                              } else {
+                                setActiveTab(tab.id);
+                              }
                               if (typeof window !== 'undefined' && window.innerWidth < 768) {
                                 setIsSidebarOpen(false);
                               }
