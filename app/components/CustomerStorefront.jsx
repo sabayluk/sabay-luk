@@ -3141,48 +3141,49 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       {/* ⭐️ 5. PRODUCT CATALOG WITH SMART FILTER & SORT BAR ⭐️ */}
       <section id="products-section" className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6">
         
-        {/* Catalog Control Bar */}
-        <div className={`${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-100 text-gray-900'} p-4 rounded-3xl border shadow-xs mb-6 flex flex-wrap items-center justify-between gap-4 transition-colors`}>
+        {/* Catalog Control Bar (Modern Clean Single-Row for Mobile & Desktop) */}
+        <div className={`${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-200/90 text-gray-900'} px-3 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl sm:rounded-3xl border shadow-xs mb-4 sm:mb-6 flex items-center justify-between gap-2 transition-colors`}>
           
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-orange-50 text-[#ff6a00] flex items-center justify-center text-lg font-bold">
-              🏷️
-            </div>
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-gray-900">
-                {selectedCategory === 'all' ? (language === 'km' ? 'ទំនិញពេញនិយមទាំងអស់' : 'All Popular Products') : selectedCategory}
+          {/* Left: Title + Badge Count (Single Row) */}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base sm:text-xl shrink-0">🏷️</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h2 className="text-xs sm:text-base font-black text-gray-900 dark:text-white truncate">
+                {selectedCategory === 'all' 
+                  ? (language === 'km' ? 'ទំនិញពេញនិយម' : 'Popular Items') 
+                  : selectedCategory}
               </h2>
-              <p className="text-[11px] text-gray-400 font-medium">
-                {language === 'km' ? `បង្ហាញចំនួន (${sortedProducts.length}) មុខទំនិញក្នុងស្តុក` : `Showing (${sortedProducts.length}) items in stock`}
-              </p>
+              <span className="text-[10px] sm:text-xs font-bold text-orange-600 bg-orange-50 dark:bg-orange-950/60 dark:text-orange-300 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-800/50 shrink-0">
+                {sortedProducts.length}
+              </span>
             </div>
           </div>
 
-          {/* Controls: In-Stock Toggle & Sorting */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Right: In-Stock Toggle & Sort Dropdown (Single Row) */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* Toggle In-Stock */}
-            <label className="flex items-center gap-2 cursor-pointer bg-gray-50 hover:bg-gray-100 px-3 py-2 rounded-2xl border border-gray-200 text-xs font-bold text-gray-700 select-none">
+            <label className="flex items-center gap-1.5 cursor-pointer bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 px-2 sm:px-3 py-1.5 rounded-xl border border-gray-200 dark:border-slate-700 text-[11px] sm:text-xs font-bold text-gray-700 dark:text-gray-200 select-none whitespace-nowrap active:scale-95 transition">
               <input 
                 type="checkbox"
                 checked={inStockOnly}
                 onChange={(e) => setInStockOnly(e.target.checked)}
-                className="w-3.5 h-3.5 accent-[#ff6a00] rounded"
+                className="w-3.5 h-3.5 accent-[#ff6a00] rounded cursor-pointer"
               />
-              <span>{t('inStockOnly', 'មានស្តុកស្រាប់')}</span>
+              <span className="hidden xs:inline">{language === 'km' ? 'មានស្តុក' : 'In Stock'}</span>
+              <span className="xs:hidden">{language === 'km' ? 'ស្តុក' : 'Stock'}</span>
             </label>
 
             {/* Sort Dropdown */}
-            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-2xl px-3 py-2 text-xs font-bold text-gray-700">
-              <span className="text-gray-400">តម្រៀប៖</span>
+            <div className="flex items-center bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs font-bold text-gray-700 dark:text-gray-200 shadow-2xs">
               <select 
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="bg-transparent focus:outline-none cursor-pointer font-bold text-gray-900"
+                className="bg-transparent focus:outline-none cursor-pointer font-bold text-gray-900 dark:text-white text-[11px] sm:text-xs"
               >
-                <option value="newest">✨ ថ្មីៗបំផុត (Newest)</option>
-                <option value="popular">🔥 លក់ដាច់បំផុត (Popular)</option>
-                <option value="price_low">📉 តម្លៃទាប ➔ ខ្ពស់</option>
-                <option value="price_high">📈 តម្លៃខ្ពស់ ➔ ទាប</option>
+                <option value="newest" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white">✨ ថ្មីៗ</option>
+                <option value="popular" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white">🔥 លក់ដាច់</option>
+                <option value="price_low" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white">📉 តម្លៃទាប</option>
+                <option value="price_high" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white">📈 តម្លៃខ្ពស់</option>
               </select>
             </div>
           </div>
