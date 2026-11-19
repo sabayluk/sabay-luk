@@ -5000,6 +5000,11 @@ export default function UnifiedAdminDashboard() {
   // Manual payment submission modal
   const [manualPaymentModalOpen, setManualPaymentModalOpen] = useState(false);
 
+  // ⭐️ MODERN ULTRA-LUXURY CONFIRMATION & APPROVAL MODAL (REPLACES NATIVE BROWSER CONFIRM) ⭐️
+  const [approvalModalData, setApprovalModalData] = useState(null);
+  const [approvalModalRejectReason, setApprovalModalRejectReason] = useState('');
+  const [isSubmittingApprovalModal, setIsSubmittingApprovalModal] = useState(false);
+
   // ⭐️ គណនាចំនួនហាង ឬ Slip ដែលកំពុងរង់ចាំការ Approve (Pending Action Count) ⭐️
   const pendingApprovalStores = useMemo(() => {
     return (registeredStores || []).filter(s => 
@@ -13973,107 +13978,163 @@ export default function UnifiedAdminDashboard() {
       }
     };
 
-    // 💳 Payment Approvals & Rejections
-    const handleApprovePayment = async (paymentId, directItem = null) => {
+    // 💳 Payment Approvals & Rejections (Trigger Modern Approval Modal)
+    const handleApprovePayment = (paymentId, directItem = null) => {
       if (guardDemoAction("អនុម័តការបង់ប្រាក់")) return;
       const payment = (allSubscriptionPayments || []).find(p => p.id === paymentId) || directItem || viewingPaymentSlipDetail;
       const isRegSlip = String(paymentId).startsWith('SUB_REG_');
       const targetStoreId = payment?.store_id || (isRegSlip ? String(paymentId).replace('SUB_REG_', '') : null);
       const targetStore = (registeredStores || []).find(s => s.id === targetStoreId || s.slug === targetStoreId);
-      const storeName = payment?.store_name || targetStore?.name || 'ហាង';
-      const planName = payment?.plan_name || targetStore?.plan || 'STARTER';
-      const amount = payment?.amount || '1.00';
 
-      if (!window.confirm(`តើអ្នកប្រាកដជាចង់ "អនុម័ត" ការបង់ប្រាក់ (${planName}) សម្រាប់ហាង "${storeName}" មែនទេ?\n\nប្រព័ន្ធនឹងបើកដំណើរការហាង (Active) និងបន្តសុពលភាពដោយស្វ័យប្រវត្តិ។`)) return;
-
-      setToastNotification(`⏳ កំពុងដំណើរការអនុម័តហាង "${storeName}"...`);
-      const res = await approveSubscriptionPayment(paymentId, 'Master Owner', payment || { store_id: targetStoreId, store_name: storeName, plan_key: targetStore?.plan || 'STARTER', amount });
-      
-      if (res && res.success) {
-        if (targetStoreId) {
-          await approveStoreDirectly(targetStoreId);
-        }
-        const freshStores = await fetchAllStores();
-        setRegisteredStores(freshStores);
-        setAllSubscriptionPayments(getSubscriptionPayments());
-        const updatedActive = getActiveStore();
-        if (updatedActive) {
-          setActiveStore(updatedActive);
-          setActiveStoreState(updatedActive);
-        }
-        setToastNotification(`🎉 បានអនុម័តការបង់ប្រាក់ និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
-        setTimeout(() => setToastNotification(null), 3500);
-
-        try {
-          fetch('/api/telegram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'store_approved_by_admin',
-              store: targetStore || { id: targetStoreId, name: storeName, plan: planName }
-            })
-          }).catch(() => {});
-        } catch (_) {}
-      } else {
-        alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
-      }
+      setApprovalModalData({
+        type: 'APPROVE_PAYMENT',
+        paymentId: paymentId,
+        payment: payment,
+        store: targetStore,
+        storeId: targetStoreId
+      });
     };
 
-    const handleRejectPayment = async (paymentId, directItem = null) => {
+    const handleRejectPayment = (paymentId, directItem = null) => {
       if (guardDemoAction("បដិសេធការបង់ប្រាក់")) return;
       const payment = (allSubscriptionPayments || []).find(p => p.id === paymentId) || directItem || viewingPaymentSlipDetail;
       const isRegSlip = String(paymentId).startsWith('SUB_REG_');
       const targetStoreId = payment?.store_id || (isRegSlip ? String(paymentId).replace('SUB_REG_', '') : null);
       const targetStore = (registeredStores || []).find(s => s.id === targetStoreId || s.slug === targetStoreId);
-      const storeName = payment?.store_name || targetStore?.name || 'ហាង';
 
-      const reason = window.prompt(`សូមបញ្ជាក់មូលហេតុនៃការបដិសេធ (Reject Reason) សម្រាប់ហាង "${storeName}":`, 'Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់');
-      if (reason === null) return;
+      setApprovalModalRejectReason('រូបភាព Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់');
+      setApprovalModalData({
+        type: 'REJECT_PAYMENT',
+        paymentId: paymentId,
+        payment: payment,
+        store: targetStore,
+        storeId: targetStoreId
+      });
+    };
 
-      const res = await rejectSubscriptionPayment(paymentId, reason, payment);
-      if (res && res.success) {
-        const freshStores = await fetchAllStores();
-        setRegisteredStores(freshStores);
-        setAllSubscriptionPayments(getSubscriptionPayments());
-        setToastNotification(`⚠️ បានបដិសេធការបង់ប្រាក់របស់ហាង "${storeName}"`);
-        setTimeout(() => setToastNotification(null), 3000);
+    // ⭐️ Handle Direct Store Approval by Admin (Trigger Modern Approval Modal)
+    const handleApproveStoreDirectly = (storeId) => {
+      if (guardDemoAction("អនុម័តហាង")) return;
+      const store = (registeredStores || []).find(s => s.id === storeId || s.slug === storeId);
+      if (!store) return;
+
+      setApprovalModalData({
+        type: 'APPROVE_STORE',
+        store: store,
+        storeId: store.id
+      });
+    };
+
+    // ⭐️ EXECUTE CONFIRMED STORE APPROVAL (FROM MODERN MODAL) ⭐️
+    const confirmExecuteApproveStore = async (storeId) => {
+      setIsSubmittingApprovalModal(true);
+      try {
+        const store = (registeredStores || []).find(s => s.id === storeId || s.slug === storeId);
+        const storeName = store?.name || 'ហាង';
+        setToastNotification(`⏳ កំពុងដំណើរការអនុម័តហាង "${storeName}"...`);
+        const res = await approveStoreDirectly(storeId);
+        if (res && res.success) {
+          const freshStores = await fetchAllStores();
+          setRegisteredStores(freshStores);
+          setAllSubscriptionPayments(getSubscriptionPayments());
+          const updatedActive = getActiveStore();
+          if (updatedActive && (updatedActive.id === storeId || updatedActive.slug === storeId)) {
+            setActiveStore(updatedActive);
+            setActiveStoreState(updatedActive);
+          }
+          setApprovalModalData(null);
+          setToastNotification(`🎉 បានអនុម័ត និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
+          setTimeout(() => setToastNotification(null), 3500);
+
+          try {
+            fetch('/api/telegram', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'store_approved_by_admin',
+                store: res.store || store || { id: storeId, name: storeName }
+              })
+            }).catch(() => {});
+          } catch (_) {}
+        } else {
+          alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        setIsSubmittingApprovalModal(false);
       }
     };
 
-    // ⭐️ Handle Direct Store Approval by Admin
-    const handleApproveStoreDirectly = async (storeId) => {
-      if (guardDemoAction("អនុម័តហាង")) return;
-      const store = (registeredStores || []).find(s => s.id === storeId || s.slug === storeId);
-      const storeName = store?.name || 'ហាង';
-      if (!window.confirm(`តើអ្នកពិតជាចង់ "អនុម័ត" (Approve) ហាង "${storeName}" នេះមែនទេ?\n\nហាងនឹងត្រូវបានបើកដំណើរការ (Active) ហើយម្ចាស់ហាងនឹងទទួលបានសិទ្ធិ Login ចូលគ្រប់គ្រងហាងបានភ្លាមៗ!`)) return;
+    // ⭐️ EXECUTE CONFIRMED PAYMENT APPROVAL (FROM MODERN MODAL) ⭐️
+    const confirmExecuteApprovePayment = async (modalData) => {
+      setIsSubmittingApprovalModal(true);
+      try {
+        const { paymentId, payment, storeId, store } = modalData;
+        const storeName = payment?.store_name || store?.name || 'ហាង';
+        const planName = payment?.plan_name || store?.plan || 'STARTER';
+        const amount = payment?.amount || '1.00';
 
-      setToastNotification(`⏳ កំពុងដំណើរការអនុម័តហាង "${storeName}"...`);
-      const res = await approveStoreDirectly(storeId);
-      if (res && res.success) {
-        const freshStores = await fetchAllStores();
-        setRegisteredStores(freshStores);
-        setAllSubscriptionPayments(getSubscriptionPayments());
-        const updatedActive = getActiveStore();
-        if (updatedActive && (updatedActive.id === storeId || updatedActive.slug === storeId)) {
-          setActiveStore(updatedActive);
-          setActiveStoreState(updatedActive);
+        setToastNotification(`⏳ កំពុងដំណើរការអនុម័តការបង់ប្រាក់ហាង "${storeName}"...`);
+        const res = await approveSubscriptionPayment(paymentId, 'Master Owner', payment || { store_id: storeId, store_name: storeName, plan_key: store?.plan || 'STARTER', amount });
+
+        if (res && res.success) {
+          if (storeId) {
+            await approveStoreDirectly(storeId);
+          }
+          const freshStores = await fetchAllStores();
+          setRegisteredStores(freshStores);
+          setAllSubscriptionPayments(getSubscriptionPayments());
+          const updatedActive = getActiveStore();
+          if (updatedActive) {
+            setActiveStore(updatedActive);
+            setActiveStoreState(updatedActive);
+          }
+          setApprovalModalData(null);
+          setViewingPaymentSlipDetail(null);
+          setToastNotification(`🎉 បានអនុម័តការបង់ប្រាក់ និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
+          setTimeout(() => setToastNotification(null), 3500);
+
+          try {
+            fetch('/api/telegram', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'store_approved_by_admin',
+                store: store || { id: storeId, name: storeName, plan: planName }
+              })
+            }).catch(() => {});
+          } catch (_) {}
+        } else {
+          alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
         }
-        setToastNotification(`🎉 បានអនុម័ត និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
-        setTimeout(() => setToastNotification(null), 3500);
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        setIsSubmittingApprovalModal(false);
+      }
+    };
 
-        // ✈️ ផ្ញើការជូនដំណឹងទៅកាន់ Telegram Super Admin
-        try {
-          fetch('/api/telegram', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'store_approved_by_admin',
-              store: res.store || store || { id: storeId, name: storeName }
-            })
-          }).catch(() => {});
-        } catch (_) {}
-      } else {
-        alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
+    // ⭐️ EXECUTE CONFIRMED PAYMENT REJECTION (FROM MODERN MODAL) ⭐️
+    const confirmExecuteRejectPayment = async (modalData) => {
+      setIsSubmittingApprovalModal(true);
+      try {
+        const { paymentId, payment, store } = modalData;
+        const reason = approvalModalRejectReason.trim() || 'Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់';
+        const res = await rejectSubscriptionPayment(paymentId, reason, payment);
+        if (res && res.success) {
+          const freshStores = await fetchAllStores();
+          setRegisteredStores(freshStores);
+          setAllSubscriptionPayments(getSubscriptionPayments());
+          setApprovalModalData(null);
+          setViewingPaymentSlipDetail(null);
+          setToastNotification(`⚠️ បានបដិសេធការបង់ប្រាក់របស់ហាង "${store?.name || payment?.store_name || 'ហាង'}"`);
+          setTimeout(() => setToastNotification(null), 3000);
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        setIsSubmittingApprovalModal(false);
       }
     };
 
@@ -29986,6 +30047,218 @@ export default function UnifiedAdminDashboard() {
           <span className="text-[10px] leading-tight">ម៉ឺនុយ</span>
         </button>
       </nav>
+
+      {/* ⭐️ ULTRA-MODERN HIGH-END APPROVAL CONFIRMATION MODAL (REPLACES NATIVE BROWSER CONFIRM) ⭐️ */}
+      {approvalModalData && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200/80 dark:border-slate-800 relative animate-in zoom-in-95 duration-200 overflow-hidden">
+            
+            {/* Top decorative gradient glow */}
+            <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${
+              approvalModalData.type === 'REJECT_PAYMENT' 
+                ? 'from-rose-500 via-red-500 to-amber-500'
+                : 'from-emerald-500 via-teal-500 to-cyan-500'
+            }`} />
+
+            {/* Header with animated icon and close button */}
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div className="flex items-center gap-3.5">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-lg shrink-0 ${
+                  approvalModalData.type === 'REJECT_PAYMENT'
+                    ? 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 border border-rose-200 dark:border-rose-800/50 shadow-rose-500/20'
+                    : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 border border-emerald-200 dark:border-emerald-800/50 shadow-emerald-500/20 animate-bounce'
+                }`}>
+                  {approvalModalData.type === 'REJECT_PAYMENT' ? '✕' : '✨'}
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    {approvalModalData.type === 'REJECT_PAYMENT' ? 'បដិសេធការបង់ប្រាក់' : 'អនុម័ត និងបើកដំណើរការហាង'}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {approvalModalData.type === 'REJECT_PAYMENT' 
+                      ? 'ផ្ទៀងផ្ទាត់ និងកត់ត្រាមូលហេតុបដិសេធ'
+                      : 'ផ្ទៀងផ្ទាត់ និងផ្តល់សិទ្ធិដំណើរការហាងផ្លូវការ'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApprovalModalData(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center text-xs font-bold transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Store Preview Card */}
+            {(() => {
+              const st = approvalModalData.store || (registeredStores || []).find(s => s.id === approvalModalData.storeId || s.slug === approvalModalData.storeId) || {};
+              const planInfo = STORE_PLANS[st.plan || approvalModalData.payment?.plan_key] || STORE_PLANS.STARTER;
+              const slipUrl = st.settings?.slip_url || st.slip_url || approvalModalData.payment?.slip_url || null;
+
+              return (
+                <div className="space-y-4">
+                  {/* Store Detail Box */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center text-xl font-black shadow-md shadow-orange-500/25 shrink-0">
+                        {st.name ? st.name.charAt(0).toUpperCase() : '🏪'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-900 dark:text-white text-sm truncate">
+                            {st.name || approvalModalData.payment?.store_name || 'ហាង'}
+                          </span>
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300 shrink-0">
+                            {planInfo.name || st.plan || 'STARTER'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 font-medium">
+                          {st.owner_name ? `👤 ${st.owner_name} • ` : ''}
+                          {st.phone ? `📞 ${st.phone}` : ''}
+                          {st.owner_email || st.email ? ` • 📧 ${st.owner_email || st.email}` : ''}
+                        </p>
+                        <p className="text-[10px] text-orange-600 dark:text-orange-400 font-mono mt-0.5">
+                          🔗 /store/{st.slug || 'store'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Small Slip Thumbnail if available */}
+                    {slipUrl && (
+                      <div 
+                        onClick={() => {
+                          setViewingPaymentSlipDetail({
+                            id: `SUB_REG_${st.id}`,
+                            store_id: st.id,
+                            store_name: st.name,
+                            plan_key: st.plan,
+                            plan_name: `កញ្ចប់ ${st.plan}`,
+                            amount: '1.00',
+                            slip_url: slipUrl,
+                            status: 'PENDING'
+                          });
+                        }}
+                        className="w-12 h-12 rounded-xl border-2 border-emerald-400 overflow-hidden shrink-0 bg-slate-200 cursor-pointer shadow-xs hover:scale-105 transition"
+                        title="ចុចមើលរូបភាព Slip ធំ"
+                      >
+                        <img src={slipUrl} alt="Slip" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* If REJECT_PAYMENT: Show input reason */}
+                  {approvalModalData.type === 'REJECT_PAYMENT' ? (
+                    <div className="space-y-2.5">
+                      <label className="block text-xs font-black text-slate-700 dark:text-slate-200">
+                        មូលហេតុនៃការបដិសេធ (Reject Reason) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={approvalModalRejectReason}
+                        onChange={(e) => setApprovalModalRejectReason(e.target.value)}
+                        placeholder="ឧ. Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                      />
+                      {/* Quick Reason Chips */}
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {[
+                          'Slip មិនត្រឹមត្រូវ',
+                          'មិនទាន់ទទួលបានប្រាក់',
+                          'ចំនួនទឹកប្រាក់មិនគ្រប់',
+                          'លេខកូដប្រតិបត្តិការមិនស៊ីគ្នា'
+                        ].map((chip) => (
+                          <button
+                            key={chip}
+                            type="button"
+                            onClick={() => setApprovalModalRejectReason(chip)}
+                            className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                          >
+                            + {chip}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Benefit checklist for Approval */
+                    <div className="p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/40 text-xs space-y-2">
+                      <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold">
+                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shrink-0 font-black">✓</span>
+                        <span>ស្ថានភាពហាងនឹងក្លាយជា <b>សកម្ម (Active)</b> ជាផ្លូវការភ្លាមៗ</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold">
+                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shrink-0 font-black">✓</span>
+                        <span>ម្ចាស់ហាងទទួលបានសិទ្ធិ Login ចូលគ្រប់គ្រង Dashboard និង POS</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold">
+                        <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shrink-0 font-black">✓</span>
+                        <span>សុពលភាពហាងត្រូវបានបន្ត <b>+១ ឆ្នាំ (៣៦៥ ថ្ងៃ)</b> ដោយស្វ័យប្រវត្តិ</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions CTA */}
+                  <div className="flex items-center gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      disabled={isSubmittingApprovalModal}
+                      onClick={() => setApprovalModalData(null)}
+                      className="flex-1 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition cursor-pointer"
+                    >
+                      បោះបង់ (Cancel)
+                    </button>
+                    {approvalModalData.type === 'REJECT_PAYMENT' ? (
+                      <button
+                        type="button"
+                        disabled={isSubmittingApprovalModal}
+                        onClick={() => confirmExecuteRejectPayment(approvalModalData)}
+                        className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-black text-xs shadow-lg shadow-rose-600/30 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        {isSubmittingApprovalModal ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>កំពុងបដិសេធ...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>✕</span>
+                            <span>បញ្ជាក់បដិសេធ (Confirm Reject)</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isSubmittingApprovalModal}
+                        onClick={() => {
+                          if (approvalModalData.type === 'APPROVE_PAYMENT') {
+                            confirmExecuteApprovePayment(approvalModalData);
+                          } else {
+                            confirmExecuteApproveStore(approvalModalData.storeId || approvalModalData.store?.id);
+                          }
+                        }}
+                        className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-lg shadow-emerald-600/30 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        {isSubmittingApprovalModal ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>កំពុងដំណើរការអនុម័ត...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>✔️</span>
+                            <span>យល់ព្រមអនុម័ត (Approve Store)</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* ⭐️ GLOBAL TOAST NOTIFICATION ⭐️ */}
       {toastNotification && (
