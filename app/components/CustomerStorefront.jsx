@@ -3141,50 +3141,57 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       {/* ⭐️ 5. PRODUCT CATALOG WITH SMART FILTER & SORT BAR ⭐️ */}
       <section id="products-section" className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6">
         
-        {/* Catalog Control Bar (Modern Clean Single-Row for Mobile & Desktop) */}
-        <div className={`${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-200/90 text-gray-900'} px-3 sm:px-5 py-2.5 sm:py-3.5 rounded-2xl sm:rounded-3xl border shadow-xs mb-4 sm:mb-6 flex items-center justify-between gap-2 transition-colors`}>
+        {/* ⭐️ Standard Luxury E-Commerce Catalog Control Bar (Sleek Single-Row Toolbar) ⭐️ */}
+        <div className={`${themeMode === 'dark' ? 'bg-slate-900/95 border-slate-800/90 text-white' : 'bg-white/95 border-slate-200/80 text-slate-900'} backdrop-blur-sm px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl border shadow-[0_2px_10px_rgba(0,0,0,0.03)] mb-4 sm:mb-6 flex items-center justify-between gap-2 transition-all`}>
           
-          {/* Left: Title + Badge Count (Single Row) */}
+          {/* Left: Section Title + Item Count Badge */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-base sm:text-xl shrink-0">🏷️</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-orange-500/15 to-amber-500/10 text-[#ff6a00] flex items-center justify-center text-xs sm:text-sm font-black shrink-0 shadow-2xs">
+              🏷️
+            </div>
             <div className="flex items-center gap-1.5 min-w-0">
-              <h2 className="text-xs sm:text-base font-black text-gray-900 dark:text-white truncate">
+              <h2 className="text-xs sm:text-sm md:text-base font-black text-slate-900 dark:text-white truncate tracking-tight">
                 {selectedCategory === 'all' 
                   ? (language === 'km' ? 'ទំនិញពេញនិយម' : 'Popular Items') 
                   : selectedCategory}
               </h2>
-              <span className="text-[10px] sm:text-xs font-bold text-orange-600 bg-orange-50 dark:bg-orange-950/60 dark:text-orange-300 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-800/50 shrink-0">
+              <span className="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full bg-orange-500/10 text-[#ff6a00] dark:text-orange-400 border border-orange-500/20 shrink-0">
                 {sortedProducts.length}
               </span>
             </div>
           </div>
 
-          {/* Right: In-Stock Toggle & Sort Dropdown (Single Row) */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-            {/* Toggle In-Stock */}
-            <label className="flex items-center gap-1.5 cursor-pointer bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 px-2 sm:px-3 py-1.5 rounded-xl border border-gray-200 dark:border-slate-700 text-[11px] sm:text-xs font-bold text-gray-700 dark:text-gray-200 select-none whitespace-nowrap active:scale-95 transition">
-              <input 
-                type="checkbox"
-                checked={inStockOnly}
-                onChange={(e) => setInStockOnly(e.target.checked)}
-                className="w-3.5 h-3.5 accent-[#ff6a00] rounded cursor-pointer"
-              />
+          {/* Right: Modern Luxury Pill Filter & Sort Chips */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Luxury In-Stock Toggle Pill Chip */}
+            <button
+              type="button"
+              onClick={() => setInStockOnly(!inStockOnly)}
+              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-black transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs border ${
+                inStockOnly 
+                  ? 'bg-gradient-to-r from-orange-500 to-[#ff6a00] text-white border-orange-500 shadow-orange-500/20' 
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/90 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/80'
+              }`}
+              title={language === 'km' ? 'បង្ហាញតែទំនិញមានស្តុក' : 'Filter In-Stock Only'}
+            >
+              <span className="text-[11px] sm:text-xs">{inStockOnly ? '✓' : '📦'}</span>
               <span className="hidden xs:inline">{language === 'km' ? 'មានស្តុក' : 'In Stock'}</span>
               <span className="xs:hidden">{language === 'km' ? 'ស្តុក' : 'Stock'}</span>
-            </label>
+            </button>
 
-            {/* Sort Dropdown */}
-            <div className="flex items-center bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-2 sm:px-2.5 py-1.5 text-[11px] sm:text-xs font-bold text-gray-700 dark:text-gray-200 shadow-2xs">
+            {/* Luxury Sort Select Pill Chip */}
+            <div className="relative inline-flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-black text-slate-700 dark:text-slate-200 shadow-2xs hover:border-slate-300 transition-colors">
               <select 
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="bg-transparent focus:outline-none cursor-pointer font-bold text-gray-900 dark:text-white text-[11px] sm:text-xs"
+                className="bg-transparent focus:outline-none cursor-pointer appearance-none pr-3.5 text-[11px] sm:text-xs font-black text-slate-800 dark:text-white"
               >
-                <option value="newest" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white">✨ ថ្មីៗ</option>
-                <option value="popular" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white">🔥 លក់ដាច់</option>
-                <option value="price_low" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white">📉 តម្លៃទាប</option>
-                <option value="price_high" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white">📈 តម្លៃខ្ពស់</option>
+                <option value="newest" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">✨ ថ្មីៗ</option>
+                <option value="popular" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">🔥 លក់ដាច់</option>
+                <option value="price_low" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">📉 តម្លៃទាប</option>
+                <option value="price_high" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">📈 តម្លៃខ្ពស់</option>
               </select>
+              <span className="pointer-events-none absolute right-2 text-[10px] text-slate-400">▾</span>
             </div>
           </div>
 
