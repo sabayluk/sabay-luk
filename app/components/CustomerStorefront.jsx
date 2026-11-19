@@ -2567,29 +2567,29 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-5 pb-3">
         {/* 📱 ផ្នែកប្រភេទផលិតផលរៀបចំមួយជួរស្អាតសម្រាប់ Mobile App (Shopee / Lazada Standard Single Row) ⭐️ */}
         <div className="block lg:hidden mb-4">
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-0.5">
-            {/* ប៊ូតុងទំនិញទាំងអស់ (All Items) */}
+          <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1.5 px-0.5">
+            {/* ប៊ូតុងទំនិញទាំងអស់ (All Items) - ពង្រីកធំស្រួលចុច (Enlarged Touch Target) */}
             <button
               type="button"
               onClick={() => setSelectedCategory('all')}
-              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-black transition whitespace-nowrap shrink-0 shadow-2xs cursor-pointer ${
+              className={`flex items-center gap-2.5 px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl text-sm sm:text-base font-black transition whitespace-nowrap shrink-0 shadow-sm cursor-pointer ${
                 selectedCategory === 'all'
                   ? 'bg-gradient-to-r from-[#18181b] to-[#27272a] text-white shadow-md'
-                  : `${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-gray-200 text-gray-700'} border hover:bg-gray-50`
+                  : `${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-gray-200 text-gray-800'} border-2 hover:bg-gray-50`
               }`}
             >
-              <span className={`p-1 rounded-lg ${selectedCategory === 'all' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="w-3.5 h-3.5">
+              <span className={`p-1.5 rounded-xl ${selectedCategory === 'all' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>
+                <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" className="w-4 h-4 sm:w-5 sm:h-5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
                 </svg>
               </span>
               <span>ទំនិញទាំងអស់</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${selectedCategory === 'all' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+              <span className={`text-xs px-2.5 py-0.5 rounded-full font-black ${selectedCategory === 'all' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
                 {products.length}
               </span>
             </button>
 
-            {/* បញ្ជីប្រភេទផលិតផលនីមួយៗក្នុងមួយជួរ (Categories in 1 Single Row) */}
+            {/* បញ្ជីប្រភេទផលិតផលនីមួយៗក្នុងមួយជួរ (Categories in 1 Single Row) - ពង្រីកធំស្រួលចុច */}
             {categories.map((cat) => {
               const count = products.filter(p => {
                 const pCat = (p.category || '').trim().toLowerCase();
@@ -2604,17 +2604,17 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                   type="button"
                   onClick={() => setSelectedCategory(cat.name)}
                   style={isSelected ? { backgroundColor: brandColor } : {}}
-                  className={`flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-black transition whitespace-nowrap shrink-0 shadow-2xs cursor-pointer ${
+                  className={`flex items-center gap-2.5 px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl text-sm sm:text-base font-black transition whitespace-nowrap shrink-0 shadow-sm cursor-pointer ${
                     isSelected
                       ? 'text-white shadow-md'
-                      : `${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-gray-200 text-gray-700'} border hover:bg-gray-50`
+                      : `${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-gray-200 text-gray-800'} border-2 hover:bg-gray-50`
                   }`}
                 >
-                  <span className={`p-1 rounded-lg ${isSelected ? 'bg-white/20 text-white' : 'bg-orange-50 text-[#ff6a00]'}`}>
+                  <span className={`p-1.5 rounded-xl ${isSelected ? 'bg-white/20 text-white' : 'bg-orange-50 text-[#ff6a00]'}`}>
                     {getCategorySvgIcon(cat, isSelected)}
                   </span>
                   <span>{cat.name}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
                     {count}
                   </span>
                 </button>
