@@ -28,6 +28,7 @@ const parseProductMeta = (p) => {
   let retail_discount = p.retail_discount != null ? parseFloat(p.retail_discount) : 0;
   let wholesale_discount = p.wholesale_discount != null ? parseFloat(p.wholesale_discount) : 0;
   let video_url = p.video_url || '';
+  let description = p.description || '';
 
   if (p.category_name) {
     try {
@@ -42,6 +43,7 @@ const parseProductMeta = (p) => {
         if (meta.retail_discount != null && !retail_discount) retail_discount = parseFloat(meta.retail_discount);
         if (meta.wholesale_discount != null && !wholesale_discount) wholesale_discount = parseFloat(meta.wholesale_discount);
         if (meta.video_url && !video_url) video_url = meta.video_url;
+        if (meta.description && !description) description = meta.description;
       } else if (typeof p.category_name === 'string' && p.category_name.startsWith('[') && images.length === 0) {
         const parsed = JSON.parse(p.category_name);
         if (Array.isArray(parsed) && parsed.length > 0) images = parsed;
@@ -57,7 +59,8 @@ const parseProductMeta = (p) => {
     detail_images,
     retail_discount: retail_discount || 0,
     wholesale_discount: wholesale_discount || 0,
-    video_url: video_url || ''
+    video_url: video_url || '',
+    description: description || ''
   };
 };
 
@@ -4087,9 +4090,10 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                 const detailImgs = (selectedProductForVariant.detail_images && selectedProductForVariant.detail_images.length > 0)
                   ? selectedProductForVariant.detail_images
                   : [];
+                const productDesc = selectedProductForVariant.description || '';
 
-                // បើគ្មាន Video ហើយក៏គ្មាន Detail Images មិនបាច់បង្ហាញទេ (មិនទាញរូបភាពពីខាងលើមកទៀតឡើយ តាមការស្នើសុំរបស់បង)
-                if (!embedUrl && detailImgs.length === 0) return null;
+                // បើគ្មាន Video, គ្មាន Description, ហើយក៏គ្មាន Detail Images មិនបាច់បង្ហាញទេ
+                if (!embedUrl && !productDesc && detailImgs.length === 0) return null;
 
                 return (
                   <div className="col-span-1 md:col-span-12 pt-8 mt-6 border-t-2 border-slate-200/90 space-y-6">
@@ -4124,7 +4128,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                       )}
                     </div>
 
-                    {/* 2. Centered Body: YouTube Video + 1 Photo Per Row (20% Smaller: max-w-[560px] mx-auto) */}
+                    {/* 2. Centered Body: YouTube Video + Text Description + Detail Images (max-w-[560px] mx-auto) */}
                     <div className="w-full max-w-[560px] mx-auto space-y-5">
                       
                       {/* 🎬 វីដេអូ YouTube ចំកណ្តាល (បង្ហាញនៅខាងក្រោម Details:) */}
@@ -4142,6 +4146,19 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                               allowFullScreen
                             />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 📝 អត្ថបទរៀបរាប់ និងព័ត៌មានលម្អិត (បង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើមុខ Website) */}
+                      {productDesc && (
+                        <div className="w-full bg-slate-50 dark:bg-slate-800/80 rounded-3xl p-5 sm:p-6 border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                            <span className="w-6 h-6 rounded-lg bg-orange-500/10 text-[#ff6a00] flex items-center justify-center text-sm font-black">📝</span>
+                            <span>ព័ត៌មានលម្អិតអំពីទំនិញ (Product Description)</span>
+                          </div>
+                          <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed font-medium whitespace-pre-wrap">
+                            {productDesc}
                           </div>
                         </div>
                       )}

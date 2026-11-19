@@ -4975,6 +4975,7 @@ export default function UnifiedAdminDashboard() {
   const [retailDiscount, setRetailDiscount] = useState('');
   const [lowStockAlert, setLowStockAlert] = useState('5');
   const [videoUrl, setVideoUrl] = useState('');
+  const [description, setDescription] = useState('');
 
   // ⭐️ Subscription payments & slips state
   const [allSubscriptionPayments, setAllSubscriptionPayments] = useState(() => getSubscriptionPayments());
@@ -5315,6 +5316,7 @@ export default function UnifiedAdminDashboard() {
           setSellingPrice(parsed.sellingPrice || '');
           setRetailDiscount(parsed.retailDiscount || '');
           setLowStockAlert(parsed.lowStockAlert || '5');
+          if (parsed.description !== undefined) setDescription(parsed.description || '');
         }
       } catch (_) {}
     }
@@ -5325,7 +5327,7 @@ export default function UnifiedAdminDashboard() {
     const sid = activeStore?.id || 'store_default_sabayluk';
     // រក្សាទុក Draft តែពេលដែលទម្រង់មានព័ត៌មាន (ឈ្មោះ ឬតម្លៃ) និងមិនមែនកំពុង Edit ទំនិញចាស់
     if (!editingProductId && (name.trim() !== '' || sellingPrice.trim() !== '')) {
-      const draft = { name, sku, category, selectedSizes, selectedColors, customTextSize, color, stockQty, costPrice, wholesalePrice, wholesaleDiscount, sellingPrice, retailDiscount, lowStockAlert };
+      const draft = { name, sku, category, selectedSizes, selectedColors, customTextSize, color, stockQty, costPrice, wholesalePrice, wholesaleDiscount, sellingPrice, retailDiscount, lowStockAlert, description: description || '' };
       try {
         localStorage.setItem(`sabay_product_draft_${sid}`, JSON.stringify(draft));
       } catch (_) {}
@@ -5335,7 +5337,7 @@ export default function UnifiedAdminDashboard() {
         localStorage.removeItem('sabay_product_draft');
       } catch (_) {}
     }
-  }, [name, sku, category, selectedSizes, selectedColors, customTextSize, color, stockQty, costPrice, sellingPrice, lowStockAlert, editingProductId, activeStore?.id]);
+  }, [name, sku, category, selectedSizes, selectedColors, customTextSize, color, stockQty, costPrice, sellingPrice, lowStockAlert, description, editingProductId, activeStore?.id]);
 
   // States សម្រាប់ Array ប៊ូតុង Size & Color (ផ្ទុកដាច់ដោយឡែកតាម Store ID)
   const [availableSizes, setAvailableSizes] = useState(() => getInitialStoreSizes(activeStore?.id));
@@ -5628,6 +5630,7 @@ export default function UnifiedAdminDashboard() {
         images: uploadedImageUrls,
         detail_images: uploadedDetailImageUrls,
         video_url: videoUrl ? videoUrl.trim() : undefined,
+        description: description ? description.trim() : undefined,
         retail_discount: parseFloat(retailDiscount) || 0,
         wholesale_discount: parseFloat(wholesaleDiscount) || 0
       });
@@ -5638,6 +5641,7 @@ export default function UnifiedAdminDashboard() {
         name: name.trim(),
         category: category.trim(),
         category_name: metaJson,
+        description: description ? description.trim() : null,
         size: finalSize,
         color: color,
         stock_qty: finalStockQty,
@@ -5661,10 +5665,11 @@ export default function UnifiedAdminDashboard() {
           .update(updatePayload)
           .eq('id', editingProductId);
 
-        if (updateError && (updateError.message?.includes('wholesale_price') || updateError.message?.includes('images') || updateError.message?.includes('detail_images') || updateError.message?.includes('discount') || updateError.code === 'PGRST204')) {
+        if (updateError && (updateError.message?.includes('wholesale_price') || updateError.message?.includes('description') || updateError.message?.includes('images') || updateError.message?.includes('detail_images') || updateError.message?.includes('discount') || updateError.code === 'PGRST204')) {
           if (updateError.message?.includes('wholesale_price')) delete updatePayload.wholesale_price;
           if (updateError.message?.includes('retail_discount')) delete updatePayload.retail_discount;
           if (updateError.message?.includes('wholesale_discount')) delete updatePayload.wholesale_discount;
+          if (updateError.message?.includes('description')) delete updatePayload.description;
           delete updatePayload.images;
           delete updatePayload.detail_images;
           const retry = await supabase
@@ -5707,8 +5712,9 @@ export default function UnifiedAdminDashboard() {
           .select()
           .single();
 
-        if (insertError && (insertError.message?.includes('wholesale_price') || insertError.message?.includes('images') || insertError.message?.includes('detail_images') || insertError.code === 'PGRST204')) {
+        if (insertError && (insertError.message?.includes('wholesale_price') || insertError.message?.includes('description') || insertError.message?.includes('images') || insertError.message?.includes('detail_images') || insertError.code === 'PGRST204')) {
           if (insertError.message?.includes('wholesale_price')) delete insertPayload.wholesale_price;
+          if (insertError.message?.includes('description')) delete insertPayload.description;
           delete insertPayload.images;
           delete insertPayload.detail_images;
           const retry = await supabase
@@ -5855,6 +5861,7 @@ export default function UnifiedAdminDashboard() {
     setProductImages([]);
     setSelectedCoverIndex(0);
     setVideoUrl('');
+    setDescription('');
     setDetailImages([]);
     setDetailImageUrlInput('');
     if (typeof window !== 'undefined') {
@@ -5918,7 +5925,14 @@ export default function UnifiedAdminDashboard() {
     setSku(product.sku || '');
     setCategory(product.category || (categories[0] ? categories[0].name : ''));
     if (typeof setBarcode === 'function') setBarcode(product.barcode || product.sku || '');
-    if (typeof setDescription === 'function') setDescription(product.description || '');
+    let prodDesc = product.description || '';
+    if (!prodDesc && product.category_name && typeof product.category_name === 'string' && product.category_name.startsWith('{')) {
+      try {
+        const m = JSON.parse(product.category_name);
+        if (m.description) prodDesc = m.description;
+      } catch(_) {}
+    }
+    setDescription(prodDesc);
     setVideoUrl(product.video_url || '');
 
     // ៤. តម្លៃ និងការបញ្ចុះតម្លៃ (Prices & Margins)
@@ -6252,6 +6266,7 @@ export default function UnifiedAdminDashboard() {
         setProductImages([]);
         setSelectedCoverIndex(0);
         setVideoUrl('');
+        setDescription('');
         setDetailImages([]);
         setDetailImageUrlInput('');
         setToastNotification('🧹 បានសម្អាតទិន្នន័យ Form បញ្ចូលទំនិញរួចរាល់!');
@@ -7587,6 +7602,83 @@ export default function UnifiedAdminDashboard() {
                 </div>
               )}
             </div>
+
+            {/* ៩. 📝 អត្ថបទពិពណ៌នាលម្អិតអំពីទំនិញ (Product Description Under YouTube) */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-base font-black">📝</span>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">៩. អត្ថបទពិពណ៌នាលម្អិតអំពីទំនិញ (Product Description)</h3>
+                    <p className="text-[11px] text-slate-400">
+                      សរសេរព័ត៌មានលម្អិតអំពីទំនិញ (អត្ថបទនេះនឹងបង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើមុខ Website)
+                    </p>
+                  </div>
+                </div>
+                {description && (
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                    ✓ មានអត្ថបទ ({description.length} តួអក្សរ)
+                  </span>
+                )}
+              </div>
+
+              {/* Quick Template Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400 mr-1">គំរូរហ័ស:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const template = `✨ ចំណុចពិសេស (Key Features):\n• ផលិតពីវត្ថុធាតុដើមគុណភាពខ្ពស់ ប្រើប្រាស់បានយូរអង្វែង\n• ទម្ងន់ស្រាល ទន់ស្រួលពាក់ មិនឈឺជើង\n• ម៉ូដទាន់សម័យ ស័ក្តិសមទាំងការងារ និងដំណើរកម្សាន្ត\n\n📏 ការណែនាំទំហំ (Size Guide):\n• Size ស្តង់ដារពិតប្រាកដ បើជើងធំសូមយកលើស ១ លេខ\n\n🛡️ ការធានា:\n• ធានាប្តូរ Size រយៈពេល ៧ ថ្ងៃ\n• ទំនិញដូចរូបភាព ១០០%`;
+                    setDescription(prev => prev ? `${prev}\n\n${template}` : template);
+                  }}
+                  className="text-[11px] font-black text-[#ff6a00] bg-orange-50 hover:bg-orange-100 px-3 py-1 rounded-xl transition cursor-pointer border border-orange-200 active:scale-95"
+                >
+                  + បញ្ចូលគំរូទូទៅ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const template = `🛡️ ការធានា & ប្តូរទំនិញ:\n• ធានាប្តូរ Size ក្នុងរយៈពេល ៧ ថ្ងៃ\n• ពិនិត្យទំនិញរួចរាល់ទើបបង់ប្រាក់\n• ដឹកជញ្ជូនរហ័សទូទាំង ២៥ ខេត្ត/ក្រុង`;
+                    setDescription(prev => prev ? `${prev}\n\n${template}` : template);
+                  }}
+                  className="text-[11px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-xl transition cursor-pointer border border-blue-200 active:scale-95"
+                >
+                  + បញ្ចូលការធានា & ដឹកជញ្ជូន
+                </button>
+              </div>
+
+              {/* Description Textarea */}
+              <div className="relative">
+                <textarea
+                  rows="6"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="សរសេរព័ត៌មានលម្អិតអំពីទំនិញ គុណភាព សាច់ក្រណាត់ ការណែនាំទំហំ ឬរបៀបប្រើប្រាស់... (អត្ថបទនេះនឹងបង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើមុខគេហទំព័រ Storefront)"
+                  className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-4 rounded-2xl text-xs sm:text-sm text-slate-800 bg-slate-50 focus:bg-white outline-none transition resize-y leading-relaxed"
+                />
+              </div>
+
+              {/* Live Preview of Description */}
+              {description && (
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                      👁️ ទិដ្ឋភាពបង្ហាញលើ Storefront (Preview):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDescription('')}
+                      className="text-[11px] font-bold text-red-500 hover:text-red-700 cursor-pointer"
+                    >
+                      លុបអត្ថបទ
+                    </button>
+                  </div>
+                  <div className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-2xs">
+                    {description}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
 
@@ -7616,6 +7708,7 @@ export default function UnifiedAdminDashboard() {
                     sizes: selectedSizes,
                     colors: selectedColors,
                     video_url: videoUrl || '',
+                    description: description || '',
                     detail_images: detailImages.map(img => img.url),
                     retail_discount: parseFloat(retailDiscount) || 0,
                     stock_qty: parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0,
