@@ -5784,35 +5784,42 @@ export default function UnifiedAdminDashboard() {
         setDisabledVariants([]);
       }
 
-      // ⭐️ RESET គ្រប់ Attributes និង Selections ទាំងអស់ ដើម្បីកុំឱ្យជាប់ឆ្លងទៅទំនិញថ្មីបន្ទាប់ (Fresh Attributes Guaranteed) ⭐️
+      // ⭐️ លុបតែរូបថតចេញបានហើយ ឯព័ត៌មានផ្សេងទៀត (ឈ្មោះ, ប្រភេទ, តម្លៃ, Size, Color, Stock) រក្សាទុកនៅដដែល ដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់ ⭐️
       setEditingProductId(null);
-      setName('');
-      setSelectedSizes([]);
-      setSelectedColors([]);
-      setColor('');
-      setCustomTextSize('');
-      setVariantStock({});
-      setDisabledVariants([]);
-      setSellingPrice('');
-      setCostPrice('');
-      setWholesalePrice('');
-      setWholesaleDiscount('');
-      setRetailDiscount('');
-      setStockQty('10');
-      setLowStockAlert('5');
       setFile(null);
       setPreviewUrl(null);
       setProductImages([]);
       setSelectedCoverIndex(0);
       setDetailImages([]);
       setDetailImageUrlInput('');
-      setVideoUrl('');
 
+      // រក្សាទុក Draft ថ្មីដែលមាន SKU បន្ទាប់ និងព័ត៌មានដដែលក្នុង LocalStorage
       if (typeof window !== 'undefined') {
         const sid = activeStore?.id || 'store_default_sabayluk';
-        localStorage.removeItem(`sabay_product_draft_${sid}`);
-        localStorage.removeItem('sabay_product_draft');
+        const retainedDraft = {
+          name,
+          sku: nextSkuVal || sku,
+          category,
+          selectedSizes,
+          selectedColors,
+          customTextSize,
+          color,
+          stockQty,
+          costPrice,
+          wholesalePrice,
+          wholesaleDiscount,
+          sellingPrice,
+          retailDiscount,
+          lowStockAlert,
+          description: description || ''
+        };
+        try {
+          localStorage.setItem(`sabay_product_draft_${sid}`, JSON.stringify(retainedDraft));
+        } catch (_) {}
       }
+
+      setToastNotification('🎉 បានរក្សាទុកទំនិញជោគជ័យ! រូបថតត្រូវបានសម្អាតរួចរាល់ ឯព័ត៌មានផ្សេងទៀតត្រូវបានរក្សាទុកដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់។');
+      setTimeout(() => setToastNotification(null), 5000);
       fetchProducts();
 
     } catch (error) {
@@ -6219,8 +6226,10 @@ export default function UnifiedAdminDashboard() {
         const nextSkuVal = computeNextSku(products);
         setSku(nextSkuVal);
         if (typeof window !== 'undefined') {
+          const sid = activeStore?.id || 'store_default_sabayluk';
           localStorage.setItem('sabay_current_sku', nextSkuVal);
           localStorage.setItem('sabay_last_saved_sku', nextSkuVal);
+          localStorage.removeItem(`sabay_product_draft_${sid}`);
           localStorage.removeItem('sabay_product_draft');
         }
         setSellingPrice('');
@@ -6233,6 +6242,7 @@ export default function UnifiedAdminDashboard() {
         setColor('');
         setSelectedSizes([]);
         setSelectedColors([]);
+        setCustomTextSize('');
         setVariantStock({});
         setDisabledVariants([]);
         setPreviewUrl(null);
@@ -6242,6 +6252,8 @@ export default function UnifiedAdminDashboard() {
         setVideoUrl('');
         setDetailImages([]);
         setDetailImageUrlInput('');
+        setToastNotification('🧹 បានសម្អាតទិន្នន័យ Form បញ្ចូលទំនិញរួចរាល់!');
+        setTimeout(() => setToastNotification(null), 3000);
       }
     };
 
@@ -6307,11 +6319,11 @@ export default function UnifiedAdminDashboard() {
             <button
               type="button"
               onClick={handleResetProductForm}
-              className="px-4 py-2.5 rounded-2xl border-2 border-slate-200 hover:border-rose-300 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="សម្អាតទិន្នន័យ Form ទាំងមូល"
+              className="px-4 py-2.5 rounded-2xl border-2 border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              title="លុបព័ត៌មានកន្លែងបញ្ចូលទំនិញនេះទាំងអស់ (Reset Form)"
             >
-              <span>🔄</span>
-              <span>{editingProductId ? 'បោះបង់ការកែប្រែ' : 'សម្អាត Form'}</span>
+              <span>🗑️</span>
+              <span>{editingProductId ? '✕ បោះបង់ការកែប្រែ' : 'លុបព័ត៌មាន Form (Reset)'}</span>
             </button>
           </div>
         </div>
@@ -7801,13 +7813,23 @@ export default function UnifiedAdminDashboard() {
                 </span>
               </button>
 
-              {editingProductId && (
+              {editingProductId ? (
                 <button 
                   type="button" 
                   onClick={handleResetProductForm}
-                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-2xl font-black text-xs transition"
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-2xl font-black text-xs transition active:scale-98 cursor-pointer"
                 >
                   ✕ បោះបង់ការកែប្រែ (Cancel Edit)
+                </button>
+              ) : (
+                <button 
+                  type="button" 
+                  onClick={handleResetProductForm}
+                  className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 py-3 rounded-2xl font-black text-xs transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-98"
+                  title="លុបព័ត៌មានកន្លែងបញ្ចូលទំនិញនេះទាំងអស់ (Reset Form)"
+                >
+                  <span>🗑️</span>
+                  <span>លុបព័ត៌មានកន្លែងបញ្ចូលទំនិញនេះ (Reset Form)</span>
                 </button>
               )}
 
@@ -27687,11 +27709,7 @@ export default function UnifiedAdminDashboard() {
                             key={tab.id}
                             type="button"
                             onClick={() => {
-                              if (tab.id === 'upload' && !editingProductId) {
-                                handleOpenNewProductForm();
-                              } else {
-                                setActiveTab(tab.id);
-                              }
+                              setActiveTab(tab.id);
                               if (typeof window !== 'undefined' && window.innerWidth < 768) {
                                 setIsSidebarOpen(false);
                               }
