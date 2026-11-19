@@ -19366,28 +19366,28 @@ export default function UnifiedAdminDashboard() {
       <div className="animate-in fade-in pb-16 max-w-[1440px] mx-auto relative select-none">
         
         {/* ⭐️ ULTRA-MODERN HEADER & ACTIONS TOOLBAR ⭐️ */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8 bg-white/90 backdrop-blur-md p-6 rounded-3xl border border-gray-200/80 shadow-xs">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 text-white flex items-center justify-center text-3xl shadow-lg shadow-blue-500/20 shrink-0">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-5 mb-3.5 sm:mb-8 bg-white/90 backdrop-blur-md p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-200/80 shadow-xs">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 text-white flex items-center justify-center text-xl sm:text-3xl shadow-md sm:shadow-lg shadow-blue-500/20 shrink-0">
               🗄️
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
-                  គ្រប់គ្រងស្តុកទំនិញ (Smart Stock Hub)
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-2xl font-black text-gray-900 tracking-tight">
+                  គ្រប់គ្រងស្តុកទំនិញ
                 </h2>
                 <span className="hidden sm:inline-flex text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full border border-blue-200">
                   Realtime Sync
                 </span>
               </div>
-              <p className="text-xs text-gray-500 font-medium mt-1">
+              <p className="text-[11px] sm:text-xs text-gray-500 font-medium hidden sm:block mt-0.5">
                 តាមដានចំនួនស្តុកជាក់ស្តែង ចលនាទំនិញ នាំចូលរហ័ស និងតម្លៃទុនស្តុកសរុប
               </p>
             </div>
           </div>
 
           {/* Action Toolbar */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-0.5 no-scrollbar">
             <input 
               type="file" 
               ref={bulkFileInputRef} 
@@ -19400,38 +19400,38 @@ export default function UnifiedAdminDashboard() {
             <button 
               type="button"
               onClick={handleOpenNewProductForm} 
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-blue-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center gap-2 cursor-pointer"
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-black shadow-md shadow-blue-500/25 transition transform hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 cursor-pointer shrink-0"
             >
-              <span>+ បន្ថែមទំនិញថ្មី</span>
+              <span>+ បន្ថែមទំនិញ</span>
             </button>
 
             {/* Import Excel */}
             <button 
               type="button" 
               onClick={() => bulkFileInputRef.current?.click()}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 sm:px-3.5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-black shadow-xs transition flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
               title="ទាញទំនិញចូលប្រព័ន្ធរាប់រយមុខតាម Excel/CSV"
             >
               <span>📥</span>
-              <span>Import Excel</span>
+              <span className="text-[11px] sm:text-xs font-black">Import</span>
             </button>
 
             {/* Export .xlsx */}
             <button 
               type="button" 
               onClick={exportInventoryToExcel}
-              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
+              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-bold transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs shrink-0"
               title="ទាញយកទិន្នន័យស្តុកជា Excel (.xlsx)"
             >
               <span>📊</span>
-              <span>Export .xlsx</span>
+              <span className="text-[11px] sm:text-xs font-bold hidden sm:inline">Export</span>
             </button>
 
             {/* គំរូ Template */}
             <button 
               type="button" 
               onClick={downloadInventoryTemplate}
-              className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2.5 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs"
+              className="hidden sm:flex bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-3 py-2.5 rounded-2xl text-xs font-bold transition items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs shrink-0"
               title="ទាញយកឯកសារគំរូ Excel"
             >
               <span>📋</span>
@@ -19443,7 +19443,7 @@ export default function UnifiedAdminDashboard() {
               type="button" 
               onClick={handleManualStockAlertCheck}
               disabled={telegramTesting}
-              className={`border px-3 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-xs ${
+              className={`border px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-black transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs shrink-0 ${
                 (lowStockCount + outOfStockCount) > 0 
                   ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300' 
                   : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
@@ -19451,7 +19451,7 @@ export default function UnifiedAdminDashboard() {
               title="ផ្ញើការជូនដំណឹងទំនិញជិតអស់ស្តុកទៅកាន់ Telegram"
             >
               <span>🔔</span>
-              <span>Telegram</span>
+              <span className="text-[11px] sm:text-xs font-black hidden sm:inline">Telegram</span>
               {(lowStockCount + outOfStockCount) > 0 && (
                 <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse">
                   {lowStockCount + outOfStockCount}
@@ -19461,101 +19461,101 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
-        {/* ⭐️ 4 VIBRANT EXECUTIVE KPI CARDS REQUESTED BY USER ⭐️ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* ⭐️ 4 VIBRANT EXECUTIVE KPI CARDS (2x2 on Mobile, 4 Cols on Desktop) ⭐️ */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-4 sm:mb-8">
           
           {/* Card 1: សរុបទំនិញក្នុងស្តុក */}
-          <div className="bg-gradient-to-br from-blue-50/90 via-white to-white p-5 rounded-3xl border border-blue-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+          <div className="bg-gradient-to-br from-blue-50/90 via-white to-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-blue-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
             <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">១. សរុបទំនិញក្នុងស្តុក</span>
-              <span className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+              <span className="text-gray-500 text-[10px] sm:text-xs font-black uppercase tracking-wider truncate">១. សរុបទំនិញក្នុងស្តុក</span>
+              <span className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center text-sm sm:text-lg font-black group-hover:scale-110 transition-transform shrink-0">
                 📦
               </span>
             </div>
-            <div className="mt-3">
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-gray-900">{totalUnits.toLocaleString()}</span>
-                <span className="text-xs font-black text-blue-600">ឯកតា (Units)</span>
+            <div className="mt-1.5 sm:mt-3">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xl sm:text-3xl font-black text-gray-900">{totalUnits.toLocaleString()}</span>
+                <span className="text-[10px] sm:text-xs font-black text-blue-600">ឯកតា</span>
               </div>
-              <p className="text-[11px] text-gray-500 font-bold mt-1">
-                មានចំនួន <span className="text-gray-900 font-black">{totalItems}</span> មុខទំនិញ (SKUs)
+              <p className="text-[10px] sm:text-[11px] text-gray-500 font-bold mt-0.5 truncate">
+                <span className="text-gray-900 font-black">{totalItems}</span> មុខទំនិញ (SKUs)
               </p>
-              <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-2.5 pt-2 border-t border-gray-100">
-                <span className="text-emerald-600 font-black">🟢 {inStockCount} ស្តុកពេញ</span>
-                <span className="text-amber-600 font-black">🟡 {lowStockCount} ជិតអស់</span>
-                <span className="text-rose-600 font-black">🔴 {outOfStockCount} ដាច់ស្តុក</span>
+              <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-gray-400 mt-2 pt-1.5 border-t border-gray-100">
+                <span className="text-emerald-600 font-black">🟢 {inStockCount}</span>
+                <span className="text-amber-600 font-black">🟡 {lowStockCount}</span>
+                <span className="text-rose-600 font-black">🔴 {outOfStockCount}</span>
               </div>
             </div>
           </div>
 
           {/* Card 2: សរុបដើមទុន */}
-          <div className="bg-gradient-to-br from-amber-50/90 via-white to-white p-5 rounded-3xl border border-amber-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+          <div className="bg-gradient-to-br from-amber-50/90 via-white to-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-amber-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
             <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">២. សរុបដើមទុន (Capital)</span>
-              <span className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+              <span className="text-gray-500 text-[10px] sm:text-xs font-black uppercase tracking-wider truncate">២. សរុបដើមទុន</span>
+              <span className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-sm sm:text-lg font-black group-hover:scale-110 transition-transform shrink-0">
                 💼
               </span>
             </div>
-            <div className="mt-3">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-black text-amber-700">
+            <div className="mt-1.5 sm:mt-3">
+              <div className="flex items-baseline gap-1">
+                <span className="text-xl sm:text-3xl font-black text-amber-700">
                   ${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <p className="text-[11px] text-gray-500 font-bold mt-1">
-                ប្រមាណ: <span className="text-gray-800 font-black">៛{Math.round(totalCostValue * 4100).toLocaleString()}</span> រៀល
+              <p className="text-[10px] sm:text-[11px] text-gray-500 font-bold mt-0.5 truncate">
+                ~ ៛{Math.round(totalCostValue * 4100).toLocaleString()}
               </p>
-              <div className="text-[10px] font-bold text-amber-700/80 mt-2.5 pt-2 border-t border-amber-100 flex items-center justify-between">
-                <span>⚡ ទុនវិនិយោគសរុបក្នុងស្តុក</span>
-                <span className="font-mono text-[9px] bg-amber-100 px-1.5 py-0.5 rounded text-amber-900 font-black">Cost Value</span>
+              <div className="text-[9px] sm:text-[10px] font-bold text-amber-700/80 mt-2 pt-1.5 border-t border-amber-100 flex items-center justify-between">
+                <span>⚡ ទុនស្តុក</span>
+                <span className="font-mono text-[9px] bg-amber-100 px-1 rounded text-amber-900 font-black">Cost</span>
               </div>
             </div>
           </div>
 
           {/* Card 3: សរុបតម្លៃបោះដុំ */}
-          <div className="bg-gradient-to-br from-purple-50/90 via-white to-white p-5 rounded-3xl border border-purple-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+          <div className="bg-gradient-to-br from-purple-50/90 via-white to-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-purple-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
             <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">៣. សរុបតម្លៃបោះដុំ (Wholesale)</span>
-              <span className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+              <span className="text-gray-500 text-[10px] sm:text-xs font-black uppercase tracking-wider truncate">៣. សរុបតម្លៃបោះដុំ</span>
+              <span className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center text-sm sm:text-lg font-black group-hover:scale-110 transition-transform shrink-0">
                 🏷️
               </span>
             </div>
-            <div className="mt-3">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-black text-purple-700">
+            <div className="mt-1.5 sm:mt-3">
+              <div className="flex items-baseline gap-1">
+                <span className="text-xl sm:text-3xl font-black text-purple-700">
                   ${totalWholesaleValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <p className="text-[11px] text-gray-500 font-bold mt-1">
-                ប្រមាណ: <span className="text-gray-800 font-black">៛{Math.round(totalWholesaleValue * 4100).toLocaleString()}</span> រៀល
+              <p className="text-[10px] sm:text-[11px] text-gray-500 font-bold mt-0.5 truncate">
+                ~ ៛{Math.round(totalWholesaleValue * 4100).toLocaleString()}
               </p>
-              <div className="text-[10px] font-bold text-purple-700/80 mt-2.5 pt-2 border-t border-purple-100 flex items-center justify-between">
-                <span>🏷️ តម្លៃបោះដុំ B2B សរុបទាំងអស់</span>
-                <span className="font-mono text-[9px] bg-purple-100 px-1.5 py-0.5 rounded text-purple-900 font-black">B2B Value</span>
+              <div className="text-[9px] sm:text-[10px] font-bold text-purple-700/80 mt-2 pt-1.5 border-t border-purple-100 flex items-center justify-between">
+                <span>🏷️ តម្លៃ B2B</span>
+                <span className="font-mono text-[9px] bg-purple-100 px-1 rounded text-purple-900 font-black">Wholesale</span>
               </div>
             </div>
           </div>
 
           {/* Card 4: សរុបតំលៃលក់រាយ */}
-          <div className="bg-gradient-to-br from-emerald-50/90 via-white to-white p-5 rounded-3xl border border-emerald-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
+          <div className="bg-gradient-to-br from-emerald-50/90 via-white to-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-emerald-200/80 shadow-xs relative overflow-hidden group hover:shadow-md transition">
             <div className="flex items-center justify-between">
-              <span className="text-gray-500 text-xs font-black uppercase tracking-wider">៤. សរុបតំលៃលក់រាយ (Retail)</span>
-              <span className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-lg font-black group-hover:scale-110 transition-transform">
+              <span className="text-gray-500 text-[10px] sm:text-xs font-black uppercase tracking-wider truncate">៤. សរុបតំលៃលក់រាយ</span>
+              <span className="w-7 h-7 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-sm sm:text-lg font-black group-hover:scale-110 transition-transform shrink-0">
                 💰
               </span>
             </div>
-            <div className="mt-3">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-black text-emerald-600">
+            <div className="mt-1.5 sm:mt-3">
+              <div className="flex items-baseline gap-1">
+                <span className="text-xl sm:text-3xl font-black text-emerald-600">
                   ${totalRetailValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <p className="text-[11px] text-gray-500 font-bold mt-1">
-                ចំណេញរំពឹងទុក: <span className="text-emerald-700 font-black">+${(totalRetailValue - totalCostValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <p className="text-[10px] sm:text-[11px] text-gray-500 font-bold mt-0.5 truncate">
+                ចំណេញ: <span className="text-emerald-700 font-black">+${(totalRetailValue - totalCostValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </p>
-              <div className="text-[10px] font-bold text-emerald-700/80 mt-2.5 pt-2 border-t border-emerald-100 flex items-center justify-between">
-                <span>📈 តម្លៃលក់ចេញរាយលើទីផ្សារ</span>
-                <span className="font-mono text-[9px] bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-900 font-black">Retail Value</span>
+              <div className="text-[9px] sm:text-[10px] font-bold text-emerald-700/80 mt-2 pt-1.5 border-t border-emerald-100 flex items-center justify-between">
+                <span>📈 តម្លៃលក់រាយ</span>
+                <span className="font-mono text-[9px] bg-emerald-100 px-1 rounded text-emerald-900 font-black">Retail</span>
               </div>
             </div>
           </div>
@@ -19563,20 +19563,20 @@ export default function UnifiedAdminDashboard() {
         </div>
 
         {/* ⭐️ SUB-NAVIGATION TABS & VIEW SWITCHER ⭐️ */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b border-gray-200 pb-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6 border-b border-gray-200 pb-3">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 -mx-2 px-2 sm:mx-0 sm:px-0">
             <button 
               type="button"
               onClick={() => setInventorySubTab('items')} 
-              className={`px-4 py-2 rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-2 ${
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl sm:rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0 ${
                 inventorySubTab === 'items' 
                   ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20' 
                   : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
               }`}
             >
               <span>📦</span>
-              <span>បញ្ជីទំនិញក្នុងស្តុក</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+              <span>បញ្ជីទំនិញ</span>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] ${
                 inventorySubTab === 'items' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
               }`}>
                 {products.length}
@@ -19589,7 +19589,7 @@ export default function UnifiedAdminDashboard() {
                 setInventorySubTab('inflow');
                 fetchStockMovements();
               }} 
-              className={`px-4 py-2 rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-2 ${
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl sm:rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0 ${
                 inventorySubTab === 'inflow' 
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 ring-2 ring-emerald-500/30' 
                   : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
@@ -19597,8 +19597,9 @@ export default function UnifiedAdminDashboard() {
               title="ជ្រើសរើសថ្ងៃខែឆ្នាំ ដើម្បីពិនិត្យមើលអីវ៉ាន់ដែលបាននាំចូលស្តុក"
             >
               <span>📥</span>
-              <span>ពិនិត្យការនាំចូលស្តុក (Stock In & Inflows)</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+              <span className="hidden sm:inline">ពិនិត្យការនាំចូលស្តុក (Stock In & Inflows)</span>
+              <span className="sm:hidden">នាំចូលស្តុក</span>
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-black ${
                 inventorySubTab === 'inflow' ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-900'
               }`}>
                 {combinedInflows.length}
@@ -19611,14 +19612,15 @@ export default function UnifiedAdminDashboard() {
                 setInventorySubTab('movements');
                 fetchStockMovements();
               }} 
-              className={`px-4 py-2 rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-2 ${
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl sm:rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0 ${
                 inventorySubTab === 'movements' 
                   ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20' 
                   : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
               }`}
             >
               <span>📋</span>
-              <span>កំណត់ត្រាចលនាស្តុក (Audit Log)</span>
+              <span className="hidden sm:inline">កំណត់ត្រាចលនាស្តុក (Audit Log)</span>
+              <span className="sm:hidden">ចលនាស្តុក</span>
             </button>
 
             {/* Telegram 8AM Alert Quick Trigger Button */}
@@ -19626,30 +19628,30 @@ export default function UnifiedAdminDashboard() {
               type="button"
               onClick={handleSendManualStockTgAlert}
               disabled={sendingManualStockAlert}
-              className="px-3.5 py-2 rounded-2xl font-black text-xs transition cursor-pointer flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs active:scale-95 disabled:opacity-50"
+              className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl font-black text-[11px] sm:text-xs transition cursor-pointer flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs active:scale-95 disabled:opacity-50 shrink-0"
               title="ផ្ញើដំណឹងស្តុកទំនិញជិតអស់/ដាច់ស្តុក ទៅកាន់ Telegram ភ្លាមៗ (Auto ម៉ោង 8 ព្រឹក)"
             >
               <span>{sendingManualStockAlert ? '⏳' : '✈️'}</span>
-              <span>{sendingManualStockAlert ? 'កំពុងផ្ញើ...' : 'ផ្ញើ Alert ទៅ Telegram (8AM)'}</span>
+              <span>{sendingManualStockAlert ? 'ផ្ញើ...' : 'Alert TG'}</span>
             </button>
           </div>
 
           {/* View Switcher: Table View vs Grid Cards */}
           {inventorySubTab === 'items' && (
-            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-2xl border border-gray-200/80">
+            <div className="flex items-center self-end sm:self-auto gap-1 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200/80 shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   setInvViewMode('table');
                   if (typeof window !== 'undefined') localStorage.setItem('sabay_inv_view_mode', 'table');
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition flex items-center gap-1 cursor-pointer ${
                   invViewMode === 'table' ? 'bg-white text-blue-600 shadow-xs ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-900'
                 }`}
                 title="មើលជាទម្រង់តារាងលម្អិត"
               >
                 <span>📑</span>
-                <span>តារាង (Table)</span>
+                <span>តារាង</span>
               </button>
               <button
                 type="button"
@@ -19657,13 +19659,13 @@ export default function UnifiedAdminDashboard() {
                   setInvViewMode('grid');
                   if (typeof window !== 'undefined') localStorage.setItem('sabay_inv_view_mode', 'grid');
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition flex items-center gap-1 cursor-pointer ${
                   invViewMode === 'grid' ? 'bg-white text-blue-600 shadow-xs ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-900'
                 }`}
                 title="មើលជាទម្រង់កាតរូបភាពទំនើប"
               >
                 <span>🎴</span>
-                <span>កាត (Cards)</span>
+                <span>កាត</span>
               </button>
             </div>
           )}
@@ -19672,24 +19674,24 @@ export default function UnifiedAdminDashboard() {
         {inventorySubTab === 'items' ? (
           <>
             {/* ⭐️ FILTER, SEARCH & SORT BAR ⭐️ */}
-            <div className="bg-white p-5 rounded-3xl shadow-xs border border-gray-200 mb-6 space-y-4">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xs border border-gray-200 mb-4 sm:mb-6 space-y-3 sm:space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3.5">
                 
                 {/* Search Bar */}
-                <div className="relative flex-1 max-w-md">
+                <div className="relative flex-1">
                   <input 
                     type="text" 
                     value={invSearch}
                     onChange={(e) => setInvSearch(e.target.value)}
                     placeholder="ស្វែងរក SKU, បាកូដ, ឈ្មោះផលិតផល..." 
-                    className="w-full pl-10 pr-9 py-2.5 rounded-2xl border border-gray-200 text-xs font-bold focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition bg-white"
+                    className="w-full pl-9 sm:pl-10 pr-8 sm:pr-9 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border border-gray-200 text-xs font-bold focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition bg-white"
                   />
-                  <span className="absolute left-3.5 top-3 text-gray-400 text-xs">🔍</span>
+                  <span className="absolute left-3 top-2.5 text-gray-400 text-xs">🔍</span>
                   {invSearch && (
                     <button 
                       type="button"
                       onClick={() => setInvSearch('')}
-                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 font-bold text-xs"
+                      className="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 font-bold text-xs"
                     >
                       ✕
                     </button>
@@ -19697,11 +19699,11 @@ export default function UnifiedAdminDashboard() {
                 </div>
 
                 {/* Category Dropdown & Sort */}
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
                   <select 
                     value={invCategory} 
                     onChange={(e) => setInvCategory(e.target.value)} 
-                    className="border border-gray-200 rounded-2xl px-3.5 py-2.5 text-xs font-bold bg-white focus:border-blue-500 outline-none transition cursor-pointer"
+                    className="border border-gray-200 rounded-xl sm:rounded-2xl px-2.5 sm:px-3.5 py-2 sm:py-2.5 text-xs font-bold bg-white focus:border-blue-500 outline-none transition cursor-pointer truncate"
                   >
                     <option value="all">📁 គ្រប់ប្រភេទ ({storeProducts.length})</option>
                     {currentStoreCategories.map(c => (
@@ -19712,27 +19714,25 @@ export default function UnifiedAdminDashboard() {
                   <select 
                     value={invSortBy} 
                     onChange={(e) => setInvSortBy(e.target.value)} 
-                    className="border border-gray-200 rounded-2xl px-3.5 py-2.5 text-xs font-bold bg-white focus:border-blue-500 outline-none transition cursor-pointer"
+                    className="border border-gray-200 rounded-xl sm:rounded-2xl px-2.5 sm:px-3.5 py-2 sm:py-2.5 text-xs font-bold bg-white focus:border-blue-500 outline-none transition cursor-pointer truncate"
                   >
-                    <option value="newest">⏱️ ទើបបញ្ចូលថ្មី</option>
-                    <option value="stock_asc">📉 ស្តុកតិចទៅច្រើន</option>
-                    <option value="stock_desc">📈 ស្តុកច្រើនទៅតិច</option>
-                    <option value="price_asc">💵 តម្លៃទាបទៅខ្ពស់</option>
-                    <option value="price_desc">💎 តម្លៃខ្ពស់ទៅទាប</option>
-                    <option value="name">🔤 ឈ្មោះ (A - Z)</option>
+                    <option value="newest">⏱️ ទើបបញ្ចូល</option>
+                    <option value="stock_asc">📉 ស្តុកតិច➔ច្រើន</option>
+                    <option value="stock_desc">📈 ស្តុកច្រើន➔តិច</option>
+                    <option value="price_asc">💵 តម្លៃទាប➔ខ្ពស់</option>
+                    <option value="price_desc">💎 តម្លៃខ្ពស់➔ទាប</option>
+                    <option value="name">🔤 ឈ្មោះ (A-Z)</option>
                   </select>
                 </div>
               </div>
 
               {/* Quick Status Filter Pills */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-black text-gray-400 uppercase tracking-wider mr-1">ស្ថានភាព:</span>
-                  
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 sm:pt-3 border-t border-gray-100">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
                   <button
                     type="button"
                     onClick={() => setFilterStatus('all')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer shrink-0 ${
                       filterStatus === 'all'
                         ? 'bg-slate-900 text-white shadow-xs'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -19744,7 +19744,7 @@ export default function UnifiedAdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setFilterStatus('normal')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
                       filterStatus === 'normal'
                         ? 'bg-emerald-600 text-white shadow-xs'
                         : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
@@ -19756,7 +19756,7 @@ export default function UnifiedAdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setFilterStatus('low')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
                       filterStatus === 'low'
                         ? 'bg-amber-600 text-white shadow-xs'
                         : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
@@ -19768,17 +19768,17 @@ export default function UnifiedAdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setFilterStatus('out')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer flex items-center gap-1 shrink-0 ${
                       filterStatus === 'out'
                         ? 'bg-rose-600 text-white shadow-xs'
                         : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
                     }`}
                   >
-                    <span>🔴 អស់ពីស្តុក ({outOfStockCount})</span>
+                    <span>🔴 អស់ ({outOfStockCount})</span>
                   </button>
                 </div>
 
-                <div className="text-xs font-bold text-gray-500">
+                <div className="text-[11px] sm:text-xs font-bold text-gray-500 self-end sm:self-auto">
                   បង្ហាញ: <span className="text-blue-600 font-black">{sortedInventory.length}</span> មុខទំនិញ
                 </div>
               </div>
@@ -19833,8 +19833,8 @@ export default function UnifiedAdminDashboard() {
 
             {/* ⭐️ VIEW MODE 1: ULTRA-MODERN INTERACTIVE TABLE VIEW ⭐️ */}
             {invViewMode === 'table' ? (
-              <div className="bg-white rounded-3xl shadow-xs border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
+              <div className="bg-white rounded-2xl sm:rounded-3xl shadow-xs border border-gray-200 overflow-hidden">
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50/80 border-b border-gray-100 text-gray-500 uppercase text-[11px] font-black">
                       <tr>
@@ -20106,6 +20106,214 @@ export default function UnifiedAdminDashboard() {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* ⭐️ MOBILE INVENTORY CARDS (md:hidden) ⭐️ */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {sortedInventory.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400">
+                      <span className="text-3xl block mb-2">🔍</span>
+                      <span className="font-bold text-xs">រកមិនឃើញទំនិញស្របតាមលក្ខខណ្ឌស្វែងរកនេះឡើយ។</span>
+                    </div>
+                  ) : (
+                    sortedInventory.map(product => {
+                      const isSelected = selectedInvProductIds.includes(product.id);
+                      const isLow = product.stock_qty > 0 && product.stock_qty <= (product.low_stock_alert || 5);
+                      const isOut = product.stock_qty <= 0;
+                      const isUpdating = quickStockUpdatingId === product.id;
+                      const displayPrice = Math.max(0, (Number(product.price) || 0) - (Number(product.retail_discount) || 0));
+
+                      return (
+                        <div 
+                          key={product.id}
+                          className={`p-3.5 transition-colors ${isSelected ? 'bg-blue-50/60' : 'bg-white hover:bg-gray-50/80'}`}
+                        >
+                          {/* Top row: Checkbox, Image, Title & SKU, Status Badge */}
+                          <div className="flex items-start gap-2.5">
+                            <input 
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectProduct(product.id)}
+                              className="w-4 h-4 mt-1 rounded text-blue-600 accent-blue-600 cursor-pointer shrink-0"
+                            />
+                            
+                            {/* Thumbnail */}
+                            <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-gray-100 shrink-0 border border-gray-200">
+                              {product.image_url ? (
+                                <img 
+                                  src={product.image_url} 
+                                  alt={product.name} 
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-400 text-xl">
+                                  📦
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1.5">
+                                <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded truncate max-w-[110px]">
+                                  {product.category || 'ទូទៅ'}
+                                </span>
+                                
+                                {/* Status Badge */}
+                                {isOut ? (
+                                  <span className="bg-rose-100 text-rose-700 text-[9px] font-black px-2 py-0.5 rounded-full shrink-0">
+                                    🔴 ដាច់ស្តុក
+                                  </span>
+                                ) : isLow ? (
+                                  <span className="bg-amber-100 text-amber-800 text-[9px] font-black px-2 py-0.5 rounded-full shrink-0 animate-pulse">
+                                    🟠 ជិតអស់ ({product.stock_qty})
+                                  </span>
+                                ) : (
+                                  <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-2 py-0.5 rounded-full shrink-0">
+                                    🟢 ស្តុក: {product.stock_qty}
+                                  </span>
+                                )}
+                              </div>
+
+                              <h4 
+                                className="font-black text-gray-900 text-xs mt-1 line-clamp-1 leading-snug cursor-pointer hover:text-blue-600"
+                                onClick={() => handleStartEditProduct(product)}
+                              >
+                                {product.name}
+                              </h4>
+
+                              {/* SKU & Barcode quick copy */}
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopySku(product.sku)}
+                                  className="font-mono text-[9px] font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 px-1.5 py-0.5 rounded border border-gray-200 flex items-center gap-1 cursor-pointer active:scale-95"
+                                  title="ចុចដើម្បីចម្លង SKU"
+                                >
+                                  <span>📋</span>
+                                  <span>{product.sku || 'No SKU'}</span>
+                                </button>
+                                {product.barcode && product.barcode !== product.sku && (
+                                  <span className="font-mono text-[9px] text-gray-400 truncate max-w-[90px]">
+                                    {product.barcode}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Middle row: Pricing breakdown & Cost */}
+                          <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-sm font-black text-emerald-600">
+                                ${displayPrice.toFixed(2)}
+                              </span>
+                              {Number(product.retail_discount) > 0 && (
+                                <span className="text-[10px] text-gray-400 line-through font-bold">
+                                  ${parseFloat(product.price).toFixed(2)}
+                                </span>
+                              )}
+                              {product.wholesale_price && parseFloat(product.wholesale_price) > 0 && (
+                                <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                  ដុំ ${parseFloat(product.wholesale_price).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-[10px] text-gray-500 font-bold">
+                              ថ្លៃដើម: <span className="text-gray-700 font-black">${parseFloat(product.cost_price || 0).toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {/* Bottom row: Inline Stock Stepper & Quick Action Buttons */}
+                          <div className="mt-2.5 flex items-center justify-between gap-1.5">
+                            {/* Stepper */}
+                            <div className="flex items-center bg-gray-100 rounded-xl p-0.5 border border-gray-200 shrink-0">
+                              <button
+                                type="button"
+                                disabled={isUpdating || product.stock_qty <= 0}
+                                onClick={() => handleQuickStockAdjust(product, -1)}
+                                className="w-7 h-7 rounded-lg bg-white hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-black text-xs flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
+                                title="-1"
+                              >
+                                -
+                              </button>
+                              <span className="w-8 text-center font-black text-xs text-gray-900">
+                                {isUpdating ? '⏳' : product.stock_qty}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={isUpdating}
+                                onClick={() => handleQuickStockAdjust(product, 1)}
+                                className="w-7 h-7 rounded-lg bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-600 font-black text-xs flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
+                                title="+1"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1">
+                              <button 
+                                type="button"
+                                onClick={() => handleOpenStockIn(product, 'IN')}
+                                className="bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white font-black text-[11px] px-2 py-1.5 rounded-xl border border-emerald-200 transition cursor-pointer flex items-center gap-1 active:scale-95"
+                                title="នាំចូលស្តុក"
+                              >
+                                <span>+</span>
+                                <span>នាំចូល</span>
+                              </button>
+
+                              <button 
+                                type="button"
+                                onClick={() => handleOpenStockIn(product, 'OUT')}
+                                className="bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white font-black text-[11px] px-2 py-1.5 rounded-xl border border-rose-200 transition cursor-pointer flex items-center gap-1 active:scale-95"
+                                title="កាត់ស្តុកចេញ"
+                              >
+                                <span>-</span>
+                                <span>កាត់</span>
+                              </button>
+
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  setBarcodeProduct(product);
+                                  setBarcodePrintQty(1);
+                                  setBarcodeModalOpen(true);
+                                }}
+                                className="bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white text-xs p-1.5 rounded-xl border border-purple-200 transition cursor-pointer active:scale-95"
+                                title="Barcode"
+                              >
+                                🏷️
+                              </button>
+
+                              <button 
+                                type="button"
+                                onClick={() => handleStartEditProduct(product)}
+                                className="bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white font-black text-[11px] px-2 py-1.5 rounded-xl border border-blue-200 transition cursor-pointer flex items-center gap-1 active:scale-95"
+                                title="កែប្រែ"
+                              >
+                                <span>✏️</span>
+                              </button>
+
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  setProductToDelete(product);
+                                  setDeleteModalOpen(true);
+                                }}
+                                className="bg-red-50 hover:bg-red-600 text-red-600 hover:text-white text-xs p-1.5 rounded-xl border border-red-200 transition cursor-pointer active:scale-95"
+                                title="លុប"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             ) : (
@@ -20565,7 +20773,8 @@ export default function UnifiedAdminDashboard() {
                   </div>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                  <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
@@ -20652,7 +20861,67 @@ export default function UnifiedAdminDashboard() {
                     </tbody>
                   </table>
                 </div>
-              )}
+
+                {/* ⭐️ MOBILE INFLOW CARDS (md:hidden) ⭐️ */}
+                <div className="md:hidden divide-y divide-gray-100">
+                  {combinedInflows.map((log) => {
+                    const qty = Math.abs(Number(log.qty_change)) || 0;
+                    const prod = storeProducts.find(p => p.id === log.product_id) || log.products || {};
+                    const unitCost = Number(log.cost_price || prod.cost_price || prod.costPrice || prod.cost || 0);
+                    const totalCost = unitCost * qty;
+
+                    return (
+                      <div key={log.id} className="p-3.5 space-y-2 bg-white">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            {(log.products?.image_url || prod.image_url || prod.image) ? (
+                              <img
+                                src={log.products?.image_url || prod.image_url || prod.image}
+                                className="w-10 h-10 rounded-xl object-cover bg-gray-100 border border-gray-200 shrink-0"
+                                alt=""
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-base shrink-0">
+                                📦
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="font-black text-gray-900 text-xs truncate max-w-[170px]">
+                                {log.products?.name || prod.name || 'ទំនិញ'}
+                              </p>
+                              <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                SKU: {log.products?.sku || prod.sku || 'N/A'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 font-black text-xs px-2 py-0.5 rounded-lg shrink-0">
+                            +{qty} ឯកតា
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-gray-50">
+                          <div className="text-gray-500 font-bold">
+                            ដើម: <span className="font-mono text-gray-700">${unitCost.toFixed(2)}</span>
+                            <span className="mx-1 text-gray-300">|</span>
+                            សរុប: <span className="font-mono font-black text-emerald-600">${totalCost.toFixed(2)}</span>
+                          </div>
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            {new Date(log.created_at).toLocaleDateString('en-GB')} {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {log.reason && (
+                          <div className="text-[10px] text-gray-500 bg-gray-50 px-2 py-1 rounded-md">
+                            📝 {log.reason}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             </div>
           </div>
         ) : (
@@ -20737,66 +21006,121 @@ export default function UnifiedAdminDashboard() {
               }
 
               return (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">កាលបរិច្ឆេទ</th>
-                        <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">ទំនិញ</th>
-                        <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">ទំហំ / ពណ៌</th>
-                        <th className="px-5 py-4 uppercase text-xs font-black text-gray-500 text-center">ប្រភេទចលនា</th>
-                        <th className="px-5 py-4 uppercase text-xs font-black text-gray-500 text-center">ចំនួនប្រែប្រួល</th>
-                        <th className="px-5 py-4 uppercase text-xs font-black text-gray-500 text-center">ស្តុកចាស់ ➔ ថ្មី</th>
-                        <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">មូលហេតុ / សម្គាល់</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 font-medium">
-                      {filteredMovements.map((log) => {
-                        const isPositive = log.qty_change > 0;
-                        let typeBadge = <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-[10px] font-black">{log.type}</span>;
-                        
-                        if (log.type === 'PURCHASE') {
-                          typeBadge = <span className="bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-md text-[10px] font-black">📥 នាំចូល (In)</span>;
-                        } else if (log.type === 'SALE') {
-                          typeBadge = <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-md text-[10px] font-black">📤 លក់ចេញ (Sale)</span>;
-                        } else if (log.type === 'ADJUSTMENT') {
-                          typeBadge = <span className="bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-md text-[10px] font-black">⚙️ កាត់ស្តុក / កែតម្រូវ</span>;
-                        }
+                <div>
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-100">
+                        <tr>
+                          <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">កាលបរិច្ឆេទ</th>
+                          <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">ទំនិញ</th>
+                          <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">ទំហំ / ពណ៌</th>
+                          <th className="px-5 py-4 uppercase text-xs font-black text-gray-500 text-center">ប្រភេទចលនា</th>
+                          <th className="px-5 py-4 uppercase text-xs font-black text-gray-500 text-center">ចំនួនប្រែប្រួល</th>
+                          <th className="px-5 py-4 uppercase text-xs font-black text-gray-500 text-center">ស្តុកចាស់ ➔ ថ្មី</th>
+                          <th className="px-5 py-4 uppercase text-xs font-black text-gray-500">មូលហេតុ / សម្គាល់</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 font-medium">
+                        {filteredMovements.map((log) => {
+                          const isPositive = log.qty_change > 0;
+                          let typeBadge = <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-[10px] font-black">{log.type}</span>;
+                          
+                          if (log.type === 'PURCHASE') {
+                            typeBadge = <span className="bg-green-50 text-green-700 border border-green-200 px-2.5 py-1 rounded-md text-[10px] font-black">📥 នាំចូល (In)</span>;
+                          } else if (log.type === 'SALE') {
+                            typeBadge = <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-1 rounded-md text-[10px] font-black">📤 លក់ចេញ (Sale)</span>;
+                          } else if (log.type === 'ADJUSTMENT') {
+                            typeBadge = <span className="bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-md text-[10px] font-black">⚙️ កាត់ស្តុក / កែតម្រូវ</span>;
+                          }
 
-                        return (
-                          <tr key={log.id} className="hover:bg-gray-50/80 transition text-xs">
-                            <td className="px-5 py-4 text-gray-500 font-bold whitespace-nowrap">
-                              {new Date(log.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
-                            </td>
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-2.5">
-                                {log.products?.image_url && (
-                                  <img src={log.products.image_url} className="w-8 h-8 rounded-lg object-cover bg-gray-100 border shrink-0" alt="" />
-                                )}
-                                <div>
-                                  <p className="font-black text-gray-900">{log.products?.name || 'ទំនិញទូទៅ'}</p>
-                                  <p className="text-[10px] text-gray-400 font-bold">{log.products?.sku}</p>
+                          return (
+                            <tr key={log.id} className="hover:bg-gray-50/80 transition text-xs">
+                              <td className="px-5 py-4 text-gray-500 font-bold whitespace-nowrap">
+                                {new Date(log.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                              </td>
+                              <td className="px-5 py-4">
+                                <div className="flex items-center gap-2.5">
+                                  {log.products?.image_url && (
+                                    <img src={log.products.image_url} className="w-8 h-8 rounded-lg object-cover bg-gray-100 border shrink-0" alt="" />
+                                  )}
+                                  <div>
+                                    <p className="font-black text-gray-900">{log.products?.name || 'ទំនិញទូទៅ'}</p>
+                                    <p className="text-[10px] text-gray-400 font-bold">{log.products?.sku}</p>
+                                  </div>
                                 </div>
+                              </td>
+                              <td className="px-5 py-4 text-gray-600">
+                                {log.product_variants?.size ? `Size: ${log.product_variants.size}` : 'ទូទៅ'}
+                              </td>
+                              <td className="px-5 py-4 text-center">{typeBadge}</td>
+                              <td className={`px-5 py-4 text-center font-black text-sm ${isPositive ? 'text-green-600' : 'text-rose-600'}`}>
+                                {isPositive ? `+${log.qty_change}` : log.qty_change}
+                              </td>
+                              <td className="px-5 py-4 text-center font-bold text-gray-600">
+                                {log.previous_qty} ➔ <span className="text-gray-900 font-black">{log.new_qty}</span>
+                              </td>
+                              <td className="px-5 py-4 text-gray-500 italic max-w-xs truncate">
+                                {log.reason || '-'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* ⭐️ MOBILE MOVEMENT CARDS (md:hidden) ⭐️ */}
+                  <div className="md:hidden divide-y divide-gray-100">
+                    {filteredMovements.map((log) => {
+                      const isPositive = log.qty_change > 0;
+                      let typeBadge = <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-black">{log.type}</span>;
+                      if (log.type === 'PURCHASE') {
+                        typeBadge = <span className="bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded text-[10px] font-black">📥 នាំចូល</span>;
+                      } else if (log.type === 'SALE') {
+                        typeBadge = <span className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded text-[10px] font-black">📤 លក់ចេញ</span>;
+                      } else if (log.type === 'ADJUSTMENT') {
+                        typeBadge = <span className="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded text-[10px] font-black">⚙️ កាត់ស្តុក</span>;
+                      }
+
+                      return (
+                        <div key={log.id} className="p-3.5 space-y-2 bg-white">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              {log.products?.image_url && (
+                                <img src={log.products.image_url} className="w-10 h-10 rounded-xl object-cover bg-gray-100 border shrink-0" alt="" />
+                              )}
+                              <div className="min-w-0">
+                                <p className="font-black text-gray-900 text-xs truncate max-w-[170px]">{log.products?.name || 'ទំនិញទូទៅ'}</p>
+                                <p className="text-[10px] text-gray-400 font-mono mt-0.5">{log.products?.sku}</p>
                               </div>
-                            </td>
-                            <td className="px-5 py-4 text-gray-600">
-                              {log.product_variants?.size ? `Size: ${log.product_variants.size}` : 'ទូទៅ'}
-                            </td>
-                            <td className="px-5 py-4 text-center">{typeBadge}</td>
-                            <td className={`px-5 py-4 text-center font-black text-sm ${isPositive ? 'text-green-600' : 'text-rose-600'}`}>
-                              {isPositive ? `+${log.qty_change}` : log.qty_change}
-                            </td>
-                            <td className="px-5 py-4 text-center font-bold text-gray-600">
-                              {log.previous_qty} ➔ <span className="text-gray-900 font-black">{log.new_qty}</span>
-                            </td>
-                            <td className="px-5 py-4 text-gray-500 italic max-w-xs truncate">
-                              {log.reason || '-'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              {typeBadge}
+                              <span className={`block font-black text-xs mt-1 ${isPositive ? 'text-green-600' : 'text-rose-600'}`}>
+                                {isPositive ? `+${log.qty_change}` : log.qty_change}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-gray-50">
+                            <div className="text-gray-500 font-bold">
+                              ស្តុក: <span className="font-mono text-gray-500">{log.previous_qty}</span> ➔ <span className="font-mono font-black text-gray-900">{log.new_qty}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-400 font-mono">
+                              {new Date(log.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                            </span>
+                          </div>
+
+                          {log.reason && (
+                            <div className="text-[10px] text-gray-500 italic bg-gray-50 px-2 py-1 rounded-md">
+                              📝 {log.reason}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })()}
