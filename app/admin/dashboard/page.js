@@ -9474,29 +9474,32 @@ export default function UnifiedAdminDashboard() {
     return [];
   });
 
-  // Function ដើម្បីសម្គាល់ថាបានមើល Feedback ទាំងអស់ (Mark All Read)
+  // Function ដើម្បីសម្គាល់ថាបានមើល Feedback ទាំងអស់របស់ហាងបច្ចុប្បន្ន (Mark All Read)
   const markFeedbacksAsRead = () => {
-    if (!adminFeedbacks || adminFeedbacks.length === 0) return;
-    const allIds = adminFeedbacks.map(f => f.id);
-    setReadFeedbackIds(allIds);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem('sabay_admin_read_feedback_ids', JSON.stringify(allIds));
-      } catch (e) {}
-    }
+    if (!currentStoreFeedbacks || currentStoreFeedbacks.length === 0) return;
+    const storeFeedbackIds = currentStoreFeedbacks.map(f => f.id);
+    setReadFeedbackIds(prev => {
+      const next = Array.from(new Set([...(prev || []), ...storeFeedbackIds]));
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('sabay_admin_read_feedback_ids', JSON.stringify(next));
+        } catch (e) {}
+      }
+      return next;
+    });
   };
 
   // ពេលកំពុងមើល ឬចុចមើល Tab Feedback អោយបាត់សញ្ញាលេខ Alert ជាស្វ័យប្រវត្តិ
   useEffect(() => {
-    if (activeTab === 'feedbacks' && adminFeedbacks.length > 0) {
+    if (activeTab === 'feedbacks' && currentStoreFeedbacks.length > 0) {
       markFeedbacksAsRead();
     }
-  }, [activeTab, adminFeedbacks]);
+  }, [activeTab, currentStoreFeedbacks]);
 
-  // គណនាចំនួន Feedback ដែលមិនទាន់បានមើល (Unread Feedbacks)
+  // គណនាចំនួន Feedback ដែលមិនទាន់បានមើលសម្រាប់តែហាងបច្ចុប្បន្ន (Store-Scoped Unread Feedbacks)
   const unreadFeedbacksCount = activeTab === 'feedbacks'
     ? 0
-    : adminFeedbacks.filter(f => !readFeedbackIds.includes(f.id)).length;
+    : currentStoreFeedbacks.filter(f => !readFeedbackIds.includes(f.id)).length;
 
   const handleDeleteFeedback = async (fbId) => {
     if (guardDemoAction("លុប Feedback")) return;
@@ -27592,7 +27595,7 @@ export default function UnifiedAdminDashboard() {
                 icon: '🛍️',
                 tabs: [
                   { id: 'pos', name: 'ប្រព័ន្ធលក់ (POS)', icon: '💻', perm: 'pos', tag: '⚡ SALE', iconColor: 'text-blue-400' },
-                  { id: 'orders', name: 'ការបញ្ជាទិញ (Orders)', icon: '🛒', perm: 'orders', count: realOrders.filter(o => o.status === 'Pending').length, iconColor: 'text-orange-400' },
+                  { id: 'orders', name: 'ការបញ្ជាទិញ (Orders)', icon: '🛒', perm: 'orders', count: (currentStoreOrders || []).filter(o => o.status === 'Pending').length, iconColor: 'text-orange-400' },
                   { id: 'inventory', name: 'គ្រប់គ្រងស្តុកទំនិញ', icon: '🗄️', perm: 'inventory', iconColor: 'text-purple-400' },
                   { id: 'upload', name: 'បញ្ចូលទំនិញថ្មី', icon: '📤', perm: 'upload', iconColor: 'text-sky-400' }
                 ]
