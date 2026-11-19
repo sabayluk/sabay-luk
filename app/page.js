@@ -3,14 +3,23 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LANDING_TRANSLATIONS, getLandingPlans, getLandingFaqs } from '../lib/landingTranslations';
-import { fetchAllStores, DEFAULT_FLAGSHIP_STORE } from '../lib/stores';
+import { fetchAllStores, getLocalStores, DEFAULT_FLAGSHIP_STORE } from '../lib/stores';
 
 export default function SaaSPlatformLandingPage() {
   const [lang, setLang] = useState('km');
   const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
   const [openFaq, setOpenFaq] = useState(null);
-  const [partnerStores, setPartnerStores] = useState([DEFAULT_FLAGSHIP_STORE]);
-  const [loadingStores, setLoadingStores] = useState(true);
+  const [partnerStores, setPartnerStores] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const local = getLocalStores();
+        const active = (local || []).filter(s => s && s.slug && s.status === 'ACTIVE');
+        if (active.length > 0) return active;
+      } catch (e) {}
+    }
+    return [DEFAULT_FLAGSHIP_STORE];
+  });
+  const [loadingStores, setLoadingStores] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -593,7 +602,7 @@ export default function SaaSPlatformLandingPage() {
 
           {/* Stores Grid */}
           <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {loadingStores ? (
+            {(loadingStores && partnerStores.length === 0) ? (
               // Loading skeleton
               [1, 2, 3].map((sk) => (
                 <div key={sk} className="bg-white rounded-3xl p-6 border border-slate-200 animate-pulse space-y-4">
