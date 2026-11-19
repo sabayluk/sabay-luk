@@ -2567,8 +2567,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-5 pb-3">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
           
-          {/* Categories Sidebar */}
-          <div className={`lg:col-span-3 ${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-100 text-gray-900'} rounded-3xl p-5 border shadow-xs flex flex-col justify-start transition-colors`}>
+          {/* Categories Sidebar (លាក់លើ Mobile / Phone App, បង្ហាញតែលើ Desktop Website តាមតម្រូវការ) */}
+          <div className={`hidden lg:flex lg:col-span-3 ${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-gray-100 text-gray-900'} rounded-3xl p-5 border shadow-xs flex-col justify-start transition-colors`}>
             <div>
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
                 <div className="flex items-center gap-2.5">
