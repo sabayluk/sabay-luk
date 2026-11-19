@@ -1054,11 +1054,15 @@ export default function UnifiedAdminDashboard() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const st = getActiveStore();
-      const stId = st?.id || 'store_default_sabayluk';
-      localStorage.setItem(`sabay_customers_${stId}`, JSON.stringify(customers));
-      if (stId === 'store_default_sabayluk') {
-        localStorage.setItem('sabay_customers', JSON.stringify(customers));
+      try {
+        const st = getActiveStore();
+        const stId = st?.id || 'store_default_sabayluk';
+        localStorage.setItem(`sabay_customers_${stId}`, JSON.stringify(customers));
+        if (stId === 'store_default_sabayluk') {
+          localStorage.setItem('sabay_customers', JSON.stringify(customers));
+        }
+      } catch (err) {
+        console.warn('⚠️ Quota exceeded while saving customers:', err);
       }
     }
   }, [customers]);
@@ -1145,11 +1149,15 @@ export default function UnifiedAdminDashboard() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const st = getActiveStore();
-      const stId = st?.id || 'store_default_sabayluk';
-      localStorage.setItem(`sabay_expenses_${stId}`, JSON.stringify(expenses));
-      if (stId === 'store_default_sabayluk') {
-        localStorage.setItem('sabay_luk_expenses', JSON.stringify(expenses));
+      try {
+        const st = getActiveStore();
+        const stId = st?.id || 'store_default_sabayluk';
+        localStorage.setItem(`sabay_expenses_${stId}`, JSON.stringify(expenses));
+        if (stId === 'store_default_sabayluk') {
+          localStorage.setItem('sabay_luk_expenses', JSON.stringify(expenses));
+        }
+      } catch (err) {
+        console.warn('⚠️ Quota exceeded while saving expenses:', err);
       }
     }
   }, [expenses]);
@@ -1494,10 +1502,14 @@ export default function UnifiedAdminDashboard() {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && activeStore) {
-      const storeId = activeStore.id || 'store_default_sabayluk';
-      localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(staffList));
-      if (storeId === 'store_default_sabayluk') {
-        localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
+      try {
+        const storeId = activeStore.id || 'store_default_sabayluk';
+        localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(staffList));
+        if (storeId === 'store_default_sabayluk') {
+          localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
+        }
+      } catch (err) {
+        console.warn('⚠️ Quota exceeded while saving staffList:', err);
       }
     }
   }, [staffList, activeStore?.id]);
@@ -1738,10 +1750,14 @@ export default function UnifiedAdminDashboard() {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && currentStaff && activeStore) {
-      const storeId = activeStore.id || 'store_default_sabayluk';
-      localStorage.setItem(`sabay_active_staff_${storeId}`, JSON.stringify(currentStaff));
-      if (storeId === 'store_default_sabayluk') {
-        localStorage.setItem('sabay_active_staff', JSON.stringify(currentStaff));
+      try {
+        const storeId = activeStore.id || 'store_default_sabayluk';
+        localStorage.setItem(`sabay_active_staff_${storeId}`, JSON.stringify(currentStaff));
+        if (storeId === 'store_default_sabayluk') {
+          localStorage.setItem('sabay_active_staff', JSON.stringify(currentStaff));
+        }
+      } catch (err) {
+        console.warn('⚠️ Quota exceeded while saving currentStaff:', err);
       }
     }
   }, [currentStaff, activeStore?.id]);
@@ -2757,10 +2773,14 @@ export default function UnifiedAdminDashboard() {
 
   useEffect(() => {
     if (typeof window !== 'undefined' && activeStore) {
-      const storeId = activeStore.id || 'store_default_sabayluk';
-      localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(storeSettings));
-      if (storeId === 'store_default_sabayluk') {
-        localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+      try {
+        const storeId = activeStore.id || 'store_default_sabayluk';
+        localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(storeSettings));
+        if (storeId === 'store_default_sabayluk') {
+          localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+        }
+      } catch (err) {
+        console.warn('⚠️ Quota exceeded while saving storeSettings:', err);
       }
     }
   }, [storeSettings, activeStore?.id]);
@@ -5069,8 +5089,8 @@ export default function UnifiedAdminDashboard() {
   });
   const [newColorInput, setNewColorInput] = useState('');
 
-  useEffect(() => { localStorage.setItem('sabay_custom_sizes', JSON.stringify(availableSizes)); }, [availableSizes]);
-  useEffect(() => { localStorage.setItem('sabay_custom_colors', JSON.stringify(availableColors)); }, [availableColors]);
+  useEffect(() => { try { localStorage.setItem('sabay_custom_sizes', JSON.stringify(availableSizes)); } catch (_) {} }, [availableSizes]);
+  useEffect(() => { try { localStorage.setItem('sabay_custom_colors', JSON.stringify(availableColors)); } catch (_) {} }, [availableColors]);
 
   // មុខងាររំកិលទីតាំង Size (Reorder Left/Right)
   const moveSize = (index, direction) => {
