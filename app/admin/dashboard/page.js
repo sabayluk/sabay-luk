@@ -27242,7 +27242,7 @@ export default function UnifiedAdminDashboard() {
 
             {/* Store Name & Workspace Live Indicator */}
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-black text-white tracking-wide truncate" title={storeSettings.storeName || 'SABAY LUK'}>
+              <h2 className="text-sm sm:text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-400 tracking-wider truncate drop-shadow-xs" title={storeSettings.storeName || 'SABAY LUK'}>
                 {storeSettings.storeName || 'SABAY LUK'}
               </h2>
               <div className="flex items-center gap-1.5 mt-0.5">
