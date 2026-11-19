@@ -7331,7 +7331,8 @@ export default function UnifiedAdminDashboard() {
             {(() => {
               const storeSlug = activeStore?.slug || 'sabay-luk';
               const targetParam = editingProductId ? `?product=${editingProductId}` : '?product=preview';
-              const origin = typeof window !== 'undefined' ? window.location.origin : 'https://sabayluk.com';
+              let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
+              if (origin.includes('localhost:')) origin = origin.replace('localhost:', '127.0.0.1:');
               const previewFullUrl = `${origin}/store/${storeSlug}${targetParam}`;
 
               const handleOpenStorefrontProduct = () => {
@@ -7497,7 +7498,8 @@ export default function UnifiedAdminDashboard() {
                     onClick={() => {
                       const storeSlug = activeStore?.slug || 'sabay-luk';
                       const targetParam = editingProductId ? `?product=${editingProductId}` : '?product=preview';
-                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                      let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
+                      if (origin.includes('localhost:')) origin = origin.replace('localhost:', '127.0.0.1:');
                       const fullUrl = `${origin}/store/${storeSlug}${targetParam}`;
                       if (typeof window !== 'undefined') {
                         const draftObj = {
@@ -27279,7 +27281,9 @@ export default function UnifiedAdminDashboard() {
                 <button
                   type="button"
                   onClick={() => {
-                    const storeUrl = window.location.origin + (activeStore?.slug ? `/store/${activeStore.slug}` : '/');
+                    let origin = window.location.origin;
+                    if (origin.includes('localhost:')) origin = origin.replace('localhost:', '127.0.0.1:');
+                    const storeUrl = origin + (activeStore?.slug ? `/store/${activeStore.slug}` : '/');
                     navigator.clipboard.writeText(storeUrl);
                     setToastNotification('📋 បានចម្លង Link មុខហាង! សូមយកទៅ Paste លើ Google Chrome');
                     setTimeout(() => setToastNotification(null), 4000);
@@ -27293,12 +27297,15 @@ export default function UnifiedAdminDashboard() {
             <button 
               type="button"
               onClick={() => {
-                const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+                let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
+                if (origin.includes('localhost:')) {
+                  origin = origin.replace('localhost:', '127.0.0.1:');
+                }
                 const storeUrl = `${origin}${activeStore?.slug ? `/store/${activeStore.slug}` : '/'}`;
                 
-                // 1. Direct browser open immediately
+                // 1. Direct browser open in regular Chrome web tab (NOT APP)
                 try {
-                  const win = window.open(storeUrl, '_blank', 'noopener,noreferrer');
+                  const win = window.open(storeUrl, '_blank');
                   if (win) win.focus();
                 } catch(e) {
                   window.location.href = storeUrl;

@@ -64,16 +64,25 @@ export default function SaaSPlatformLandingPage() {
   const [browserToast, setBrowserToast] = useState(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // ⭐️ បើកគេហទំព័រមុខហាងតែ ១ Tab គត់ (Single Tab Web Browser) ⭐️
+  // ⭐️ មុខងារបង្កើតតំណភ្ជាប់ URL គេហទំព័រមុខហាងគេចផុតពី PWA Capture (Escape PWA to Normal Web Tab) ⭐️
+  const getCleanStoreUrl = (slug) => {
+    let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
+    if (origin.includes('localhost:')) {
+      origin = origin.replace('localhost:', '127.0.0.1:');
+    }
+    return `${origin}/store/${slug}`;
+  };
+
+  // ⭐️ បើកគេហទំព័រមុខហាងជា Tab លើ Web Browser (Google Chrome / Edge) មិនឱ្យចេញជា APP ⭐️
   const handleOpenStoreInBrowser = (e, slug) => {
     if (e && e.preventDefault) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
     
-    const targetUrl = `/store/${slug}`;
+    const targetUrl = getCleanStoreUrl(slug);
     setOpeningSlug(slug);
 
     try {
-      const win = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      const win = window.open(targetUrl, '_blank');
       if (win) win.focus();
     } catch (_) {
       window.location.href = targetUrl;
@@ -85,11 +94,7 @@ export default function SaaSPlatformLandingPage() {
   };
 
   const handleCopyStoreLink = (slug) => {
-    let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
-    if (origin.includes('localhost:')) {
-      origin = origin.replace('localhost:', '127.0.0.1:');
-    }
-    const targetUrl = `${origin}/store/${slug}`;
+    const targetUrl = getCleanStoreUrl(slug);
     if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(targetUrl);
       setCopiedSlug(slug);
@@ -402,7 +407,7 @@ export default function SaaSPlatformLandingPage() {
                   return (
                     <a
                       key={st.slug || st.id}
-                      href={`/store/${st.slug}`}
+                      href={getCleanStoreUrl(st.slug)}
                       onClick={(e) => handleOpenStoreInBrowser(e, st.slug)}
                       className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-300 shadow-xs hover:shadow-sm transition transform active:scale-95 cursor-pointer"
                       title={lang === 'km' ? `បើកទំព័រ ${st.name} លើ Browser` : `Open ${st.name} in Web Browser`}
@@ -611,7 +616,7 @@ export default function SaaSPlatformLandingPage() {
               partnerStores.map((st) => {
                 const logo = getStoreLogoUrl(st);
                 const catName = getStoreCategoryName(st.business_type);
-                const storefrontUrl = `/store/${st.slug}`;
+                const storefrontUrl = getCleanStoreUrl(st.slug);
                 const desc = st.settings?.storeDescription || st.settings?.announcementText || (lang === 'km' ? 'ហាងលក់ទំនិញគុណភាពខ្ពស់ ផ្ដល់ទំនុកចិត្ត និងការបញ្ជាទិញរហ័សតាមអនឡាញ។' : 'Quality merchandise store offering fast & reliable online shopping.');
 
                 return (
