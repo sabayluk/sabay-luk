@@ -21672,8 +21672,134 @@ export default function UnifiedAdminDashboard() {
       <div className="flex flex-col lg:flex-row h-full min-h-[calc(100vh-140px)] animate-in fade-in bg-gray-100 -m-3 sm:-m-6 md:-m-10 pb-20 lg:pb-0 relative">
         
         {/* ផ្នែកខាងឆ្វេង: បញ្ជីទំនិញ និង Categories */}
-        <div className="flex-1 flex flex-col h-full p-6">
-          <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
+        <div className="flex-1 flex flex-col h-full p-2.5 sm:p-4 lg:p-6">
+          
+          {/* ⭐️ MOBILE POS COMPACT HEADER (lg:hidden) ⭐️ */}
+          <div className="lg:hidden mb-3 space-y-2.5">
+            {/* Row 1: Title + Exchange Rate + Retail/Wholesale Toggle */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-1.5">
+                  <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center text-xs sm:text-sm shadow-xs">
+                    💻
+                  </span>
+                  <span>ប្រព័ន្ធលក់</span>
+                </h2>
+                <span className="text-[10px] font-bold text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-xs">
+                  $1 = {exchangeRate.toLocaleString()}៛
+                </span>
+              </div>
+
+              {/* Retail / Wholesale Segmented Toggle */}
+              <div className="bg-white p-0.5 rounded-xl border border-gray-200 shadow-xs flex items-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSwitchPriceMode('retail')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition flex items-center gap-1 cursor-pointer ${
+                    posPriceMode === 'retail'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <span>🛍️</span>
+                  <span>រាយ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchPriceMode('wholesale')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition flex items-center gap-1 cursor-pointer ${
+                    posPriceMode === 'wholesale'
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-xs'
+                      : 'text-gray-600 hover:text-purple-700'
+                  }`}
+                >
+                  <span>💼</span>
+                  <span>ដុំ</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Row 2: Search Input with Embedded Camera Scan Button */}
+            <div className="relative flex items-center">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={posSearch}
+                onChange={(e) => setPosSearch(e.target.value)}
+                onKeyDown={handleBarcodeScan}
+                placeholder="ស្វែងរកឈ្មោះ ឬបាកូដ SKU..."
+                className="w-full pl-9 pr-24 py-2 sm:py-2.5 rounded-xl border-2 border-blue-100 shadow-xs focus:border-blue-500 font-bold outline-none transition bg-white text-xs text-gray-900"
+              />
+              <span className="absolute left-3 text-blue-500 text-sm">🔍</span>
+              {posSearch && (
+                <button
+                  type="button"
+                  onClick={() => setPosSearch('')}
+                  className="absolute right-20 text-gray-400 hover:text-gray-600 text-xs w-5 h-5 flex items-center justify-center font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+              {/* Camera Scanner Button (Embedded inside Search on mobile) */}
+              <button
+                type="button"
+                onClick={() => setIsCameraScannerOpen(true)}
+                className="absolute right-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 active:scale-95 text-white px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-black shadow-xs flex items-center gap-1 transition cursor-pointer"
+                title="បើកកាមេរ៉ាស្កេនបាកូដ"
+              >
+                <span className="text-xs">📷</span>
+                <span className="text-[10px]">ស្កេន</span>
+              </button>
+            </div>
+
+            {/* Row 3: Quick Action Pills (Horizontal scrollable or flex) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+              {/* Z-Report */}
+              <button
+                type="button"
+                onClick={() => setZReportModalOpen(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1.5 rounded-xl text-[11px] font-black shadow-xs flex items-center gap-1 shrink-0 transition cursor-pointer"
+              >
+                <span>📋</span>
+                <span>បិទបញ្ជី (Z-Report)</span>
+              </button>
+
+              {/* Hardware Scanner Settings */}
+              <button
+                type="button"
+                onClick={() => setScannerSettingsOpen(true)}
+                className="bg-white hover:bg-slate-50 active:scale-95 text-slate-700 border border-slate-200 px-2.5 py-1.5 rounded-xl text-[11px] font-black shadow-xs flex items-center gap-1 shrink-0 transition cursor-pointer"
+              >
+                <span>⚡</span>
+                <span>ម៉ាស៊ីនស្កេន</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+              </button>
+
+              {/* Customer Display */}
+              <button
+                type="button"
+                onClick={() => {
+                  const win = window.open('/pos-display', 'SabayCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
+                  displayWindowRef.current = win;
+                  setTimeout(() => {
+                    try {
+                      const raw = localStorage.getItem('sabay_pos_customer_display_state');
+                      if (raw && win && !win.closed) {
+                        win.postMessage({ type: 'POS_STATE_UPDATE', payload: JSON.parse(raw) }, '*');
+                      }
+                    } catch(e) {}
+                  }, 500);
+                }}
+                className="bg-slate-900 hover:bg-black active:scale-95 text-amber-300 border border-slate-700 px-2.5 py-1.5 rounded-xl text-[11px] font-black shadow-xs flex items-center gap-1 shrink-0 transition cursor-pointer"
+              >
+                <span>🖥️</span>
+                <span>អេក្រង់ក្រៅ ↗</span>
+              </button>
+            </div>
+          </div>
+
+          {/* ⭐️ DESKTOP POS HEADER (hidden lg:flex) ⭐️ */}
+          <div className="hidden lg:flex flex-wrap justify-between items-center mb-6 gap-4">
             <div className="flex items-center gap-4">
               <div>
                 <h2 className="text-3xl font-black text-gray-900">ប្រព័ន្ធលក់ (POS)</h2>
@@ -21784,19 +21910,19 @@ export default function UnifiedAdminDashboard() {
           </div>
 
           {/* Categories Tab */}
-          <div className="flex gap-2.5 mb-6 overflow-x-auto pb-2 items-center">
+          <div className="flex gap-2 sm:gap-2.5 mb-3 sm:mb-4 lg:mb-6 overflow-x-auto pb-1.5 sm:pb-2 items-center no-scrollbar">
             {/* ប៊ូតុង ទំនិញទាំងអស់ */}
             <button
               type="button"
               onClick={() => setPosCategory('all')}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-sm transition flex items-center gap-2 cursor-pointer border ${
+              className={`px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-xs transition flex items-center gap-1.5 sm:gap-2 cursor-pointer border shrink-0 ${
                 posCategory === 'all'
                   ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/40'
                   : 'bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 border-gray-200/80'
               }`}
             >
               <span>ទំនិញទាំងអស់</span>
-              <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+              <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black tracking-tight ${
                 posCategory === 'all' ? 'bg-white/25 text-white' : 'bg-blue-50 text-blue-700'
               }`}>
                 ({currentStoreProducts.length})
@@ -21816,14 +21942,14 @@ export default function UnifiedAdminDashboard() {
                   key={cat.id || catName}
                   type="button"
                   onClick={() => setPosCategory(catName)}
-                  className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-sm transition flex items-center gap-2 cursor-pointer border ${
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-xs transition flex items-center gap-1.5 sm:gap-2 cursor-pointer border shrink-0 ${
                     isSelected
                       ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/40'
                       : 'bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 border-gray-200/80'
                   }`}
                 >
                   <span>{catName}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+                  <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black tracking-tight ${
                     isSelected
                       ? 'bg-white/25 text-white'
                       : count > 0
@@ -21848,14 +21974,14 @@ export default function UnifiedAdminDashboard() {
                   key={`extra-${extraCat}`}
                   type="button"
                   onClick={() => setPosCategory(extraCat)}
-                  className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-sm transition flex items-center gap-2 cursor-pointer border ${
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl font-bold text-xs whitespace-nowrap shadow-xs transition flex items-center gap-1.5 sm:gap-2 cursor-pointer border shrink-0 ${
                     isSelected
                       ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/25 ring-2 ring-blue-400/40'
                       : 'bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 border-gray-200/80'
                   }`}
                 >
                   <span>{extraCat}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-black tracking-tight ${
+                  <span className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black tracking-tight ${
                     isSelected
                       ? 'bg-white/25 text-white'
                       : count > 0
@@ -21871,7 +21997,7 @@ export default function UnifiedAdminDashboard() {
 
 
           {/* Product Grid */}
-          <div className="flex-1 overflow-y-auto pr-2 pb-10">
+          <div className="flex-1 overflow-y-auto pr-1 sm:pr-2 pb-28 sm:pb-32 lg:pb-10">
             {filteredProducts.length === 0 ? (
               <div className="h-full min-h-[350px] flex flex-col items-center justify-center text-center p-8 bg-white/70 rounded-3xl border-2 border-dashed border-gray-200">
                 <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center text-3xl mb-3 shadow-inner">
@@ -21897,41 +22023,59 @@ export default function UnifiedAdminDashboard() {
                 )}
               </div>
             ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-3.5 lg:gap-4">
               {filteredProducts.map(product => {
                 const isOutOfStock = product.stock_qty <= 0;
+                const inCartQty = posCart
+                  .filter(it => it.id === product.id)
+                  .reduce((s, it) => s + (it.quantity || 1), 0);
+
                 return (
                   <div 
                     key={product.id} 
                     onClick={() => handleProductClick(product)} 
-                    className={`bg-white p-3 rounded-2xl shadow-sm hover:shadow-xl cursor-pointer border-2 transition transform hover:-translate-y-1 flex flex-col ${isOutOfStock ? 'opacity-50 border-gray-200 grayscale' : 'border-transparent hover:border-blue-500'}`}
+                    className={`bg-white p-2.5 sm:p-3 rounded-2xl shadow-xs hover:shadow-lg cursor-pointer border-2 transition-all transform active:scale-[0.97] hover:-translate-y-0.5 flex flex-col relative select-none ${
+                      isOutOfStock 
+                        ? 'opacity-50 border-gray-200 grayscale' 
+                        : inCartQty > 0 
+                        ? 'border-blue-500 shadow-md ring-2 ring-blue-100' 
+                        : 'border-transparent hover:border-blue-400'
+                    }`}
                   >
-                    <div className="aspect-square bg-gray-100 rounded-xl mb-3 overflow-hidden relative">
+                    <div className="aspect-square bg-gray-100 rounded-xl mb-2 sm:mb-2.5 overflow-hidden relative">
                       {product.image_url ? (
                         <img src={product.image_url} className="w-full h-full object-cover" alt="" />
                       ) : (
                         <span className="absolute inset-0 flex justify-center items-center text-gray-400 text-xs">គ្មានរូប</span>
                       )}
-                      <span className={`absolute top-2 right-2 text-white text-[10px] px-2 py-0.5 rounded-md font-bold ${isOutOfStock ? 'bg-red-600' : 'bg-black/70'}`}>
+                      <span className={`absolute top-1.5 right-1.5 text-white text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-md font-bold shadow-xs ${isOutOfStock ? 'bg-red-600' : 'bg-black/70'}`}>
                         {isOutOfStock ? 'អស់ស្តុក' : `ស្តុក: ${product.stock_qty}`}
                       </span>
+
+                      {/* ⭐️ IN-CART QUANTITY BADGE (Standard POS indicator) ⭐️ */}
+                      {inCartQty > 0 && (
+                        <span className="absolute top-1.5 left-1.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[10px] sm:text-[11px] font-black px-1.5 py-0.5 rounded-lg shadow-md flex items-center gap-1 animate-in zoom-in-75 z-10">
+                          <span>🛒</span>
+                          <span>{inCartQty}</span>
+                        </span>
+                      )}
                     </div>
-                    <h4 className="text-xs font-bold text-gray-800 line-clamp-1 mb-1">{product.name}</h4>
-                    <p className="text-[10px] text-gray-400 font-bold mb-2">{product.sku}</p>
-                    <div className="flex justify-between items-end mt-auto pt-2 border-t border-gray-100">
+                    <h4 className="text-xs font-bold text-gray-800 line-clamp-1 mb-0.5 leading-snug">{product.name}</h4>
+                    <p className="text-[10px] text-gray-400 font-mono font-bold mb-1.5">{product.sku}</p>
+                    <div className="flex justify-between items-end mt-auto pt-1.5 border-t border-gray-100">
                       <div>
                         {posPriceMode === 'wholesale' ? (
                           <div>
                             <div className="flex items-center gap-1">
-                              <span className="text-[9px] font-black bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">
+                              <span className="text-[8px] sm:text-[9px] font-black bg-purple-100 text-purple-700 px-1 py-0.2 rounded border border-purple-200">
                                 ដុំ
                               </span>
-                              <p className="text-purple-700 font-black text-base">
+                              <p className="text-purple-700 font-black text-sm sm:text-base leading-tight">
                                 ${getProductPosPrice(product, 'wholesale').toFixed(2)}
                               </p>
                             </div>
                             {product.wholesale_price && parseFloat(product.wholesale_price) > 0 ? (
-                              <p className="text-[9px] text-gray-400 line-through font-bold">
+                              <p className="text-[8px] sm:text-[9px] text-gray-400 line-through font-bold">
                                 រាយ: ${parseFloat(product.price).toFixed(2)}
                               </p>
                             ) : (
@@ -21943,22 +22087,22 @@ export default function UnifiedAdminDashboard() {
                         ) : (
                           <div>
                             <div className="flex items-center gap-1">
-                              <span className="text-[9px] font-black bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
+                              <span className="text-[8px] sm:text-[9px] font-black bg-blue-100 text-blue-700 px-1 py-0.2 rounded border border-blue-200">
                                 រាយ
                               </span>
-                              <p className="text-blue-600 font-black text-base">
+                              <p className="text-blue-600 font-black text-sm sm:text-base leading-tight">
                                 ${getProductPosPrice(product, 'retail').toFixed(2)}
                               </p>
                             </div>
                             {product.wholesale_price && parseFloat(product.wholesale_price) > 0 && (
-                              <p className="text-[9px] text-purple-600 font-bold">
+                              <p className="text-[8px] sm:text-[9px] text-purple-600 font-bold">
                                 ដុំ: ${parseFloat(product.wholesale_price).toFixed(2)}
                               </p>
                             )}
                           </div>
                         )}
                       </div>
-                      <span className="text-[10px] text-gray-400 font-bold">
+                      <span className="text-[9px] sm:text-[10px] text-gray-400 font-bold leading-tight">
                         {Math.round(getProductPosPrice(product, posPriceMode) * exchangeRate).toLocaleString()} ៛
                       </span>
                     </div>
@@ -22398,23 +22542,28 @@ export default function UnifiedAdminDashboard() {
 
         {/* ⭐️ MOBILE FLOATING CART ACTION BAR (Shown on Mobile when Cart has items) ⭐️ */}
         {posCart.length > 0 && (
-          <div className="lg:hidden fixed bottom-16 left-3 right-3 z-30 animate-in slide-in-from-bottom-2">
+          <div className="lg:hidden fixed bottom-16 left-2.5 right-2.5 z-30 animate-in slide-in-from-bottom-2 duration-300">
             <button
               type="button"
               onClick={() => setIsMobileCartOpen(true)}
-              className="w-full bg-slate-950 hover:bg-black text-white p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center justify-between gap-3 active:scale-[0.98] transition cursor-pointer"
+              className="w-full bg-slate-950/95 backdrop-blur-md hover:bg-black text-white p-3 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.5)] border-2 border-amber-400/60 flex items-center justify-between gap-2.5 active:scale-[0.98] transition cursor-pointer"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center text-lg font-black shadow-md shrink-0">
-                  🛒
-                </span>
+                <div className="relative shrink-0">
+                  <span className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 text-white flex items-center justify-center text-lg font-black shadow-md">
+                    🛒
+                  </span>
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center border-2 border-slate-950 animate-bounce">
+                    {posCart.reduce((s, it) => s + (it.quantity || 1), 0)}
+                  </span>
+                </div>
                 <div className="text-left min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-black text-xs text-white block truncate">
-                      {posCart.reduce((s, it) => s + (it.quantity || 1), 0)} មុខក្នុងកន្ត្រក
+                      {posCart.length} មុខ ({posCart.reduce((s, it) => s + (it.quantity || 1), 0)} ឯកតា)
                     </span>
                     {posPriceMode === 'wholesale' && (
-                      <span className="text-[9px] bg-purple-500/30 text-purple-200 px-1.5 py-0.2 rounded font-bold">ដុំ</span>
+                      <span className="text-[9px] bg-purple-500/30 text-purple-200 px-1.5 py-0.2 rounded font-bold border border-purple-400/30">ដុំ</span>
                     )}
                   </div>
                   <span className="text-[11px] text-amber-300 font-black">
@@ -22422,9 +22571,9 @@ export default function UnifiedAdminDashboard() {
                   </span>
                 </div>
               </div>
-              <span className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-xs flex items-center gap-1.5 shrink-0">
-                <span>មើលកន្ត្រក & គិតលុយ</span>
-                <span>➔</span>
+              <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 shrink-0 hover:brightness-110 transition">
+                <span>គិតលុយ</span>
+                <span className="text-sm">➔</span>
               </span>
             </button>
           </div>
@@ -22442,10 +22591,12 @@ export default function UnifiedAdminDashboard() {
             >
               {/* Mobile Cart Header */}
               <div className="p-3.5 border-b border-gray-100 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">🛒</span>
+                <div className="flex items-center gap-2.5">
+                  <span className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center text-sm font-black shadow-xs">
+                    🛒
+                  </span>
                   <div>
-                    <h3 className="font-black text-xs sm:text-sm">កន្រ្តកទំនិញ ({posCart.length} មុខ)</h3>
+                    <h3 className="font-black text-sm">កន្រ្តកទំនិញ ({posCart.length} មុខ)</h3>
                     <p className="text-[10px] text-slate-400">
                       អតិថិជន: <span className="text-white font-bold">{customerName || 'អតិថិជនទូទៅ'}</span>
                     </p>
@@ -22459,7 +22610,7 @@ export default function UnifiedAdminDashboard() {
                         clearCart();
                         setIsMobileCartOpen(false);
                       }}
-                      className="text-red-400 hover:text-red-300 text-xs font-bold bg-white/10 px-2 py-1 rounded-lg"
+                      className="text-red-400 hover:text-red-300 text-xs font-bold bg-white/10 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
                     >
                       🗑️ សម្អាត
                     </button>
@@ -22467,7 +22618,7 @@ export default function UnifiedAdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setIsMobileCartOpen(false)}
-                    className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs"
+                    className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center text-xs transition cursor-pointer"
                   >
                     ✕
                   </button>
@@ -22478,14 +22629,17 @@ export default function UnifiedAdminDashboard() {
               <div className="flex-1 overflow-y-auto p-3 space-y-3">
                 {/* Customer quick button */}
                 <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
-                  <span className="font-bold text-slate-700">👤 អតិថិជន: <b>{customerName || 'ទូទៅ'}</b></span>
+                  <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <span>👤</span>
+                    <span>អតិថិជន: <b className="text-gray-900">{customerName || 'ទូទៅ'}</b></span>
+                  </span>
                   <button
                     type="button"
                     onClick={() => {
                       setCustomerName('អតិថិជនទូទៅ');
                       setCustomerPhone('');
                     }}
-                    className="text-[10px] bg-slate-200 text-slate-700 font-bold px-2 py-0.5 rounded-md"
+                    className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-2.5 py-1 rounded-lg transition cursor-pointer"
                   >
                     ទូទៅ
                   </button>
@@ -22494,29 +22648,46 @@ export default function UnifiedAdminDashboard() {
                 {/* Items */}
                 <div className="space-y-2">
                   {posCart.map(item => (
-                    <div key={item.cartItemId} className="p-2.5 rounded-xl border border-gray-100 bg-gray-50 flex items-center justify-between gap-2">
+                    <div key={item.cartItemId} className="p-2.5 rounded-2xl border border-gray-100 bg-gray-50/80 flex items-center gap-2.5 shadow-xs">
+                      {/* Product Thumbnail */}
+                      <div className="w-12 h-12 rounded-xl bg-gray-200 overflow-hidden shrink-0 relative border border-gray-200">
+                        {item.image_url ? (
+                          <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="w-full h-full flex items-center justify-center text-[10px] text-gray-400">ទំនិញ</span>
+                        )}
+                      </div>
+
+                      {/* Info */}
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-xs text-gray-900 truncate">{item.name}</p>
-                        <p className="text-[10px] text-gray-500 font-mono">
-                          {item.selectedSize ? `Size: ${item.selectedSize}` : ''} {item.selectedColor ? `• ${item.selectedColor}` : ''} • ${(item.price || 0).toFixed(2)}
+                        <p className="text-[10px] text-gray-500 font-mono mt-0.5">
+                          {item.selectedSize ? `Size: ${item.selectedSize}` : ''} {item.selectedColor ? `• ${item.selectedColor}` : ''}
+                        </p>
+                        <p className="text-xs font-black text-blue-600 mt-0.5">
+                          ${(item.price || 0).toFixed(2)}
+                          <span className="text-[10px] text-gray-400 font-normal ml-1">x {item.quantity} = <b>${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</b></span>
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+
+                      {/* Steppers & Remove */}
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
-                          className="w-6 h-6 rounded-lg bg-white border border-gray-300 flex items-center justify-center text-xs font-bold"
+                          className="w-7 h-7 rounded-xl bg-white border border-gray-300 hover:bg-gray-100 active:scale-95 flex items-center justify-center text-xs font-black text-gray-700 shadow-xs transition cursor-pointer"
                         >-</button>
-                        <span className="text-xs font-black min-w-[16px] text-center">{item.quantity}</span>
+                        <span className="text-xs font-black min-w-[20px] text-center text-gray-900">{item.quantity}</span>
                         <button
                           type="button"
                           onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
-                          className="w-6 h-6 rounded-lg bg-white border border-gray-300 flex items-center justify-center text-xs font-bold"
+                          className="w-7 h-7 rounded-xl bg-white border border-gray-300 hover:bg-gray-100 active:scale-95 flex items-center justify-center text-xs font-black text-gray-700 shadow-xs transition cursor-pointer"
                         >+</button>
                         <button
                           type="button"
                           onClick={() => removeFromCart(item.cartItemId)}
-                          className="text-rose-500 hover:text-rose-700 text-xs font-bold ml-1"
+                          className="w-7 h-7 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 active:scale-95 flex items-center justify-center text-xs font-bold transition ml-0.5 cursor-pointer"
+                          title="លុបចេញពីកន្ត្រក"
                         >✕</button>
                       </div>
                     </div>
@@ -22524,44 +22695,44 @@ export default function UnifiedAdminDashboard() {
                 </div>
 
                 {/* Totals */}
-                <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200/80 space-y-2 text-xs">
+                <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200/80 space-y-2 text-xs">
                   <div className="flex justify-between items-center font-bold text-gray-600">
                     <span>តម្លៃដើមសរុប:</span>
                     <span>${(posSubtotal || 0).toFixed(2)}</span>
                   </div>
                   {posDiscountAmount > 0 && (
                     <div className="flex justify-between items-center font-bold text-rose-600">
-                      <span>បញ្ចុះតម្លៃ:</span>
-                      <span>-${(posDiscountAmount || 0).toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
-                    <div>
-                      <span className="font-black text-gray-900 text-sm block">ទឹកប្រាក់សរុប (Total):</span>
-                      <span className="text-[11px] text-orange-600 font-black">{posTotalKHR.toLocaleString()} ៛</span>
-                    </div>
-                    <span className="text-2xl font-black text-blue-600">${posTotal.toFixed(2)}</span>
+                    <span>បញ្ចុះតម្លៃ:</span>
+                    <span>-${(posDiscountAmount || 0).toFixed(2)}</span>
                   </div>
+                )}
+                <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
+                  <div>
+                    <span className="font-black text-gray-900 text-sm block">ទឹកប្រាក់សរុប (Total):</span>
+                    <span className="text-[11px] text-orange-600 font-black">{posTotalKHR.toLocaleString()} ៛</span>
+                  </div>
+                  <span className="text-2xl font-black text-blue-600">${posTotal.toFixed(2)}</span>
                 </div>
-
-                {/* Mobile Pay CTA */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAmountTendered(posTotal.toString());
-                    setIsMobileCartOpen(false);
-                    setPaymentModalOpen(true);
-                  }}
-                  disabled={posCart.length === 0}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                >
-                  <span>💳</span>
-                  <span>ទូទាត់ប្រាក់ឥឡូវនេះ (PAY)</span>
-                </button>
               </div>
+
+              {/* Mobile Pay CTA */}
+              <button
+                type="button"
+                onClick={() => {
+                  setAmountTendered(posTotal.toString());
+                  setIsMobileCartOpen(false);
+                  setPaymentModalOpen(true);
+                }}
+                disabled={posCart.length === 0}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:bg-gray-300 disabled:shadow-none"
+              >
+                <span>💳</span>
+                <span>ទូទាត់ប្រាក់ឥឡូវនេះ (PAY)</span>
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
                 {/* ⭐️ MODAL ជ្រើសរើសទំហំ & ពណ៌ FULL OPTION ⭐️ */}
         {variantModalOpen && selectedProductForVariant && (
@@ -27436,10 +27607,10 @@ export default function UnifiedAdminDashboard() {
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden relative">
       {/* ⭐️ PERSISTENT TOP-RIGHT PAYMENT & PLAN APPROVAL ALERT WIDGET (បង្ហាញតែម្ចាស់ប្រព័ន្ធ / ACCOUNT OWNER ប៉ុណ្ណោះ មិនបង្ហាញលើ ACCOUNT អតិថិជន) ⭐️ */}
       {Boolean((activeStore?.id === 'store_default_sabayluk' || !activeStore?.id) && (canManageStores || currentStaff?.id === 'STAFF-1' || currentStaff?.role === 'ADMIN')) && totalPendingActionCount > 0 && (
-        <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end gap-2 animate-in slide-in-from-top-3 fade-in duration-300">
+        <div className="fixed top-2.5 right-2.5 sm:top-4 sm:right-4 z-[9999] flex flex-col items-end gap-2 animate-in slide-in-from-top-3 fade-in duration-300 max-w-[calc(100vw-20px)] sm:max-w-sm pointer-events-auto">
           {!paymentAlertDismissed ? (
             <div 
-              className="bg-slate-950/95 backdrop-blur-md text-white p-4 rounded-3xl shadow-2xl border-2 border-amber-400 max-w-sm w-full relative overflow-hidden group cursor-pointer hover:border-amber-300 transition-all active:scale-[0.99]"
+              className="bg-slate-950/95 backdrop-blur-md text-white p-3.5 sm:p-4 rounded-3xl shadow-2xl border-2 border-amber-400 max-w-sm w-full relative overflow-hidden group cursor-pointer hover:border-amber-300 transition-all active:scale-[0.99]"
               onClick={() => handleNavigateToPendingApproval()}
             >
               {/* Glowing animated accent top line */}
@@ -27499,12 +27670,12 @@ export default function UnifiedAdminDashboard() {
             <button
               type="button"
               onClick={() => handleNavigateToPendingApproval()}
-              className="group bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 hover:from-amber-600 hover:to-orange-600 text-white px-3.5 py-2.5 rounded-2xl shadow-2xl border-2 border-amber-400 flex items-center gap-2.5 transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer relative"
+              className="group bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 hover:from-amber-600 hover:to-orange-600 text-white p-2 sm:px-3.5 sm:py-2.5 rounded-2xl shadow-xl border-2 border-amber-400 flex items-center gap-1.5 sm:gap-2.5 transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer relative"
               title="ចុចដើម្បីពិនិត្យ និង Approve ហាងដែលបានបង់ប្រាក់"
             >
-              <span className="text-base group-hover:rotate-12 transition-transform">🔔</span>
-              <span className="text-xs font-black">ស្នើសុំ Approve</span>
-              <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center border-2 border-slate-950 animate-bounce">
+              <span className="text-sm sm:text-base group-hover:rotate-12 transition-transform">🔔</span>
+              <span className="text-xs font-black hidden sm:inline">ស្នើសុំ Approve</span>
+              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-rose-600 text-white text-[9px] sm:text-[10px] font-black flex items-center justify-center border-2 border-slate-950 animate-bounce">
                 {totalPendingActionCount}
               </span>
             </button>
