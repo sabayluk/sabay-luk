@@ -683,53 +683,125 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [downloadSuccessMsg, setDownloadSuccessMsg] = useState('');
 
-  // មុខងារទាញយករូបភាព ១ សន្លឹក
+  // ⭐️ មុខងារទាញយករូបភាព ១ សន្លឹក (គាំទ្រទាំង Mobile iOS/Android និង Desktop) ⭐️
   const downloadSingleImage = async (imgUrl, filename) => {
     if (!imgUrl) return;
+    const cleanFilename = (filename || 'product-image.jpg').replace(/[/\\?%*:|"<>]/g, '_');
+    const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
     try {
+      setDownloadSuccessMsg('⏳ កំពុងដំណើរការទាញយក...');
       const response = await fetch(imgUrl, { mode: 'cors' });
       const blob = await response.blob();
+      const mimeType = blob.type || (cleanFilename.endsWith('.png') ? 'image/png' : 'image/jpeg');
+      const file = new File([blob], cleanFilename, { type: mimeType });
+
+      // 📱 1. សម្រាប់ Mobile (iOS Safari / Android): ប្រើ Web Share API រក្សាទុកផ្ទាល់ចូលក្នុង Photos / Camera Roll
+      if (isMobile && typeof navigator.share === 'function' && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: cleanFilename
+          });
+          setDownloadSuccessMsg('✅ បានបើកផ្ទាំងរូបភាព! សូមចុច «Save Image (រក្សាទុករូបថត)»');
+          setTimeout(() => setDownloadSuccessMsg(''), 4500);
+          return;
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') {
+            setDownloadSuccessMsg('');
+            return;
+          }
+          console.warn('Navigator share dismissed or failed, falling back to download:', shareErr);
+        }
+      }
+
+      // 💻 2. សម្រាប់ Desktop ឬ Mobile Browser ផ្សេងទៀត: ប្រើ Blob Anchor Click
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = filename || 'product-image.jpg';
+      link.download = cleanFilename;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      setTimeout(() => {
+        try {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        } catch (_) {}
+      }, 1500);
+
       setDownloadSuccessMsg('✅ បានទាញយករូបភាពដោយជោគជ័យ!');
-      setTimeout(() => setDownloadSuccessMsg(''), 3000);
+      setTimeout(() => setDownloadSuccessMsg(''), 3500);
     } catch (e) {
-      // Fallback direct open
-      const link = document.createElement('a');
-      link.href = imgUrl;
-      link.target = '_blank';
-      link.download = filename || 'product-image.jpg';
-      link.click();
+      console.warn('Direct blob download failed, opening direct image:', e);
+      // 📱 3. Fallback: បើករូបភាពផ្ទាល់ក្នុង Tab ថ្មីដើម្បីឱ្យ user សង្កត់លើរូប Save Image បាន
+      window.open(imgUrl, '_blank');
+      setDownloadSuccessMsg('💡 លើទូរសព្ទ៖ សូមចុចសង្កត់លើរូបភាព រួចជ្រើសរើស «Save to Photos»');
+      setTimeout(() => setDownloadSuccessMsg(''), 5000);
     }
   };
 
-  // មុខងារទាញយករូបភាពទាំងអស់ក្នុងពេលតែមួយ (Download All Photos)
+  // ⭐️ មុខងារទាញយករូបភាពទាំងអស់ក្នុងពេលតែមួយ (Download All Photos for Mobile & Desktop) ⭐️
   const downloadAllProductImages = async (imagesList, prodName) => {
     if (!imagesList || imagesList.length === 0) return;
     setIsDownloadingAll(true);
-    setDownloadSuccessMsg('⏳ កំពុងទាញយករូបភាពទាំងអស់...');
+    setDownloadSuccessMsg(`⏳ កំពុងរៀបចំទាញយករូបភាពទាំង ${imagesList.length} សន្លឹក...`);
+
+    const cleanName = (prodName || 'sabay_product')
+      .replace(/[^a-zA-Z0-9_\-\u1780-\u17FF]/g, '_')
+      .slice(0, 30);
+    const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
     try {
-      const cleanName = (prodName || 'sabay_product')
-        .replace(/[^a-zA-Z0-9_\-\u1780-\u17FF]/g, '_')
-        .slice(0, 30);
+      // 1. Fetch all images as blobs & convert to File array
+      const files = [];
       for (let i = 0; i < imagesList.length; i++) {
-        const ext = imagesList[i].split('.').pop()?.split('?')[0] || 'jpg';
+        const url = imagesList[i];
+        try {
+          const res = await fetch(url, { mode: 'cors' });
+          const blob = await res.blob();
+          const ext = url.split('.').pop()?.split(/[#?]/)[0] || 'jpg';
+          const filename = `${cleanName}_pic_${i + 1}.${ext}`;
+          files.push(new File([blob], filename, { type: blob.type || 'image/jpeg' }));
+        } catch (fetchErr) {
+          console.warn(`Failed to fetch image ${i + 1}:`, fetchErr);
+        }
+      }
+
+      // 📱 2. លើ Mobile (iOS / Android): ប្រើ Web Share API បញ្ជូនរូបភាពទាំងអស់ទៅ Native Share Sheet (Save All Images)
+      if (isMobile && typeof navigator.share === 'function' && navigator.canShare && files.length > 0 && navigator.canShare({ files })) {
+        try {
+          await navigator.share({
+            files: files,
+            title: `${prodName} - រូបភាពទាំងអស់`
+          });
+          setDownloadSuccessMsg(`🎉 បានបើកផ្ទាំងរូបភាពទាំង ${files.length} សន្លឹក! សូមចុច «Save Images»`);
+          setTimeout(() => setDownloadSuccessMsg(''), 5000);
+          return;
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') {
+            setDownloadSuccessMsg('');
+            return;
+          }
+          console.warn('Multi-file share error, falling back:', shareErr);
+        }
+      }
+
+      // 💻 3. សម្រាប់ Desktop ឬ Fallback: Download Sequential
+      for (let i = 0; i < imagesList.length; i++) {
+        const ext = imagesList[i].split('.').pop()?.split(/[#?]/)[0] || 'jpg';
         const filename = `${cleanName}_pic_${i + 1}.${ext}`;
         await downloadSingleImage(imagesList[i], filename);
         if (i < imagesList.length - 1) {
-          await new Promise(res => setTimeout(res, 400));
+          await new Promise(res => setTimeout(res, 500));
         }
       }
+
       setDownloadSuccessMsg(`🎉 បានទាញយករូបភាពទាំងអស់ (${imagesList.length} សន្លឹក) ជោគជ័យ!`);
       setTimeout(() => setDownloadSuccessMsg(''), 4000);
     } catch (err) {
       console.error('Error downloading all images:', err);
+      setDownloadSuccessMsg('❌ មានបញ្ហាបន្តិចបន្តួចពេលទាញយក សូមសាកល្បងម្តងទៀត');
+      setTimeout(() => setDownloadSuccessMsg(''), 4000);
     } finally {
       setIsDownloadingAll(false);
     }
