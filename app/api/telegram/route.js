@@ -89,19 +89,34 @@ export async function POST(request) {
         console.warn('Telegram store settings lookup error:', dbErr);
       }
 
-      // ⭐️ Fallback ទៅ store_default_sabayluk ប្រសិនបើហាងសាខាមិនទាន់បានកំណត់ Bot Token ផ្ទាល់ខ្លួន ⭐️
+      // ⭐️ FIX: STRICT MULTI-TENANT ISOLATION (ហាងមួយមាន Bot មួយ កុំឱ្យលោតជាន់គ្នា) ⭐️
+      // ប្រសិនបើហាងនេះជាហាងសាខា ឬហាងដាច់ដោយឡែក (Tenant Store) ហើយមិនទាន់បានកំណត់ Bot Token ឬ Chat ID
+      // ដាច់ខាតមិនត្រូវ Fallback ទៅ store_default_sabayluk ឬ Platform Admin Bot ឡើយ ដើម្បីកុំឱ្យសារលោតជាន់គ្នា!
+      const isDefaultStore = (!storeId || storeId === 'store_default_sabayluk') && (!storeSlug || storeSlug === 'sabay-luk');
+
       if (!token || !chat) {
-        try {
-          const { data: defaultRow } = await supabase.from('stores').select('settings').eq('id', 'store_default_sabayluk').maybeSingle();
-          if (defaultRow?.settings) {
-            if (!token && defaultRow.settings.telegramBotToken) token = defaultRow.settings.telegramBotToken.trim();
-            if (!chat && defaultRow.settings.telegramChatId) chat = defaultRow.settings.telegramChatId.trim();
+        if (isDefaultStore) {
+          // ករណីហាង SABAY LUK ដើម (Default Flagship) ទើបអនុញ្ញាតឱ្យប្រើ Default Platform Bot
+          try {
+            const { data: defaultRow } = await supabase.from('stores').select('settings').eq('id', 'store_default_sabayluk').maybeSingle();
+            if (defaultRow?.settings) {
+              if (!token && defaultRow.settings.telegramBotToken) token = defaultRow.settings.telegramBotToken.trim();
+              if (!chat && defaultRow.settings.telegramChatId) chat = defaultRow.settings.telegramChatId.trim();
+            }
+          } catch (fbErr) {
+            console.warn('Fallback telegram lookup error:', fbErr);
           }
-        } catch (fbErr) {
-          console.warn('Fallback telegram lookup error:', fbErr);
+          if (!token) token = (process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || DEFAULT_PLATFORM_BOT_TOKEN).trim();
+          if (!chat) chat = (process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || DEFAULT_PLATFORM_CHAT_ID).trim();
+        } else {
+          // ហាងសាខាផ្សេង (Mario, Urbangrabs...) បើមិនទាន់ដាក់ Bot ផ្ទាល់ខ្លួន គឺ Skip ដោយសុវត្ថិភាព មិនឱ្យលោតចូល Telegram ហាងដទៃឡើយ!
+          console.log(`[Telegram Isolated Notice] Store "${storeName || storeSlug || storeId}" has no Telegram bot configured. Skipping alert to prevent cross-store overlap.`);
+          return NextResponse.json({
+            success: true,
+            skipped: true,
+            message: `ហាង "${storeName || storeSlug || storeId}" មិនទាន់បានកំណត់ Telegram Bot Token ឬ Chat ID ផ្ទាល់ខ្លួននៅឡើយទេ (ប្រព័ន្ធរក្សាការសម្ងាត់ មិនផ្ញើទៅហាងដទៃឡើយ)`
+          });
         }
-        if (!token) token = DEFAULT_PLATFORM_BOT_TOKEN;
-        if (!chat) chat = DEFAULT_PLATFORM_CHAT_ID;
       }
     }
 

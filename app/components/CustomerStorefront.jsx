@@ -2261,11 +2261,15 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
       // 🚨 ៤. ជូនដំណឹងស្វ័យប្រវត្តិតាម Telegram ពេលមានការបញ្ជាទិញថ្មី (New Order Alert)
       try {
+        const isDefault = (!currentStore?.id || currentStore.id === 'store_default_sabayluk');
         const storeKey = currentStore?.id ? `sabay_store_settings_${currentStore.id}` : 'sabay_store_settings';
-        const savedSettings = typeof window !== 'undefined' ? (localStorage.getItem(storeKey) || localStorage.getItem('sabay_store_settings')) : null;
-        const parsedSettings = savedSettings ? JSON.parse(savedSettings) : storeSettings;
-        const botToken = (parsedSettings.telegramBotToken || storeSettings.telegramBotToken || currentStore?.settings?.telegramBotToken || '').trim();
-        const chatId = (parsedSettings.telegramChatId || storeSettings.telegramChatId || currentStore?.settings?.telegramChatId || '').trim();
+        const savedSettings = typeof window !== 'undefined' 
+          ? (localStorage.getItem(storeKey) || (isDefault ? localStorage.getItem('sabay_store_settings') : null)) 
+          : null;
+        const parsedSettings = savedSettings ? JSON.parse(savedSettings) : (currentStore?.settings || {});
+        // ⭐️ STRICT MULTI-TENANT ISOLATION: ហាមដាច់ខាតមិនឱ្យទាញ Bot Token របស់ហាងដទៃមកប្រើឡើយ
+        const botToken = (parsedSettings.telegramBotToken || currentStore?.settings?.telegramBotToken || (isDefault ? storeSettings.telegramBotToken : '') || '').trim();
+        const chatId = (parsedSettings.telegramChatId || currentStore?.settings?.telegramChatId || (isDefault ? storeSettings.telegramChatId : '') || '').trim();
 
         // ⭐️ ផ្ញើ Request ទៅ /api/telegram ជានិច្ច (Server នឹងស្វែងរក Bot Token ពី Supabase / Stores table បើ Client គ្មាន)
         fetch('/api/telegram', {

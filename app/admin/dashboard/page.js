@@ -2768,10 +2768,11 @@ export default function UnifiedAdminDashboard() {
   // Helper ទទួលបានការកំណត់ហាងនីមួយៗ (Store-specific Settings Isolation)
   const getStoreScopedSettings = (store) => {
     const storeId = store?.id || 'store_default_sabayluk';
+    const isDefault = storeId === 'store_default_sabayluk';
     const storeSpecificKey = `sabay_store_settings_${storeId}`;
     let savedParsed = null;
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(storeSpecificKey) || (storeId === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
+      const saved = localStorage.getItem(storeSpecificKey) || (isDefault ? localStorage.getItem('sabay_store_settings') : null);
       if (saved) {
         try { savedParsed = JSON.parse(saved); } catch (e) {}
       }
@@ -2780,14 +2781,29 @@ export default function UnifiedAdminDashboard() {
     const merged = { ...DEFAULT_STORE_SETTINGS, ...dbSettings, ...(savedParsed || {}) };
     return {
       ...merged,
-      storeName: merged.storeName || store?.name || 'SABAY LUK',
-      phone: merged.phone || store?.phone || (storeId === 'store_default_sabayluk' ? '096 720 5522' : ''),
+      storeName: merged.storeName || store?.name || (isDefault ? 'SABAY LUK' : 'ហាងថ្មី'),
+      phone: merged.phone || store?.phone || (isDefault ? '096 720 5522' : ''),
       telegram: (() => {
-        let tg = (merged.telegram || store?.telegram || (storeId === 'store_default_sabayluk' ? 'sabay_luk' : '')).replace(/^@/, '').trim();
+        let tg = (merged.telegram || store?.telegram || (isDefault ? 'sabay_luk' : '')).replace(/^@/, '').trim();
         if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
         return tg;
       })(),
-      address: merged.address || store?.address || (storeId === 'store_default_sabayluk' ? 'Street 271, Phnom Penh, Cambodia' : '')
+      address: merged.address || store?.address || (isDefault ? 'Street 271, Phnom Penh, Cambodia' : ''),
+      // ⭐️ 100% STRICT MULTI-TENANT ISOLATION: មួយហាង ត្រូវមានតែមួយ មិនឱ្យជាន់គ្នាដាច់ខាត ⭐️
+      telegramBotToken: isDefault 
+        ? (savedParsed?.telegramBotToken ?? dbSettings.telegramBotToken ?? DEFAULT_STORE_SETTINGS.telegramBotToken ?? '')
+        : (savedParsed?.telegramBotToken ?? dbSettings.telegramBotToken ?? ''),
+      telegramChatId: isDefault 
+        ? (savedParsed?.telegramChatId ?? dbSettings.telegramChatId ?? DEFAULT_STORE_SETTINGS.telegramChatId ?? '')
+        : (savedParsed?.telegramChatId ?? dbSettings.telegramChatId ?? ''),
+      abaMerchantId: isDefault 
+        ? (savedParsed?.abaMerchantId ?? dbSettings.abaMerchantId ?? DEFAULT_STORE_SETTINGS.abaMerchantId ?? '')
+        : (savedParsed?.abaMerchantId ?? dbSettings.abaMerchantId ?? ''),
+      abaApiKey: isDefault 
+        ? (savedParsed?.abaApiKey ?? dbSettings.abaApiKey ?? DEFAULT_STORE_SETTINGS.abaApiKey ?? '')
+        : (savedParsed?.abaApiKey ?? dbSettings.abaApiKey ?? ''),
+      enableLowStockAlert: savedParsed?.enableLowStockAlert ?? dbSettings.enableLowStockAlert ?? true,
+      lowStockThreshold: savedParsed?.lowStockThreshold ?? dbSettings.lowStockThreshold ?? 5
     };
   };
 
@@ -2841,6 +2857,7 @@ export default function UnifiedAdminDashboard() {
   // ⭐️ States សម្រាប់ Telegram Notifications ⭐️
   const [telegramTesting, setTelegramTesting] = useState(false);
   const [telegramStatusMsg, setTelegramStatusMsg] = useState('');
+  const [paywayStatusMsg, setPaywayStatusMsg] = useState('');
 
   // ⭐️ Helper Function គណនាពន្ធអាករលើ Order មួយៗ (Tax VAT calculation for any order) ⭐️
   const getOrderTax = (order) => {
@@ -2854,7 +2871,7 @@ export default function UnifiedAdminDashboard() {
   };
 
   // រក្សាទុកការកំណត់ហាងទាំងអស់ (Save Store Settings)
-  const handleSaveStoreSettings = async (e) => {
+  const handleSaveStoreSettings = async (e, sectionType = 'general') => {
     if (e && e.preventDefault) e.preventDefault();
     if (guardDemoAction("កែប្រែការកំណត់ហាង")) return;
 
@@ -2864,11 +2881,12 @@ export default function UnifiedAdminDashboard() {
       telegram: cleanTg
     };
 
-    localStorage.setItem('sabay_store_settings', JSON.stringify(updatedSettings));
-    
-    // Save scoped per-store settings if multi-tenant store is active
+    // ⭐️ STRICT MULTI-TENANT ISOLATION: រក្សាទុកដាច់ដោយឡែកតាម storeId ហាមជាន់គ្នា ⭐️
     const storeId = activeStore?.id || 'store_default_sabayluk';
     localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(updatedSettings));
+    if (storeId === 'store_default_sabayluk') {
+      localStorage.setItem('sabay_store_settings', JSON.stringify(updatedSettings));
+    }
 
     const updatedStores = (registeredStores || []).map(s => {
       if (s.id === storeId) {
@@ -2943,6 +2961,14 @@ export default function UnifiedAdminDashboard() {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('storage'));
       window.dispatchEvent(new CustomEvent('sabay_store_changed', { detail: { storeId } }));
+    }
+
+    if (sectionType === 'telegram') {
+      setTelegramStatusMsg(`✅ បានរក្សាទុកការកំណត់ Telegram Bot សម្រាប់ហាង "${activeStore?.name || 'SABAY LUK'}" ជោគជ័យ!`);
+      setTimeout(() => setTelegramStatusMsg(''), 4000);
+    } else if (sectionType === 'payway') {
+      setPaywayStatusMsg(`✅ បានរក្សាទុក ABA Payway Merchant ID សម្រាប់ហាង "${activeStore?.name || 'SABAY LUK'}" ជោគជ័យ!`);
+      setTimeout(() => setPaywayStatusMsg(''), 4000);
     }
 
     setStoreSettingsSavedMsg('🎉 រក្សាទុកការកំណត់ហាង និងម៉ាកយីហោជោគជ័យ!');
@@ -25995,18 +26021,97 @@ export default function UnifiedAdminDashboard() {
 
   const ApiView = () => {
     const isTelegramConfigured = !!(storeSettings.telegramBotToken && storeSettings.telegramChatId);
+    const isPaywayConfigured = !!(storeSettings.abaMerchantId);
 
     return (
       <div className="animate-in fade-in pb-12 max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+        {/* Page Main Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
             <h2 className="text-3xl font-black text-gray-900">🔌 ការតភ្ជាប់ប្រព័ន្ធ (API & Integrations)</h2>
-            <p className="text-gray-500 text-sm mt-1">កំណត់ការភ្ជាប់ប្រព័ន្ធជូនដំណឹង Telegram Bot ស្វ័យប្រវត្តិ និង Payment Gateway</p>
+            <p className="text-gray-500 text-sm mt-1">
+              កំណត់ការភ្ជាប់ប្រព័ន្ធជូនដំណឹង Telegram Bot ស្វ័យប្រវត្តិ និង Payment Gateway (ABA Payway API) មួយហាងមានមួយដាច់ដោយឡែក
+            </p>
           </div>
-          <span className={`px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5 ${isTelegramConfigured ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}>
-            <span className={`w-2 h-2 rounded-full ${isTelegramConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-            {isTelegramConfigured ? 'Telegram Bot Active' : 'Not Configured'}
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5 ${isTelegramConfigured ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}`}>
+              <span className={`w-2 h-2 rounded-full ${isTelegramConfigured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+              {isTelegramConfigured ? 'Telegram Bot Active' : 'Bot Not Configured'}
+            </span>
+            <span className={`px-3 py-1.5 rounded-full text-xs font-black flex items-center gap-1.5 ${isPaywayConfigured ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-100 text-gray-700 border border-gray-300'}`}>
+              <span className={`w-2 h-2 rounded-full ${isPaywayConfigured ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'}`}></span>
+              {isPaywayConfigured ? 'Payway Active' : 'Payway Not Set'}
+            </span>
+          </div>
+        </div>
+
+        {/* 🏬 Multi-Tenant Active Store Banner with Instant Store Switcher */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-slate-800 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-2xl font-black shrink-0 shadow-inner">
+                🏪
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] uppercase font-black tracking-widest text-orange-400 bg-orange-500/20 px-2.5 py-0.5 rounded-full border border-orange-500/30">
+                    ហាងកំពុងកំណត់ (Active Store)
+                  </span>
+                  <span className="text-xs font-mono text-slate-300 bg-white/10 px-2 py-0.5 rounded-md">
+                    slug: {activeStore?.slug || 'sabay-luk'}
+                  </span>
+                </div>
+                <h3 className="text-xl font-black text-white mt-1 flex items-center gap-2">
+                  <span>{activeStore?.name || 'SABAY LUK'}</span>
+                  {activeStore?.id === 'store_default_sabayluk' && (
+                    <span className="text-[10px] font-bold bg-amber-400 text-slate-900 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                      Flagship Master
+                    </span>
+                  )}
+                </h3>
+              </div>
+            </div>
+
+            {/* Store Switcher Dropdown (If multi-store) */}
+            {registeredStores && registeredStores.length > 1 && (
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md p-1.5 rounded-2xl border border-white/15">
+                <span className="text-xs font-bold text-slate-300 pl-2 whitespace-nowrap">ប្តូរហាងកំណត់៖</span>
+                <select
+                  value={activeStore?.id || 'store_default_sabayluk'}
+                  onChange={(e) => {
+                    const target = registeredStores.find(s => s.id === e.target.value);
+                    if (target) {
+                      setActiveStore(target);
+                      setActiveStoreState(target);
+                      setStoreSettings(getStoreScopedSettings(target));
+                      if (typeof window !== 'undefined') {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('store', target.slug || target.id);
+                        window.history.replaceState({}, '', url.toString());
+                      }
+                      setToastNotification(`🏬 បានប្តូរទៅកាន់ហាង "${target.name}"`);
+                      setTimeout(() => setToastNotification(null), 2500);
+                    }
+                  }}
+                  className="bg-slate-800 text-white font-black text-xs px-3 py-2 rounded-xl outline-none border border-slate-700 cursor-pointer"
+                >
+                  {registeredStores.map(st => (
+                    <option key={st.id} value={st.id} className="bg-slate-900 text-white">
+                      {st.name} ({st.slug})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Multi-Tenant Isolation Guarantee Notice */}
+          <div className="mt-4 pt-4 border-t border-white/10 flex items-start gap-2.5 text-xs text-slate-300">
+            <span className="text-base text-emerald-400 shrink-0">🛡️</span>
+            <div>
+              <b>ប្រព័ន្ធការពារទិន្នន័យឯករាជ្យ ១០០% (1 Store = 1 Bot & 1 Gateway):</b> រាល់ Telegram Bot Token, Chat ID និង ABA Merchant ID ខាងក្រោមនេះត្រូវបានរក្សាទុកផ្តាច់មុខសម្រាប់តែហាង <b>«{activeStore?.name || 'SABAY LUK'}»</b> ប៉ុណ្ណោះ។ ការកុម្ម៉ង់ និងស្តុករបស់ហាងនេះនឹងមិនជាន់គ្នា ឬរំខានដល់ហាងដទៃឡើយ!
+            </div>
+          </div>
         </div>
 
         <div className="space-y-6">
@@ -26018,8 +26123,15 @@ export default function UnifiedAdminDashboard() {
                   ✈️
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-gray-900">Telegram Bot Notifications (ជូនដំណឹងស្វ័យប្រវត្តិ)</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">ទទួលសារផ្ទាល់ខ្លួន ឬក្នុងគ្រុប Telegram ពេលទំនិញជិតអស់ស្តុក (Low Stock Alert) និងពេលមានការកុម្ម៉ង់ថ្មី</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-black text-gray-900">Telegram Bot Notifications</h3>
+                    <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                      ហាង៖ {activeStore?.name || 'SABAY LUK'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    ទទួលសារផ្ទាល់ខ្លួន ឬក្នុងគ្រុប Telegram ពេលមានការកុម្ម៉ង់ថ្មី (New Orders) និងទំនិញជិតអស់ស្តុក (Low Stock Alert) នៃហាងនេះ
+                  </p>
                 </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -26046,7 +26158,7 @@ export default function UnifiedAdminDashboard() {
                     placeholder="ឧ. 7123456789:AAHxxxxx_xxxxxxxxxxxxxxx" 
                     className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-mono focus:border-blue-500 outline-none transition bg-white" 
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">ទទួលបានពីការ Chat បង្កើត Bot ជាមួយ @BotFather</p>
+                  <p className="text-[11px] text-gray-400 mt-1">ទទួលបានពីការ Chat បង្កើត Bot ជាមួយ @BotFather សម្រាប់ហាងនេះ</p>
                 </div>
 
                 <div>
@@ -26060,7 +26172,7 @@ export default function UnifiedAdminDashboard() {
                     placeholder="ឧ. 123456789 ឬ -100xxxxxxxxxx" 
                     className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-mono focus:border-blue-500 outline-none transition bg-white" 
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">អាចជា User ID ឬ Group/Channel ID សម្រាប់ទទួលសារ</p>
+                  <p className="text-[11px] text-gray-400 mt-1">អាចជា User ID ឬ Group/Channel ID របស់ម្ចាស់ហាងនេះ</p>
                 </div>
               </div>
 
@@ -26078,7 +26190,7 @@ export default function UnifiedAdminDashboard() {
                     className="w-32 border-2 border-gray-200 p-3 rounded-2xl text-sm font-black focus:border-blue-500 outline-none transition bg-white" 
                   />
                   <span className="text-xs text-gray-500">
-                    ទំនិញណាសល់ <b>ស្មើ ឬតិចជាង {storeSettings.lowStockThreshold || 5}</b> នឹងរាប់ជា "ជិតអស់ស្តុក" ហើយផ្ញើសារ Alert។
+                    ទំនិញណាសល់ <b>ស្មើ ឬតិចជាង {storeSettings.lowStockThreshold || 5}</b> នឹងរាប់ជា "ជិតអស់ស្តុក" ហើយផ្ញើសារ Alert ចូល Telegram ហាងនេះ។
                   </span>
                 </div>
               </div>
@@ -26094,11 +26206,11 @@ export default function UnifiedAdminDashboard() {
               <div className="flex flex-wrap items-center gap-3 pt-2">
                 <button 
                   type="button"
-                  onClick={handleSaveStoreSettings}
+                  onClick={(e) => handleSaveStoreSettings(e, 'telegram')}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-md transition flex items-center gap-2 cursor-pointer active:scale-95"
                 >
                   <span>💾</span>
-                  <span>រក្សាទុកការកំណត់</span>
+                  <span>រក្សាទុក Telegram Bot ({activeStore?.name || 'ហាងនេះ'})</span>
                 </button>
 
                 <button 
@@ -26133,10 +26245,10 @@ export default function UnifiedAdminDashboard() {
 
               {/* Instructions Guide */}
               <div className="bg-slate-900 text-slate-200 p-5 rounded-2xl text-xs space-y-2 mt-4">
-                <p className="font-black text-amber-400 text-sm">💡 ការណែនាំខ្លីៗអំពីរបៀបបង្កើត Telegram Bot (ត្រឹមតែ ១ នាទី):</p>
+                <p className="font-black text-amber-400 text-sm">💡 ការណែនាំខ្លីៗអំពីរបៀបបង្កើត Telegram Bot សម្រាប់ហាងនេះ (ត្រឹមតែ ១ នាទី):</p>
                 <ol className="list-decimal list-inside space-y-1.5 text-slate-300">
                   <li>បើកកម្មវិធី <b>Telegram</b> ស្វែងរក <b>@BotFather</b> រួចចុច <code>/start</code> ហើយវាយ <code>/newbot</code>។</li>
-                  <li>ដាក់ឈ្មោះ Bot របស់បង (ឧ. <i>SabayLuk Alert Bot</i>) និងដាក់ username បញ្ចប់ដោយ bot (ឧ. <i>sabayluk_alert_bot</i>)។</li>
+                  <li>ដាក់ឈ្មោះ Bot របស់ហាងបង (ឧ. <i>{activeStore?.name || 'Sabay'} Alert Bot</i>) និងដាក់ username បញ្ចប់ដោយ bot (ឧ. <i>{activeStore?.slug || 'my_store'}_alert_bot</i>)។</li>
                   <li>ចម្លង <b>HTTP API Token</b> ដែល @BotFather ផ្ញើមក យកមកបិទភ្ជាប់ក្នុងប្រអប់ <b>Telegram Bot Token</b> ខាងលើ។</li>
                   <li>ដើម្បីយក <b>Chat ID</b>: ឆាតទៅកាន់ <b>@userinfobot</b> វានឹងប្រាប់ <code>Id: 123456789</code> របស់បងភ្លាម ឬបើចង់ឱ្យ Alert ចូល Group គ្រាន់តែ Add Bot ចូល Group រួចយក Group Chat ID (ផ្តើមដោយ <code>-100...</code>)។</li>
                 </ol>
@@ -26151,8 +26263,15 @@ export default function UnifiedAdminDashboard() {
                 💳
               </div>
               <div>
-                <h3 className="text-lg font-black text-gray-900">Payment Gateway (ABA Payway API)</h3>
-                <p className="text-xs text-gray-500 mt-0.5">កំណត់ Merchant ID សម្រាប់ទូទាត់ប្រាក់ស្វ័យប្រវត្តិតាម ABA KHQR</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-lg font-black text-gray-900">Payment Gateway (ABA Payway API)</h3>
+                  <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                    ហាង៖ {activeStore?.name || 'SABAY LUK'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  កំណត់ Merchant ID និង API Key ផ្ទាល់ខ្លួនរបស់ហាងនេះ សម្រាប់ទទួលប្រាក់ស្វ័យប្រវត្តិតាម ABA KHQR
+                </p>
               </div>
             </div>
 
@@ -26165,9 +26284,10 @@ export default function UnifiedAdminDashboard() {
                   type="text" 
                   value={storeSettings.abaMerchantId || ''} 
                   onChange={(e) => setStoreSettings({ ...storeSettings, abaMerchantId: e.target.value.trim() })}
-                  placeholder="ABA Merchant ID" 
+                  placeholder="ឧ. ec432100" 
                   className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-mono focus:border-blue-500 outline-none transition bg-white" 
                 />
+                <p className="text-[11px] text-gray-400 mt-1">Merchant ID ផ្លូវការពីគណនី ABA Payway របស់ហាងនេះ</p>
               </div>
 
               <div>
@@ -26178,19 +26298,27 @@ export default function UnifiedAdminDashboard() {
                   type="text" 
                   value={storeSettings.abaApiKey || ''} 
                   onChange={(e) => setStoreSettings({ ...storeSettings, abaApiKey: e.target.value.trim() })}
-                  placeholder="ABA API Key" 
+                  placeholder="ឧ. 9f482a... (ABA API Key)" 
                   className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-mono focus:border-blue-500 outline-none transition bg-white" 
                 />
+                <p className="text-[11px] text-gray-400 mt-1">API Key សម្ងាត់សម្រាប់ Sign ប្រតិបត្តិការ KHQR</p>
               </div>
             </div>
 
+            {/* Payway Status Message Banner */}
+            {paywayStatusMsg && (
+              <div className="p-3.5 mb-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-900 animate-in fade-in">
+                {paywayStatusMsg}
+              </div>
+            )}
+
             <button 
               type="button"
-              onClick={handleSaveStoreSettings}
+              onClick={(e) => handleSaveStoreSettings(e, 'payway')}
               className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-2xl font-black text-xs shadow-md transition flex items-center gap-2 cursor-pointer active:scale-95"
             >
               <span>💾</span>
-              <span>រក្សាទុក Merchant ID</span>
+              <span>រក្សាទុក ABA Payway ({activeStore?.name || 'ហាងនេះ'})</span>
             </button>
           </div>
         </div>
