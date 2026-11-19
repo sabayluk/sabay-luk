@@ -11,6 +11,7 @@ import {
   fetchAllStores, 
   submitSubscriptionPayment 
 } from '../../lib/stores';
+import { supabase } from '../../supabase';
 
 function RegisterStoreForm() {
   const router = useRouter();
@@ -256,7 +257,7 @@ function RegisterStoreForm() {
 
         // Telegram instant notification ជូនដំណឹងទៅ Super Admin ឱ្យ Approve
         try {
-          fetch('/api/telegram', {
+          await fetch('/api/telegram', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -268,8 +269,10 @@ function RegisterStoreForm() {
               slipUrl: slipUrl || '',
               ref: paymentTxRef || ''
             })
-          }).catch(e => console.warn('Telegram notice skipped', e));
-        } catch (tgErr) {}
+          });
+        } catch (tgErr) {
+          console.warn('Telegram notice error:', tgErr);
+        }
 
         // 🔔 ជូនដំណឹង Realtime ឆ្លង Tab ទៅកាន់ Admin Dashboard
         if (typeof window !== 'undefined') {
@@ -299,7 +302,7 @@ function RegisterStoreForm() {
 
       // Telegram notification
       try {
-        fetch('/api/telegram', {
+        await fetch('/api/telegram', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -307,8 +310,10 @@ function RegisterStoreForm() {
             store: newStore,
             payment_status: 'FREE_GMAIL_VERIFIED'
           })
-        }).catch(e => console.warn('Telegram notice skipped', e));
-      } catch (tgErr) {}
+        });
+      } catch (tgErr) {
+        console.warn('Telegram notice error:', tgErr);
+      }
 
       // 🔔 ជូនដំណឹង Realtime ឆ្លង Tab ទៅកាន់ Admin Dashboard
       if (typeof window !== 'undefined') {
@@ -406,14 +411,33 @@ function RegisterStoreForm() {
     if (e && e.preventDefault) e.preventDefault();
     setPaymentError('');
 
-    if (!paymentSlipPreview) {
+    if (!paymentSlipPreview && !paymentSlipFile) {
       setPaymentError('❌ សូម Upload រូបភាពបង្កាន់ដៃផ្ទេរប្រាក់ (Payment Slip) របស់អ្នកជាមុនសិន! មិនអាចរំលងការបង់ប្រាក់បានឡើយ។');
       return;
     }
 
     setIsSubmittingPayment(true);
+    let finalSlipUrl = paymentSlipPreview || '';
+
+    // Upload slip to Supabase Storage 'slips' bucket if file is present
+    if (paymentSlipFile) {
+      try {
+        const ext = paymentSlipFile.name.split('.').pop() || 'jpg';
+        const fileName = `slip_reg_${pendingStoreData?.slug || 'store'}_${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('slips').upload(fileName, paymentSlipFile);
+        if (!upErr) {
+          const { data: pubData } = supabase.storage.from('slips').getPublicUrl(fileName);
+          if (pubData && pubData.publicUrl) {
+            finalSlipUrl = pubData.publicUrl;
+          }
+        }
+      } catch (uploadErr) {
+        console.warn('Storage slip upload fallback to preview:', uploadErr);
+      }
+    }
+
     setShowPaymentModal(false);
-    await handleFinalizeRegistration(pendingStoreData, true, paymentSlipPreview);
+    await handleFinalizeRegistration(pendingStoreData, true, finalSlipUrl);
   };
 
   const planInfo = STORE_PLANS[selectedPlan] || STORE_PLANS.FREE;

@@ -4,6 +4,9 @@ import { supabase } from '../../../supabase';
 
 // Telegram Bot API strictly rejects inline keyboard button URLs pointing to localhost or private IPs.
 // This validator ensures only valid public URLs are sent in inline_keyboard buttons to prevent 400 Bad Request.
+const DEFAULT_PLATFORM_BOT_TOKEN = '9040211511:AAGOkRi0gG8Qddid9y1WMVwueP4LSsMPsrE';
+const DEFAULT_PLATFORM_CHAT_ID = '-1001612401000';
+
 function isValidTelegramUrl(url) {
   if (!url || typeof url !== 'string') return false;
   try {
@@ -30,6 +33,7 @@ export async function POST(request) {
     const { botToken, chatId, message, action, items, storeName, order } = body;
     const storeId = body.storeId || body.store_id || 'store_default_sabayluk';
     const storeSlug = body.storeSlug || body.store_slug;
+    const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
     let token = (botToken || process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || '').trim();
     let chat = (chatId || process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || '').trim();
@@ -38,6 +42,7 @@ export async function POST(request) {
     const isPlatformAction = [
       'new_store_registered',
       'new_store_registered_pending_approval',
+      'store_approved_by_admin',
       'store_plan_upgrade_requested',
       'plan_upgraded',
       'plan_renewed',
@@ -64,8 +69,8 @@ export async function POST(request) {
         console.warn('Telegram master owner lookup error:', masterErr);
       }
 
-      if (!token) token = (process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || '').trim();
-      if (!chat) chat = (process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || '').trim();
+      if (!token) token = (process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || DEFAULT_PLATFORM_BOT_TOKEN).trim();
+      if (!chat) chat = (process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || DEFAULT_PLATFORM_CHAT_ID).trim();
     } else if (!token || !chat) {
       // ⭐️ ករណីធម្មតា (កុម្ម៉ង់ទំនិញ / POS Sale): ទាញយក Bot Token របស់ហាងសាខានោះ
       try {
@@ -95,6 +100,8 @@ export async function POST(request) {
         } catch (fbErr) {
           console.warn('Fallback telegram lookup error:', fbErr);
         }
+        if (!token) token = DEFAULT_PLATFORM_BOT_TOKEN;
+        if (!chat) chat = DEFAULT_PLATFORM_CHAT_ID;
       }
     }
 
@@ -107,6 +114,8 @@ export async function POST(request) {
       const planPrice = body.price || 'N/A';
       const slipUrl = body.slipUrl || '';
       const ref = body.ref || '';
+      const isOnlineSlip = slipUrl && typeof slipUrl === 'string' && (slipUrl.startsWith('http://') || slipUrl.startsWith('https://'));
+      const hasSlip = !!slipUrl;
 
       finalMessage = `🚨 <b>មានការចុះឈ្មោះហាងថ្មី & ផ្ញើបង្កាន់ដៃ (SLIP) រង់ចាំ APPROVE!</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
@@ -119,16 +128,15 @@ export async function POST(request) {
         (st.telegram ? `✈️ <b>Telegram:</b> @${st.telegram.replace(/^@/, '')}\n` : '') +
         `📍 <b>ទីតាំង:</b> ${st.address || 'ភ្នំពេញ'}\n` +
         (ref ? `🔢 <b>កូដប្រតិបត្តិការ (Ref):</b> <code>${ref}</code>\n` : '') +
-        (slipUrl ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> <a href="${slipUrl}">ចុចមើលរូបភាព Slip ↗</a>\n` : '') +
+        (isOnlineSlip ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> <a href="${slipUrl}">ចុចមើលរូបភាព Slip ↗</a>\n` : (hasSlip ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> មានភ្ជាប់ជាមួយសារនេះ (Attached below)\n` : '')) +
         `━━━━━━━━━━━━━━━━━━\n` +
         `⏳ <b>ស្ថានភាព:</b> 🟡 <b>រង់ចាំ Super Admin ពិនិត្យ Slip & ចុច Approve!</b>\n` +
         `⏰ <b>កាលបរិច្ឆេទ:</b> ${new Date().toLocaleString('km-KH')}\n\n` +
         `🔒 <i>សារនេះផ្ញើជូនផ្ដាច់មុខតែ Super Admin ម្នាក់គត់ (Platform Master Owner)!</i>`;
 
-      const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
       inlineKeyboard = [];
       const row = [];
-      if (slipUrl && isValidTelegramUrl(slipUrl)) {
+      if (isOnlineSlip && isValidTelegramUrl(slipUrl)) {
         row.push({ text: '🧾 មើលបង្កាន់ដៃ Slip', url: slipUrl });
       }
       if (isValidTelegramUrl(`${origin}/admin/dashboard`)) {
@@ -142,6 +150,8 @@ export async function POST(request) {
       const amount = body.amount || '';
       const slipUrl = body.slipUrl || '';
       const ref = body.ref || '';
+      const isOnlineSlip = slipUrl && typeof slipUrl === 'string' && (slipUrl.startsWith('http://') || slipUrl.startsWith('https://'));
+      const hasSlip = !!slipUrl;
 
       finalMessage = `💎 <b>មានហាងស្នើសុំដំឡើងគម្រោង (PLAN UPGRADE REQUEST)!</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
@@ -151,16 +161,15 @@ export async function POST(request) {
         `👤 <b>ម្ចាស់ហាង:</b> ${st.owner_name || 'N/A'} (📞 <code>${st.phone || 'N/A'}</code>)\n` +
         `📧 <b>Gmail:</b> <code>${st.owner_email || 'N/A'}</code>\n` +
         (ref ? `🔢 <b>Ref:</b> <code>${ref}</code>\n` : '') +
-        (slipUrl ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> <a href="${slipUrl}">ចុចមើលរូបភាព Slip ↗</a>\n` : '') +
+        (isOnlineSlip ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> <a href="${slipUrl}">ចុចមើលរូបភាព Slip ↗</a>\n` : (hasSlip ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> មានភ្ជាប់ជាមួយសារនេះ (Attached below)\n` : '')) +
         `━━━━━━━━━━━━━━━━━━\n` +
         `⏳ <b>ស្ថានភាព:</b> 🟡 <b>រង់ចាំ Super Admin ពិនិត្យ Slip & Approve!</b>\n` +
         `⏰ <b>កាលបរិច្ឆេទ:</b> ${new Date().toLocaleString('km-KH')}\n\n` +
         `🔒 <i>សារនេះផ្ញើជូនផ្ដាច់មុខតែ Super Admin ម្នាក់គត់ (Platform Master Owner)!</i>`;
 
-      const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
       inlineKeyboard = [];
       const row = [];
-      if (slipUrl && isValidTelegramUrl(slipUrl)) {
+      if (isOnlineSlip && isValidTelegramUrl(slipUrl)) {
         row.push({ text: '🧾 មើលបង្កាន់ដៃ Slip', url: slipUrl });
       }
       if (isValidTelegramUrl(`${origin}/admin/dashboard`)) {
@@ -184,10 +193,26 @@ export async function POST(request) {
         `⚡ <i>គណនីហាងត្រូវបានបង្កើត និងដំណើរការក្នុងប្រព័ន្ធរួចរាល់!</i>\n\n` +
         `🔒 <i>សារនេះផ្ញើជូនផ្ដាច់មុខតែ Super Admin ម្នាក់គត់ (Platform Master Owner)!</i>`;
 
-      const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
       inlineKeyboard = [
         [
           { text: '🌐 មើលមុខហាង (Storefront)', url: `${origin}/store/${st.slug || ''}` },
+          { text: '📊 ផ្ទាំងគ្រប់គ្រងហាង', url: `${origin}/admin/dashboard` }
+        ]
+      ];
+    } else if (action === 'store_approved_by_admin') {
+      const st = body.store || {};
+      finalMessage = `✅ <b>ហាងត្រូវបានអនុម័តជោគជ័យ (STORE APPROVED)!</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🏪 <b>ហាង:</b> <b>${st.name || 'ហាង'}</b> (<code>${st.slug || 'N/A'}</code>)\n` +
+        `📦 <b>កញ្ចប់សេវា:</b> <b>${st.plan || 'FREE'}</b>\n` +
+        `👤 <b>ម្ចាស់ហាង:</b> ${st.owner_name || 'N/A'} (📞 <code>${st.phone || 'N/A'}</code>)\n` +
+        `📧 <b>Gmail:</b> <code>${st.owner_email || 'N/A'}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🟢 <b>ស្ថានភាព:</b> សកម្ម (ACTIVE) — ម្ចាស់ហាងអាចចូលគ្រប់គ្រងបានហើយ\n` +
+        `⏰ <b>កាលបរិច្ឆេទ:</b> ${new Date().toLocaleString('km-KH')}`;
+      inlineKeyboard = [
+        [
+          { text: '🛍️ មើល Storefront', url: `${origin}/store/${st.slug}` },
           { text: '📊 ផ្ទាំងគ្រប់គ្រងហាង', url: `${origin}/admin/dashboard` }
         ]
       ];
@@ -195,6 +220,8 @@ export async function POST(request) {
       const st = body.store || {};
       const newPlan = body.newPlan || 'PRO';
       const planPrice = body.price || 0;
+      const isOnlineSlip = body.slipUrl && typeof body.slipUrl === 'string' && (body.slipUrl.startsWith('http://') || body.slipUrl.startsWith('https://'));
+      const hasSlip = !!body.slipUrl;
       finalMessage = `💎 <b>ការដំឡើងកញ្ចប់សេវាថ្មី (STORE PLAN UPGRADE)!</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `🏪 <b>ហាង:</b> <b>${st.name || 'ហាង'}</b> (<code>${st.slug || 'N/A'}</code>)\n` +
@@ -202,11 +229,11 @@ export async function POST(request) {
         `💰 <b>តម្លៃសេវា:</b> <b>${planPrice}</b>\n` +
         `👤 <b>ម្ចាស់ហាង:</b> ${st.owner_name || 'N/A'} (📞 <code>${st.phone || 'N/A'}</code>)\n` +
         `📧 <b>Gmail:</b> <code>${st.owner_email || 'N/A'}</code>\n` +
-        (body.slipUrl ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> <a href="${body.slipUrl}">ចុចមើលរូបភាព Slip ↗</a>\n` : '') +
+        (isOnlineSlip ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> <a href="${body.slipUrl}">ចុចមើលរូបភាព Slip ↗</a>\n` : (hasSlip ? `🧾 <b>បង្កាន់ដៃវេរលុយ (Slip):</b> មានភ្ជាប់ជាមួយសារនេះ (Attached below)\n` : '')) +
         `━━━━━━━━━━━━━━━━━━\n` +
         `⏰ <b>កាលបរិច្ឆេទ:</b> ${new Date().toLocaleString('km-KH')}\n` +
         `✅ <i>ប្រព័ន្ធបានទទួលការបង់ប្រាក់ & ស្នើសុំ Upgrade រួចរាល់!</i>`;
-      if (body.slipUrl) {
+      if (isOnlineSlip && isValidTelegramUrl(body.slipUrl)) {
         inlineKeyboard = [
           [
             { text: '🧾 មើលបង្កាន់ដៃ Slip', url: body.slipUrl },
@@ -466,31 +493,66 @@ export async function POST(request) {
       }
     }
 
-    // ⭐️ ប្រសិនបើមាន Slip URL ជាប្រភេទរូបភាព Online ព្យាយាមផ្ញើជា SendPhoto ជាមុន ដើម្បីឱ្យ Admin ឃើញរូបភាពបង្កាន់ដៃផ្ទាល់លើ Telegram
-    if (body.slipUrl && typeof body.slipUrl === 'string' && (body.slipUrl.startsWith('http://') || body.slipUrl.startsWith('https://')) && finalMessage.length <= 1024) {
+    // ⭐️ ប្រសិនបើមាន Slip URL (ជាប្រភេទ Base64 Data URL ឬ Online URL) ព្យាយាមផ្ញើជារូបភាព sendPhoto ដោយផ្ទាល់
+    if (body.slipUrl && typeof body.slipUrl === 'string' && token && chat) {
       try {
-        const photoPayload = {
-          chat_id: chat,
-          photo: body.slipUrl,
-          caption: finalMessage,
-          parse_mode: 'HTML'
-        };
-        if (payload.reply_markup) {
-          photoPayload.reply_markup = payload.reply_markup;
-        }
+        const captionText = finalMessage.length <= 1024 ? finalMessage : (finalMessage.slice(0, 1020) + '...');
+        
+        if (body.slipUrl.startsWith('data:image/')) {
+          // Base64 Data URL -> send via multipart FormData
+          const base64Data = body.slipUrl.replace(/^data:image\/\w+;base64,/, '');
+          const buffer = Buffer.from(base64Data, 'base64');
+          const mimeMatch = body.slipUrl.match(/^data:(image\/\w+);/);
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          const ext = mimeType.split('/')[1] || 'jpg';
+          const formData = new FormData();
+          formData.append('chat_id', chat);
+          const blob = new Blob([buffer], { type: mimeType });
+          formData.append('photo', blob, `slip_${Date.now()}.${ext}`);
+          formData.append('caption', captionText);
+          formData.append('parse_mode', 'HTML');
+          if (payload.reply_markup) {
+            formData.append('reply_markup', JSON.stringify(payload.reply_markup));
+          }
 
-        const photoRes = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(photoPayload)
-        });
-        const photoData = await photoRes.json();
-        if (photoData && photoData.ok) {
-          return NextResponse.json({
-            success: true,
-            message: 'បានផ្ញើរូបភាព Slip និងសារជូនដំណឹងទៅ Telegram ជោគជ័យ!',
-            data: photoData
+          const photoRes = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+            method: 'POST',
+            body: formData
           });
+          const photoData = await photoRes.json();
+          if (photoData && photoData.ok) {
+            return NextResponse.json({
+              success: true,
+              message: 'បានផ្ញើរូបភាព Slip និងសារជូនដំណឹងទៅ Telegram ជោគជ័យ!',
+              data: photoData
+            });
+          } else {
+            console.warn('Telegram sendPhoto base64 response not ok:', photoData);
+          }
+        } else if (body.slipUrl.startsWith('http://') || body.slipUrl.startsWith('https://')) {
+          const photoPayload = {
+            chat_id: chat,
+            photo: body.slipUrl,
+            caption: captionText,
+            parse_mode: 'HTML'
+          };
+          if (payload.reply_markup) {
+            photoPayload.reply_markup = payload.reply_markup;
+          }
+
+          const photoRes = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(photoPayload)
+          });
+          const photoData = await photoRes.json();
+          if (photoData && photoData.ok) {
+            return NextResponse.json({
+              success: true,
+              message: 'បានផ្ញើរូបភាព Slip និងសារជូនដំណឹងទៅ Telegram ជោគជ័យ!',
+              data: photoData
+            });
+          }
         }
       } catch (photoErr) {
         console.warn('Telegram sendPhoto fallback to sendMessage:', photoErr);
@@ -517,7 +579,7 @@ export async function POST(request) {
       data
     });
   } catch (err) {
-    console.error('Telegram notification error:', err);
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    console.error('Telegram notification error:', err.message, err.cause || '');
+    return NextResponse.json({ success: false, message: err.message, cause: String(err.cause || '') }, { status: 500 });
   }
 }

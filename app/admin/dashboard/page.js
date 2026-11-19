@@ -2454,6 +2454,7 @@ export default function UnifiedAdminDashboard() {
 
   // ⭐️ States & Realtime Alert សម្រាប់គ្រប់គ្រងការកុម្ម៉ង់ថ្មី (ADMIN & SALES ALERT) ⭐️
   const [newOrderAlert, setNewOrderAlert] = useState(null);
+  const [newStoreAlert, setNewStoreAlert] = useState(null);
   const [highlightedOrderId, setHighlightedOrderId] = useState(null);
 
   // សំឡេងកណ្ដឹងជូនដំណឹងពេលមានការកុម្ម៉ង់ថ្មី (Notification Chime)
@@ -2505,6 +2506,13 @@ export default function UnifiedAdminDashboard() {
             playNewOrderSound();
             fetchAllStores().then(stores => setRegisteredStores(stores));
             setPaymentAlertDismissed(false);
+            setNewStoreAlert({
+              action: payload.new?.status === 'PENDING_APPROVAL' ? 'new_store_registered_pending_approval' : 'new_store_registered',
+              store: payload.new,
+              plan: payload.new?.plan || 'FREE',
+              slipUrl: payload.new?.settings?.slip_url || payload.new?.slip_url || '',
+              timestamp: Date.now()
+            });
             setToastNotification('🔔 ទទួលបានការចុះឈ្មោះហាងថ្មីលើប្រព័ន្ធ!');
             setTimeout(() => setToastNotification(null), 4000);
           } else if (payload?.eventType === 'DELETE') {
@@ -2515,12 +2523,23 @@ export default function UnifiedAdminDashboard() {
 
       subChannel = supabase
         .channel('admin_sub_payments_realtime')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'subscription_payments' }, () => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'subscription_payments' }, (payload) => {
           playNewOrderSound();
           if (typeof getSubscriptionPayments === 'function') {
             setAllSubscriptionPayments(getSubscriptionPayments());
           }
           setPaymentAlertDismissed(false);
+          if (payload?.eventType === 'INSERT') {
+            setNewStoreAlert({
+              action: 'new_subscription_payment',
+              store: { id: payload.new?.store_id, name: payload.new?.store_name, phone: payload.new?.customer_phone },
+              plan: payload.new?.plan_name || payload.new?.plan_key,
+              price: `$${payload.new?.amount || 0}`,
+              slipUrl: payload.new?.slip_url || '',
+              ref: payload.new?.notes || '',
+              timestamp: Date.now()
+            });
+          }
           setToastNotification('💳 ទទួលបានបង្កាន់ដៃបង់ប្រាក់កញ្ចប់សេវា (Slip) ថ្មី!');
           setTimeout(() => setToastNotification(null), 4000);
         })
@@ -2539,12 +2558,14 @@ export default function UnifiedAdminDashboard() {
       }
       if (e && (e.key === 'sabay_new_store_alert' || e.key === 'sabay_subscription_alert') && e.newValue) {
         try {
+          const parsed = JSON.parse(e.newValue);
           playNewOrderSound();
           setRegisteredStores(getLocalStores());
           if (typeof getSubscriptionPayments === 'function') {
             setAllSubscriptionPayments(getSubscriptionPayments());
           }
           setPaymentAlertDismissed(false);
+          setNewStoreAlert(parsed);
           setToastNotification('🔔 ទទួលបានការចុះឈ្មោះហាងថ្មី / បង់ប្រាក់ Slip ថ្មី!');
           setTimeout(() => setToastNotification(null), 4000);
         } catch (err) {}
@@ -2567,22 +2588,28 @@ export default function UnifiedAdminDashboard() {
       };
 
       bcStores = new BroadcastChannel('sabay_stores_sync');
-      bcStores.onmessage = () => {
+      bcStores.onmessage = (event) => {
         playNewOrderSound();
         setRegisteredStores(getLocalStores());
         fetchAllStores().then(stores => setRegisteredStores(stores));
         setPaymentAlertDismissed(false);
+        if (event.data) {
+          setNewStoreAlert(event.data);
+        }
         setToastNotification('🔔 ទទួលបានការចុះឈ្មោះហាងថ្មីលើប្រព័ន្ធ!');
         setTimeout(() => setToastNotification(null), 4000);
       };
 
       bcSubs = new BroadcastChannel('sabay_subscription_sync');
-      bcSubs.onmessage = () => {
+      bcSubs.onmessage = (event) => {
         playNewOrderSound();
         if (typeof getSubscriptionPayments === 'function') {
           setAllSubscriptionPayments(getSubscriptionPayments());
         }
         setPaymentAlertDismissed(false);
+        if (event.data) {
+          setNewStoreAlert(event.data);
+        }
         setToastNotification('💳 ទទួលបានបង្កាន់ដៃបង់ប្រាក់កញ្ចប់សេវា (Slip) ថ្មី!');
         setTimeout(() => setToastNotification(null), 4000);
       };
@@ -14002,8 +14029,57 @@ export default function UnifiedAdminDashboard() {
         }
         setToastNotification(`🎉 បានអនុម័ត និងបើកដំណើរការហាង "${store.name}" ជោគជ័យ!`);
         setTimeout(() => setToastNotification(null), 3500);
+
+        // ✈️ ផ្ញើការជូនដំណឹងទៅកាន់ Telegram Super Admin
+        try {
+          fetch('/api/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'store_approved_by_admin',
+              store: store
+            })
+          }).catch(() => {});
+        } catch (_) {}
       } else {
         alert('មានបញ្ហាក្នុងការអនុម័ត! សូមព្យាយាមម្តងទៀត');
+      }
+    };
+
+    // ⭐️ ផ្ញើសារ Alert ហាងទៅ Telegram Super Admin ម្តងទៀត (Manual Resend by Platform Owner)
+    const handleResendTelegramStoreAlert = async (targetStore) => {
+      if (!targetStore) return;
+      try {
+        setToastNotification(`✈️ កំពុងផ្ញើ Alert ហាង "${targetStore.name}" ទៅ Telegram Super Admin...`);
+        const relatedSub = (allSubscriptionPayments || []).find(p => p.store_id === targetStore.id);
+        const slipUrl = targetStore.settings?.slip_url || targetStore.settings?.pending_payment?.slip_url || targetStore.slip_url || relatedSub?.slip_url || '';
+        const planInfo = STORE_PLANS[targetStore.plan] || STORE_PLANS.FREE;
+        const isPaid = targetStore.status === 'PENDING_APPROVAL' || Boolean(slipUrl) || (targetStore.plan && targetStore.plan !== 'FREE');
+
+        const res = await fetch('/api/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: isPaid ? 'new_store_registered_pending_approval' : 'new_store_registered',
+            store: targetStore,
+            payment_status: isPaid ? 'PAID_SLIP_PENDING_APPROVAL' : 'FREE_GMAIL_VERIFIED',
+            plan: planInfo?.name || targetStore.plan || 'Free',
+            price: relatedSub?.amount ? `$${relatedSub.amount}` : `$${planInfo?.price || 0}`,
+            slipUrl: slipUrl,
+            ref: relatedSub?.notes || targetStore.settings?.pending_payment?.notes || ''
+          })
+        });
+
+        const resData = await res.json();
+        if (resData.success) {
+          setToastNotification(`✅ បានផ្ញើ Telegram Alert ហាង "${targetStore.name}" ទៅ Super Admin ជោគជ័យ!`);
+        } else {
+          setToastNotification(`⚠️ Telegram: ${resData.error || 'ផ្ញើមិនបានជោគជ័យ'}`);
+        }
+        setTimeout(() => setToastNotification(null), 4000);
+      } catch (err) {
+        setToastNotification(`❌ បរាជ័យក្នុងការផ្ញើ Telegram Alert: ${err.message}`);
+        setTimeout(() => setToastNotification(null), 4000);
       }
     };
 
@@ -14731,15 +14807,25 @@ export default function UnifiedAdminDashboard() {
                       {/* Action Buttons */}
                       <td className="px-5 py-4 whitespace-nowrap text-right pr-6 space-x-1.5">
                         {st.status === 'PENDING_APPROVAL' && (
-                          <button
-                            type="button"
-                            onClick={() => handleApproveStoreDirectly(st.id)}
-                            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-[11px] shadow-sm transition active:scale-95 cursor-pointer inline-flex items-center gap-1 animate-pulse"
-                            title="ចុចដើម្បីអនុម័តហាង និងបើកសិទ្ធិឱ្យចូលគ្រប់គ្រងភ្លាមៗ"
-                          >
-                            <span>✔️</span>
-                            <span>អនុម័ត (Approve)</span>
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveStoreDirectly(st.id)}
+                              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-[11px] shadow-sm transition active:scale-95 cursor-pointer inline-flex items-center gap-1 animate-pulse"
+                              title="ចុចដើម្បីអនុម័តហាង និងបើកសិទ្ធិឱ្យចូលគ្រប់គ្រងភ្លាមៗ"
+                            >
+                              <span>✔️</span>
+                              <span>អនុម័ត (Approve)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleResendTelegramStoreAlert(st)}
+                              className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] border border-blue-200 transition shadow-2xs cursor-pointer inline-flex items-center gap-1"
+                              title="ផ្ញើសារជូនដំណឹងហាងនេះទៅកាន់ Telegram Super Admin ម្តងទៀត"
+                            >
+                              <span>✈️ ផ្ញើ Telegram</span>
+                            </button>
+                          </>
                         )}
 
                         {/* ⭐️ ប៊ូតុង Approve ដំឡើងគម្រោង (សម្រាប់ហាងដែលកំពុងដំណើរការហើយសុំដំឡើងគម្រោង) ⭐️ */}
@@ -26970,6 +27056,64 @@ export default function UnifiedAdminDashboard() {
             type="button"
             onClick={(e) => { e.stopPropagation(); setNewOrderAlert(null); }}
             className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-xs font-bold transition shrink-0 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ⭐️ REALTIME FLOATING NEW STORE REGISTRATION / SLIP ALERT TOAST ⭐️ */}
+      {newStoreAlert && (
+        <div
+          className={`fixed ${newOrderAlert ? 'top-28' : 'top-5'} right-5 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-4 rounded-3xl shadow-2xl flex items-center gap-3.5 border-2 ${
+            newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl
+              ? 'border-amber-400 ring-4 ring-amber-500/20 shadow-amber-500/10'
+              : 'border-blue-500 ring-4 ring-blue-500/20'
+          } animate-in slide-in-from-top-4 max-w-md cursor-pointer hover:scale-102 transition duration-200`}
+          onClick={() => {
+            setActiveTab('stores');
+            setNewStoreAlert(null);
+          }}
+        >
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-2xl shrink-0 shadow-lg shadow-orange-500/30 animate-bounce">
+            🏪
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl
+                  ? 'bg-amber-400 text-slate-950'
+                  : 'bg-blue-400 text-slate-950'
+              }`}>
+                {newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl
+                  ? '⏳ ហាងថ្មីសុំ Approve Slip'
+                  : '🎉 ហាងថ្មីបានចុះឈ្មោះ!'}
+              </span>
+              <span className="text-[10px] text-slate-400">ទើបចុះឈ្មោះថ្មីៗ</span>
+            </div>
+            <p className="text-xs font-black text-white mt-1 truncate">
+              {newStoreAlert.store?.name || 'ហាងថ្មី'}
+              {newStoreAlert.store?.owner_name ? ` • 👤 ${newStoreAlert.store.owner_name}` : ''}
+            </p>
+            <p className="text-[11px] font-bold text-amber-300">
+              {newStoreAlert.plan ? `កញ្ចប់: ${newStoreAlert.plan}` : ''}
+              {newStoreAlert.price ? ` (${newStoreAlert.price})` : ''}
+              {newStoreAlert.store?.phone ? ` • 📞 ${newStoreAlert.store.phone}` : ''}
+            </p>
+            <p className="text-[9px] text-amber-400/90 mt-0.5 flex items-center gap-1 font-semibold">
+              <span>👉 ចុចដើម្បីចូលទៅពិនិត្យ & អនុម័ត (Approve) ក្នុង Stores Manager</span>
+            </p>
+          </div>
+          {newStoreAlert.slipUrl && (
+            <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-400/50 shrink-0 bg-slate-800">
+              <img src={newStoreAlert.slipUrl} alt="Slip" className="w-full h-full object-cover" />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setNewStoreAlert(null); }}
+            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-xs font-bold transition shrink-0 cursor-pointer"
+            title="បិទ"
           >
             ✕
           </button>
