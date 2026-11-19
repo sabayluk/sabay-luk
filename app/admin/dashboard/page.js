@@ -12218,108 +12218,122 @@ export default function UnifiedAdminDashboard() {
     };
 
     return (
-      <div className="animate-in fade-in pb-16 space-y-6">
+      <div className="animate-in fade-in pb-20 space-y-3 sm:space-y-4 md:space-y-6">
         {/* Title Bar & Quick Actions */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-gray-100 shadow-xs">
-          <div>
+        <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div className="flex items-center gap-2.5">
-              <span className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl font-bold">
+              <span className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center text-lg sm:text-xl font-bold shadow-xs shrink-0">
                 🛒
               </span>
               <div>
-                <h2 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">
-                  ប្រវត្តិការទិញ-លក់ & ពិនិត្យទំនិញចូល (Order & Inflow History)
+                <h2 className="text-base sm:text-xl font-black text-gray-900 leading-tight">
+                  ប្រវត្តិការទិញ-លក់
                 </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  ពិនិត្យតាមដានទំនិញលក់បាន ទឹកប្រាក់សរុប និងទំនិញនាំចូលស្តុកតាមថ្ងៃខែឆ្នាំជាក់លាក់
+                <p className="text-[11px] sm:text-xs text-gray-500 hidden sm:block">
+                  ពិនិត្យតាមដានទំនិញលក់បាន ទឹកប្រាក់សរុប និងទំនិញនាំចូលស្តុកតាមកាលបរិច្ឆេទ
                 </p>
               </div>
             </div>
+
+            {/* Quick Action buttons (Excel & Refresh) */}
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button 
+                type="button"
+                onClick={exportOrdersToCSV}
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="ទាញយកបញ្ជីលក់ជា Excel/CSV"
+              >
+                <span>📊</span>
+                <span className="text-[11px] sm:text-xs font-black">Export Excel</span>
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  fetchRealOrders();
+                  fetchStockMovements();
+                }}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <span>🔄</span>
+                <span className="text-[11px] sm:text-xs font-black hidden sm:inline">Refresh</span>
+              </button>
+            </div>
           </div>
           
-          <div className="flex flex-wrap gap-2.5 items-center w-full lg:w-auto">
+          {/* Search bar */}
+          <div className="relative flex items-center">
             <input 
               type="text"
               value={searchOrder}
               onChange={(e) => setSearchOrder(e.target.value)}
               placeholder="🔍 ស្វែងរក Order ID, ឈ្មោះភ្ញៀវ, លេខទូរស័ព្ទ..."
-              className="border-2 border-gray-200 px-4 py-2.5 rounded-2xl text-xs font-bold outline-none focus:border-blue-500 bg-white flex-1 sm:w-64"
+              className="w-full border-2 border-gray-200 pl-4 pr-10 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-bold outline-none focus:border-blue-500 bg-white"
             />
-            <button 
-              type="button"
-              onClick={exportOrdersToCSV}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-              title="ទាញយកបញ្ជីលក់ជា Excel/CSV"
-            >
-              <span>📊</span>
-              <span>Export Excel</span>
-            </button>
-            <button 
-              type="button"
-              onClick={() => {
-                fetchRealOrders();
-                fetchStockMovements();
-              }}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <span>🔄</span>
-              <span>Refresh</span>
-            </button>
+            {searchOrder && (
+              <button
+                type="button"
+                onClick={() => setSearchOrder('')}
+                className="absolute right-3 text-gray-400 hover:text-gray-600 text-xs font-bold w-5 h-5 flex items-center justify-center cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
         {/* ⭐️ MODE SWITCHER: ការកុម្ម៉ង់ & លក់ទំនិញ (ORDERS) VS ការនាំចូលស្តុក (STOCK IN) ⭐️ */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-2xs">
-          <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-xl">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-white p-2 sm:p-3 rounded-2xl border border-gray-100 shadow-2xs">
+          <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl">
             <button
               type="button"
               onClick={() => setOrdersViewMode('sales')}
-              className={`px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 ordersViewMode === 'sales'
                   ? 'bg-white text-gray-900 shadow-xs'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
             >
               <span>🛒</span>
-              <span>ការកុម្ម៉ង់ & លក់ចេញ ({filteredOrders.length})</span>
+              <span>ការលក់ ({filteredOrders.length})</span>
             </button>
             <button
               type="button"
               onClick={() => setOrdersViewMode('stock_in')}
-              className={`px-4 py-2 rounded-lg text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 ordersViewMode === 'stock_in'
                   ? 'bg-white text-gray-900 shadow-xs'
                   : 'text-gray-500 hover:text-gray-900'
               }`}
             >
               <span>📥</span>
-              <span>ការនាំទំនិញចូលស្តុក ({filteredStockInMovements.length})</span>
+              <span>ទំនិញចូល ({filteredStockInMovements.length})</span>
             </button>
           </div>
 
-          <div className="text-xs font-bold text-gray-600 flex items-center gap-2">
+          <div className="text-[11px] sm:text-xs font-bold text-gray-600 flex items-center justify-between sm:justify-end gap-2 px-1">
             <span>កាលបរិច្ឆេទសកម្ម:</span>
-            <span className="font-black px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-200">
+            <span className="font-black px-2 py-0.5 rounded-lg bg-orange-50 text-orange-700 border border-orange-200">
               📅 {getPeriodLabel()}
             </span>
           </div>
         </div>
 
         {/* ⭐️ DATE FILTER TOOLBAR (រើសថ្ងៃខែឆ្នាំ: ថ្ងៃនេះ, ម្សិលមិញ, ចន្លោះថ្ងៃជាក់លាក់) ⭐️ */}
-        <div className="bg-white p-4 sm:p-5 rounded-3xl border border-gray-200 shadow-xs space-y-3.5">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="bg-white p-3 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-200 shadow-xs space-y-2.5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
             {/* Quick Presets Pills */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-black text-gray-700 mr-1 flex items-center gap-1">
-                <span>🗓️</span> ចម្រាញ់តាមកាលបរិច្ឆេទ:
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+              <span className="text-[11px] sm:text-xs font-black text-gray-700 mr-1 flex items-center gap-1 shrink-0">
+                <span>🗓️</span> <span className="hidden sm:inline">ចម្រាញ់កាលបរិច្ឆេទ:</span>
               </span>
               {[
                 { key: 'all', label: '🌐 គ្រប់ពេល' },
-                { key: 'today', label: '⚡ ថ្ងៃនេះ (Today)' },
-                { key: 'yesterday', label: '⏮️ ម្សិលមិញ (Yesterday)' },
-                { key: '7days', label: '📅 ៧ ថ្ងៃចុងក្រោយ' },
-                { key: 'month', label: '📆 ខែនេះ (Month)' },
-                { key: 'custom', label: '🔍 ចន្លោះថ្ងៃជាក់លាក់' }
+                { key: 'today', label: '⚡ ថ្ងៃនេះ' },
+                { key: 'yesterday', label: '⏮️ ម្សិលមិញ' },
+                { key: '7days', label: '📅 ៧ថ្ងៃ' },
+                { key: 'month', label: '📆 ខែនេះ' },
+                { key: 'custom', label: '🔍 រើសថ្ងៃ' }
               ].map(p => (
                 <button
                   key={p.key}
@@ -12334,7 +12348,7 @@ export default function UnifiedAdminDashboard() {
                       setOrderCustomEndDate(yesterdayStr);
                     }
                   }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 ${
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 shrink-0 ${
                     orderDatePeriod === p.key
                       ? 'bg-slate-900 text-white shadow-xs'
                       : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
@@ -12347,19 +12361,19 @@ export default function UnifiedAdminDashboard() {
 
             {/* Status Filter (សម្រាប់ Sales Orders) */}
             {ordersViewMode === 'sales' && (
-              <div className="flex items-center gap-1 overflow-x-auto pb-1">
+              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
                 {['all', 'Completed', 'Preparing', 'Shipped', 'Cancelled'].map(st => (
                   <button
                     key={st}
                     type="button"
                     onClick={() => setOrderFilterStatus(st)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
                       orderFilterStatus === st 
                         ? 'bg-blue-600 text-white shadow-2xs' 
                         : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
                     }`}
                   >
-                    {st === 'all' && `ស្ថានភាពទាំងអស់`}
+                    {st === 'all' && `ទាំងអស់`}
                     {st === 'Completed' && '✓ ជោគជ័យ'}
                     {st === 'Preparing' && '⏳ កំពុងរៀបចំ'}
                     {st === 'Shipped' && '🚚 កំពុងដឹក'}
@@ -12371,194 +12385,191 @@ export default function UnifiedAdminDashboard() {
           </div>
 
           {/* Custom Date Range Picker (From Date -> To Date) */}
-          <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-3 bg-gray-50/70 p-3 rounded-2xl">
-            <span className="text-xs font-bold text-gray-600">ជ្រើសរើសថ្ងៃខែឆ្នាំ:</span>
-            
-            <div className="flex items-center gap-2">
-              <label className="text-[11px] font-bold text-gray-500">ចាប់ពីថ្ងៃ:</label>
-              <input 
-                type="date"
-                value={orderCustomStartDate}
-                onChange={(e) => {
-                  setOrderCustomStartDate(e.target.value);
-                  setOrderDatePeriod('custom');
-                }}
-                className="bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
-              />
-            </div>
+          {(orderDatePeriod === 'custom' || orderCustomStartDate || orderCustomEndDate) && (
+            <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-2 bg-gray-50/80 p-2.5 sm:p-3 rounded-xl sm:rounded-2xl animate-in fade-in">
+              <span className="text-xs font-bold text-gray-600">រើសចន្លោះថ្ងៃ:</span>
+              
+              <div className="flex items-center gap-1.5">
+                <label className="text-[11px] font-bold text-gray-500">ពី:</label>
+                <input 
+                  type="date"
+                  value={orderCustomStartDate}
+                  onChange={(e) => {
+                    setOrderCustomStartDate(e.target.value);
+                    setOrderDatePeriod('custom');
+                  }}
+                  className="bg-white border border-gray-300 rounded-xl px-2.5 py-1 text-xs font-black text-gray-800 outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
+                />
+              </div>
 
-            <div className="flex items-center gap-2">
-              <label className="text-[11px] font-bold text-gray-500">ដល់ថ្ងៃ:</label>
-              <input 
-                type="date"
-                value={orderCustomEndDate}
-                onChange={(e) => {
-                  setOrderCustomEndDate(e.target.value);
-                  setOrderDatePeriod('custom');
-                }}
-                className="bg-white border border-gray-300 rounded-xl px-3 py-1.5 text-xs font-black text-gray-800 outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
-              />
-            </div>
+              <div className="flex items-center gap-1.5">
+                <label className="text-[11px] font-bold text-gray-500">ដល់:</label>
+                <input 
+                  type="date"
+                  value={orderCustomEndDate}
+                  onChange={(e) => {
+                    setOrderCustomEndDate(e.target.value);
+                    setOrderDatePeriod('custom');
+                  }}
+                  className="bg-white border border-gray-300 rounded-xl px-2.5 py-1 text-xs font-black text-gray-800 outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
+                />
+              </div>
 
-            {/* Quick 1-Click Day Selectors */}
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setOrderDatePeriod('today');
-                  setOrderCustomStartDate(todayStr);
-                  setOrderCustomEndDate(todayStr);
-                }}
-                className={`text-[11px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer ${
-                  orderDatePeriod === 'today'
-                    ? 'bg-amber-100 text-amber-900 border-amber-300'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-                }`}
-              >
-                ថ្ងៃនេះ ({todayStr})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOrderDatePeriod('yesterday');
-                  setOrderCustomStartDate(yesterdayStr);
-                  setOrderCustomEndDate(yesterdayStr);
-                }}
-                className={`text-[11px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer ${
-                  orderDatePeriod === 'yesterday'
-                    ? 'bg-amber-100 text-amber-900 border-amber-300'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-                }`}
-              >
-                ម្សិលមិញ ({yesterdayStr})
-              </button>
-            </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderDatePeriod('today');
+                    setOrderCustomStartDate(todayStr);
+                    setOrderCustomEndDate(todayStr);
+                  }}
+                  className={`text-[10px] font-black px-2 py-1 rounded-lg border transition cursor-pointer ${
+                    orderDatePeriod === 'today'
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  ថ្ងៃនេះ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderDatePeriod('yesterday');
+                    setOrderCustomStartDate(yesterdayStr);
+                    setOrderCustomEndDate(yesterdayStr);
+                  }}
+                  className={`text-[10px] font-black px-2 py-1 rounded-lg border transition cursor-pointer ${
+                    orderDatePeriod === 'yesterday'
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  ម្សិលមិញ
+                </button>
+              </div>
 
-            {(orderCustomStartDate || orderCustomEndDate || orderDatePeriod !== 'all') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setOrderDatePeriod('all');
-                  setOrderCustomStartDate('');
-                  setOrderCustomEndDate('');
-                }}
-                className="text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-200 transition cursor-pointer ml-auto"
-              >
-                ✕ សម្អាត Filter ថ្ងៃខែ
-              </button>
-            )}
-          </div>
+              {(orderCustomStartDate || orderCustomEndDate || orderDatePeriod !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderDatePeriod('all');
+                    setOrderCustomStartDate('');
+                    setOrderCustomEndDate('');
+                  }}
+                  className="text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2 py-1 rounded-lg border border-rose-200 transition cursor-pointer ml-auto"
+                >
+                  ✕ សម្អាត
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ⭐️ SUMMARY STATS CARDS FOR SELECTED DATE ⭐️ */}
         {ordersViewMode === 'sales' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
             {/* 1. Total Revenue */}
-            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-5 rounded-3xl border border-indigo-500/30 shadow-md">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                ចំណូលសរុប ({getPeriodLabel()})
+            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-indigo-500/30 shadow-md">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider truncate">
+                ចំណូល ({getPeriodLabel()})
               </span>
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-3xl font-black text-emerald-400 font-mono">
+              <div className="flex items-baseline gap-1 mt-1 sm:mt-2">
+                <span className="text-xl sm:text-3xl font-black text-emerald-400 font-mono">
                   ${totalFilteredRevenue.toFixed(2)}
                 </span>
               </div>
-              <p className="text-xs text-slate-300 font-mono mt-1">
+              <p className="text-[10px] sm:text-xs text-slate-300 font-mono mt-0.5 truncate">
                 ~ {(Math.round(totalFilteredRevenue * exchangeRate)).toLocaleString()} ៛
               </p>
             </div>
 
             {/* 2. Total Orders */}
-            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
-                វិក្កយបត្រសរុប (Orders)
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
+                វិក្កយបត្រ (Orders)
               </span>
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-3xl font-black text-gray-900 font-mono">
+              <div className="flex items-baseline gap-1.5 mt-1 sm:mt-2">
+                <span className="text-xl sm:text-3xl font-black text-gray-900 font-mono">
                   {filteredOrders.length}
                 </span>
-                <span className="text-xs text-gray-500 font-bold">វិក្កយបត្រ</span>
+                <span className="text-[11px] sm:text-xs text-gray-500 font-bold">វិក្កយបត្រ</span>
               </div>
-              <div className="flex items-center gap-2 mt-2 text-[11px] font-bold">
-                <span className="text-emerald-600">✓ ជោគជ័យ: {completedOrdersCount}</span>
+              <div className="flex items-center gap-1.5 mt-1 sm:mt-2 text-[10px] sm:text-[11px] font-bold truncate">
+                <span className="text-emerald-600">✓ {completedOrdersCount}</span>
                 <span className="text-gray-300">•</span>
-                <span className="text-amber-600">⏳ កំពុងរៀបចំ: {pendingOrdersCount}</span>
+                <span className="text-amber-600">⏳ {pendingOrdersCount}</span>
               </div>
             </div>
 
             {/* 3. Total Items Qty */}
-            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
-                បរិមាណទំនិញលក់បាន
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
+                ទំនិញលក់បាន
               </span>
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-3xl font-black text-blue-600 font-mono">
+              <div className="flex items-baseline gap-1.5 mt-1 sm:mt-2">
+                <span className="text-xl sm:text-3xl font-black text-blue-600 font-mono">
                   {totalFilteredItemsQty}
                 </span>
-                <span className="text-xs text-gray-500 font-bold">ចំនួនទំនិញ</span>
+                <span className="text-[11px] sm:text-xs text-gray-500 font-bold">ចំនួន</span>
               </div>
-              <p className="text-[11px] text-gray-500 mt-2">
-                សរុបមកពី <b>{orderItemsSummary.length}</b> មុខទំនិញខុសៗគ្នា
+              <p className="text-[10px] sm:text-[11px] text-gray-500 mt-1 sm:mt-2 truncate">
+                ពី <b>{orderItemsSummary.length}</b> មុខទំនិញ
               </p>
             </div>
 
             {/* 4. Action Card: Toggle Breakdown */}
             <div 
               onClick={() => setShowOrderItemsBreakdown(prev => !prev)}
-              className="bg-gradient-to-br from-amber-50 to-orange-50/70 p-5 rounded-3xl border border-amber-200 shadow-xs flex flex-col justify-between cursor-pointer hover:border-amber-300 transition group"
+              className="bg-gradient-to-br from-amber-50 to-orange-50/70 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-amber-200 shadow-xs flex flex-col justify-between cursor-pointer hover:border-amber-300 transition group"
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-black text-amber-900 tracking-wider">
-                    ពិនិត្យមុខទំនិញលម្អិត
+                  <span className="text-[10px] uppercase font-black text-amber-900 tracking-wider truncate">
+                    មុខទំនិញលម្អិត
                   </span>
-                  <span className="text-lg group-hover:scale-110 transition-transform">📦</span>
+                  <span className="text-base sm:text-lg group-hover:scale-110 transition-transform">📦</span>
                 </div>
-                <h4 className="text-sm font-black text-gray-900 mt-2">
-                  {orderItemsSummary.length} មុខទំនិញបានលក់
+                <h4 className="text-xs sm:text-sm font-black text-gray-900 mt-1 sm:mt-2 truncate">
+                  {orderItemsSummary.length} មុខទំនិញ
                 </h4>
-                <p className="text-[11px] text-gray-600 mt-1">
-                  {showOrderItemsBreakdown ? 'ចុចដើម្បីបិទបញ្ជីមុខទំនិញ' : 'ចុចដើម្បីពិនិត្យមុខទំនិញនីមួយៗ'}
-                </p>
               </div>
 
-              <div className="pt-2 text-xs font-black text-amber-700 flex items-center gap-1">
-                <span>{showOrderItemsBreakdown ? '▲ លាក់បញ្ជី' : '▼ បង្ហាញមុខទំនិញលម្អិត'}</span>
+              <div className="pt-1.5 text-[10px] sm:text-xs font-black text-amber-700 flex items-center gap-1">
+                <span>{showOrderItemsBreakdown ? '▲ លាក់' : '▼ បង្ហាញលម្អិត'}</span>
               </div>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-5 rounded-3xl border border-indigo-500/30 shadow-md">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                ចំនួនដងនាំចូលស្តុក ({getPeriodLabel()})
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
+            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-indigo-500/30 shadow-md">
+              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider truncate">
+                ដងនាំចូល ({getPeriodLabel()})
               </span>
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-3xl font-black text-amber-300 font-mono">
+              <div className="flex items-baseline gap-1 mt-1 sm:mt-2">
+                <span className="text-xl sm:text-3xl font-black text-amber-300 font-mono">
                   {filteredStockInMovements.length}
                 </span>
-                <span className="text-xs text-slate-300 font-bold">លើក/ប្រតិបត្តិការ</span>
+                <span className="text-[10px] sm:text-xs text-slate-300 font-bold">លើក</span>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
-                បរិមាណទំនិញនាំចូលសរុប
+            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
+                នាំចូលសរុប
               </span>
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-3xl font-black text-emerald-600 font-mono">
+              <div className="flex items-baseline gap-1 mt-1 sm:mt-2">
+                <span className="text-xl sm:text-3xl font-black text-emerald-600 font-mono">
                   +{totalStockInQty}
                 </span>
-                <span className="text-xs text-gray-500 font-bold">ចំនួន</span>
+                <span className="text-[10px] sm:text-xs text-gray-500 font-bold">ចំនួន</span>
               </div>
-              <p className="text-[11px] text-gray-500 mt-1">នាំចូលស្តុកបន្ថែមក្នុងកាលបរិច្ឆេទនេះ</p>
+              <p className="text-[10px] sm:text-[11px] text-gray-500 mt-1 truncate">នាំចូលស្តុកបន្ថែម</p>
             </div>
 
-            <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-xs flex items-center justify-between">
+            <div className="col-span-2 sm:col-span-1 bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs flex items-center justify-between gap-2">
               <div>
                 <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">គ្រប់គ្រងស្តុក</span>
-                <h4 className="text-sm font-black text-gray-900 mt-1">ចង់នាំចូលស្តុកបន្ថែម?</h4>
-                <p className="text-[11px] text-gray-500 mt-0.5">ចុចដើម្បីនាំចូលស្តុកផលិតផលភ្លាមៗ</p>
+                <h4 className="text-xs sm:text-sm font-black text-gray-900 mt-0.5">នាំចូលស្តុក?</h4>
               </div>
               <button
                 type="button"
@@ -12569,9 +12580,9 @@ export default function UnifiedAdminDashboard() {
                     alert('សូមបង្កើតទំនិញជាមុនសិន!');
                   }
                 }}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-xs transition active:scale-95"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
               >
-                + នាំចូលស្តុក
+                + នាំចូល
               </button>
             </div>
           </div>
@@ -12660,7 +12671,9 @@ export default function UnifiedAdminDashboard() {
                 <p className="text-xs text-gray-400">សូមសាកល្បងជ្រើសរើស "🌐 គ្រប់ពេល" ឬប្តូរថ្ងៃខែឆ្នាំឡើងវិញ។</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* ⭐️ DESKTOP ORDERS TABLE (hidden md:block) ⭐️ */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
@@ -12885,6 +12898,242 @@ export default function UnifiedAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              {/* ⭐️ MOBILE ORDER CARDS (md:hidden) ⭐️ */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {filteredOrders.map(order => {
+                  const displayId = order.order_id || order.id;
+                  const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+                  const slipUrl = order.payment_slip_url || order.slip_url || (Array.isArray(order.items) && (order.items[0]?.payment_slip_url || order.items[0]?.slip_url));
+
+                  return (
+                    <div 
+                      key={`mobile-order-${order.id}`}
+                      id={`mobile-order-card-${order.id}`}
+                      className={`p-3.5 space-y-2.5 transition ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400' : 'bg-white hover:bg-gray-50/60'}`}
+                    >
+                      {/* Top: Order ID + Type + Date */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-mono font-black text-xs text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-lg truncate">
+                            {displayId}
+                          </span>
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${order.order_type === 'ONLINE' ? 'bg-orange-50 text-orange-600 border border-orange-200' : 'bg-gray-100 text-gray-700'}`}>
+                            {order.order_type || 'POS'}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-bold shrink-0">
+                          {order.created_at ? new Date(order.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : 'POS'}
+                        </span>
+                      </div>
+
+                      {/* Customer & Total */}
+                      <div className="flex items-start justify-between gap-2 pt-0.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black text-xs text-gray-900 truncate">
+                            {order.customer || 'អតិថិជនទូទៅ'}
+                          </p>
+                          {order.phone && (
+                            <p className="text-[10px] text-gray-400 font-mono font-bold mt-0.5">
+                              📞 {order.phone}
+                            </p>
+                          )}
+                          {items.length > 0 && (
+                            <p className="text-[10px] text-gray-500 mt-1 line-clamp-1">
+                              📦 {items.map(it => `${it.name || 'ទំនិញ'} x${it.quantity || it.qty || 1}`).join(', ')}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-black text-emerald-600 font-mono">
+                            ${parseFloat(order.total || 0).toFixed(2)}
+                          </p>
+                          <p className="text-[10px] text-gray-400 font-bold">
+                            {(parseFloat(order.total || 0) * exchangeRate).toLocaleString()} ៛
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Payment & Status Control */}
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold bg-gray-100 text-gray-700 px-2 py-1 rounded-md">
+                            {order.payment || order.payment_method || 'Cash'}
+                          </span>
+                          {slipUrl && (
+                            <button 
+                              type="button"
+                              onClick={() => setViewingSlipUrl(slipUrl)}
+                              className="bg-blue-50 hover:bg-blue-100 text-blue-600 font-black text-[10px] px-2 py-1 rounded-lg border border-blue-200 transition inline-flex items-center gap-1 shadow-2xs cursor-pointer animate-pulse"
+                            >
+                              🧾 Slip
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={order.status || 'Pending'}
+                            onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                            className={`text-[11px] font-black rounded-lg px-2 py-1 border outline-none cursor-pointer transition ${
+                              order.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                              order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                              order.status === 'Preparing' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
+                              order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-300' :
+                              'bg-amber-50 text-amber-700 border-amber-300'
+                            }`}
+                          >
+                            <option value="Pending">🟡 Pending</option>
+                            <option value="Preparing">🔵 វេចខ្ចប់</option>
+                            <option value="Shipped">🚚 កំពុងដឹក</option>
+                            <option value="Completed">🟢 ជោគជ័យ</option>
+                            <option value="Cancelled">❌ បោះបង់</option>
+                          </select>
+
+                          {(!order.status || order.status === 'Pending') && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateOrderStatus(order.id, 'Preparing')}
+                              className="bg-indigo-600 active:scale-95 text-white text-[10px] font-black px-2 py-1 rounded-lg transition"
+                            >
+                              វេចខ្ចប់
+                            </button>
+                          )}
+                          {order.status === 'Preparing' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateOrderStatus(order.id, 'Shipped')}
+                              className="bg-blue-600 active:scale-95 text-white text-[10px] font-black px-2 py-1 rounded-lg transition"
+                            >
+                              ដឹក
+                            </button>
+                          )}
+                          {order.status === 'Shipped' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateOrderStatus(order.id, 'Completed')}
+                              className="bg-emerald-600 active:scale-95 text-white text-[10px] font-black px-2 py-1 rounded-lg transition"
+                            >
+                              ជោគជ័យ
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons Row */}
+                      <div className="flex items-center justify-end gap-1.5 pt-1 text-xs">
+                        <button 
+                          type="button"
+                          onClick={() => setSelectedOrderDetails(order)}
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] px-2.5 py-1 rounded-lg border border-blue-200 transition cursor-pointer flex items-center gap-1"
+                        >
+                          <span>👁️</span>
+                          <span>លម្អិត</span>
+                        </button>
+
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const rawAddr = order.delivery_address || order.address || '';
+                            const cleanAddr = rawAddr
+                              .replace(/\[📍 Maps:.*?\]/gi, '')
+                              .replace(/\[🏠 រូបផ្ទះ:.*?\]/gi, '')
+                              .replace(/\[✈️ Telegram(?:\/Email)?:.*?\]/gi, '')
+                              .replace(/\[✉️ Email:.*?\]/gi, '')
+                              .trim();
+                            const mapM = (rawAddr || '').match(/Maps:\s*(https?:\/\/[^\s\]]+)/i) || 
+                                         (rawAddr || '').match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)[^\s\]]+)/i);
+                            const gMap = order.google_map_url || (mapM ? mapM[1] : null);
+                            const tgM = (rawAddr || '').match(/Telegram(?:\/Email)?:\s*([^\s\]]+)/i);
+                            const tg = order.telegram || order.customer_telegram || (tgM ? tgM[1] : null);
+
+                            const orderTax = getOrderTax(order);
+                            const sub = Number(order.subtotal || order.total || 0);
+                            const disc = Number(order.discount || 0);
+                            const tot = Number(order.total || order.total_amount || 0);
+
+                            setReceiptData({
+                              orderId: displayId,
+                              date: order.created_at ? new Date(order.created_at).toLocaleString('km-KH') : new Date().toLocaleString('km-KH'),
+                              items: items,
+                              subtotal: sub,
+                              discount: disc,
+                              taxAmount: orderTax,
+                              taxRate: orderTax > 0 ? 10 : 0,
+                              taxMode: 'exclusive',
+                              taxLabel: 'ពន្ធអាករ (VAT 10%)',
+                              vatTin: storeSettings.vatTin || invoiceSettings.vatTin || '',
+                              total: tot,
+                              totalKHR: Math.round(tot * (storeSettings.exchangeRate || 4100)),
+                              method: order.payment || order.payment_method || 'Cash',
+                              tendered: tot,
+                              change: 0,
+                              customer: order.customer || order.customer_name || 'អតិថិជនទូទៅ',
+                              phone: order.phone || order.phone_number || '',
+                              address: cleanAddr,
+                              telegram: tg,
+                              gMapUrl: gMap
+                            });
+                          }}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] px-2.5 py-1 rounded-lg border border-slate-300 transition cursor-pointer flex items-center gap-1"
+                        >
+                          <span>🖨️</span>
+                          <span>Print</span>
+                        </button>
+
+                        <a
+                          href={getInvoiceUrl(order.order_id || order.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => openInvoiceInBrowser(order.order_id || order.id, e)}
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-[11px] px-2.5 py-1 rounded-lg border border-purple-200 transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>🌐</span>
+                          <span>PDF</span>
+                        </a>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const orderItems = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+                            const res = await sendTelegramNotification({
+                              action: 'send_invoice',
+                              order: {
+                                order_id: order.order_id || order.id,
+                                customer_name: order.customer || order.customer_name || 'អតិថិជន',
+                                phone: order.phone || order.phone_number || 'N/A',
+                                delivery_address: order.address || order.delivery_address || 'N/A',
+                                address: order.address || order.delivery_address || 'N/A',
+                                google_map_url: order.google_map_url || orderItems[0]?.google_map_url || null,
+                                location_photo_url: order.location_photo_url || orderItems[0]?.location_photo_url || null,
+                                payment_slip_url: order.payment_slip_url || orderItems[0]?.payment_slip_url || null,
+                                total_amount: order.total || order.total_amount || 0,
+                                subtotal: order.subtotal || order.total || 0,
+                                discount: order.discount || 0,
+                                coupon_code: order.coupon_code || orderItems[0]?.coupon_code || null,
+                                items: orderItems,
+                                payment_method: order.payment || order.payment_method || 'Cash',
+                                exchange_rate: storeSettings.exchangeRate || 4100
+                              }
+                            });
+                            if (res && res.success) {
+                              setToastNotification(`✅ បានផ្ញើវិក្កយបត្រ PDF #${order.order_id || order.id} ទៅ Telegram ជោគជ័យ!`);
+                              setTimeout(() => setToastNotification(null), 3500);
+                            } else {
+                              alert('❌ ' + (res?.message || 'សូមពិនិត្យមើល Telegram Bot Token ក្នុង Settings'));
+                            }
+                          }}
+                          className="bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-[11px] px-2 py-1 rounded-lg border border-sky-200 transition cursor-pointer flex items-center gap-1"
+                          title="ផ្ញើទៅ Telegram"
+                        >
+                          <span>✈️</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              </>
             )}
           </div>
         ) : (
@@ -12908,7 +13157,9 @@ export default function UnifiedAdminDashboard() {
                 <p className="text-xs text-gray-400">សូមសាកល្បងជ្រើសរើស "🌐 គ្រប់ពេល" ឬប្តូរថ្ងៃខែឆ្នាំឡើងវិញ។</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* ⭐️ DESKTOP ORDERS TABLE (hidden md:block) ⭐️ */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase font-black">
                     <tr>
@@ -12957,6 +13208,46 @@ export default function UnifiedAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              {/* ⭐️ MOBILE STOCK IN CARDS (md:hidden) ⭐️ */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {filteredStockInMovements.map((m, idx) => (
+                  <div key={`mobile-stock-${idx}`} className="p-3.5 space-y-2 bg-white">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-black text-xs text-gray-900 truncate">{m.products?.name || 'ទំនិញ'}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">SKU: {m.products?.sku || 'N/A'}</p>
+                      </div>
+                      <span className="text-sm font-black font-mono px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                        +{Math.abs(parseInt(m.qty_change) || 0)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
+                      <div>
+                        {m.product_variants?.size ? (
+                          <span className="bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded text-[10px]">
+                            Size: {m.product_variants.size} {m.product_variants.color ? `• ${m.product_variants.color}` : ''}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-[10px]">ទូទៅ</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-mono text-gray-500">
+                        <span>{m.previous_qty || 0}</span>
+                        <span className="mx-1 text-gray-300">➔</span>
+                        <span className="font-bold text-emerald-600">{m.new_qty || 0}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-gray-400 pt-0.5">
+                      <span>{m.reason || 'នាំចូលស្តុកបន្ថែម'}</span>
+                      <span>{m.created_at ? new Date(m.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              </>
             )}
           </div>
         )}
