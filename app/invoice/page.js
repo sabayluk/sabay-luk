@@ -352,13 +352,9 @@ function InvoiceContent() {
           <button
             type="button"
             onClick={() => {
-              let targetUrl = window.location.href.replace('localhost:', '127.0.0.1:');
-              fetch('/api/open-chrome', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: targetUrl })
-              }).catch(() => {});
-              window.open(targetUrl, '_blank');
+              const targetUrl = window.location.href;
+              const win = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+              if (win) win.focus();
             }}
             className="bg-white text-blue-700 font-black px-3.5 py-1.5 rounded-xl hover:bg-blue-50 transition shrink-0 cursor-pointer shadow-xs"
           >
@@ -387,14 +383,9 @@ function InvoiceContent() {
             <button
               type="button"
               onClick={() => {
-                let targetUrl = window.location.href;
-                if (targetUrl.includes('localhost:')) targetUrl = targetUrl.replace('localhost:', '127.0.0.1:');
-                fetch('/api/open-chrome', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ url: targetUrl })
-                }).catch(() => {});
-                window.open(targetUrl, '_blank');
+                const targetUrl = window.location.href;
+                const win = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                if (win) win.focus();
               }}
               className="px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
               title="បើកក្នុង Web Browser (Google Chrome / Edge)"

@@ -7051,15 +7051,11 @@ export default function UnifiedAdminDashboard() {
 
                 // 1. Direct browser open immediately
                 try {
-                  window.open(previewFullUrl, '_blank');
-                } catch(e) {}
-
-                // 2. Also trigger Windows Shell to ensure Chrome opens
-                fetch('/api/open-chrome', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ url: previewFullUrl })
-                }).catch(() => {});
+                  const win = window.open(previewFullUrl, '_blank', 'noopener,noreferrer');
+                  if (win) win.focus();
+                } catch(e) {
+                  window.location.href = previewFullUrl;
+                }
 
                 setToastNotification('🌐 បានបើកទំនិញលើ Google Chrome!');
                 setTimeout(() => setToastNotification(null), 3000);
@@ -26814,15 +26810,11 @@ export default function UnifiedAdminDashboard() {
                 
                 // 1. Direct browser open immediately
                 try {
-                  window.open(storeUrl, '_blank');
-                } catch(e) {}
-
-                // 2. Also trigger Windows Shell to ensure Google Chrome opens it
-                fetch('/api/open-chrome', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ url: storeUrl })
-                }).catch(() => {});
+                  const win = window.open(storeUrl, '_blank', 'noopener,noreferrer');
+                  if (win) win.focus();
+                } catch(e) {
+                  window.location.href = storeUrl;
+                }
 
                 setToastNotification('🌐 បានបើកមុខហាងលើ Google Chrome រួចរាល់!');
                 setTimeout(() => setToastNotification(null), 3000);
