@@ -833,6 +833,51 @@ export default function UnifiedAdminDashboard() {
   
   // ⭐️ Global Toast Notification State
   const [toastNotification, setToastNotification] = useState(null);
+
+  // ⭐️ Global Modern Confirmation Modal (ផ្ទាំងលោតបញ្ជាក់ទំនើប ជំនួស browser window.confirm) ⭐️
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'យល់ព្រម',
+    cancelText: 'បោះបង់',
+    type: 'danger',
+    icon: '🗑️',
+    resolveFn: null,
+    rejectFn: null
+  });
+
+  const showConfirmModal = ({
+    title = 'ផ្ទាំងបញ្ជាក់',
+    message = '',
+    confirmText = 'យល់ព្រម',
+    cancelText = 'បោះបង់',
+    type = 'danger',
+    icon = '🗑️'
+  }) => {
+    return new Promise((resolve) => {
+      setConfirmModal({
+        isOpen: true,
+        title,
+        message,
+        confirmText,
+        cancelText,
+        type,
+        icon,
+        resolveFn: () => resolve(true),
+        rejectFn: () => resolve(false)
+      });
+    });
+  };
+
+  const handleCloseConfirmModal = (result) => {
+    if (result && confirmModal.resolveFn) {
+      confirmModal.resolveFn();
+    } else if (!result && confirmModal.rejectFn) {
+      confirmModal.rejectFn();
+    }
+    setConfirmModal(prev => ({ ...prev, isOpen: false, resolveFn: null, rejectFn: null }));
+  };
   
   // ⭐️ ពិនិត្យមើលថាតើកំពុងបើកក្នុងទម្រង់ Desktop PWA App ឬ browser ធម្មតា
   const [isAppWindow, setIsAppWindow] = useState(false);
@@ -1935,9 +1980,17 @@ export default function UnifiedAdminDashboard() {
   };
 
   // លុបអតិថិជន
-  const handleDeleteCustomer = (id) => {
+  const handleDeleteCustomer = async (id) => {
     if (guardDemoAction("លុបអតិថិជន")) return;
-    if (window.confirm('តើបងពិតជាចង់លុបអតិថិជននេះចេញពីប្រព័ន្ធមែនទេ?')) {
+    const ok = await showConfirmModal({
+      title: 'លុបអតិថិជន (Delete Customer)',
+      message: 'តើបងពិតជាចង់លុបអតិថិជននេះចេញពីប្រព័ន្ធមែនទេ?',
+      confirmText: 'យល់ព្រមលុប',
+      cancelText: 'បោះបង់',
+      type: 'danger',
+      icon: '👤'
+    });
+    if (ok) {
       setCustomers(prev => prev.filter(c => c.id !== id));
     }
   };
@@ -6087,10 +6140,19 @@ export default function UnifiedAdminDashboard() {
       } else if (type === 'none') {
         setSelectedSizes([]);
       } else if (type === 'clear_available') {
-        if (window.confirm('តើអ្នកពិតជាចង់លុបទំហំ Size ទាំងអស់របស់ហាងនេះមែនទេ?')) {
-          setAvailableSizes([]);
-          setSelectedSizes([]);
-        }
+        showConfirmModal({
+          title: 'លុបទំហំទាំងអស់ (Clear All Sizes)',
+          message: 'តើបងពិតជាចង់លុបទំហំ Size ទាំងអស់របស់ហាងនេះមែនទេ?',
+          confirmText: 'យល់ព្រមលុបទាំងអស់',
+          cancelText: 'បោះបង់',
+          type: 'danger',
+          icon: '⚠️'
+        }).then((ok) => {
+          if (ok) {
+            setAvailableSizes([]);
+            setSelectedSizes([]);
+          }
+        });
       }
     };
 
@@ -6114,11 +6176,20 @@ export default function UnifiedAdminDashboard() {
         setSelectedColors([]);
         setColor('');
       } else if (type === 'clear_available') {
-        if (window.confirm('តើអ្នកពិតជាចង់លុបពណ៌ Colors ទាំងអស់របស់ហាងនេះមែនទេ?')) {
-          setAvailableColors([]);
-          setSelectedColors([]);
-          setColor('');
-        }
+        showConfirmModal({
+          title: 'លុបពណ៌ទាំងអស់ (Clear All Colors)',
+          message: 'តើបងពិតជាចង់លុបពណ៌ Colors ទាំងអស់របស់ហាងនេះមែនទេ?',
+          confirmText: 'យល់ព្រមលុបទាំងអស់',
+          cancelText: 'បោះបង់',
+          type: 'danger',
+          icon: '⚠️'
+        }).then((ok) => {
+          if (ok) {
+            setAvailableColors([]);
+            setSelectedColors([]);
+            setColor('');
+          }
+        });
       }
     };
 
@@ -6133,8 +6204,16 @@ export default function UnifiedAdminDashboard() {
     };
 
     // ⚡ មុខងារ Reset Form
-    const handleResetProductForm = () => {
-      if (window.confirm('តើអ្នកពិតជាចង់សម្អាតទិន្នន័យ Form នេះមែនទេ?')) {
+    const handleResetProductForm = async () => {
+      const ok = await showConfirmModal({
+        title: 'សម្អាតទិន្នន័យ Form (Reset Form)',
+        message: 'តើបងពិតជាចង់សម្អាតទិន្នន័យ Form នេះមែនទេ? ទិន្នន័យដែលបានបំពេញនឹងត្រូវកំណត់ឡើងវិញ។',
+        confirmText: 'យល់ព្រមសម្អាត',
+        cancelText: 'បោះបង់',
+        type: 'warning',
+        icon: '🔄'
+      });
+      if (ok) {
         setEditingProductId(null);
         setName('');
         const nextSkuVal = computeNextSku(products);
@@ -6670,9 +6749,17 @@ export default function UnifiedAdminDashboard() {
                             
                             <button
                               type="button"
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`តើអ្នកពិតជាចង់លុបទំហំ [${sz}] នេះចេញពីហាងមែនទេ?`)) {
+                                const ok = await showConfirmModal({
+                                  title: 'លុបទំហំទំនិញ (Delete Size)',
+                                  message: `តើបងពិតជាចង់លុបទំហំ [${sz}] នេះចេញពីហាងមែនទេ?`,
+                                  confirmText: 'យល់ព្រមលុប',
+                                  cancelText: 'បោះបង់',
+                                  type: 'danger',
+                                  icon: '🗑️'
+                                });
+                                if (ok) {
                                   setAvailableSizes(availableSizes.filter(s => s !== sz));
                                   setSelectedSizes(selectedSizes.filter(s => s !== sz));
                                 }
@@ -6828,9 +6915,17 @@ export default function UnifiedAdminDashboard() {
                           
                           <button
                             type="button"
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
-                              if (window.confirm(`តើអ្នកពិតជាចង់លុបពណ៌ [${col}] នេះចេញពីហាងមែនទេ?`)) {
+                              const ok = await showConfirmModal({
+                                title: 'លុបពណ៌ទំនិញ (Delete Color)',
+                                message: `តើបងពិតជាចង់លុបពណ៌ [${col}] នេះចេញពីហាងមែនទេ?`,
+                                confirmText: 'យល់ព្រមលុប',
+                                cancelText: 'បោះបង់',
+                                type: 'danger',
+                                icon: '🎨'
+                              });
+                              if (ok) {
                                 setAvailableColors(availableColors.filter(c => c !== col));
                                 setSelectedColors(selectedColors.filter(c => c !== col));
                                 if (color === col) setColor('');
@@ -7824,7 +7919,15 @@ export default function UnifiedAdminDashboard() {
       confirmMsg = `⚠️ ប្រភេទ "${catName}" មានទំនិញចំនួន ${productCount} កំពុងប្រើប្រាស់! ប្រសិនបើបងលុប ផលិតផលទាំងនោះអាចនឹងគ្មានប្រភេទ។ តើបងពិតជាចង់លុបមែនទេ?`;
     }
 
-    if (window.confirm(confirmMsg)) {
+    const ok = await showConfirmModal({
+      title: 'លុបប្រភេទទំនិញ (Delete Category)',
+      message: confirmMsg,
+      confirmText: 'យល់ព្រមលុប',
+      cancelText: 'បោះបង់',
+      type: 'danger',
+      icon: '🗂️'
+    });
+    if (ok) {
       const { error } = await supabase.from('categories').delete().eq('id', catId);
       if (!error) {
         setCatMessage(`✅ បានលុបប្រភេទ "${catName}" ដោយជោគជ័យ!`);
@@ -8376,8 +8479,16 @@ export default function UnifiedAdminDashboard() {
   };
 
   // មុខងារសម្អាតទិន្នន័យសន្លឹកបច្ចុប្បន្ន
-  const handleClearCurrentSlide = () => {
-    if (!window.confirm(`តើអ្នកពិតជាចង់សម្អាតទិន្នន័យសន្លឹកទី ${activeSlideIndex + 1} នេះមែនទេ?`)) return;
+  const handleClearCurrentSlide = async () => {
+    const ok = await showConfirmModal({
+      title: 'សម្អាតទិន្នន័យ Slide',
+      message: `តើបងពិតជាចង់សម្អាតទិន្នន័យសន្លឹកទី ${activeSlideIndex + 1} នេះមែនទេ?`,
+      confirmText: 'យល់ព្រមសម្អាត',
+      cancelText: 'បោះបង់',
+      type: 'warning',
+      icon: '🖼️'
+    });
+    if (!ok) return;
     const updated = [...slides];
     updated[activeSlideIndex] = {
       id: activeSlideIndex + 1,
@@ -8397,8 +8508,16 @@ export default function UnifiedAdminDashboard() {
   };
 
   // មុខងារដាក់ទិន្នន័យគំរូស្អាតៗ (Fill Demo Content)
-  const handleFillDemoSlides = () => {
-    if (!window.confirm('តើអ្នកចង់បំពេញទិន្នន័យគំរូ Cover ស្អាតៗបែបប្រណិតទាំង ៥ សន្លឹកមែនទេ?')) return;
+  const handleFillDemoSlides = async () => {
+    const ok = await showConfirmModal({
+      title: 'បំពេញទិន្នន័យគំរូ Slide',
+      message: 'តើបងចង់បំពេញទិន្នន័យគំរូ Cover ស្អាតៗបែបប្រណិតទាំង ៥ សន្លឹកមែនទេ?',
+      confirmText: 'យល់ព្រមបំពេញ',
+      cancelText: 'បោះបង់',
+      type: 'info',
+      icon: '✨'
+    });
+    if (!ok) return;
     const demo = [
       {
         id: 1,
@@ -9194,9 +9313,17 @@ export default function UnifiedAdminDashboard() {
     showCouponToast(`ប្តូរស្ថានភាពកូដ [${code}] ជោគជ័យ!`);
   };
 
-  const handleDeleteCoupon = (code) => {
+  const handleDeleteCoupon = async (code) => {
     if (guardDemoAction("លុប Coupon")) return;
-    if (window.confirm(`តើអ្នកពិតជាចង់លុបប័ណ្ណបញ្ចុះតម្លៃ [${code}] នេះមែនទេ?`)) {
+    const ok = await showConfirmModal({
+      title: 'លុបប័ណ្ណបញ្ចុះតម្លៃ (Delete Coupon)',
+      message: `តើបងពិតជាចង់លុបប័ណ្ណបញ្ចុះតម្លៃ [${code}] នេះមែនទេ?`,
+      confirmText: 'យល់ព្រមលុប',
+      cancelText: 'បោះបង់',
+      type: 'danger',
+      icon: '🏷️'
+    });
+    if (ok) {
       const updated = adminCoupons.filter(c => c.code !== code);
       saveCouponsToStorage(updated);
       showCouponToast(`បានលុបកូដ [${code}] រួចរាល់!`);
@@ -9349,9 +9476,17 @@ export default function UnifiedAdminDashboard() {
     ? 0
     : adminFeedbacks.filter(f => !readFeedbackIds.includes(f.id)).length;
 
-  const handleDeleteFeedback = (fbId) => {
+  const handleDeleteFeedback = async (fbId) => {
     if (guardDemoAction("លុប Feedback")) return;
-    if (!window.confirm('តើអ្នកពិតជាចង់លុបមតិយោបល់ Feedback នេះមែនទេ?')) return;
+    const ok = await showConfirmModal({
+      title: 'លុបមតិយោបល់ (Delete Feedback)',
+      message: 'តើបងពិតជាចង់លុបមតិយោបល់ Feedback នេះមែនទេ?',
+      confirmText: 'យល់ព្រមលុប',
+      cancelText: 'បោះបង់',
+      type: 'danger',
+      icon: '💬'
+    });
+    if (!ok) return;
     const updated = adminFeedbacks.filter(f => f.id !== fbId);
     setAdminFeedbacks(updated);
     localStorage.setItem('sabay_luk_product_feedbacks', JSON.stringify(updated));
@@ -13290,8 +13425,16 @@ export default function UnifiedAdminDashboard() {
     };
 
     const handleDeleteExpense = async (id, title) => {
-    if (guardDemoAction("លុបចំណាយ")) return;
-      if (!window.confirm(`តើបងពិតជាចង់លុបចំណាយ "${title}" នេះមែនទេ?`)) return;
+      if (guardDemoAction("លុបចំណាយ")) return;
+      const ok = await showConfirmModal({
+        title: 'លុបចំណាយ (Delete Expense)',
+        message: `តើបងពិតជាចង់លុបចំណាយ "${title}" នេះមែនទេ?`,
+        confirmText: 'យល់ព្រមលុប',
+        cancelText: 'បោះបង់',
+        type: 'danger',
+        icon: '💸'
+      });
+      if (!ok) return;
       setExpenses(prev => prev.filter(e => e.id !== id));
       try {
         await supabase.from('expenses').delete().eq('id', id);
@@ -13977,7 +14120,15 @@ export default function UnifiedAdminDashboard() {
       if (guardDemoAction("ផ្អាកហាង")) return;
       if (targetStore.id === 'store_default_sabayluk') return;
       const days = getStoreInactivityDays(targetStore);
-      if (!window.confirm(`⚠️ បញ្ជាក់៖ ហាង "${targetStore.name}" មិនមានសកម្មភាពចំនួន ${days} ថ្ងៃហើយ!\n\nតើបងពិតជាចង់ផ្អាកដំណើរការហាងនេះជាបណ្តោះអាសន្នមែនទេ?`)) return;
+      const ok = await showConfirmModal({
+        title: 'ផ្អាកដំណើរការហាង (Suspend Store)',
+        message: `⚠️ ហាង "${targetStore.name}" មិនមានសកម្មភាពចំនួន ${days} ថ្ងៃហើយ!\n\nតើបងពិតជាចង់ផ្អាកដំណើរការហាងនេះជាបណ្តោះអាសន្នមែនទេ?`,
+        confirmText: 'យល់ព្រមផ្អាក',
+        cancelText: 'បោះបង់',
+        type: 'warning',
+        icon: '🔒'
+      });
+      if (!ok) return;
       const res = await suspendStore(targetStore.id, `អសកម្មចំនួន ${days} ថ្ងៃ`);
       if (res) {
         setRegisteredStores(getLocalStores());
@@ -13990,7 +14141,15 @@ export default function UnifiedAdminDashboard() {
     const handleBulkSuspendInactiveStores = async () => {
       if (guardDemoAction("ផ្អាកហាងអសកម្ម")) return;
       if (inactiveStores.length === 0) return alert('គ្មានហាងអសកម្មដែលត្រូវផ្អាកទេ!');
-      if (!window.confirm(`🚨 បញ្ជាក់ការផ្អាកជាដុំ (Bulk Suspend)៖\n\nមានចំនួន ${inactiveStores.length} ហាងដែលអសកម្មលើសពី ៣០ ថ្ងៃ។ តើបងចង់ផ្អាកដំណើរការហាងទាំងនេះទាំងអស់តែម្តងមែនទេ?`)) return;
+      const ok = await showConfirmModal({
+        title: 'ផ្អាកហាងអសកម្មជាដុំ (Bulk Suspend)',
+        message: `🚨 មានចំនួន ${inactiveStores.length} ហាងដែលអសកម្មលើសពី ៣០ ថ្ងៃ។ តើបងចង់ផ្អាកដំណើរការហាងទាំងនេះទាំងអស់តែម្តងមែនទេ?`,
+        confirmText: 'យល់ព្រមផ្អាកទាំងអស់',
+        cancelText: 'បោះបង់',
+        type: 'danger',
+        icon: '⚠️'
+      });
+      if (!ok) return;
       for (const st of inactiveStores) {
         await suspendStore(st.id, `អសកម្មលើសពី ៣០ ថ្ងៃ (ផ្អាកជាដុំ)`);
       }
@@ -17295,7 +17454,7 @@ export default function UnifiedAdminDashboard() {
       setStaffModalOpen(true);
     };
 
-    const handleDeleteStaff = (staff) => {
+    const handleDeleteStaff = async (staff) => {
       if (guardDemoAction("លុបបុគ្គលិក")) return;
       if (staffList.length <= 1) {
         alert('មិនអាចលុបគណនីបុគ្គលិកចុងក្រោយបានទេ!');
@@ -17305,7 +17464,15 @@ export default function UnifiedAdminDashboard() {
         alert('មិនអាចលុបគណនីដែលកំពុង Log In នេះបានទេ! សូមប្តូរទៅគណនីផ្សេងសិន។');
         return;
       }
-      if (!window.confirm(`តើបងពិតជាចង់លុបគណនីបុគ្គលិក "${staff.name}" នេះមែនទេ?`)) return;
+      const ok = await showConfirmModal({
+        title: 'លុបគណនីបុគ្គលិក (Delete Staff)',
+        message: `តើបងពិតជាចង់លុបគណនីបុគ្គលិក "${staff.name}" នេះមែនទេ?`,
+        confirmText: 'យល់ព្រមលុប',
+        cancelText: 'បោះបង់',
+        type: 'danger',
+        icon: '👥'
+      });
+      if (!ok) return;
       const storeId = activeStore?.id || 'store_default_sabayluk';
       const updatedList = staffList.filter(s => s.id !== staff.id);
       setStaffList(updatedList);
@@ -18750,7 +18917,15 @@ export default function UnifiedAdminDashboard() {
 
     const handleBulkDelete = async () => {
       if (selectedInvProductIds.length === 0) return;
-      if (!window.confirm(`តើបងពិតជាចង់លុបទំនិញទាំង ${selectedInvProductIds.length} មុខនេះចេញពីស្តុកមែនទេ?`)) return;
+      const ok = await showConfirmModal({
+        title: 'លុបទំនិញពីស្តុក (Bulk Delete)',
+        message: `តើបងពិតជាចង់លុបទំនិញទាំង ${selectedInvProductIds.length} មុខនេះចេញពីស្តុកមែនទេ?`,
+        confirmText: 'យល់ព្រមលុបទាំងអស់',
+        cancelText: 'បោះបង់',
+        type: 'danger',
+        icon: '🗑️'
+      });
+      if (!ok) return;
 
       try {
         const { error } = await supabase
@@ -30389,6 +30564,71 @@ export default function UnifiedAdminDashboard() {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* ⭐️ ULTRA-MODERN CONFIRMATION MODAL (ផ្ទាំងលោតបញ្ជាក់ទំនើប និងទាន់សម័យបំផុត) ⭐️ */}
+      {confirmModal.isOpen && (
+        <div 
+          className="fixed inset-0 z-[99999] bg-slate-950/65 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => handleCloseConfirmModal(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border border-slate-100 flex flex-col items-center text-center transform scale-100 animate-in zoom-in-95 duration-200 relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top decorative gradient bar */}
+            <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+              confirmModal.type === 'danger'
+                ? 'bg-gradient-to-r from-rose-500 via-red-500 to-orange-500'
+                : 'bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500'
+            }`} />
+
+            {/* Glowing Icon Badge with soft pulse */}
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4 shadow-sm relative ${
+              confirmModal.type === 'danger'
+                ? 'bg-rose-50 text-rose-500 border border-rose-100'
+                : 'bg-amber-50 text-amber-500 border border-amber-100'
+            }`}>
+              <span className="relative z-10">{confirmModal.icon || (confirmModal.type === 'danger' ? '🗑️' : '⚠️')}</span>
+              <div className={`absolute inset-0 rounded-2xl animate-ping opacity-20 ${
+                confirmModal.type === 'danger' ? 'bg-rose-400' : 'bg-amber-400'
+              }`} />
+            </div>
+
+            {/* Title */}
+            <h3 className="text-base font-black text-slate-900 tracking-tight mb-2">
+              {confirmModal.title}
+            </h3>
+
+            {/* Message Body */}
+            <p className="text-xs text-slate-600 font-medium leading-relaxed mb-6 whitespace-pre-line">
+              {confirmModal.message}
+            </p>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2.5 w-full">
+              <button
+                type="button"
+                onClick={() => handleCloseConfirmModal(false)}
+                className="flex-1 py-3 px-4 rounded-2xl font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 active:scale-95 transition cursor-pointer"
+              >
+                {confirmModal.cancelText || 'បោះបង់'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCloseConfirmModal(true)}
+                className={`flex-1 py-3 px-4 rounded-2xl font-black text-xs text-white shadow-md active:scale-95 transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                  confirmModal.type === 'danger'
+                    ? 'bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 shadow-rose-500/25'
+                    : 'bg-gradient-to-r from-[#ff6a00] to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-orange-500/25'
+                }`}
+              >
+                <span>✓</span>
+                <span>{confirmModal.confirmText || 'យល់ព្រម'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
