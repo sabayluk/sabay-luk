@@ -1541,6 +1541,12 @@ export default function UnifiedAdminDashboard() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
 
+      // ⭐️ បើអ្នកប្រើប្រាស់ចុច Login ច្បាស់លាស់ (?login=true ឬ ?logout=true) ត្រូវបង្ហាញផ្ទាំង Login ភ្លាមៗ ⭐️
+      if (urlParams.get('login') === 'true' || urlParams.get('logout') === 'true') {
+        localStorage.removeItem('sabay_admin_authenticated');
+        return false;
+      }
+
       const isLoggedOut = localStorage.getItem('sabay_admin_logged_out') === 'true';
       if (isLoggedOut) return false;
       const isAuthSaved = localStorage.getItem('sabay_admin_authenticated') === 'true';

@@ -7,7 +7,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     // Redirect directly to the Admin / Store Login Portal
-    router.replace('/admin/dashboard');
+    router.replace('/admin/dashboard?login=true');
   }, [router]);
 
   return (

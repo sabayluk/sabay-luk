@@ -437,7 +437,7 @@ function RegisterStoreForm() {
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500 hidden sm:inline">មានហាងរួចហើយមែនទេ?</span>
           <Link 
-            href="/admin/dashboard" 
+            href="/admin/dashboard?login=true" 
             className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-black text-slate-800 border border-slate-300 transition"
           >
             🔑 ចូលគណនី (Log In)
@@ -522,7 +522,7 @@ function RegisterStoreForm() {
             {/* Action buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
               <Link
-                href="/admin/dashboard"
+                href="/admin/dashboard?login=true"
                 className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 hover:from-black hover:to-slate-900 text-white font-black text-xs transition shadow-md active:scale-95 text-center flex items-center justify-center gap-2"
               >
                 <span>🔑</span>
