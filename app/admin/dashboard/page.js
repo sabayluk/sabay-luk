@@ -5031,6 +5031,162 @@ export default function UnifiedAdminDashboard() {
   const [approvalModalRejectReason, setApprovalModalRejectReason] = useState('');
   const [isSubmittingApprovalModal, setIsSubmittingApprovalModal] = useState(false);
 
+  // ⭐️ TOP-LEVEL HANDLERS FOR APPROVAL MODAL (ACCESSIBLE TO MODAL & ALL VIEWS) ⭐️
+  const handleApprovePayment = (paymentId, directItem = null) => {
+    if (guardDemoAction("អនុម័តការបង់ប្រាក់")) return;
+    const payment = (allSubscriptionPayments || []).find(p => p.id === paymentId) || directItem || viewingPaymentSlipDetail;
+    const isRegSlip = String(paymentId).startsWith('SUB_REG_');
+    const targetStoreId = payment?.store_id || (isRegSlip ? String(paymentId).replace('SUB_REG_', '') : null);
+    const targetStore = (registeredStores || []).find(s => s.id === targetStoreId || s.slug === targetStoreId);
+
+    setApprovalModalData({
+      type: 'APPROVE_PAYMENT',
+      paymentId: paymentId,
+      payment: payment,
+      store: targetStore,
+      storeId: targetStoreId
+    });
+  };
+
+  const handleRejectPayment = (paymentId, directItem = null) => {
+    if (guardDemoAction("បដិសេធការបង់ប្រាក់")) return;
+    const payment = (allSubscriptionPayments || []).find(p => p.id === paymentId) || directItem || viewingPaymentSlipDetail;
+    const isRegSlip = String(paymentId).startsWith('SUB_REG_');
+    const targetStoreId = payment?.store_id || (isRegSlip ? String(paymentId).replace('SUB_REG_', '') : null);
+    const targetStore = (registeredStores || []).find(s => s.id === targetStoreId || s.slug === targetStoreId);
+
+    setApprovalModalRejectReason('រូបភាព Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់');
+    setApprovalModalData({
+      type: 'REJECT_PAYMENT',
+      paymentId: paymentId,
+      payment: payment,
+      store: targetStore,
+      storeId: targetStoreId
+    });
+  };
+
+  const handleApproveStoreDirectly = (storeId) => {
+    if (guardDemoAction("អនុម័តហាង")) return;
+    const store = (registeredStores || []).find(s => s.id === storeId || s.slug === storeId);
+    if (!store) return;
+
+    setApprovalModalData({
+      type: 'APPROVE_STORE',
+      store: store,
+      storeId: store.id
+    });
+  };
+
+  const confirmExecuteApproveStore = async (storeId) => {
+    setIsSubmittingApprovalModal(true);
+    try {
+      const store = (registeredStores || []).find(s => s.id === storeId || s.slug === storeId);
+      const storeName = store?.name || 'ហាង';
+      setToastNotification(`⏳ កំពុងដំណើរការអនុម័តហាង "${storeName}"...`);
+      const res = await approveStoreDirectly(storeId);
+      if (res && res.success) {
+        const freshStores = await fetchAllStores();
+        setRegisteredStores(freshStores);
+        setAllSubscriptionPayments(getSubscriptionPayments());
+        const updatedActive = getActiveStore();
+        if (updatedActive && (updatedActive.id === storeId || updatedActive.slug === storeId)) {
+          setActiveStore(updatedActive);
+          setActiveStoreState(updatedActive);
+        }
+        setApprovalModalData(null);
+        setToastNotification(`🎉 បានអនុម័ត និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 3500);
+
+        try {
+          fetch('/api/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'store_approved_by_admin',
+              store: res.store || store || { id: storeId, name: storeName }
+            })
+          }).catch(() => {});
+        } catch (_) {}
+      } else {
+        alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsSubmittingApprovalModal(false);
+    }
+  };
+
+  const confirmExecuteApprovePayment = async (modalData) => {
+    setIsSubmittingApprovalModal(true);
+    try {
+      const { paymentId, payment, storeId, store } = modalData;
+      const storeName = payment?.store_name || store?.name || 'ហាង';
+      const planName = payment?.plan_name || store?.plan || 'STARTER';
+      const amount = payment?.amount || '1.00';
+
+      setToastNotification(`⏳ កំពុងដំណើរការអនុម័តការបង់ប្រាក់ហាង "${storeName}"...`);
+      const res = await approveSubscriptionPayment(paymentId, 'Master Owner', payment || { store_id: storeId, store_name: storeName, plan_key: store?.plan || 'STARTER', amount });
+
+      if (res && res.success) {
+        if (storeId) {
+          await approveStoreDirectly(storeId);
+        }
+        const freshStores = await fetchAllStores();
+        setRegisteredStores(freshStores);
+        setAllSubscriptionPayments(getSubscriptionPayments());
+        const updatedActive = getActiveStore();
+        if (updatedActive) {
+          setActiveStore(updatedActive);
+          setActiveStoreState(updatedActive);
+        }
+        setApprovalModalData(null);
+        setViewingPaymentSlipDetail(null);
+        setToastNotification(`🎉 បានអនុម័តការបង់ប្រាក់ និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 3500);
+
+        try {
+          fetch('/api/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'store_approved_by_admin',
+              store: store || { id: storeId, name: storeName, plan: planName }
+            })
+          }).catch(() => {});
+        } catch (_) {}
+      } else {
+        alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsSubmittingApprovalModal(false);
+    }
+  };
+
+  const confirmExecuteRejectPayment = async (modalData) => {
+    setIsSubmittingApprovalModal(true);
+    try {
+      const { paymentId, payment, store } = modalData;
+      const reason = approvalModalRejectReason.trim() || 'Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់';
+      const res = await rejectSubscriptionPayment(paymentId, reason, payment);
+      if (res && res.success) {
+        const freshStores = await fetchAllStores();
+        setRegisteredStores(freshStores);
+        setAllSubscriptionPayments(getSubscriptionPayments());
+        setApprovalModalData(null);
+        setViewingPaymentSlipDetail(null);
+        setToastNotification(`⚠️ បានបដិសេធការបង់ប្រាក់របស់ហាង "${store?.name || payment?.store_name || 'ហាង'}"`);
+        setTimeout(() => setToastNotification(null), 3000);
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setIsSubmittingApprovalModal(false);
+    }
+  };
+
   // ⭐️ គណនាចំនួនហាង ឬ Slip ដែលកំពុងរង់ចាំការ Approve (Pending Action Count) ⭐️
   const pendingApprovalStores = useMemo(() => {
     return (registeredStores || []).filter(s => 
@@ -14001,166 +14157,6 @@ export default function UnifiedAdminDashboard() {
         setTimeout(() => setToastNotification(null), 3500);
       } catch (err) {
         alert('មានបញ្ហាក្នុងការ Export: ' + err.message);
-      }
-    };
-
-    // 💳 Payment Approvals & Rejections (Trigger Modern Approval Modal)
-    const handleApprovePayment = (paymentId, directItem = null) => {
-      if (guardDemoAction("អនុម័តការបង់ប្រាក់")) return;
-      const payment = (allSubscriptionPayments || []).find(p => p.id === paymentId) || directItem || viewingPaymentSlipDetail;
-      const isRegSlip = String(paymentId).startsWith('SUB_REG_');
-      const targetStoreId = payment?.store_id || (isRegSlip ? String(paymentId).replace('SUB_REG_', '') : null);
-      const targetStore = (registeredStores || []).find(s => s.id === targetStoreId || s.slug === targetStoreId);
-
-      setApprovalModalData({
-        type: 'APPROVE_PAYMENT',
-        paymentId: paymentId,
-        payment: payment,
-        store: targetStore,
-        storeId: targetStoreId
-      });
-    };
-
-    const handleRejectPayment = (paymentId, directItem = null) => {
-      if (guardDemoAction("បដិសេធការបង់ប្រាក់")) return;
-      const payment = (allSubscriptionPayments || []).find(p => p.id === paymentId) || directItem || viewingPaymentSlipDetail;
-      const isRegSlip = String(paymentId).startsWith('SUB_REG_');
-      const targetStoreId = payment?.store_id || (isRegSlip ? String(paymentId).replace('SUB_REG_', '') : null);
-      const targetStore = (registeredStores || []).find(s => s.id === targetStoreId || s.slug === targetStoreId);
-
-      setApprovalModalRejectReason('រូបភាព Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់');
-      setApprovalModalData({
-        type: 'REJECT_PAYMENT',
-        paymentId: paymentId,
-        payment: payment,
-        store: targetStore,
-        storeId: targetStoreId
-      });
-    };
-
-    // ⭐️ Handle Direct Store Approval by Admin (Trigger Modern Approval Modal)
-    const handleApproveStoreDirectly = (storeId) => {
-      if (guardDemoAction("អនុម័តហាង")) return;
-      const store = (registeredStores || []).find(s => s.id === storeId || s.slug === storeId);
-      if (!store) return;
-
-      setApprovalModalData({
-        type: 'APPROVE_STORE',
-        store: store,
-        storeId: store.id
-      });
-    };
-
-    // ⭐️ EXECUTE CONFIRMED STORE APPROVAL (FROM MODERN MODAL) ⭐️
-    const confirmExecuteApproveStore = async (storeId) => {
-      setIsSubmittingApprovalModal(true);
-      try {
-        const store = (registeredStores || []).find(s => s.id === storeId || s.slug === storeId);
-        const storeName = store?.name || 'ហាង';
-        setToastNotification(`⏳ កំពុងដំណើរការអនុម័តហាង "${storeName}"...`);
-        const res = await approveStoreDirectly(storeId);
-        if (res && res.success) {
-          const freshStores = await fetchAllStores();
-          setRegisteredStores(freshStores);
-          setAllSubscriptionPayments(getSubscriptionPayments());
-          const updatedActive = getActiveStore();
-          if (updatedActive && (updatedActive.id === storeId || updatedActive.slug === storeId)) {
-            setActiveStore(updatedActive);
-            setActiveStoreState(updatedActive);
-          }
-          setApprovalModalData(null);
-          setToastNotification(`🎉 បានអនុម័ត និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
-          setTimeout(() => setToastNotification(null), 3500);
-
-          try {
-            fetch('/api/telegram', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'store_approved_by_admin',
-                store: res.store || store || { id: storeId, name: storeName }
-              })
-            }).catch(() => {});
-          } catch (_) {}
-        } else {
-          alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      } finally {
-        setIsSubmittingApprovalModal(false);
-      }
-    };
-
-    // ⭐️ EXECUTE CONFIRMED PAYMENT APPROVAL (FROM MODERN MODAL) ⭐️
-    const confirmExecuteApprovePayment = async (modalData) => {
-      setIsSubmittingApprovalModal(true);
-      try {
-        const { paymentId, payment, storeId, store } = modalData;
-        const storeName = payment?.store_name || store?.name || 'ហាង';
-        const planName = payment?.plan_name || store?.plan || 'STARTER';
-        const amount = payment?.amount || '1.00';
-
-        setToastNotification(`⏳ កំពុងដំណើរការអនុម័តការបង់ប្រាក់ហាង "${storeName}"...`);
-        const res = await approveSubscriptionPayment(paymentId, 'Master Owner', payment || { store_id: storeId, store_name: storeName, plan_key: store?.plan || 'STARTER', amount });
-
-        if (res && res.success) {
-          if (storeId) {
-            await approveStoreDirectly(storeId);
-          }
-          const freshStores = await fetchAllStores();
-          setRegisteredStores(freshStores);
-          setAllSubscriptionPayments(getSubscriptionPayments());
-          const updatedActive = getActiveStore();
-          if (updatedActive) {
-            setActiveStore(updatedActive);
-            setActiveStoreState(updatedActive);
-          }
-          setApprovalModalData(null);
-          setViewingPaymentSlipDetail(null);
-          setToastNotification(`🎉 បានអនុម័តការបង់ប្រាក់ និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
-          setTimeout(() => setToastNotification(null), 3500);
-
-          try {
-            fetch('/api/telegram', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'store_approved_by_admin',
-                store: store || { id: storeId, name: storeName, plan: planName }
-              })
-            }).catch(() => {});
-          } catch (_) {}
-        } else {
-          alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      } finally {
-        setIsSubmittingApprovalModal(false);
-      }
-    };
-
-    // ⭐️ EXECUTE CONFIRMED PAYMENT REJECTION (FROM MODERN MODAL) ⭐️
-    const confirmExecuteRejectPayment = async (modalData) => {
-      setIsSubmittingApprovalModal(true);
-      try {
-        const { paymentId, payment, store } = modalData;
-        const reason = approvalModalRejectReason.trim() || 'Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់';
-        const res = await rejectSubscriptionPayment(paymentId, reason, payment);
-        if (res && res.success) {
-          const freshStores = await fetchAllStores();
-          setRegisteredStores(freshStores);
-          setAllSubscriptionPayments(getSubscriptionPayments());
-          setApprovalModalData(null);
-          setViewingPaymentSlipDetail(null);
-          setToastNotification(`⚠️ បានបដិសេធការបង់ប្រាក់របស់ហាង "${store?.name || payment?.store_name || 'ហាង'}"`);
-          setTimeout(() => setToastNotification(null), 3000);
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      } finally {
-        setIsSubmittingApprovalModal(false);
       }
     };
 
