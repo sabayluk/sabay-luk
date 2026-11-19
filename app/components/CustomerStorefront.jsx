@@ -1079,41 +1079,82 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     } catch (e) {}
   };
 
-  // មុខងារ Share ទំនិញទៅ Telegram, Facebook ឬចម្លង Link
-  const handleShareProduct = (e, product, platform = 'native') => {
+  // មុខងារ Share ទំនិញទៅ Telegram, Facebook ឬចម្លង Link (ភ្ជាប់ជាមួយរូបភាពពិត & OpenGraph Rich Preview)
+  const handleShareProduct = async (e, product, platform = 'native') => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!product) return;
 
-    const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://sabayluk.com';
-    const shareUrl = `${siteUrl}?product=${product.id}`;
-    const priceText = product.retail_discount && parseFloat(product.retail_discount) > 0
-      ? `$${(parseFloat(product.price) - parseFloat(product.retail_discount)).toFixed(2)} (ចុះពី $${parseFloat(product.price).toFixed(2)})`
-      : `$${parseFloat(product.price || 0).toFixed(2)}`;
+    // ប្រើ Domain សំខាន់ sabayluk.com ដើម្បីឱ្យ Telegram Bot & Facebook Crawlers អាចទាញយករូបភាពបានជានិច្ច
+    const origin = typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')
+      ? window.location.origin
+      : 'https://sabayluk.com';
+
+    const storeSlug = currentStore?.slug || 'sabay-luk';
+    const directProductUrl = `${origin}${storeSlug !== 'sabay-luk' ? `/store/${storeSlug}` : ''}?product=${product.id}`;
+    // Dynamic OpenGraph Link ដែលផ្ទុករូបភាពទំនិញ og:image សម្រាប់ Telegram, Facebook, WhatsApp...
+    const richShareUrl = `${origin}/api/share?id=${product.id}&store=${storeSlug}`;
+
+    const hasDiscount = Boolean(product.retail_discount && parseFloat(product.retail_discount) > 0);
+    const finalPrice = hasDiscount 
+      ? (parseFloat(product.price) - parseFloat(product.retail_discount)).toFixed(2)
+      : parseFloat(product.price || 0).toFixed(2);
+    const priceText = hasDiscount
+      ? `$${finalPrice} (ចុះពី $${parseFloat(product.price).toFixed(2)})`
+      : `$${finalPrice}`;
+
     const shareTitle = `✨ ${product.name} - SABAY LUK`;
-    const shareText = `🔥 មើលទំនិញនេះ៖ ${product.name}\n💰 តម្លៃត្រឹមតែ៖ ${priceText}\n📦 ដឹកជញ្ជូនរហ័ស ២៥ ខេត្ត/ក្រុង!\n🔗 មើលលម្អិត & កុម្ម៉ង់ទិញ៖ ${shareUrl}`;
+    const shareText = `🔥 មើលទំនិញនេះ៖ ${product.name}\n💰 តម្លៃត្រឹមតែ៖ ${priceText}\n📦 ដឹកជញ្ជូនរហ័ស ២៥ ខេត្ត/ក្រុង!\n🔗 មើលលម្អិត & កុម្ម៉ង់ទិញ៖ ${directProductUrl}`;
+    const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (platform === 'telegram') {
-      const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
+      // ✈️ សម្រាប់ Telegram: បញ្ជូន richShareUrl ដើម្បីឱ្យ Telegram បង្ហាញផ្ទាំងរូបភាពធំ (Photo Preview Card) ភ្លាមៗ
+      const tgSummary = `🔥 ${product.name}\n💰 តម្លៃ៖ ${priceText}\n📦 ដឹកជញ្ជូនរហ័ស ២៥ ខេត្ត/ក្រុង!`;
+      const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(richShareUrl)}&text=${encodeURIComponent(tgSummary)}`;
       window.open(tgUrl, '_blank', 'noopener,noreferrer');
     } else if (platform === 'facebook') {
-      const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(shareText)}`;
+      // 📘 សម្រាប់ Facebook: បញ្ជូន richShareUrl ដើម្បីទាញ og:image មកបង្ហាញពេញលេញ
+      const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(richShareUrl)}&quote=${encodeURIComponent(shareText)}`;
       window.open(fbUrl, '_blank', 'noopener,noreferrer');
     } else if (platform === 'copy') {
+      // 📋 ចម្លង Link និងព័ត៌មានទំនិញ
       if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareUrl);
-        setShareToast('✅ បានចម្លង Link ទំនិញជោគជ័យ!');
+        await navigator.clipboard.writeText(`${shareText}\n${directProductUrl}`);
+        setShareToast('✅ បានចម្លង Link និងព័ត៌មានទំនិញជោគជ័យ!');
         setTimeout(() => setShareToast(''), 3000);
       }
-    } else {
+    } else if (platform === 'image_file' || (platform === 'native' && isMobile)) {
+      // 📱 មុខងារ Native File Share ភ្ជាប់រូបភាពពិត (Image Attachment) សម្រាប់ទូរស័ព្ទដៃ
+      if (navigator.canShare && product.image_url) {
+        try {
+          const res = await fetch(product.image_url, { mode: 'cors' });
+          const blob = await res.blob();
+          const ext = product.image_url.split('.').pop()?.split(/[#?]/)[0] || 'jpg';
+          const file = new File([blob], `${(product.name || 'product').replace(/[^a-zA-Z0-9_\u1780-\u17FF]/g, '_')}.${ext}`, { type: blob.type || 'image/jpeg' });
+
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: shareTitle,
+              text: shareText
+            });
+            return;
+          }
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') return;
+          console.warn('Native image share fallback:', shareErr);
+        }
+      }
+
+      // Fallback ប្រសិនបើ Browser មិន Support File Share
       if (navigator.share) {
         navigator.share({
           title: shareTitle,
           text: shareText,
-          url: shareUrl
+          url: richShareUrl
         }).catch(() => {});
       } else if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareUrl);
-        setShareToast('✅ បានចម្លង Link ទំនិញជោគជ័យ!');
+        await navigator.clipboard.writeText(`${shareText}\n${directProductUrl}`);
+        setShareToast('✅ បានចម្លង Link និងព័ត៌មានទំនិញជោគជ័យ!');
         setTimeout(() => setShareToast(''), 3000);
       }
     }
@@ -4011,19 +4052,27 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                   })()}
                 </div>
 
-                {/* 📤 Social Share Bar (Telegram, Facebook & Copy Link) */}
+                {/* 📤 Social Share Bar (Telegram, Facebook, Copy Link & Image Share) */}
                 <div className="bg-gray-50 border border-gray-200/80 p-3 rounded-2xl flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-black text-gray-700 flex items-center gap-1.5">
                     <span>📤</span> ចែករំលែកទំនិញ៖
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       onClick={(e) => handleShareProduct(e, selectedProductForVariant, 'telegram')}
                       className="bg-[#24A1DE] hover:bg-[#1f8ec4] text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
-                      title="ផ្ញើទៅកាន់ Telegram"
+                      title="ផ្ញើទៅកាន់ Telegram (ភ្ជាប់រូបភាព & Link ស្វ័យប្រវត្តិ)"
                     >
                       <span>✈️</span> Telegram
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleShareProduct(e, selectedProductForVariant, 'image_file')}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                      title="Share រូបភាពពិត (Mobile & Telegram/Chat Apps)"
+                    >
+                      <span>🖼️</span> Share រូប
                     </button>
                     <button
                       type="button"
