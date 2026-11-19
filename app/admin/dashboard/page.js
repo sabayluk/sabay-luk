@@ -2760,8 +2760,15 @@ export default function UnifiedAdminDashboard() {
     khqrImageUrl: '/khqr-aba.jpg',
     showInvoiceLogo: true,
     showReceiptQr: true,
+    enableDeliveryFee: true,
     deliveryPhnomPenh: '1.50',
-    deliveryProvince: '2.00',
+    deliveryProvince: '2.50',
+    freeShippingThreshold: '0',
+    enableTax: false,
+    taxRate: 10,
+    taxMode: 'exclusive',
+    vatTin: '',
+    taxLabel: 'ពន្ធអាករ (VAT 10%)',
     policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)',
     exchangeRate: 4100,
     themeColor: '#ff6a00',
@@ -25392,7 +25399,7 @@ export default function UnifiedAdminDashboard() {
           { id: 'contact', label: '📞 ទំនាក់ទំនង & បណ្តាញសង្គម', desc: 'Telegram, Facebook, TikTok, ទូរស័ព្ទ' },
           { id: 'announcement', label: '📢 សាររត់លើគេ', desc: 'Marquee Announcement' },
           { id: 'payment', label: '💳 គណនី KHQR / ABA', desc: 'Bank QR & Merchant Info' },
-          { id: 'delivery', label: '🚚 ដឹកជញ្ជូន & អត្រាប្តូរប្រាក់', desc: 'ថ្លៃដឹក & អត្រាប្រាក់រៀល' },
+          { id: 'delivery', label: '🚚 ដឹកជញ្ជូន & 🏛️ ពន្ធអាករ (VAT)', desc: 'ថ្លៃដឹកជញ្ជូន, Free Shipping & ពន្ធ VAT' },
           { id: 'security', label: '🔒 ប្តូរលេខសម្ងាត់ហាង (Change Password)', desc: 'ប្តូរលេខសម្ងាត់/PIN ចូលគ្រប់គ្រងហាង' },
           { id: 'data', label: '🧹 សម្អាតទិន្នន័យ & Export', desc: 'Reset ទិន្នន័យតេស្ត & ទាញយក Excel' },
         ].map(tab => (
@@ -25786,73 +25793,291 @@ export default function UnifiedAdminDashboard() {
             </div>
           )}
 
-          {/* TAB 5: DELIVERY & RATES */}
+          {/* TAB 5: DELIVERY, TAX & RATES */}
           {activeSettingsSubTab === 'delivery' && (
-            <div className="space-y-5 animate-in fade-in">
-              <div>
-                <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
-                  <span>🚚</span> ៥. សេវាដឹកជញ្ជូន & អត្រាប្តូរប្រាក់ (Delivery & Rates)
-                </h3>
-                <p className="text-xs text-gray-500 mt-0.5">កំណត់ថ្លៃដឹកជញ្ជូនគិតប្រាក់លើកន្ត្រក និងអត្រាប្តូរប្រាក់រៀល</p>
+            <div className="space-y-6 animate-in fade-in">
+              
+              {/* ⭐️ PART 1: 🏛️ TAX & VAT CONFIGURATION (សារ៉េពន្ធអាករតាមតម្រូវការហាងនីមួយៗ) ⭐️ */}
+              <div className="p-5 rounded-3xl bg-blue-50/50 border-2 border-blue-200/80 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-blue-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl shadow-sm shrink-0">
+                      🏛️
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-blue-950 flex items-center gap-2">
+                        <span>ការកំណត់ពន្ធអាករ (Tax & VAT Configuration)</span>
+                        {storeSettings.enableTax ? (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-600 text-white">
+                            🟢 កំពុងបើក ({storeSettings.taxRate ?? 10}%)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                            ⚪ មិនគិតពន្ធ (Tax-Free)
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-xs text-blue-800/80 mt-0.5">
+                        កំណត់ថាតើហាងរបស់អ្នកចង់គិតពន្ធអាករ (VAT) ដែរឬទេ? ហាងខ្លះគិតពន្ធ ហាងខ្លះមិនគិតពន្ធ។
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Switch */}
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 self-start sm:self-auto">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(storeSettings.enableTax)}
+                      onChange={(e) => setStoreSettings({ ...storeSettings, enableTax: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {storeSettings.enableTax ? (
+                  <div className="space-y-4 pt-1 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      {/* Tax Rate */}
+                      <div>
+                        <label className="block text-xs font-bold text-blue-900 uppercase mb-1.5 flex items-center justify-between">
+                          <span>អត្រាពន្ធ Tax Rate (%)</span>
+                          <span className="text-[10px] font-mono font-black text-blue-600">{storeSettings.taxRate ?? 10}%</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max="100"
+                          value={storeSettings.taxRate ?? 10}
+                          onChange={(e) => setStoreSettings({ ...storeSettings, taxRate: parseFloat(e.target.value) || 0 })}
+                          className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-xs font-black text-blue-900 focus:border-blue-500 outline-none transition bg-white"
+                        />
+                        {/* Preset Buttons */}
+                        <div className="flex items-center gap-1 mt-1.5">
+                          {[
+                            { r: 0, l: '0%' },
+                            { r: 5, l: '5%' },
+                            { r: 7, l: '7%' },
+                            { r: 10, l: '10% VAT' }
+                          ].map(btn => (
+                            <button
+                              key={btn.r}
+                              type="button"
+                              onClick={() => setStoreSettings({ ...storeSettings, taxRate: btn.r })}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                (storeSettings.taxRate ?? 10) === btn.r 
+                                  ? 'bg-blue-600 text-white font-black' 
+                                  : 'bg-white text-blue-800 hover:bg-blue-100 border border-blue-200'
+                              }`}
+                            >
+                              {btn.l}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Tax Mode */}
+                      <div>
+                        <label className="block text-xs font-bold text-blue-900 uppercase mb-1.5">
+                          របៀបគិតពន្ធ (Tax Mode)
+                        </label>
+                        <select
+                          value={storeSettings.taxMode || 'exclusive'}
+                          onChange={(e) => setStoreSettings({ ...storeSettings, taxMode: e.target.value })}
+                          className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-xs font-black text-blue-900 focus:border-blue-500 outline-none transition bg-white cursor-pointer"
+                        >
+                          <option value="exclusive">បូកបន្ថែមលើតម្លៃ (Exclusive: +VAT)</option>
+                          <option value="inclusive">តម្លៃទំនិញរួមពន្ធរួច (Inclusive: Tax Included)</option>
+                        </select>
+                        <p className="text-[10px] text-blue-700/80 mt-1">
+                          {storeSettings.taxMode === 'inclusive' ? 'ពន្ធមានស្រាប់ក្នុងតម្លៃទំនិញ' : 'ប្រព័ន្ធនឹងបូកពន្ធបន្ថែមលើ Subtotal'}
+                        </p>
+                      </div>
+
+                      {/* Tax Label */}
+                      <div>
+                        <label className="block text-xs font-bold text-blue-900 uppercase mb-1.5">
+                          ឈ្មោះពន្ធសម្គាល់ (Label)
+                        </label>
+                        <input
+                          type="text"
+                          value={storeSettings.taxLabel || `ពន្ធអាករ (VAT ${storeSettings.taxRate ?? 10}%)`}
+                          onChange={(e) => setStoreSettings({ ...storeSettings, taxLabel: e.target.value })}
+                          placeholder="ពន្ធអាករ (VAT 10%)"
+                          className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-xs font-bold text-blue-900 focus:border-blue-500 outline-none transition bg-white"
+                        />
+                        <p className="text-[10px] text-blue-700/80 mt-1">ឈ្មោះបង្ហាញលើវិក្កយបត្រ & Website</p>
+                      </div>
+                    </div>
+
+                    {/* Optional VAT TIN */}
+                    <div>
+                      <label className="block text-xs font-bold text-blue-900 uppercase mb-1 flex items-center justify-between">
+                        <span>លេខអត្តសញ្ញាណកម្មសារពើពន្ធ (VAT TIN / Tax ID)</span>
+                        <span className="text-[10px] text-blue-600 font-normal">ស្រេចចិត្ត (Optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={storeSettings.vatTin || ''}
+                        onChange={(e) => setStoreSettings({ ...storeSettings, vatTin: e.target.value })}
+                        placeholder="ឧ. K001-90218821"
+                        className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-xs font-mono font-bold text-blue-900 focus:border-blue-500 outline-none transition bg-white"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white/80 rounded-2xl border border-blue-200 text-xs text-slate-600 flex items-center gap-2">
+                    <span className="text-base">✅</span>
+                    <span>
+                      <b>ហាងនេះមិនគិតពន្ធអាករទេ (Tax-Free Store)៖</b> រាល់ការលក់លើប្រព័ន្ធ POS និងលើគេហទំព័រមុខហាង E-Commerce នឹងមិនមានការបូកពន្ធ ឬបង្ហាញ VAT ឡើយ។
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                    ថ្លៃដឹកក្នុងភ្នំពេញ ($)
+              {/* ⭐️ PART 2: 🚚 WORLD-STANDARD DELIVERY & SHIPPING ENGINE (សេវាដឹកជញ្ជូនស្តង់ដាអន្តរជាតិ) ⭐️ */}
+              <div className="p-5 rounded-3xl bg-emerald-50/50 border-2 border-emerald-200/80 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-sm shrink-0">
+                      🚚
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-emerald-950 flex items-center gap-2">
+                        <span>សេវាដឹកជញ្ជូនស្តង់ដាពិភពលោក (World-Standard Delivery)</span>
+                        {storeSettings.enableDeliveryFee !== false ? (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                            🛵 គិតថ្លៃដឹកតាមតំបន់
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            🎁 ដឹក Free គ្រប់ទំនិញ
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-xs text-emerald-800/80 mt-0.5">
+                        កំណត់ថ្លៃដឹកជញ្ជូនស្វ័យប្រវត្តិតាមគោលដៅ (ភ្នំពេញ vs បណ្តាខេត្ត) និងប្រូម៉ូសិនទិញគ្រប់ចំនួនដឹក Free
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle Delivery Fee */}
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 self-start sm:self-auto">
+                    <input
+                      type="checkbox"
+                      checked={storeSettings.enableDeliveryFee !== false}
+                      onChange={(e) => setStoreSettings({ ...storeSettings, enableDeliveryFee: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                   </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={storeSettings.deliveryPhnomPenh}
-                    onChange={(e) => setStoreSettings({ ...storeSettings, deliveryPhnomPenh: e.target.value })}
-                    placeholder="1.50"
-                    className="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-black text-blue-600 focus:border-blue-500 outline-none transition bg-white"
-                  />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                    ថ្លៃដឹកតាមខេត្ត ($)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={storeSettings.deliveryProvince}
-                    onChange={(e) => setStoreSettings({ ...storeSettings, deliveryProvince: e.target.value })}
-                    placeholder="2.00"
-                    className="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-black text-blue-600 focus:border-blue-500 outline-none transition bg-white"
-                  />
-                </div>
+                {storeSettings.enableDeliveryFee !== false ? (
+                  <div className="space-y-4 pt-1 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      {/* Phnom Penh Fee */}
+                      <div>
+                        <label className="block text-xs font-bold text-emerald-900 uppercase mb-1.5 flex items-center justify-between">
+                          <span>🛵 ថ្លៃដឹកភ្នំពេញ ($)</span>
+                          <span className="text-[10px] text-emerald-700 font-bold">Phnom Penh</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={storeSettings.deliveryPhnomPenh ?? '1.50'}
+                          onChange={(e) => setStoreSettings({ ...storeSettings, deliveryPhnomPenh: e.target.value })}
+                          placeholder="1.50"
+                          className="w-full border-2 border-emerald-200 p-2.5 rounded-xl text-xs font-black text-emerald-900 focus:border-emerald-500 outline-none transition bg-white"
+                        />
+                        <p className="text-[10px] text-emerald-700/80 mt-1">ឧ. $1.50 (គិតពេលភ្ញៀវរើសភ្នំពេញ)</p>
+                      </div>
 
+                      {/* Provinces Fee */}
+                      <div>
+                        <label className="block text-xs font-bold text-emerald-900 uppercase mb-1.5 flex items-center justify-between">
+                          <span>🚚 ថ្លៃដឹកតាមខេត្ត ($)</span>
+                          <span className="text-[10px] text-emerald-700 font-bold">24 Provinces</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={storeSettings.deliveryProvince ?? '2.50'}
+                          onChange={(e) => setStoreSettings({ ...storeSettings, deliveryProvince: e.target.value })}
+                          placeholder="2.50"
+                          className="w-full border-2 border-emerald-200 p-2.5 rounded-xl text-xs font-black text-emerald-900 focus:border-emerald-500 outline-none transition bg-white"
+                        />
+                        <p className="text-[10px] text-emerald-700/80 mt-1">ឧ. $2.50 (គិតពេលភ្ញៀវរើសតាមខេត្ត)</p>
+                      </div>
+
+                      {/* Free Shipping Minimum Threshold */}
+                      <div>
+                        <label className="block text-xs font-bold text-emerald-900 uppercase mb-1.5 flex items-center justify-between">
+                          <span>🎁 ទិញដល់ ($) ដឹក Free</span>
+                          <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-1.5 py-0.2 rounded">Amazon Style</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="1"
+                          min="0"
+                          value={storeSettings.freeShippingThreshold ?? '0'}
+                          onChange={(e) => setStoreSettings({ ...storeSettings, freeShippingThreshold: e.target.value })}
+                          placeholder="0 (គ្មាន Free)"
+                          className="w-full border-2 border-emerald-200 p-2.5 rounded-xl text-xs font-black text-emerald-900 focus:border-emerald-500 outline-none transition bg-white"
+                        />
+                        <p className="text-[10px] text-emerald-700/80 mt-1">
+                          {parseFloat(storeSettings.freeShippingThreshold || 0) > 0 
+                            ? `ទិញចាប់ពី $${parseFloat(storeSettings.freeShippingThreshold).toFixed(2)} ឡើងទៅ Free ដឹក!` 
+                            : 'ដាក់ 0 ប្រសិនបើមិនចង់ផ្ដល់ Free ដឹក'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white/80 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
+                    <span className="text-base">🎁</span>
+                    <span>
+                      <b>ហាងនេះផ្ដល់ការដឹកជញ្ជូនឥតគិតថ្លៃគ្រប់ទំនិញ (Free Delivery Everywhere)៖</b> រាល់ពេលអតិថិជនកុម្ម៉ង់ទិញលើ Website នឹងបង្ហាញ <i>✓ ឥតគិតថ្លៃ (Free Delivery)</i> ដោយស្វ័យប្រវត្តិ។
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* ⭐️ PART 3: 💵 EXCHANGE RATE & RETURN POLICY (អត្រាប្តូរប្រាក់ & គោលការណ៍) ⭐️ */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                    អត្រាប្រាក់រៀល ($1 = ? ៛)
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5 flex items-center justify-between">
+                    <span>💵 អត្រាប្រាក់រៀល ($1 = ? ៛)</span>
+                    <span className="text-[10px] font-mono font-black text-emerald-600">KHR Exchange</span>
                   </label>
                   <input
                     type="number"
-                    value={storeSettings.exchangeRate}
+                    value={storeSettings.exchangeRate || 4100}
                     onChange={(e) => setStoreSettings({ ...storeSettings, exchangeRate: Number(e.target.value) })}
                     placeholder="4100"
-                    className="w-full border-2 border-gray-200 p-3 rounded-2xl text-sm font-black text-emerald-600 focus:border-emerald-500 outline-none transition bg-white"
+                    className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-xs font-black text-emerald-600 focus:border-emerald-500 outline-none transition bg-white"
                   />
+                  <p className="text-[10px] text-gray-400 mt-1">ប្តូរប្រាក់រៀលស្វ័យប្រវត្តិតាមអត្រានេះលើ POS & Website</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                    📜 គោលការណ៍ប្តូរទំនិញ / លក្ខខណ្ឌ (Return Policy Note)
+                  </label>
+                  <input
+                    type="text"
+                    value={storeSettings.policyNote || ''}
+                    onChange={(e) => setStoreSettings({ ...storeSettings, policyNote: e.target.value })}
+                    placeholder="ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)"
+                    className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-xs font-medium focus:border-[#ff6a00] outline-none transition bg-white"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">បង្ហាញលើវិក្កយបត្រ POS & Slip</p>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
-                  គោលការណ៍ប្តូរទំនិញ / លក្ខខណ្ឌ (Return Policy Note)
-                </label>
-                <textarea
-                  rows="2"
-                  value={storeSettings.policyNote}
-                  onChange={(e) => setStoreSettings({ ...storeSettings, policyNote: e.target.value })}
-                  placeholder="ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)"
-                  className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-medium focus:border-[#ff6a00] outline-none transition bg-white"
-                />
-              </div>
             </div>
           )}
 

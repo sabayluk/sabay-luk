@@ -278,17 +278,19 @@ const DEFAULT_STORE_SETTINGS = {
   bankAccountKhr: '004 500 394',
   bankAccountUsd: '010 723 080',
   khqrImageUrl: '/khqr-aba.jpg',
+  enableDeliveryFee: true,
   deliveryPhnomPenh: '1.50',
-  deliveryProvince: '2.00',
+  deliveryProvince: '2.50',
+  freeShippingThreshold: '0',
   policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)',
   exchangeRate: 4100,
   themeColor: '#ff6a00',
   themePreset: 'orange',
-  enableTax: true,
+  enableTax: false,
   taxRate: 10,
   taxMode: 'exclusive',
   vatTin: '',
-  taxLabel: 'អាករលើតម្លៃបន្ថែម (VAT 10%)'
+  taxLabel: 'ពន្ធអាករ (VAT 10%)'
 };
 
 export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
@@ -2058,8 +2060,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   }
 
   // ⭐️ គណនាពន្ធ VAT (បើហាងបានបើកដំណើរការក្នុង Settings) ⭐️
-  const isTaxEnabled = storeSettings.enableTax !== false;
-  const taxRatePercent = Number(storeSettings.taxRate) || 10;
+  const isTaxEnabled = storeSettings.enableTax === true;
+  const taxRatePercent = isTaxEnabled ? (Number(storeSettings.taxRate) || 0) : 0;
   const taxMode = storeSettings.taxMode || 'exclusive'; // 'exclusive' | 'inclusive'
 
   const netBeforeTax = Math.max(0, subtotalPrice - couponDiscountAmount);
@@ -2076,6 +2078,19 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     }
   }
 
+  // ⭐️ World-Standard Delivery Fee Engine ⭐️
+  // កំណត់តម្លៃដឹកជញ្ជូនតាមស្តង់ដារអន្តរជាតិ (ភ្នំពេញ vs ២៤ ខេត្តក្រុង និង Free Delivery ពេលទិញដល់កម្រិតកំណត់)
+  const isDeliveryFeeEnabled = storeSettings.enableDeliveryFee !== false;
+  const freeThreshold = parseFloat(storeSettings.freeShippingThreshold || storeSettings.freeDeliveryMin || 0);
+  const isPhnomPenh = !customerProvince || customerProvince === 'ភ្នំពេញ' || customerProvince.toLowerCase().includes('phnom penh');
+  const baseDeliveryFee = isPhnomPenh
+    ? (parseFloat(storeSettings.deliveryPhnomPenh) >= 0 ? parseFloat(storeSettings.deliveryPhnomPenh) : 1.50)
+    : (parseFloat(storeSettings.deliveryProvince) >= 0 ? parseFloat(storeSettings.deliveryProvince) : 2.50);
+
+  const isFreeDeliveryEligible = isDeliveryFeeEnabled && freeThreshold > 0 && subtotalPrice >= freeThreshold;
+  const deliveryFee = (!isDeliveryFeeEnabled || isFreeDeliveryEligible) ? 0 : baseDeliveryFee;
+
+  totalPrice = Math.round((totalPrice + deliveryFee) * 100) / 100;
   const totalRiel = Math.round(totalPrice * (storeSettings.exchangeRate || 4100));
 
   // ⭐️ បញ្ជាក់ការបញ្ជាទិញ (Submit Online Checkout to Supabase) ⭐️
@@ -2220,6 +2235,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         total_amount: totalPrice,
         subtotal: subtotalPrice,
         discount: couponDiscountAmount || 0,
+        delivery_fee: deliveryFee,
+        tax_amount: (isTaxEnabled && taxAmount > 0) ? taxAmount : 0,
         coupon_code: appliedCoupon ? appliedCoupon.code : null,
         google_map_url: googleMapUrl || null,
         location_photo_url: uploadedLocationPhotoUrl || null,
@@ -2250,6 +2267,12 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             tax_amount: taxAmount,
             tax_mode: taxMode,
             tax_label: storeSettings.taxLabel || `អាករលើតម្លៃបន្ថែម (VAT ${taxRatePercent}%)`
+          }] : []),
+          ...(deliveryFee > 0 ? [{
+            is_delivery_meta: true,
+            delivery_fee: deliveryFee,
+            destination: customerProvince,
+            label: `ថ្លៃដឹកជញ្ជូន (${isPhnomPenh ? 'ភ្នំពេញ' : customerProvince})`
           }] : [])
         ]
       };
@@ -2266,6 +2289,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         total_amount: totalPrice,
         subtotal: subtotalPrice,
         discount: couponDiscountAmount || 0,
+        delivery_fee: deliveryFee,
         payment_method: paymentMethod,
         payment_slip_url: uploadedSlipUrl || null,
         status: 'Pending',
@@ -2390,6 +2414,9 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               subtotal: subtotalPrice,
               discount: couponDiscountAmount || 0,
               coupon_code: appliedCoupon ? appliedCoupon.code : null,
+              delivery_fee: deliveryFee,
+              tax_amount: (isTaxEnabled && taxAmount > 0) ? taxAmount : 0,
+              tax_label: storeSettings.taxLabel || `ពន្ធអាករ (VAT ${taxRatePercent}%)`,
               payment_method: paymentMethod,
               items: cart,
               exchange_rate: parsedSettings.exchangeRate || storeSettings.exchangeRate || 4100
@@ -4317,35 +4344,78 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
             {cart.length > 0 && (
               <div className="pt-4 border-t border-gray-100 mt-3 space-y-3">
-                <div className="bg-emerald-50 text-emerald-700 text-[11px] p-2.5 rounded-xl font-bold flex items-center gap-1.5">
-                  <span>🚚</span>
-                  <span>ប្រូម៉ូសិនពិសេស៖ ដឹកជញ្ជូនឥតគិតថ្លៃគ្រប់ទីកន្លែង!</span>
-                </div>
+                {/* 🚚 World-Standard Dynamic Delivery Notice / Free Shipping Progress */}
+                {isDeliveryFeeEnabled && freeThreshold > 0 ? (
+                  <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-800 text-[11px] font-bold space-y-1.5 shadow-xs">
+                    {isFreeDeliveryEligible ? (
+                      <div className="flex items-center gap-1.5 font-black text-emerald-700">
+                        <span>🎉</span>
+                        <span>អបអរសាទរ! អ្នកទទួលបានការដឹកជញ្ជូនឥតគិតថ្លៃ!</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between items-center text-[10.5px]">
+                          <span>🚚 ទិញថែម <span className="text-[#ff6a00] font-black font-mono">${(freeThreshold - subtotalPrice).toFixed(2)}</span> ទៀត ដើម្បីដឹកឥតគិតថ្លៃ!</span>
+                          <span className="font-mono text-[10px] text-emerald-600 font-black">{Math.min(100, Math.round((subtotalPrice / freeThreshold) * 100))}%</span>
+                        </div>
+                        <div className="w-full bg-emerald-200/60 rounded-full h-1.5 overflow-hidden">
+                          <div 
+                            className="bg-emerald-600 h-1.5 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, Math.round((subtotalPrice / freeThreshold) * 100))}%` }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200/80 text-slate-700 text-[11px] p-2.5 rounded-xl font-bold flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span>🚚</span>
+                      <span>សេវាដឹកជញ្ជូន:</span>
+                    </span>
+                    <span className="font-mono font-bold text-slate-900 text-[10.5px]">
+                      {isDeliveryFeeEnabled ? `ភ្នំពេញ $${parseFloat(storeSettings.deliveryPhnomPenh || 1.5).toFixed(2)} | ខេត្ត $${parseFloat(storeSettings.deliveryProvince || 2.5).toFixed(2)}` : 'ឥតគិតថ្លៃ (Free)'}
+                    </span>
+                  </div>
+                )}
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex justify-between items-center text-xs text-gray-500">
                     <span>សរុបទំនិញ (Subtotal):</span>
-                    <span className="font-bold text-gray-800">${subtotalPrice.toFixed(2)}</span>
+                    <span className="font-bold text-gray-800 font-mono">${subtotalPrice.toFixed(2)}</span>
                   </div>
                   {appliedCoupon && couponDiscountAmount > 0 && (
                     <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
                       <span>បញ្ចុះតម្លៃ Promo Code ({appliedCoupon.code}):</span>
-                      <span>-${couponDiscountAmount.toFixed(2)}</span>
+                      <span className="font-mono">-${couponDiscountAmount.toFixed(2)}</span>
                     </div>
                   )}
                   {isTaxEnabled && taxAmount > 0 && (
                     <div className="flex justify-between items-center text-xs text-blue-600 font-bold">
-                      <span>ពន្ធអាករ (VAT {taxRatePercent}%):</span>
-                      <span>{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${taxAmount.toFixed(2)}</span>
+                      <span>{storeSettings.taxLabel || `ពន្ធអាករ (VAT ${taxRatePercent}%)`}:</span>
+                      <span className="font-mono">{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${taxAmount.toFixed(2)}</span>
                     </div>
                   )}
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <span>ថ្លៃដឹកជញ្ជូន (Delivery):</span>
+                    {deliveryFee === 0 ? (
+                      <span className="font-bold text-emerald-600 font-mono">ឥតគិតថ្លៃ (Free)</span>
+                    ) : (
+                      <span className="font-bold text-gray-800 font-mono">+${deliveryFee.toFixed(2)}</span>
+                    )}
+                  </div>
                   <div className="flex justify-between items-center text-xs text-gray-500">
                     <span>សរុបប្រាក់រៀល:</span>
                     <span className="font-bold text-gray-800">{totalRiel.toLocaleString()} ៛</span>
                   </div>
-                  <div className="flex justify-between items-baseline pt-1 border-t border-dashed border-gray-200">
-                    <span className="font-black text-sm text-gray-900">ទឹកប្រាក់ត្រូវទូទាត់:</span>
-                    <span className="text-xl text-[#ff6a00] font-black">${totalPrice.toFixed(2)}</span>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-dashed border-gray-200">
+                    <div>
+                      <span className="font-black text-sm text-gray-900 block leading-tight">ទឹកប្រាក់ត្រូវទូទាត់:</span>
+                      <span className="text-[10px] text-gray-400 font-medium">
+                        {isTaxEnabled ? 'រួមបញ្ចូលពន្ធ និងថ្លៃដឹក' : 'រួមបញ្ចូលថ្លៃដឹក'}
+                      </span>
+                    </div>
+                    <span className="text-xl text-[#ff6a00] font-black font-mono">${totalPrice.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -5020,7 +5090,32 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                   </div>
 
                   {/* CARD 5: 🧾 សង្ខេបវិក្កយបត្រ (Invoice Summary Breakdown) */}
-                  <div className="p-4 sm:p-5 bg-gradient-to-b from-slate-50 to-orange-50/20 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+                  <div className="p-4 sm:p-5 bg-gradient-to-b from-slate-50 to-orange-50/20 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                    {/* Free Shipping Progress Bar (Amazon / Shopify World-Class Standard) */}
+                    {isDeliveryFeeEnabled && freeThreshold > 0 && (
+                      <div className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-800 shadow-xs">
+                        {isFreeDeliveryEligible ? (
+                          <div className="flex items-center gap-1.5 text-xs font-black text-emerald-700">
+                            <span>🎉</span>
+                            <span>អបអរសាទរ! ការកុម្ម៉ង់នេះទទួលបានការដឹកជញ្ជូនឥតគិតថ្លៃ (Free Shipping)!</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between items-center text-[11px] font-bold text-slate-700">
+                              <span>🚚 ទិញថែម <span className="text-[#ff6a00] font-black font-mono">${(freeThreshold - subtotalPrice).toFixed(2)}</span> ទៀត ដើម្បីដឹកឥតគិតថ្លៃ!</span>
+                              <span className="font-mono text-[10px] text-emerald-600 font-black">{Math.min(100, Math.round((subtotalPrice / freeThreshold) * 100))}%</span>
+                            </div>
+                            <div className="w-full bg-emerald-200/60 rounded-full h-1.5 overflow-hidden">
+                              <div 
+                                className="bg-emerald-600 h-1.5 rounded-full transition-all duration-300"
+                                style={{ width: `${Math.min(100, Math.round((subtotalPrice / freeThreshold) * 100))}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex justify-between items-center text-xs font-bold text-slate-600">
                       <span>ទំនិញសរុប ({cart.length} មុខ):</span>
                       <span className="font-mono text-slate-900">${subtotalPrice.toFixed(2)}</span>
@@ -5033,22 +5128,30 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                     )}
                     {isTaxEnabled && taxAmount > 0 && (
                       <div className="flex justify-between items-center text-xs font-bold text-blue-600">
-                        <span>ពន្ធអាករ (VAT {taxRatePercent}%):</span>
+                        <span>{storeSettings.taxLabel || `ពន្ធអាករ (VAT ${taxRatePercent}%)`}:</span>
                         <span className="font-mono">{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${taxAmount.toFixed(2)}</span>
                       </div>
                     )}
                     <div className="flex justify-between items-center text-xs font-bold text-slate-600">
-                      <span>ថ្លៃដឹកជញ្ជូន:</span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
-                        ✓ ឥតគិតថ្លៃ (Free)
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span>ថ្លៃដឹកជញ្ជូន ({isPhnomPenh ? 'ភ្នំពេញ' : (customerProvince || 'ខេត្ត')}):</span>
+                      </div>
+                      {deliveryFee === 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black">
+                          ✓ ឥតគិតថ្លៃ (Free Delivery)
+                        </span>
+                      ) : (
+                        <span className="font-mono font-black text-slate-900">+${deliveryFee.toFixed(2)}</span>
+                      )}
                     </div>
 
                     {/* Grand Total */}
                     <div className="flex justify-between items-baseline pt-3 border-t border-slate-200/80">
                       <div>
                         <span className="font-black text-sm text-slate-900 block leading-tight">ទឹកប្រាក់សរុប (Total):</span>
-                        <span className="text-[10px] text-slate-400 font-medium">រួមបញ្ចូលពន្ធ និងថ្លៃដឹក</span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {isTaxEnabled ? 'រួមបញ្ចូលពន្ធ និងថ្លៃដឹកជញ្ជូន' : 'រួមបញ្ចូលថ្លៃដឹកជញ្ជូន'}
+                        </span>
                       </div>
                       <div className="text-right">
                         <span className="font-black text-2xl text-[#ff6a00] font-mono leading-none">${totalPrice.toFixed(2)}</span>

@@ -279,7 +279,14 @@ export async function POST(request) {
         `<i>ប្រព័ន្ធនឹងផ្ញើសារ និងវិក្កយបត្រ PDF ស្វ័យប្រវត្តិចូលទីនេះរាល់ពេលមានការបញ្ជាទិញ ឬទំនិញជិតអស់ស្តុក!</i>`;
     } else if (action === 'new_order' || action === 'send_invoice') {
       const ord = order || {};
-      const orderItems = Array.isArray(ord.items) ? ord.items.filter(it => !it.is_tax_meta) : [];
+      const orderItems = Array.isArray(ord.items) ? ord.items.filter(it => !it.is_tax_meta && !it.is_delivery_meta) : [];
+      const taxMeta = Array.isArray(ord.items) ? ord.items.find(it => it.is_tax_meta) : null;
+      const deliveryMeta = Array.isArray(ord.items) ? ord.items.find(it => it.is_delivery_meta) : null;
+      const taxAmount = parseFloat(ord.tax_amount || taxMeta?.tax_amount || 0);
+      const taxLabel = ord.tax_label || taxMeta?.tax_label || (taxMeta?.tax_rate ? `ពន្ធអាករ (VAT ${taxMeta.tax_rate}%)` : 'ពន្ធអាករ (VAT)');
+      const deliveryFee = parseFloat(ord.delivery_fee || ord.shipping_fee || deliveryMeta?.delivery_fee || 0);
+      const subtotalNum = parseFloat(ord.subtotal || 0);
+
       const itemsList = orderItems.map((it, idx) => {
         const itemTotal = ((it.price || 0) * (it.qty || 1)).toFixed(2);
         const variantInfo = [it.size ? `Size: ${it.size}` : '', it.color ? `ពណ៌: ${it.color}` : ''].filter(Boolean).join(', ');
@@ -326,12 +333,15 @@ export async function POST(request) {
         })() +
         (ord.payment_slip_url ? `🧾 <b>បង្កាន់ដៃបង់ប្រាក់ KHQR:</b> <a href="${ord.payment_slip_url}">ចុចមើលរូបភាព Slip ↗</a>\n` : '') +
         `💳 <b>វិធីទូទាត់:</b> <b>${ord.payment_method || 'Bakong KHQR / Cash'}</b>\n` +
-        (ord.coupon_code ? `🎟️ <b>កូដបញ្ចុះតម្លៃ:</b> <code>${ord.coupon_code}</code> (-$${Number(ord.discount || 0).toFixed(2)})\n` : '') +
         `━━━━━━━━━━━━━━━━━━\n` +
         `📦 <b>បញ្ជីទំនិញ (${orderItems.length} មុខ):</b>\n` +
         `${itemsList || 'គ្មានបញ្ជីទំនិញ'}\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
-        `💰 <b>ទឹកប្រាក់សរុប:</b> <b>$${totalNum.toFixed(2)}</b> (≈ ${totalRiel.toLocaleString()} ៛)\n` +
+        (subtotalNum > 0 ? `💵 <b>ទំនិញសរុប (Subtotal):</b> $${subtotalNum.toFixed(2)}\n` : '') +
+        (ord.coupon_code ? `🎟️ <b>កូដបញ្ចុះតម្លៃ (${ord.coupon_code}):</b> -$${Number(ord.discount || 0).toFixed(2)}\n` : '') +
+        (taxAmount > 0 ? `🏛️ <b>${taxLabel}:</b> +$${taxAmount.toFixed(2)}\n` : '') +
+        `🚚 <b>ថ្លៃដឹកជញ្ជូន:</b> ${deliveryFee > 0 ? `+$${deliveryFee.toFixed(2)}` : '<b>ឥតគិតថ្លៃ (FREE)</b>'}\n` +
+        `💰 <b>ទឹកប្រាក់សរុប (Grand Total):</b> <b>$${totalNum.toFixed(2)}</b> (≈ ${totalRiel.toLocaleString()} ៛)\n` +
         `✅ <b>ស្ថានភាព:</b> <b>${ord.payment_method?.includes('KHQR') || ord.payment_slip_url ? 'PAID / PENDING CONFIRMATION' : 'CASH ON DELIVERY (COD)'}</b>\n\n` +
         `⏰ <b>ពេលវេលា:</b> ${new Date().toLocaleString('km-KH')}\n` +
         `📄 <i>ឯកសារវិក្កយបត្រ PDF ផ្លូវការត្រូវបានភ្ជាប់ជូនខាងក្រោម!</i>`;

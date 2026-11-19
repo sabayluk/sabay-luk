@@ -308,10 +308,14 @@ function InvoiceContent() {
     );
   }
 
-  const items = Array.isArray(order?.items) ? order.items.filter(it => !it.is_tax_meta) : [];
+  const taxMeta = Array.isArray(order?.items) ? order.items.find(it => it.is_tax_meta) : null;
+  const deliveryMeta = Array.isArray(order?.items) ? order.items.find(it => it.is_delivery_meta) : null;
+  const items = Array.isArray(order?.items) ? order.items.filter(it => !it.is_tax_meta && !it.is_delivery_meta) : [];
   const subtotal = parseFloat(order?.subtotal || order?.total_amount || order?.total || 0);
   const discount = parseFloat(order?.discount || 0);
-  const tax = parseFloat(order?.tax_amount || 0);
+  const tax = parseFloat(order?.tax_amount || taxMeta?.tax_amount || 0);
+  const deliveryFee = parseFloat(order?.delivery_fee || order?.shipping_fee || deliveryMeta?.delivery_fee || 0);
+  const taxLabel = taxMeta?.tax_label || (taxMeta?.tax_rate ? `ពន្ធអាករ (VAT ${taxMeta.tax_rate}%)` : (storeSettings?.taxLabel || 'ពន្ធអាករ (VAT 10%)'));
   const total = parseFloat(order?.total_amount || order?.total || 0);
   const exchangeRate = storeSettings.exchangeRate || 4100;
   const totalKHR = Math.round(total * exchangeRate);
@@ -667,16 +671,16 @@ function InvoiceContent() {
                 </div>
               )}
 
-              {(parseFloat(order?.delivery_fee || order?.shipping_fee || 0) > 0) && (
+              {deliveryFee > 0 && (
                 <div className="flex justify-between items-center text-gray-600">
-                  <span>សេវាដឹកជញ្ជូន (Delivery Fee):</span>
-                  <span className="font-mono font-bold">+${parseFloat(order?.delivery_fee || order?.shipping_fee || 0).toFixed(2)}</span>
+                  <span>{deliveryMeta?.label || 'សេវាដឹកជញ្ជូន (Delivery Fee)'}:</span>
+                  <span className="font-mono font-bold">+${deliveryFee.toFixed(2)}</span>
                 </div>
               )}
 
               {tax > 0 && (
                 <div className="flex justify-between items-center text-gray-600">
-                  <span>ពន្ធអាករ (VAT 10%):</span>
+                  <span>{taxLabel}:</span>
                   <span className="font-mono font-bold">+${tax.toFixed(2)}</span>
                 </div>
               )}
