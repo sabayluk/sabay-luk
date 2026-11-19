@@ -37,6 +37,7 @@ export async function POST(request) {
 
     let token = (botToken || process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || '').trim();
     let chat = (chatId || process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || '').trim();
+    let isFallbackToCentralBot = false;
 
     // ⭐️ កំណត់សម្គាល់សកម្មភាពកម្រិត Platform Master Admin (ចុះឈ្មោះហាងថ្មី & បង់ប្រាក់ Slip)
     const isPlatformAction = [
@@ -89,10 +90,12 @@ export async function POST(request) {
         console.warn('Telegram store settings lookup error:', dbErr);
       }
 
-      // ⭐️ FIX: STRICT MULTI-TENANT ISOLATION (ហាងមួយមាន Bot មួយ កុំឱ្យលោតជាន់គ្នា) ⭐️
-      // ប្រសិនបើហាងនេះជាហាងសាខា ឬហាងដាច់ដោយឡែក (Tenant Store) ហើយមិនទាន់បានកំណត់ Bot Token ឬ Chat ID
-      // ដាច់ខាតមិនត្រូវ Fallback ទៅ store_default_sabayluk ឬ Platform Admin Bot ឡើយ ដើម្បីកុំឱ្យសារលោតជាន់គ្នា!
+      // ⭐️ FIX: MULTI-TENANT ISOLATED ALERT WITH CENTRAL PLATFORM FALLBACK ⭐️
+      // ប្រសិនបើហាងមាន Bot ផ្ទាល់ខ្លួន -> ផ្ញើទៅ Bot ហាងនោះ
+      // ប្រសិនបើហាងមិនទាន់បានកំណត់ Bot ផ្ទាល់ខ្លួន (Tenant ថ្មី) -> Fallback ទៅ Platform Central Bot
+      // ដើម្បីធានាថា ADMIN មិនបាត់បង់ការជូនដំណឹងពេលមានការទិញទំនិញឡើយ!
       const isDefaultStore = (!storeId || storeId === 'store_default_sabayluk') && (!storeSlug || storeSlug === 'sabay-luk');
+      isFallbackToCentralBot = false;
 
       if (!token || !chat) {
         if (isDefaultStore) {
@@ -109,13 +112,11 @@ export async function POST(request) {
           if (!token) token = (process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || DEFAULT_PLATFORM_BOT_TOKEN).trim();
           if (!chat) chat = (process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || DEFAULT_PLATFORM_CHAT_ID).trim();
         } else {
-          // ហាងសាខាផ្សេង (Mario, Urbangrabs...) បើមិនទាន់ដាក់ Bot ផ្ទាល់ខ្លួន គឺ Skip ដោយសុវត្ថិភាព មិនឱ្យលោតចូល Telegram ហាងដទៃឡើយ!
-          console.log(`[Telegram Isolated Notice] Store "${storeName || storeSlug || storeId}" has no Telegram bot configured. Skipping alert to prevent cross-store overlap.`);
-          return NextResponse.json({
-            success: true,
-            skipped: true,
-            message: `ហាង "${storeName || storeSlug || storeId}" មិនទាន់បានកំណត់ Telegram Bot Token ឬ Chat ID ផ្ទាល់ខ្លួននៅឡើយទេ (ប្រព័ន្ធរក្សាការសម្ងាត់ មិនផ្ញើទៅហាងដទៃឡើយ)`
-          });
+          // ហាងសាខាដែលមិនទាន់ដាក់ Bot ផ្ទាល់ខ្លួន -> បញ្ជូនទៅ Central Bot របស់ Admin Sabay Luk
+          token = (process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || DEFAULT_PLATFORM_BOT_TOKEN).trim();
+          chat = (process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || DEFAULT_PLATFORM_CHAT_ID).trim();
+          isFallbackToCentralBot = true;
+          console.log(`[Telegram Central Alert] Store "${storeName || storeSlug || storeId}" has no Telegram bot configured. Routing order alert to Central Platform Bot.`);
         }
       }
     }
@@ -294,10 +295,14 @@ export async function POST(request) {
         ? `🧾 <b>វិក្កយបត្រផ្លូវការ (OFFICIAL TAX INVOICE)</b>`
         : `🛍️ <b>មានការបញ្ជាទិញថ្មី (NEW ORDER NOTIFICATION)!</b>`;
 
+      const fallbackNotice = isFallbackToCentralBot
+        ? `\nℹ️ <i>(ហាងនេះមិនទាន់កំណត់ Telegram Bot ផ្ទាល់ខ្លួនទេ — បញ្ជូនដំណឹងស្វ័យប្រវត្តិកណ្តាលជូន Admin)</i>`
+        : '';
+
       finalMessage = `${headerTitle}\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `🧾 <b>លេខវិក្កយបត្រ:</b> <code>#${ord.order_id || 'N/A'}</code>\n` +
-        `🏪 <b>ហាង:</b> <b>${storeName || 'SABAY LUK SHOES STORE 👟'}</b>\n` +
+        `🏪 <b>ហាង:</b> <b>${storeName || 'SABAY LUK SHOES STORE 👟'}</b>` + (storeSlug ? ` (<code>${storeSlug}</code>)` : '') + `${fallbackNotice}\n` +
         (body.storePhone ? `📞 <b>ទូរស័ព្ទហាង:</b> <code>${body.storePhone}</code>\n` : '') +
         (body.storeTelegram ? `✈️ <b>Telegram ហាង:</b> @${body.storeTelegram.replace(/^@/, '')}\n` : '') +
         `👤 <b>ឈ្មោះអតិថិជន:</b> <b>${ord.customer_name || ord.customer || 'អតិថិជន'}</b>\n` +
@@ -357,22 +362,63 @@ export async function POST(request) {
         finalMessage += `\n🔗 <b>តំណភ្ជាប់វិក្កយបត្រ:</b> <a href="${invoiceUrl}">${invoiceUrl}</a>`;
       }
 
-      // ⭐️ Send Slip Photo directly if uploaded by customer ⭐️
-      if (ord.payment_slip_url && token && chat) {
+      // ⭐️ Send Slip Photo directly if uploaded by customer (Supports Base64 & Online URLs) ⭐️
+      const rawSlip = ord.payment_slip_url || body.slipUrl;
+      if (rawSlip && token && chat) {
         try {
-          await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: chat,
-              photo: ord.payment_slip_url,
-              caption: `🧾 <b>បង្កាន់ដៃផ្ទេរប្រាក់ KHQR សម្រាប់កុម្ម៉ង់ #${ord.order_id || ''}</b>\n👤 អតិថិជន: <b>${ord.customer_name || 'អតិថិជន'}</b>\n💰 ទឹកប្រាក់: <b>$${totalNum.toFixed(2)}</b> (~ ${totalRiel.toLocaleString()} ៛)`,
-              parse_mode: 'HTML'
-            })
-          }).catch(pErr => console.warn('Telegram sendPhoto slip error:', pErr));
+          const slipCaption = `🧾 <b>បង្កាន់ដៃផ្ទេរប្រាក់ KHQR សម្រាប់កុម្ម៉ង់ #${ord.order_id || ''}</b>\n🏪 ហាង: <b>${storeName || 'SABAY LUK'}</b>\n👤 អតិថិជន: <b>${ord.customer_name || 'អតិថិជន'}</b>\n💰 ទឹកប្រាក់: <b>$${totalNum.toFixed(2)}</b> (~ ${totalRiel.toLocaleString()} ៛)`;
+          if (typeof rawSlip === 'string' && rawSlip.startsWith('data:image/')) {
+            const base64Data = rawSlip.replace(/^data:image\/\w+;base64,/, '');
+            const buffer = Buffer.from(base64Data, 'base64');
+            const mimeMatch = rawSlip.match(/^data:(image\/\w+);/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+            const ext = mimeType.split('/')[1] || 'jpg';
+            const formData = new FormData();
+            formData.append('chat_id', chat);
+            const blob = new Blob([buffer], { type: mimeType });
+            formData.append('photo', blob, `slip_${Date.now()}.${ext}`);
+            formData.append('caption', slipCaption);
+            formData.append('parse_mode', 'HTML');
+            await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+              method: 'POST',
+              body: formData
+            }).catch(pErr => console.warn('Telegram sendPhoto slip error:', pErr));
+          } else if (typeof rawSlip === 'string' && (rawSlip.startsWith('http://') || rawSlip.startsWith('https://'))) {
+            await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chat,
+                photo: rawSlip,
+                caption: slipCaption,
+                parse_mode: 'HTML'
+              })
+            }).catch(pErr => console.warn('Telegram sendPhoto slip error:', pErr));
+          }
         } catch (slipErr) {
           console.warn('Slip photo send error:', slipErr);
         }
+      }
+
+      // ⭐️ Send Carbon Copy (CC) to Platform Super Admin Bot if tenant has custom bot ⭐️
+      if (!isFallbackToCentralBot && (token !== DEFAULT_PLATFORM_BOT_TOKEN || chat !== DEFAULT_PLATFORM_CHAT_ID)) {
+        try {
+          const adminCopyText = `🔔 <b>[Sabay Luk Platform] មានការកុម្ម៉ង់ទិញថ្មីនៅហាង៖ ${storeName || storeSlug}</b>\n` +
+            `━━━━━━━━━━━━━━━━━━\n` +
+            `🧾 លេខវិក្កយបត្រ: #${ord.order_id || 'N/A'}\n` +
+            `👤 អតិថិជន: <b>${ord.customer_name || 'អតិថិជន'}</b> (📞 <code>${ord.phone || 'N/A'}</code>)\n` +
+            `💰 ទឹកប្រាក់: <b>$${totalNum.toFixed(2)}</b> (~ ${totalRiel.toLocaleString()} ៛) - ${ord.payment_method || 'Cash'}\n` +
+            `⏰ ពេលវេលា: ${new Date().toLocaleString('km-KH')}`;
+          await fetch(`https://api.telegram.org/bot${DEFAULT_PLATFORM_BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: DEFAULT_PLATFORM_CHAT_ID,
+              text: adminCopyText,
+              parse_mode: 'HTML'
+            })
+          }).catch(ccErr => console.warn('Admin CC order alert error:', ccErr));
+        } catch (_) {}
       }
 
       // ⭐️ Generate and send the actual PDF Document directly to Telegram ⭐️

@@ -2370,6 +2370,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
             })(),
             action: 'new_order',
+            slipUrl: uploadedSlipUrl || null,
             order: {
               order_id: generatedOrderId,
               customer_name: customerName.trim(),
@@ -2417,12 +2418,15 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       try {
         const adminOrderAlert = {
           type: 'NEW_ORDER',
+          id: createdOrder?.id || generatedOrderId,
           order_id: generatedOrderId,
           customer_name: customerName.trim(),
           phone: customerContact,
           total: totalPrice,
           itemsCount: cart.length,
           payment: paymentMethod,
+          store_id: currentStore?.id || 'store_default_sabayluk',
+          store_name: currentStore?.name || parsedSettings.storeName || 'SABAY LUK',
           timestamp: Date.now()
         };
         localStorage.setItem('sabay_new_order_alert', JSON.stringify(adminOrderAlert));

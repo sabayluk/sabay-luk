@@ -2492,10 +2492,12 @@ export default function UnifiedAdminDashboard() {
           playNewOrderSound();
           fetchRealOrders();
           setNewOrderAlert({
+            id: payload.new?.id,
             order_id: payload.new?.order_id || 'ថ្មី',
             customer_name: payload.new?.customer_name || 'អតិថិជន',
             phone: payload.new?.phone || payload.new?.phone_number || '',
-            total: payload.new?.total_amount || 0
+            total: payload.new?.total_amount || 0,
+            store_id: payload.new?.store_id || 'store_default_sabayluk'
           });
         })
         .subscribe();
@@ -27422,21 +27424,36 @@ export default function UnifiedAdminDashboard() {
         <div
           className="fixed top-5 right-5 z-50 bg-slate-950 text-white p-4 rounded-3xl shadow-2xl flex items-center gap-3.5 border-2 border-emerald-500 animate-in slide-in-from-top-4 max-w-md cursor-pointer hover:border-emerald-400 hover:bg-slate-900 transition"
           onClick={() => {
+            // Auto switch store if order is from a different store
+            if (newOrderAlert?.store_id && activeStore?.id !== newOrderAlert.store_id) {
+              const target = registeredStores.find(s => s.id === newOrderAlert.store_id);
+              if (target) {
+                setActiveStore(target);
+                setActiveStoreState(target);
+                if (typeof window !== 'undefined') {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('store', target.slug || target.id);
+                  window.history.replaceState({}, '', url.toString());
+                }
+                fetchRealOrders(target.id);
+              }
+            }
             // 1. Switch to orders tab
             setActiveTab('orders');
             // 2. Close the alert
             setNewOrderAlert(null);
             // 3. Highlight + scroll to the order row after tab renders
-            if (newOrderAlert?.id) {
-              setHighlightedOrderId(newOrderAlert.id);
+            const targetId = newOrderAlert?.id || newOrderAlert?.order_id;
+            if (targetId) {
+              setHighlightedOrderId(targetId);
               setTimeout(() => {
-                const el = document.getElementById(`order-row-${newOrderAlert.id}`);
+                const el = document.getElementById(`order-row-${targetId}`) || document.getElementById(`order-row-${newOrderAlert?.order_id}`);
                 if (el) {
                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
                 // Remove highlight after 4s
                 setTimeout(() => setHighlightedOrderId(null), 4000);
-              }, 300);
+              }, 400);
             }
           }}
         >
@@ -27444,10 +27461,15 @@ export default function UnifiedAdminDashboard() {
             🛍️
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-black uppercase bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full">
                 New Order ថ្មី!
               </span>
+              {newOrderAlert.store_name && (
+                <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                  🏬 {newOrderAlert.store_name}
+                </span>
+              )}
               <span className="text-[10px] text-slate-400">ទើបកុម្ម៉ង់មុននេះបន្តិច</span>
             </div>
             <p className="text-xs font-black text-white mt-1 truncate">
