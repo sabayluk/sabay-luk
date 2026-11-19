@@ -61,6 +61,10 @@ export default function LocationPickerModal({
   const [searchResults, setSearchResults] = useState([]);
   const [searchError, setSearchError] = useState('');
 
+  // 🎯 មុខងារទាញយកទីតាំង GPS បច្ចុប្បន្ន (Geolocation API)
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState('');
+
   // ⭐️ ជំហាន Modal: 'MAP' (រើសលើផែនទី) ឬ 'CONFIRM_DETAILS' (បញ្ជាក់ផ្លូវ, សង្កាត់, ភូមិ, ឃុំ, ខណ្ឌ, ក្រុង) ⭐️
   const [modalStep, setModalStep] = useState('MAP');
   const [isReverseGeocoding, setIsReverseGeocoding] = useState(false);
@@ -174,6 +178,43 @@ export default function LocationPickerModal({
     if (p) {
       sendLocationToIframe(p.lat, p.lng, 14);
     }
+  };
+
+  // 🎯 មុខងារទាញយកទីតាំង GPS បច្ចុប្បន្នផ្ទាល់ខ្លួន (HTML5 Geolocation API)
+  const handleGetCurrentLocation = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      alert('ឧបករណ៍ ឬកម្មវិធីរុករក (Browser) របស់អ្នកមិនគាំទ្រ GPS ទីតាំងទេ!');
+      return;
+    }
+
+    setIsLocating(true);
+    setLocationError('');
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = Number(position.coords.latitude.toFixed(6));
+        const lng = Number(position.coords.longitude.toFixed(6));
+        sendLocationToIframe(lat, lng, 17);
+        setIsLocating(false);
+      },
+      (error) => {
+        setIsLocating(false);
+        let errMsg = 'មិនអាចទាញយកទីតាំងបច្ចុប្បន្នបានទេ!';
+        if (error.code === 1) { // PERMISSION_DENIED
+          errMsg = 'សូមបើកសិទ្ធិ (Allow Location Access) នៅក្នុងទូរស័ព្ទ ឬ Browser ដើម្បីទាញយកទីតាំងបច្ចុប្បន្ន!';
+        } else if (error.code === 2) { // POSITION_UNAVAILABLE
+          errMsg = 'ពុំអាចកំណត់ទីតាំង GPS បានទេនៅពេលនេះ!';
+        } else if (error.code === 3) { // TIMEOUT
+          errMsg = 'ការទាញយកទីតាំងចំណាយពេលយូរពេក! សូមសាកល្បងម្ដងទៀត។';
+        }
+        setLocationError(errMsg);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 0
+      }
+    );
   };
 
   // Search places using OpenStreetMap Nominatim
@@ -432,8 +473,26 @@ export default function LocationPickerModal({
                 </div>
               )}
 
-              {/* Quick 25 Provinces Selector */}
+              {locationError && (
+                <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl flex items-center justify-between">
+                  <span>⚠️ {locationError}</span>
+                  <button type="button" onClick={() => setLocationError('')} className="text-rose-400 hover:text-rose-700 ml-2 font-bold cursor-pointer">✕</button>
+                </div>
+              )}
+
+              {/* Quick 25 Provinces Selector & Current GPS Button */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isLocating}
+                  className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-3 py-1.5 rounded-xl font-black transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-75"
+                  title="ចុចដើម្បីទាញយកទីតាំងផ្ទាល់ខ្លួនតាម GPS"
+                >
+                  <span className={isLocating ? 'animate-spin' : ''}>{isLocating ? '⏳' : '🎯'}</span>
+                  <span>{isLocating ? 'កំពុងទាញទីតាំង...' : 'ទីតាំងបច្ចុប្បន្ន (GPS)'}</span>
+                </button>
+                <div className="w-[1px] h-4 bg-slate-300 shrink-0 mx-0.5" />
                 <span className="text-slate-500 font-bold shrink-0">រើសខេត្ត/ក្រុង:</span>
                 {Object.keys(PROVINCE_COORDINATES).map((prov) => (
                   <button
@@ -462,6 +521,22 @@ export default function LocationPickerModal({
                 sandbox="allow-scripts allow-same-origin"
               />
 
+              {/* 🎯 Floating GPS Current Location Button directly on Map */}
+              <div className="absolute top-3 right-3 z-10">
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isLocating}
+                  className="bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-700 px-3.5 py-2 rounded-2xl shadow-xl border border-slate-200/90 text-xs font-black flex items-center gap-2 backdrop-blur-md transition active:scale-90 cursor-pointer disabled:opacity-75 group"
+                  title="ចុចទាញយកទីតាំងបច្ចុប្បន្នរបស់អ្នក (GPS)"
+                >
+                  <span className={`text-base ${isLocating ? 'animate-spin' : 'group-hover:scale-125 transition-transform'}`}>
+                    {isLocating ? '⏳' : '🎯'}
+                  </span>
+                  <span>{isLocating ? 'កំពុងទាញ...' : 'ទីតាំងបច្ចុប្បន្ន'}</span>
+                </button>
+              </div>
+
               {/* Instructions Floating Pill */}
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none z-10 w-[90%] sm:w-auto text-center">
                 <div className="bg-slate-900/90 backdrop-blur-md text-white text-[11px] font-bold px-4 py-2 rounded-full shadow-lg border border-white/20 inline-flex items-center gap-2">
@@ -473,11 +548,21 @@ export default function LocationPickerModal({
 
             {/* Modal Footer */}
             <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-xs text-slate-600 flex items-center gap-2 w-full sm:w-auto">
+              <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <span className="text-emerald-600 font-black">● GPS:</span>
                 <span className="font-mono font-bold bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-800 text-[11px]">
                   {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
                 </span>
+                <button
+                  type="button"
+                  onClick={handleGetCurrentLocation}
+                  disabled={isLocating}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-black transition flex items-center gap-1 active:scale-95 cursor-pointer disabled:opacity-60"
+                  title="ទាញទីតាំងបច្ចុប្បន្នតាម GPS"
+                >
+                  <span className={isLocating ? 'animate-spin' : ''}>{isLocating ? '⏳' : '🎯'}</span>
+                  <span>{isLocating ? 'កំពុងទាញ...' : 'ទីតាំងខ្ញុំ'}</span>
+                </button>
                 {isReverseGeocoding && (
                   <span className="text-[10px] text-orange-500 animate-pulse font-bold">កំពុងទាញឈ្មោះទីតាំង...</span>
                 )}
