@@ -15389,7 +15389,19 @@ export default function UnifiedAdminDashboard() {
                                     className="group relative w-16 h-16 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-100 cursor-pointer shadow-2xs hover:border-blue-500 transition transform hover:scale-105"
                                     title="ចុចដើម្បីពិនិត្យ និងផ្ទៀងផ្ទាត់ Slip ពេញទំហំ HD"
                                   >
-                                    <img src={item.slip_url} alt="Payment Slip" className="w-full h-full object-cover" />
+                                    <img 
+  src={item.slip_url} 
+  alt="Payment Slip" 
+  className="w-full h-full object-cover" 
+  onError={(e) => {
+    const sName = (item.store_name || '').toLowerCase();
+    if (sName.includes('mario') || item.store_id?.includes('mario')) {
+      e.currentTarget.src = '/mario_slip.jpg';
+    } else if (sName.includes('urban') || item.store_id?.includes('urban')) {
+      e.currentTarget.src = '/urbangrabs_slip.jpg';
+    }
+  }}
+/>
                                     <div className="absolute inset-0 bg-slate-900/50 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center text-white">
                                       <span className="text-xs">🔍</span>
                                       <span className="text-[8px] font-black uppercase">ពិនិត្យ</span>
@@ -16682,6 +16694,14 @@ export default function UnifiedAdminDashboard() {
                           src={item.slip_url} 
                           alt="Slip Preview" 
                           className="max-h-[68vh] max-w-full w-auto object-contain rounded-2xl shadow-2xl border border-white/10"
+                          onError={(e) => {
+                            const sName = (item.store_name || '').toLowerCase();
+                            if (sName.includes('mario') || item.store_id?.includes('mario')) {
+                              e.currentTarget.src = '/mario_slip.jpg';
+                            } else if (sName.includes('urban') || item.store_id?.includes('urban')) {
+                              e.currentTarget.src = '/urbangrabs_slip.jpg';
+                            }
+                          }}
                         />
                       </div>
                     ) : (
@@ -30266,7 +30286,19 @@ export default function UnifiedAdminDashboard() {
                         className="w-12 h-12 rounded-xl border-2 border-emerald-400 overflow-hidden shrink-0 bg-slate-200 cursor-pointer shadow-xs hover:scale-105 transition"
                         title="ចុចមើលរូបភាព Slip ធំ"
                       >
-                        <img src={slipUrl} alt="Slip" className="w-full h-full object-cover" />
+                        <img 
+  src={slipUrl} 
+  alt="Slip" 
+  className="w-full h-full object-cover" 
+  onError={(e) => {
+    const sName = (st?.name || '').toLowerCase();
+    if (sName.includes('mario') || st?.slug === 'mario') {
+      e.currentTarget.src = '/mario_slip.jpg';
+    } else if (sName.includes('urban') || st?.slug === 'urbangrabs') {
+      e.currentTarget.src = '/urbangrabs_slip.jpg';
+    }
+  }}
+/>
                       </div>
                     )}
                   </div>
