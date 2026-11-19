@@ -1088,7 +1088,14 @@ export default function SaaSPlatformLandingPage() {
                   onClick={() => toggleFaq(idx)}
                   className="w-full p-5 text-left font-black text-sm sm:text-base text-slate-900 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer"
                 >
-                  <span>{faq.q}</span>
+                  <div className="flex items-center gap-2">
+                    {faq.category && (
+                      <span className="text-[10px] uppercase font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 shrink-0">
+                        {faq.category}
+                      </span>
+                    )}
+                    <span>{faq.q}</span>
+                  </div>
                   <span className="text-orange-600 font-bold ml-4 text-lg">
                     {openFaq === idx ? '−' : '+'}
                   </span>
@@ -1100,6 +1107,17 @@ export default function SaaSPlatformLandingPage() {
                 )}
               </div>
             ))}
+          </div>
+
+          {/* Link to dedicated FAQ Hub */}
+          <div className="mt-8 text-center">
+            <Link
+              href="/faq"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-900 hover:bg-orange-600 text-white font-black text-xs transition shadow-md cursor-pointer active:scale-95"
+            >
+              <span>💡 {lang === 'km' ? 'ស្វែងរកសំណួរ និងមើលចម្លើយទាំងអស់ (10 FAQs)' : 'Browse & Search All 10 FAQs'}</span>
+              <span>→</span>
+            </Link>
           </div>
         </div>
       </section>
@@ -1169,6 +1187,9 @@ export default function SaaSPlatformLandingPage() {
               <li><Link href="/login" className="hover:text-orange-400 font-bold text-orange-400 transition">🔑 {t.btn_login || 'ចូលប្រព័ន្ធ (Store Login)'}</Link></li>
               <li><a href="#partner-stores" className="hover:text-white transition">🏪 {lang === 'km' ? 'ហាងដៃគូសហការ (Live Stores)' : 'Partner Stores (Live)'}</a></li>
               <li><Link href="/plans" className="hover:text-white transition">💎 {t.nav_pricing} (Plans)</Link></li>
+              <li><Link href="/faq" className="hover:text-orange-400 font-bold transition">💡 {lang === 'km' ? 'សំណួរញឹកញាប់ (FAQ)' : 'FAQ & Knowledge'}</Link></li>
+              <li><Link href="/privacy" className="hover:text-emerald-400 font-bold transition">🛡️ {lang === 'km' ? 'គោលការណ៍ឯកជនភាព (Privacy Policy)' : 'Privacy Policy'}</Link></li>
+              <li><Link href="/terms" className="hover:text-blue-400 font-bold transition">⚖️ {lang === 'km' ? 'លក្ខខណ្ឌប្រើប្រាស់ (Terms of Service)' : 'Terms of Service'}</Link></li>
               <li><Link href="/register" className="hover:text-white transition">🚀 {t.btn_create_free}</Link></li>
             </ul>
           </div>
@@ -1196,6 +1217,20 @@ export default function SaaSPlatformLandingPage() {
                 <span>{lang === 'km' ? 'ភ្នំពេញ, ព្រះរាជាណាចក្រកម្ពុជា' : 'Phnom Penh, Kingdom of Cambodia'}</span>
               </li>
             </ul>
+          </div>
+        </div>
+
+        {/* Bottom Sub-Strip */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10 pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500">
+          <div>
+            &copy; {new Date().getFullYear()} Sabay Luk POS Cloud Platform. {lang === 'km' ? 'រក្សាសិទ្ធិគ្រប់យ៉ាងស្របតាមច្បាប់នៃព្រះរាជាណាចក្រកម្ពុជា។' : 'All rights reserved under the laws of the Kingdom of Cambodia.'}
+          </div>
+          <div className="flex items-center gap-4 font-bold">
+            <Link href="/privacy" className="hover:text-slate-300 transition">{lang === 'km' ? 'គោលការណ៍ឯកជនភាព (Privacy)' : 'Privacy Policy'}</Link>
+            <span>•</span>
+            <Link href="/terms" className="hover:text-slate-300 transition">{lang === 'km' ? 'លក្ខខណ្ឌប្រើប្រាស់ (Terms)' : 'Terms of Service'}</Link>
+            <span>•</span>
+            <Link href="/faq" className="hover:text-slate-300 transition">{lang === 'km' ? 'សំណួរញឹកញាប់ (FAQ)' : 'FAQ'}</Link>
           </div>
         </div>
       </footer>

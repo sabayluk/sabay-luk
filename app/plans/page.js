@@ -551,9 +551,18 @@ export default function PlansAndSaaSPage() {
       </section>
 
       {/* ⭐️ FOOTER ⭐️ */}
-      <footer className="bg-white border-t border-slate-200 py-8 px-4 text-center text-xs text-slate-500 font-medium space-y-2">
+      <footer className="bg-white border-t border-slate-200 py-8 px-4 text-center text-xs text-slate-500 font-medium space-y-2.5">
         <p>© 2026 SABAY LUK POS ERP • All Rights Reserved</p>
-        <p className="text-slate-400 text-[11px]">
+        <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-bold text-slate-600">
+          <Link href="/" className="hover:text-orange-600 transition">ទំព័រដើម (Home)</Link>
+          <span>•</span>
+          <Link href="/faq" className="hover:text-orange-600 transition">💡 សំណួរញឹកញាប់ (FAQ)</Link>
+          <span>•</span>
+          <Link href="/privacy" className="hover:text-emerald-600 transition">🛡️ គោលការណ៍ឯកជនភាព (Privacy Policy)</Link>
+          <span>•</span>
+          <Link href="/terms" className="hover:text-blue-600 transition">⚖️ លក្ខខណ្ឌប្រើប្រាស់ (Terms of Service)</Link>
+        </div>
+        <p className="text-slate-400 text-[11px] pt-1">
           ទំនាក់ទំនងម្ចាស់ប្រព័ន្ធ៖ <b>sengsoveasna93@gmail.com</b> • 📞 096 720 5522 • Telegram: @Sabay_luk
         </p>
       </footer>

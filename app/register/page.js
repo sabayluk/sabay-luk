@@ -1065,6 +1065,19 @@ function RegisterStoreForm() {
                     : '💳 កញ្ចប់អាជីវកម្ម — តម្រូវឱ្យបង់ប្រាក់ និង Upload បង្កាន់ដៃផ្ទេរប្រាក់ (Slip) ដើម្បីដំណើរការហាង'}
                 </p>
               )}
+
+              {/* Legal Terms & Privacy Consent Notice */}
+              <div className="mt-4 pt-3 border-t border-slate-200/80 text-center text-xs text-slate-500">
+                <span>តាមរយៈការចុះឈ្មោះបង្កើតហាង អ្នកយល់ព្រមតាម </span>
+                <Link href="/terms" target="_blank" className="font-bold text-[#ff6a00] hover:underline">
+                  លក្ខខណ្ឌនៃការប្រើប្រាស់ (Terms)
+                </Link>
+                <span> និង </span>
+                <Link href="/privacy" target="_blank" className="font-bold text-[#ff6a00] hover:underline">
+                  គោលការណ៍ឯកជនភាព (Privacy Policy)
+                </Link>
+                <span> របស់យើងខ្ញុំ។</span>
+              </div>
             </div>
 
           </form>
@@ -1493,8 +1506,17 @@ function RegisterStoreForm() {
       })()}
 
       {/* Footer */}
-      <footer className="px-6 py-6 border-t border-slate-200 bg-white text-center text-xs text-slate-500">
+      <footer className="px-6 py-6 border-t border-slate-200 bg-white text-center text-xs text-slate-500 space-y-2">
         <p>© 2026 Sabay Luk POS Platform — ប្រព័ន្ធគ្រប់គ្រងហាង និងលក់ទំនិញសម្រាប់អាជីវកម្មកម្ពុជា</p>
+        <div className="flex items-center justify-center gap-4 text-[11px] font-bold text-slate-400">
+          <Link href="/" className="hover:text-slate-600 transition">ទំព័រដើម (Home)</Link>
+          <span>•</span>
+          <Link href="/privacy" target="_blank" className="hover:text-[#ff6a00] transition">គោលការណ៍ឯកជនភាព (Privacy Policy)</Link>
+          <span>•</span>
+          <Link href="/terms" target="_blank" className="hover:text-[#ff6a00] transition">លក្ខខណ្ឌប្រើប្រាស់ (Terms)</Link>
+          <span>•</span>
+          <Link href="/faq" target="_blank" className="hover:text-slate-600 transition">សំណួរញឹកញាប់ (FAQ)</Link>
+        </div>
       </footer>
 
     </div>
