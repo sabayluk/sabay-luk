@@ -13974,39 +13974,68 @@ export default function UnifiedAdminDashboard() {
     };
 
     // 💳 Payment Approvals & Rejections
-    const handleApprovePayment = async (paymentId) => {
-    if (guardDemoAction("អនុម័តការបង់ប្រាក់")) return;
-      const payment = allSubscriptionPayments.find(p => p.id === paymentId);
-      if (!payment) return;
-      if (!window.confirm(`តើអ្នកប្រាកដជាចង់ "អនុម័ត" ការបង់ប្រាក់ចំនួន ${payment.amount} សម្រាប់ហាង "${payment.store_name}" មែនទេ?\n\nប្រព័ន្ធនឹងដំឡើងកញ្ចប់ ${payment.plan_name || payment.plan_key} និងបន្តសុពលភាពដោយស្វ័យប្រវត្តិ។`)) return;
+    const handleApprovePayment = async (paymentId, directItem = null) => {
+      if (guardDemoAction("អនុម័តការបង់ប្រាក់")) return;
+      const payment = (allSubscriptionPayments || []).find(p => p.id === paymentId) || directItem || viewingPaymentSlipDetail;
+      const isRegSlip = String(paymentId).startsWith('SUB_REG_');
+      const targetStoreId = payment?.store_id || (isRegSlip ? String(paymentId).replace('SUB_REG_', '') : null);
+      const targetStore = (registeredStores || []).find(s => s.id === targetStoreId || s.slug === targetStoreId);
+      const storeName = payment?.store_name || targetStore?.name || 'ហាង';
+      const planName = payment?.plan_name || targetStore?.plan || 'STARTER';
+      const amount = payment?.amount || '1.00';
 
-      const res = await approveSubscriptionPayment(paymentId);
+      if (!window.confirm(`តើអ្នកប្រាកដជាចង់ "អនុម័ត" ការបង់ប្រាក់ (${planName}) សម្រាប់ហាង "${storeName}" មែនទេ?\n\nប្រព័ន្ធនឹងបើកដំណើរការហាង (Active) និងបន្តសុពលភាពដោយស្វ័យប្រវត្តិ។`)) return;
+
+      setToastNotification(`⏳ កំពុងដំណើរការអនុម័តហាង "${storeName}"...`);
+      const res = await approveSubscriptionPayment(paymentId, 'Master Owner', payment || { store_id: targetStoreId, store_name: storeName, plan_key: targetStore?.plan || 'STARTER', amount });
+      
       if (res && res.success) {
+        if (targetStoreId) {
+          await approveStoreDirectly(targetStoreId);
+        }
+        const freshStores = await fetchAllStores();
+        setRegisteredStores(freshStores);
         setAllSubscriptionPayments(getSubscriptionPayments());
-        setRegisteredStores(getLocalStores());
         const updatedActive = getActiveStore();
         if (updatedActive) {
           setActiveStore(updatedActive);
           setActiveStoreState(updatedActive);
         }
-        setToastNotification(`🎉 បានអនុម័តការបង់ប្រាក់ និងដំឡើងកញ្ចប់ហាង "${payment.store_name}" ជោគជ័យ!`);
+        setToastNotification(`🎉 បានអនុម័តការបង់ប្រាក់ និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
         setTimeout(() => setToastNotification(null), 3500);
+
+        try {
+          fetch('/api/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'store_approved_by_admin',
+              store: targetStore || { id: targetStoreId, name: storeName, plan: planName }
+            })
+          }).catch(() => {});
+        } catch (_) {}
       } else {
-        alert('មានបញ្ហាក្នុងការអនុម័ត! សូមព្យាយាមម្តងទៀត');
+        alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
       }
     };
 
-    const handleRejectPayment = async (paymentId) => {
-    if (guardDemoAction("បដិសេធការបង់ប្រាក់")) return;
-      const payment = allSubscriptionPayments.find(p => p.id === paymentId);
-      if (!payment) return;
-      const reason = window.prompt(`សូមបញ្ជាក់មូលហេតុនៃការបដិសេធ (Reject Reason) សម្រាប់ហាង "${payment.store_name}":`, 'Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់');
+    const handleRejectPayment = async (paymentId, directItem = null) => {
+      if (guardDemoAction("បដិសេធការបង់ប្រាក់")) return;
+      const payment = (allSubscriptionPayments || []).find(p => p.id === paymentId) || directItem || viewingPaymentSlipDetail;
+      const isRegSlip = String(paymentId).startsWith('SUB_REG_');
+      const targetStoreId = payment?.store_id || (isRegSlip ? String(paymentId).replace('SUB_REG_', '') : null);
+      const targetStore = (registeredStores || []).find(s => s.id === targetStoreId || s.slug === targetStoreId);
+      const storeName = payment?.store_name || targetStore?.name || 'ហាង';
+
+      const reason = window.prompt(`សូមបញ្ជាក់មូលហេតុនៃការបដិសេធ (Reject Reason) សម្រាប់ហាង "${storeName}":`, 'Slip មិនត្រឹមត្រូវ ឬមិនទាន់ទទួលបានប្រាក់');
       if (reason === null) return;
 
-      const res = await rejectSubscriptionPayment(paymentId, reason);
+      const res = await rejectSubscriptionPayment(paymentId, reason, payment);
       if (res && res.success) {
+        const freshStores = await fetchAllStores();
+        setRegisteredStores(freshStores);
         setAllSubscriptionPayments(getSubscriptionPayments());
-        setToastNotification(`⚠️ បានបដិសេធការបង់ប្រាក់របស់ហាង "${payment.store_name}"`);
+        setToastNotification(`⚠️ បានបដិសេធការបង់ប្រាក់របស់ហាង "${storeName}"`);
         setTimeout(() => setToastNotification(null), 3000);
       }
     };
@@ -14014,20 +14043,22 @@ export default function UnifiedAdminDashboard() {
     // ⭐️ Handle Direct Store Approval by Admin
     const handleApproveStoreDirectly = async (storeId) => {
       if (guardDemoAction("អនុម័តហាង")) return;
-      const store = (registeredStores || []).find(s => s.id === storeId);
-      if (!store) return;
-      if (!window.confirm(`តើអ្នកពិតជាចង់ "អនុម័ត" (Approve) ហាង "${store.name}" នេះមែនទេ?\n\nហាងនឹងត្រូវបានបើកដំណើរការ (Active) ហើយម្ចាស់ហាងនឹងទទួលបានសិទ្ធិ Login ចូលគ្រប់គ្រងហាងបានភ្លាមៗ!`)) return;
+      const store = (registeredStores || []).find(s => s.id === storeId || s.slug === storeId);
+      const storeName = store?.name || 'ហាង';
+      if (!window.confirm(`តើអ្នកពិតជាចង់ "អនុម័ត" (Approve) ហាង "${storeName}" នេះមែនទេ?\n\nហាងនឹងត្រូវបានបើកដំណើរការ (Active) ហើយម្ចាស់ហាងនឹងទទួលបានសិទ្ធិ Login ចូលគ្រប់គ្រងហាងបានភ្លាមៗ!`)) return;
 
+      setToastNotification(`⏳ កំពុងដំណើរការអនុម័តហាង "${storeName}"...`);
       const res = await approveStoreDirectly(storeId);
       if (res && res.success) {
-        setRegisteredStores(getLocalStores());
+        const freshStores = await fetchAllStores();
+        setRegisteredStores(freshStores);
         setAllSubscriptionPayments(getSubscriptionPayments());
         const updatedActive = getActiveStore();
-        if (updatedActive && updatedActive.id === storeId) {
+        if (updatedActive && (updatedActive.id === storeId || updatedActive.slug === storeId)) {
           setActiveStore(updatedActive);
           setActiveStoreState(updatedActive);
         }
-        setToastNotification(`🎉 បានអនុម័ត និងបើកដំណើរការហាង "${store.name}" ជោគជ័យ!`);
+        setToastNotification(`🎉 បានអនុម័ត និងបើកដំណើរការហាង "${storeName}" ជោគជ័យ!`);
         setTimeout(() => setToastNotification(null), 3500);
 
         // ✈️ ផ្ញើការជូនដំណឹងទៅកាន់ Telegram Super Admin
@@ -14037,12 +14068,12 @@ export default function UnifiedAdminDashboard() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'store_approved_by_admin',
-              store: store
+              store: res.store || store || { id: storeId, name: storeName }
             })
           }).catch(() => {});
         } catch (_) {}
       } else {
-        alert('មានបញ្ហាក្នុងការអនុម័ត! សូមព្យាយាមម្តងទៀត');
+        alert('មានបញ្ហាក្នុងការអនុម័ត: ' + (res?.error || 'សូមព្យាយាមម្តងទៀត'));
       }
     };
 
@@ -15428,7 +15459,7 @@ export default function UnifiedAdminDashboard() {
                                     <>
                                       <button
                                         type="button"
-                                        onClick={() => handleApprovePayment(item.id)}
+                                        onClick={() => handleApprovePayment(item.id, item)}
                                         className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1"
                                         title="យល់ព្រម និងដំឡើងកញ្ចប់សេវាជូនហាងនេះ"
                                       >
@@ -15437,7 +15468,7 @@ export default function UnifiedAdminDashboard() {
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => handleRejectPayment(item.id)}
+                                        onClick={() => handleRejectPayment(item.id, item)}
                                         className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs border border-rose-200 transition cursor-pointer flex items-center gap-1"
                                         title="បដិសេធការបង់ប្រាក់នេះ"
                                       >
@@ -16388,14 +16419,14 @@ export default function UnifiedAdminDashboard() {
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => handleApprovePayment(p.id)}
+                                    onClick={() => handleApprovePayment(p.id, p)}
                                     className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-sm transition active:scale-95 cursor-pointer"
                                   >
                                     ✓ យល់ព្រម
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleRejectPayment(p.id)}
+                                    onClick={() => handleRejectPayment(p.id, p)}
                                     className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs border border-rose-200 transition cursor-pointer"
                                   >
                                     ✕ បដិសេធ
@@ -16675,7 +16706,7 @@ export default function UnifiedAdminDashboard() {
                           <button
                             type="button"
                             onClick={() => {
-                              handleApprovePayment(item.id);
+                              handleApprovePayment(item.id, item);
                               setViewingPaymentSlipDetail(null);
                             }}
                             className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black py-2.5 rounded-xl text-xs shadow-lg shadow-emerald-600/30 transition cursor-pointer flex items-center justify-center gap-1.5"
@@ -16686,7 +16717,7 @@ export default function UnifiedAdminDashboard() {
                           <button
                             type="button"
                             onClick={() => {
-                              handleRejectPayment(item.id);
+                              handleRejectPayment(item.id, item);
                               setViewingPaymentSlipDetail(null);
                             }}
                             className="w-full bg-rose-500/20 hover:bg-rose-600 text-rose-300 hover:text-white font-bold py-2 rounded-xl text-xs border border-rose-500/30 transition cursor-pointer"
