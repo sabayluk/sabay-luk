@@ -1600,6 +1600,64 @@ export default function UnifiedAdminDashboard() {
   // ⭐️ AUTHENTICATION STATES (FULL OPTION LOGIN SYSTEM — 30-DAY PERSISTENT SESSION) ⭐️
   const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000; // 30 ថ្ងៃ (1 ខែ)
 
+  // ⭐️ REMEMBERED ACCOUNTS & GMAIL HISTORY HELPERS (Google Standard Account Chooser) ⭐️
+  const getRememberedAccounts = () => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('sabay_remembered_accounts');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  };
+
+  const saveRememberedAccount = (accData) => {
+    if (typeof window === 'undefined' || !accData || !accData.email) return;
+    try {
+      const emailNorm = (accData.email || '').trim().toLowerCase();
+      if (!emailNorm) return;
+      let accounts = getRememberedAccounts();
+      accounts = accounts.filter(a => (a.email || '').trim().toLowerCase() !== emailNorm);
+      const newAcc = {
+        email: emailNorm,
+        name: accData.name || emailNorm.split('@')[0],
+        storeName: accData.storeName || '',
+        storeSlug: accData.storeSlug || '',
+        logoUrl: accData.logoUrl || '',
+        role: accData.role || 'OWNER',
+        roleLabel: accData.roleLabel || (accData.role === 'MASTER_ADMIN' ? '👑 Master Owner' : accData.role === 'OWNER' ? '🏪 ម្ចាស់ហាង' : '👥 បុគ្គលិក'),
+        avatar: accData.avatar || (emailNorm === 'sengsoveasna93@gmail.com' ? '👑' : '🏪'),
+        lastUsed: Date.now()
+      };
+      accounts.unshift(newAcc);
+      if (accounts.length > 6) accounts = accounts.slice(0, 6);
+      localStorage.setItem('sabay_remembered_accounts', JSON.stringify(accounts));
+      localStorage.setItem('sabay_last_login_email', emailNorm);
+    } catch (_) {}
+  };
+
+  const removeRememberedAccount = (emailToRemove) => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const emailNorm = (emailToRemove || '').trim().toLowerCase();
+      let accounts = getRememberedAccounts();
+      accounts = accounts.filter(a => (a.email || '').trim().toLowerCase() !== emailNorm);
+      localStorage.setItem('sabay_remembered_accounts', JSON.stringify(accounts));
+      if (localStorage.getItem('sabay_last_login_email') === emailNorm) {
+        if (accounts.length > 0) {
+          localStorage.setItem('sabay_last_login_email', accounts[0].email);
+        } else {
+          localStorage.removeItem('sabay_last_login_email');
+        }
+      }
+      return accounts;
+    } catch (_) {
+      return [];
+    }
+  };
+
   const savePersistentAdminSession = (staffObj, storeObj) => {
     if (typeof window === 'undefined') return;
     const expiryTimestamp = Date.now() + ONE_MONTH_MS;
@@ -1618,6 +1676,23 @@ export default function UnifiedAdminDashboard() {
         localStorage.setItem('sabay_active_store_id', storeObj.id);
       } catch (_) {}
     }
+    // Auto-save account identity into remembered accounts list
+    try {
+      const userEmail = (staffObj?.email || storeObj?.owner_email || storeObj?.email || '').trim().toLowerCase();
+      if (userEmail) {
+        saveRememberedAccount({
+          email: userEmail,
+          name: staffObj?.name || storeObj?.name || userEmail.split('@')[0],
+          storeName: storeObj?.name || '',
+          storeSlug: storeObj?.slug || '',
+          logoUrl: storeObj?.settings?.logoUrl || '',
+          role: staffObj?.role || 'OWNER',
+          roleLabel: staffObj?.roleLabel || (staffObj?.role === 'ADMIN' ? (userEmail === 'sengsoveasna93@gmail.com' ? '👑 Master Owner' : '🏪 ម្ចាស់ហាង') : '👥 បុគ្គលិក'),
+          avatar: userEmail === 'sengsoveasna93@gmail.com' ? '👑' : (staffObj?.role === 'ADMIN' ? '🏪' : '👤'),
+          lastUsed: Date.now()
+        });
+      }
+    } catch (_) {}
     // Backup session ក្នុង Cookie សម្រាប់ PWA / Cross-tab
     try {
       document.cookie = `sabay_admin_session=active; max-age=${30 * 24 * 60 * 60}; path=/; SameSite=Lax`;
@@ -1720,6 +1795,13 @@ export default function UnifiedAdminDashboard() {
   });
   const [loginAccountType, setLoginAccountType] = useState('owner'); // 'owner' | 'staff'
   const [loginSelectedStaffMember, setLoginSelectedStaffMember] = useState(null);
+  const [rememberedAccounts, setRememberedAccounts] = useState(() => getRememberedAccounts());
+  const [rememberGmail, setRememberGmail] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sabay_remember_email_enabled') !== 'false';
+    }
+    return true;
+  });
   const [loginGmail, setLoginGmail] = useState(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
@@ -1728,6 +1810,10 @@ export default function UnifiedAdminDashboard() {
         const found = getLocalStores().find(s => s.slug === storeParam || s.id === storeParam);
         if (found && (found.owner_email || found.email)) return found.owner_email || found.email;
       }
+      const lastEmail = localStorage.getItem('sabay_last_login_email');
+      if (lastEmail) return lastEmail;
+      const rec = getRememberedAccounts();
+      if (rec.length > 0) return rec[0].email;
     }
     return '';
   });
@@ -1754,12 +1840,16 @@ export default function UnifiedAdminDashboard() {
     setLoginGmailPassword('');
     setLoginError('');
     setLoginSuccessMsg('');
+    const freshRemembered = getRememberedAccounts();
+    setRememberedAccounts(freshRemembered);
     if (typeof window !== 'undefined') {
       localStorage.setItem('sabay_admin_logged_out', 'true');
       localStorage.removeItem('sabay_admin_authenticated');
       localStorage.removeItem('sabay_admin_session_expires_at');
       localStorage.removeItem('sabay_admin_logged_in_at');
       localStorage.removeItem('sabay_demo_mode');
+      const lastEmail = localStorage.getItem('sabay_last_login_email') || (freshRemembered.length > 0 ? freshRemembered[0].email : '');
+      if (lastEmail) setLoginGmail(lastEmail);
       try {
         document.cookie = 'sabay_admin_session=; max-age=0; path=/;';
       } catch (_) {}
@@ -28092,6 +28182,19 @@ export default function UnifiedAdminDashboard() {
         setLoginAccountType('owner');
         setLoginStep(2);
         setLoginGmailPassword('');
+        if (rememberGmail) {
+          saveRememberedAccount({
+            email: 'sengsoveasna93@gmail.com',
+            name: 'សេង សុវាសនា (Master Owner)',
+            storeName: flagship?.name || 'Sabay Luk Flagship Store',
+            storeSlug: flagship?.slug || 'sabay-luk',
+            logoUrl: flagship?.settings?.logoUrl || '',
+            role: 'MASTER_ADMIN',
+            roleLabel: '👑 Master Owner',
+            avatar: '👑'
+          });
+          setRememberedAccounts(getRememberedAccounts());
+        }
         return true;
       }
 
@@ -28165,6 +28268,19 @@ export default function UnifiedAdminDashboard() {
 
         setLoginStep(2);
         setLoginGmailPassword('');
+        if (rememberGmail) {
+          saveRememberedAccount({
+            email: input,
+            name: selStore.name,
+            storeName: selStore.name,
+            storeSlug: selStore.slug,
+            logoUrl: selStore.settings?.logoUrl || '',
+            role: isOwner ? 'OWNER' : 'STAFF',
+            roleLabel: isOwner ? '🏪 ម្ចាស់ហាង' : '👥 បុគ្គលិក',
+            avatar: isOwner ? '🏪' : '👤'
+          });
+          setRememberedAccounts(getRememberedAccounts());
+        }
         return true;
       }
 
@@ -28467,6 +28583,107 @@ export default function UnifiedAdminDashboard() {
                 {/* ⭐️ STEP 1: LOOKUP STORE BY GMAIL / STORE IDENTIFIER ⭐️ */}
                 {loginStep === 1 && (
                   <div className="space-y-4 animate-in fade-in">
+                    {/* 👤 RECENT / REMEMBERED ACCOUNTS (Google Standard Account Chooser) */}
+                    {rememberedAccounts && rememberedAccounts.length > 0 && (
+                      <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 shadow-2xs">
+                        <div className="flex items-center justify-between mb-2 px-1">
+                          <span className="text-[11px] font-extrabold text-slate-600 flex items-center gap-1.5 uppercase tracking-wider">
+                            <span>👤</span>
+                            <span>គណនីធ្លាប់ Login ថ្មីៗ ({rememberedAccounts.length})</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm('តើអ្នកពិតជាចង់លុបប្រវត្តិ Gmail ទាំងអស់ចេញពីឧបករណ៍នេះមែនទេ?')) {
+                                try {
+                                  localStorage.removeItem('sabay_remembered_accounts');
+                                  localStorage.removeItem('sabay_last_login_email');
+                                } catch (_) {}
+                                setRememberedAccounts([]);
+                                setLoginGmail('');
+                              }
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-rose-500 font-bold transition cursor-pointer"
+                          >
+                            សម្អាតទាំងអស់
+                          </button>
+                        </div>
+
+                        <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
+                          {rememberedAccounts.map((acc, idx) => (
+                            <div
+                              key={acc.email + idx}
+                              onClick={() => {
+                                setLoginGmail(acc.email);
+                                handleLookupGmailStores(acc.email);
+                              }}
+                              className="group flex items-center justify-between p-2.5 bg-white hover:bg-blue-50/70 border border-slate-200 hover:border-blue-400 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-99"
+                              title={`ចុចដើម្បី Login ចូលហាង ${acc.storeName || acc.name}`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs shrink-0 overflow-hidden">
+                                  {acc.logoUrl ? (
+                                    <img src={acc.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span>{acc.avatar || '🏪'}</span>
+                                  )}
+                                </div>
+                                <div className="min-w-0 text-left">
+                                  <div className="flex items-center gap-1.5">
+                                    <h5 className="text-xs font-black text-slate-800 group-hover:text-blue-600 transition truncate">
+                                      {acc.storeName || acc.name}
+                                    </h5>
+                                    {acc.roleLabel && (
+                                      <span className={`text-[9px] px-1.5 py-0.2 rounded-md font-bold shrink-0 ${
+                                        acc.role === 'MASTER_ADMIN'
+                                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                                          : acc.role === 'OWNER'
+                                          ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                          : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                      }`}>
+                                        {acc.roleLabel}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 font-mono truncate">
+                                    {acc.email}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                <span className="text-blue-600 font-bold text-xs group-hover:translate-x-0.5 transition hidden sm:inline-block">
+                                  ចូល ›
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const updated = removeRememberedAccount(acc.email);
+                                    setRememberedAccounts(updated);
+                                    if (loginGmail.toLowerCase() === acc.email.toLowerCase()) {
+                                      setLoginGmail(updated.length > 0 ? updated[0].email : '');
+                                    }
+                                  }}
+                                  className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer text-xs font-bold"
+                                  title="លុបគណនីនេះចេញពីបញ្ជីចងចាំ"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="relative my-3 text-center">
+                          <div className="border-t border-slate-200"></div>
+                          <span className="bg-slate-50 px-2.5 text-[10px] font-bold text-slate-400 relative -top-2">
+                            ឬ វាយបញ្ចូល Gmail ផ្សេងទៀត
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <label className="text-xs font-bold text-slate-700 block mb-1.5">
                         អាសយដ្ឋាន Gmail ឬ Email របស់ហាង <span className="text-blue-600">*</span>
@@ -28478,12 +28695,52 @@ export default function UnifiedAdminDashboard() {
                           value={loginGmail}
                           onChange={(e) => setLoginGmail(e.target.value)}
                           placeholder="ឧ. yourstore@gmail.com ឬ ឈ្មោះហាង"
-                          className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl pl-10 pr-4 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition"
+                          className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl pl-10 pr-9 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition"
                           required
-                          autoFocus
+                          list="remembered-emails-list"
+                          autoFocus={!rememberedAccounts || rememberedAccounts.length === 0}
                         />
+                        {loginGmail && (
+                          <button
+                            type="button"
+                            onClick={() => setLoginGmail('')}
+                            className="absolute right-3 top-3 w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full text-xs font-bold transition cursor-pointer"
+                            title="សម្អាត"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-1.5 font-medium flex items-center gap-1">
+
+                      <datalist id="remembered-emails-list">
+                        {rememberedAccounts && rememberedAccounts.map((acc, i) => (
+                          <option key={acc.email + i} value={acc.email}>
+                            {acc.storeName ? `${acc.storeName} (${acc.roleLabel || ''})` : acc.name}
+                          </option>
+                        ))}
+                      </datalist>
+
+                      {/* Remember Gmail Checkbox */}
+                      <div className="flex items-center justify-between mt-2 px-0.5">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={rememberGmail}
+                            onChange={(e) => {
+                              setRememberGmail(e.target.checked);
+                              try {
+                                localStorage.setItem('sabay_remember_email_enabled', e.target.checked.toString());
+                              } catch (_) {}
+                            }}
+                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer accent-blue-600"
+                          />
+                          <span className="text-[11px] font-bold text-slate-600">
+                            ចងចាំ Gmail នេះលើឧបករណ៍នេះ (Remember account)
+                          </span>
+                        </label>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 mt-2 font-medium flex items-center gap-1">
                         <span>💡</span>
                         <span>បញ្ចូល Gmail ដែលបានចុះឈ្មោះហាង ដើម្បីស្វែងរកហាងរបស់អ្នក</span>
                       </p>
@@ -28492,10 +28749,19 @@ export default function UnifiedAdminDashboard() {
                     <button
                       type="submit"
                       disabled={isLoggingIn}
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
                     >
-                      <span>🔍</span>
-                      <span>ស្វែងរកហាងរបស់ខ្ញុំ (Find Store)</span>
+                      {isLoggingIn ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>កំពុងស្វែងរកហាង...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🔍</span>
+                          <span>ស្វែងរកហាងរបស់ខ្ញុំ (Find Store)</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 )}
