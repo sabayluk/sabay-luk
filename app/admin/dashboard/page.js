@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase, normalizeEnableTax } from '../../../supabase';
-import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, fetchAllStores, deleteStoreRecord, STORE_PLANS, checkStorePlanLimit, getStorePlanExpiryInfo, renewStoreSubscription, getSubscriptionPayments, saveSubscriptionPayments, submitSubscriptionPayment, approveSubscriptionPayment, rejectSubscriptionPayment, approveStoreDirectly, isStoreNameOrSlugTaken, getStoreInactivityDays, isStoreInactive, updateStoreActivity, suspendStore, reactivateStore } from '../../../lib/stores';
+import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, fetchAllStores, deleteStoreRecord, STORE_PLANS, checkStorePlanLimit, getStorePlanExpiryInfo, renewStoreSubscription, updateStorePlanExpiryDate, getSubscriptionPayments, saveSubscriptionPayments, submitSubscriptionPayment, approveSubscriptionPayment, rejectSubscriptionPayment, approveStoreDirectly, isStoreNameOrSlugTaken, getStoreInactivityDays, isStoreInactive, updateStoreActivity, suspendStore, reactivateStore } from '../../../lib/stores';
 import { sendStorePlanExpiryTelegramAlert, sendAllExpiringStoresTelegramAlerts, filterExpiringStores } from '../../../lib/planExpiryAlertEngine';
 import * as XLSX from 'xlsx';
 import { CATEGORY_DEPARTMENTS, CATEGORY_ICONS_LIST, renderCategorySvg } from '../../../lib/categoryIcons';
@@ -5813,6 +5813,26 @@ export default function UnifiedAdminDashboard() {
   const [renewPasswordError, setRenewPasswordError] = useState('');
   const [showRenewPassword, setShowRenewPassword] = useState(false);
   const [isRenewingStore, setIsRenewingStore] = useState(false);
+
+  // ⭐️ States សម្រាប់កែប្រែកាលបរិច្ឆេទផុតកំណត់នៃកញ្ចប់ហាងដោយផ្ទាល់ (MANUAL STORE EXPIRY DATE EDIT) ⭐️
+  const [editExpiryStore, setEditExpiryStore] = useState(null);
+  const [editExpiryDateInput, setEditExpiryDateInput] = useState('');
+  const [editExpiryError, setEditExpiryError] = useState('');
+  const [isSavingExpiry, setIsSavingExpiry] = useState(false);
+
+  // ⭐️ States សម្រាប់កែប្រែចំណូលប្រចាំខែពីកញ្ចប់ (CUSTOM SAAS MRR OVERRIDE) ⭐️
+  const [customMrrOverride, setCustomMrrOverride] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_custom_saas_mrr');
+      if (saved !== null && saved !== '') {
+        const num = parseFloat(saved);
+        if (!isNaN(num)) return num;
+      }
+    }
+    return null;
+  });
+  const [mrrModalOpen, setMrrModalOpen] = useState(false);
+  const [mrrInput, setMrrInput] = useState('');
 
   // Manual payment submission modal
   const [manualPaymentModalOpen, setManualPaymentModalOpen] = useState(false);
@@ -15399,12 +15419,14 @@ export default function UnifiedAdminDashboard() {
     const expiringStores = filterExpiringStores(registeredStores);
     const expiringCount = expiringStores.length;
 
-    // Monthly Recurring Revenue (MRR)
-    const estimatedMRR = registeredStores.reduce((sum, s) => {
+    // Monthly Recurring Revenue (MRR) - Auto calculated & customizable
+    const autoCalculatedMRR = registeredStores.reduce((sum, s) => {
       if (s.status === 'SUSPENDED') return sum;
-      const planInfo = STORE_PLANS[s.plan] || STORE_PLANS.FREE;
+      const planKey = (s.plan || s.settings?.plan || 'FREE').toUpperCase();
+      const planInfo = STORE_PLANS[planKey] || STORE_PLANS.FREE;
       return sum + (planInfo.price || 0);
     }, 0);
+    const estimatedMRR = customMrrOverride !== null ? customMrrOverride : autoCalculatedMRR;
 
     // Toggle store active/suspended
     const handleToggleStoreStatus = (targetStore) => {
@@ -16044,10 +16066,29 @@ export default function UnifiedAdminDashboard() {
             <span className="text-[10px] text-amber-600/70 block">ទំនិញក្រោម ១៥ មុខ</span>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 rounded-2xl border border-slate-700 shadow-sm space-y-1">
-            <span className="text-[10px] font-black text-orange-400 uppercase tracking-wider block">💰 ចំណូល SaaS MRR</span>
-            <span className="text-2xl font-black text-white">${estimatedMRR.toFixed(2)}</span>
-            <span className="text-[10px] text-slate-400 block">ចំណូលប្រចាំខែពីកញ្ចប់</span>
+          <div 
+            onClick={() => {
+              setMrrInput(customMrrOverride !== null ? String(customMrrOverride) : estimatedMRR.toFixed(2));
+              setMrrModalOpen(true);
+            }}
+            role="button"
+            tabIndex={0}
+            className="group relative bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 rounded-2xl border border-slate-700 hover:border-orange-500/60 shadow-sm space-y-1 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
+            title="ចុចដើម្បីកំណត់/កែប្រែចំណូលប្រចាំខែពីកញ្ចប់តាមចិត្ត ឬត្រឡប់ទៅគិតស្វ័យប្រវត្តិ"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-orange-400 uppercase tracking-wider block">💰 ចំណូល SaaS MRR</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-white/10 group-hover:bg-orange-500/20 text-orange-300 font-bold border border-white/10 group-hover:border-orange-500/40 transition">
+                {customMrrOverride !== null ? '✏️ កំណត់ផ្ទាល់' : '✏️ កែប្រែ'}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-black text-white">${estimatedMRR.toFixed(2)}</span>
+              {customMrrOverride !== null && (
+                <span className="text-[9px] text-orange-300 font-semibold font-mono">(Custom)</span>
+              )}
+            </div>
+            <span className="text-[10px] text-slate-400 block">ចំណូលប្រចាំខែពីកញ្ចប់ • ចុចកែប្រែ</span>
           </div>
 
         </div>
@@ -16386,8 +16427,29 @@ export default function UnifiedAdminDashboard() {
                                     />
                                   </div>
 
-                                  <div className="text-[9px] text-slate-400 font-mono">
-                                    📅 ផុត៖ {expiry.formattedExpiry}
+                                  <div className="flex items-center gap-1.5 text-[9px] font-mono">
+                                    <span className="text-slate-400">📅 ផុត៖ {expiry.formattedExpiry}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditExpiryStore(st);
+                                        let init = '';
+                                        if (st.plan_expires_at) {
+                                          try {
+                                            init = new Date(st.plan_expires_at).toISOString().slice(0, 10);
+                                          } catch (_) {}
+                                        }
+                                        if (!init) {
+                                          init = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+                                        }
+                                        setEditExpiryDateInput(init);
+                                        setEditExpiryError('');
+                                      }}
+                                      className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-bold cursor-pointer inline-flex items-center gap-0.5 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200"
+                                      title="កែប្រែថ្ងៃខែឆ្នាំផុតកំណត់ផ្ទាល់"
+                                    >
+                                      <span>✏️</span> កែថ្ងៃផុត
+                                    </button>
                                   </div>
 
                                   {/* Quick Actions & Direct Telegram Alert */}
@@ -17997,6 +18059,331 @@ export default function UnifiedAdminDashboard() {
                         </>
                       )}
                     </button>
+                  </div>
+                </form>
+
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ========================================================================= */}
+        {/* 📅 MODAL: កែប្រែថ្ងៃខែឆ្នាំផុតកំណត់នៃកញ្ចប់ហាង (EDIT STORE PLAN EXPIRY DATE) 📅 */}
+        {/* ========================================================================= */}
+        {editExpiryStore && (() => {
+          const st = editExpiryStore;
+          const currentExp = getStorePlanExpiryInfo(st);
+
+          let newDaysLeft = null;
+          if (editExpiryDateInput) {
+            try {
+              const target = new Date(editExpiryDateInput + 'T23:59:59.000Z');
+              const diffMs = target.getTime() - Date.now();
+              newDaysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+            } catch (_) {}
+          }
+
+          const handleSaveExpiry = async (e) => {
+            if (e) e.preventDefault();
+            if (!editExpiryDateInput) {
+              setEditExpiryError('សូមជ្រើសរើសថ្ងៃខែឆ្នាំផុតកំណត់!');
+              return;
+            }
+            setIsSavingExpiry(true);
+            try {
+              const iso = new Date(editExpiryDateInput + 'T23:59:59.000Z').toISOString();
+              const res = await updateStorePlanExpiryDate(st.id, iso);
+              if (res.success) {
+                setRegisteredStores(getLocalStores());
+                setToastNotification(`✅ បានកែប្រែថ្ងៃផុតកំណត់នៃហាង "${st.name}" ទៅជា ${editExpiryDateInput} ជោគជ័យ!`);
+                setTimeout(() => setToastNotification(null), 3500);
+                setEditExpiryStore(null);
+              } else {
+                setEditExpiryError(res.error || 'មិនអាចកែប្រែបានទេ');
+              }
+            } catch (err) {
+              setEditExpiryError('❌ បរាជ័យ: ' + err.message);
+            } finally {
+              setIsSavingExpiry(false);
+            }
+          };
+
+          return (
+            <div 
+              onClick={() => !isSavingExpiry && setEditExpiryStore(null)}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 space-y-4"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-black shrink-0">
+                      📅
+                    </span>
+                    <div>
+                      <h3 className="font-black text-sm text-slate-900 leading-tight">
+                        កែប្រែថ្ងៃខែឆ្នាំផុតកំណត់នៃកញ្ចប់ហាង
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        ហាង "{st.name}" ({st.slug})
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isSavingExpiry}
+                    onClick={() => setEditExpiryStore(null)}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-xs transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Current Expiry Info Card */}
+                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80 text-xs space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-bold">កាលបរិច្ឆេទផុតបច្ចុប្បន្ន:</span>
+                    <span className="font-mono font-black text-slate-900">
+                      {currentExp.formattedExpiry}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-bold">ស្ថានភាពបច្ចុប្បន្ន:</span>
+                    <span className="font-bold text-slate-800">
+                      សល់ {Math.max(0, currentExp.daysLeft)} ថ្ងៃ
+                    </span>
+                  </div>
+                </div>
+
+                {/* Date Picker Form */}
+                <form onSubmit={handleSaveExpiry} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1.5">
+                      ជ្រើសរើសថ្ងៃខែឆ្នាំផុតកំណត់ថ្មី (New Expiry Date) *
+                    </label>
+                    <input 
+                      type="date"
+                      value={editExpiryDateInput}
+                      onChange={(e) => {
+                        setEditExpiryDateInput(e.target.value);
+                        if (editExpiryError) setEditExpiryError('');
+                      }}
+                      className="w-full bg-white border-2 border-slate-200 focus:border-blue-500 rounded-2xl px-4 py-2.5 text-xs font-black text-slate-900 outline-none shadow-2xs cursor-pointer"
+                    />
+
+                    {/* Real-time Calculation Badge */}
+                    {newDaysLeft !== null && (
+                      <p className="text-[11px] font-bold mt-1.5 flex items-center gap-1.5 text-blue-700">
+                        <span>⏳</span>
+                        <span>នឹងសល់សុពលភាពចំនួន: <b>{newDaysLeft} ថ្ងៃ</b> {newDaysLeft <= 0 ? '(ផុតកំណត់)' : ''}</span>
+                      </p>
+                    )}
+
+                    {editExpiryError && (
+                      <p className="text-[11px] text-rose-600 font-bold mt-1.5">
+                        ⚠️ {editExpiryError}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">
+                      ប៊ូតុងកំណត់រហ័ស (Quick Presets):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: '+១ ខែ (30 ថ្ងៃ)', days: 30 },
+                        { label: '+៣ ខែ (90 ថ្ងៃ)', days: 90 },
+                        { label: '+៦ ខែ (180 ថ្ងៃ)', days: 180 },
+                        { label: '+១ ឆ្នាំ (365 ថ្ងៃ)', days: 365 },
+                        { label: 'ត្រឹមដំណាច់ឆ្នាំ ២០២៦', customDate: '2026-12-31' },
+                        { label: 'ត្រឹមដំណាច់ឆ្នាំ ២០២៧', customDate: '2027-12-31' },
+                        { label: 'ផុតកំណត់ថ្ងៃនេះ', days: 0 }
+                      ].map((preset, pIdx) => (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          onClick={() => {
+                            let dStr = '';
+                            if (preset.customDate) {
+                              dStr = preset.customDate;
+                            } else {
+                              const d = new Date(Date.now() + preset.days * 24 * 60 * 60 * 1000);
+                              dStr = d.toISOString().slice(0, 10);
+                            }
+                            setEditExpiryDateInput(dStr);
+                            if (editExpiryError) setEditExpiryError('');
+                          }}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-xl border border-slate-200 transition cursor-pointer active:scale-95"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      disabled={isSavingExpiry}
+                      onClick={() => setEditExpiryStore(null)}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-2xl font-bold text-xs transition cursor-pointer"
+                    >
+                      បោះបង់
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingExpiry || !editExpiryDateInput}
+                      className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-2.5 rounded-2xl font-black text-xs transition shadow-md shadow-blue-500/20 active:scale-95 cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingExpiry ? 'កំពុងរក្សាទុក...' : '💾 រក្សាទុកថ្ងៃផុតកំណត់'}
+                    </button>
+                  </div>
+                </form>
+
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ========================================================================= */}
+        {/* 💰 MODAL: កែប្រែចំណូលប្រចាំខែពីកញ្ចប់ SAAS MRR (CUSTOM SAAS MRR OVERRIDE) 💰 */}
+        {/* ========================================================================= */}
+        {mrrModalOpen && (() => {
+          const handleSaveMrr = (e) => {
+            if (e) e.preventDefault();
+            const val = parseFloat(mrrInput);
+            if (isNaN(val) || val < 0) {
+              alert('សូមបញ្ចូលចំនួនទឹកប្រាក់ត្រឹមត្រូវ!');
+              return;
+            }
+            setCustomMrrOverride(val);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('sabay_custom_saas_mrr', val.toString());
+            }
+            setToastNotification(`✅ បានកែប្រែចំណូលប្រចាំខែ SaaS MRR ទៅជា ${val.toFixed(2)} ជោគជ័យ!`);
+            setTimeout(() => setToastNotification(null), 3000);
+            setMrrModalOpen(false);
+          };
+
+          const handleResetToAuto = () => {
+            setCustomMrrOverride(null);
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('sabay_custom_saas_mrr');
+            }
+            setToastNotification(`🔄 បានប្តូរទៅប្រើតម្លៃគណនាស្វ័យប្រវត្តិតាមហាងពិត (${autoCalculatedMRR.toFixed(2)}) វិញជោគជ័យ!`);
+            setTimeout(() => setToastNotification(null), 3000);
+            setMrrModalOpen(false);
+          };
+
+          return (
+            <div 
+              onClick={() => setMrrModalOpen(false)}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+            >
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-3xl max-w-sm sm:max-w-md w-full p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 space-y-4"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-9 h-9 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
+                      💰
+                    </span>
+                    <div>
+                      <h3 className="font-black text-sm text-slate-900 leading-tight">
+                        កែប្រែចំណូលប្រចាំខែពីកញ្ចប់ (SaaS MRR)
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Monthly Recurring Revenue Settings
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMrrModalOpen(false)}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-xs transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Auto Calculation Preview */}
+                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80 text-xs space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-bold">គណនាស្វ័យប្រវត្តិតាមហាងពិត:</span>
+                    <span className="font-mono font-black text-emerald-600 text-sm">
+                      ${autoCalculatedMRR.toFixed(2)} /ខែ
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    បូកសរុបចេញពីតម្លៃកញ្ចប់របស់ហាងសកម្មទាំងអស់ដែលមានក្នុងប្រព័ន្ធ
+                  </p>
+                </div>
+
+                {/* Input Form */}
+                <form onSubmit={handleSaveMrr} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1.5">
+                      កំណត់ចំនួនទឹកប្រាក់ចំណូលប្រចាំខែផ្ទាល់ ($ USD) *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-black text-sm">$</span>
+                      <input 
+                        type="number"
+                        step="0.01"
+                        autoFocus
+                        value={mrrInput}
+                        onChange={(e) => setMrrInput(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-white border-2 border-slate-200 focus:border-orange-500 rounded-2xl pl-8 pr-4 py-2.5 text-sm font-black text-slate-900 outline-none shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Preset Values */}
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase">
+                      តម្លៃរហ័ស (Quick Presets):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[13, 20, 35, 50, 100, 200, 500].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setMrrInput(val.toString())}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold px-2.5 py-1 rounded-xl border border-slate-200 transition cursor-pointer active:scale-95 font-mono"
+                        >
+                          ${val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="submit"
+                      className="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white py-2.5 rounded-2xl font-black text-xs transition shadow-md shadow-orange-500/25 active:scale-95 cursor-pointer"
+                    >
+                      💾 រក្សាទុកចំនួនទឹកប្រាក់
+                    </button>
+
+                    {customMrrOverride !== null && (
+                      <button
+                        type="button"
+                        onClick={handleResetToAuto}
+                        className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-2xl font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        <span>🔄</span> ត្រឡប់ទៅប្រើតម្លៃ Auto វិញ (${autoCalculatedMRR.toFixed(2)})
+                      </button>
+                    )}
                   </div>
                 </form>
 
