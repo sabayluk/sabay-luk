@@ -29002,6 +29002,21 @@ export default function UnifiedAdminDashboard() {
               </span>
               <span className="text-xs text-orange-400 group-hover:translate-x-0.5 transition-transform">↗</span>
             </button>
+
+            {/* 🛡️ Legal & FAQs Quick Links */}
+            <div className="pt-2.5 mt-2 border-t border-slate-800/80 flex items-center justify-center gap-2 text-[10px] font-bold text-slate-400">
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition flex items-center gap-0.5">
+                <span>🛡️</span> <span>Privacy</span>
+              </a>
+              <span>•</span>
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition flex items-center gap-0.5">
+                <span>⚖️</span> <span>Terms</span>
+              </a>
+              <span>•</span>
+              <a href="/faq" target="_blank" rel="noopener noreferrer" className="hover:text-orange-400 transition flex items-center gap-0.5">
+                <span>💡</span> <span>FAQs</span>
+              </a>
+            </div>
           </div>
         </nav>
       </aside>

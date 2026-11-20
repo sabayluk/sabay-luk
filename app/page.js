@@ -168,7 +168,7 @@ export default function SaaSPlatformLandingPage() {
           </Link>
 
           {/* Desktop Nav Links */}
-          <nav className="hidden lg:flex items-center gap-8 text-sm font-bold text-slate-600">
+          <nav className="hidden lg:flex items-center gap-6 text-sm font-bold text-slate-600">
             <a href="#partner-stores" className="hover:text-orange-600 transition flex items-center gap-1.5 text-slate-800">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -179,8 +179,16 @@ export default function SaaSPlatformLandingPage() {
             <a href="#features" className="hover:text-orange-600 transition">{t.nav_features}</a>
             <a href="#solutions" className="hover:text-orange-600 transition">{t.nav_solutions}</a>
             <a href="#pricing" className="hover:text-orange-600 transition">{t.nav_pricing}</a>
-            <a href="#how-it-works" className="hover:text-orange-600 transition">{t.nav_how_it_works}</a>
-            <a href="#faq" className="hover:text-orange-600 transition">{t.nav_faq}</a>
+            <Link href="/faq" className="hover:text-orange-600 transition flex items-center gap-1 text-orange-600">
+              <span>💡</span>
+              <span>{t.nav_faq || 'សំណួរញឹកញាប់'}</span>
+            </Link>
+            <Link href="/privacy" className="hover:text-emerald-600 transition">
+              {lang === 'km' ? 'ឯកជនភាព' : 'Privacy'}
+            </Link>
+            <Link href="/terms" className="hover:text-blue-600 transition">
+              {lang === 'km' ? 'លក្ខខណ្ឌ' : 'Terms'}
+            </Link>
           </nav>
 
           {/* Action CTAs & Language Switcher */}
@@ -280,13 +288,30 @@ export default function SaaSPlatformLandingPage() {
               >
                 {t.nav_how_it_works}
               </a>
-              <a 
-                href="#faq" 
+              <Link 
+                href="/faq" 
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="px-3 py-2.5 rounded-xl hover:bg-orange-50 hover:text-orange-600 transition"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-orange-50 text-orange-600 font-bold transition"
               >
-                {t.nav_faq}
-              </a>
+                <span>💡</span>
+                <span>{lang === 'km' ? 'មជ្ឈមណ្ឌលសំណួរញឹកញាប់ (FAQs Hub)' : 'Interactive FAQs Hub'}</span>
+              </Link>
+              <Link 
+                href="/privacy" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-emerald-50 text-emerald-700 font-bold transition"
+              >
+                <span>🛡️</span>
+                <span>{lang === 'km' ? 'គោលការណ៍ឯកជនភាព (Privacy Policy) — ច្បាប់ ១០០%' : 'Privacy Policy'}</span>
+              </Link>
+              <Link 
+                href="/terms" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-blue-50 text-blue-700 font-bold transition"
+              >
+                <span>⚖️</span>
+                <span>{lang === 'km' ? 'លក្ខខណ្ឌប្រើប្រាស់សេវាកម្ម (Terms of Service)' : 'Terms of Service'}</span>
+              </Link>
             </nav>
             <div className="pt-2.5 border-t border-slate-100 flex flex-col gap-2">
               <Link

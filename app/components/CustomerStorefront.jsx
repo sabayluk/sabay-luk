@@ -2633,6 +2633,20 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               <span className="hidden sm:inline">{t('trackOrder', 'តាមដានការកុម្ម៉ង់')}</span>
             </button>
 
+            {/* 💡 ប៊ូតុង សំណួរញឹកញាប់ & ជំនួយ (FAQ & Help Hub) */}
+            <Link
+              href="/faq"
+              className={`cursor-pointer hidden lg:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl transition text-xs font-bold border shadow-2xs ${
+                themeMode === 'dark'
+                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
+                  : 'bg-amber-50/70 hover:bg-amber-100/80 text-amber-800 border-amber-200/80 hover:text-[#ff6a00]'
+              }`}
+              title="មជ្ឈមណ្ឌលសំណួរញឹកញាប់ និងជំនួយ (FAQs Hub)"
+            >
+              <span className="text-sm">💡</span>
+              <span>FAQ / ជំនួយ</span>
+            </Link>
+
             {/* 🔑 ប៊ូតុង ចូលគ្រប់គ្រងហាង (Store Admin Login) */}
             <a 
               href="/login"
@@ -5928,20 +5942,54 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
           <div>
             <h4 className="font-black text-gray-900 mb-3 text-xs uppercase tracking-wider">សេវាកម្ម និងជំនួយ</h4>
             <ul className="space-y-2 text-xs">
-              <li onClick={() => setTrackModalOpen(true)} className="hover:text-[#ff6a00] cursor-pointer">🔍 តាមដានការកុម្ម៉ង់</li>
-              <li className="hover:text-[#ff6a00] cursor-pointer">🔄 គោលការណ៍ប្តូរទំនិញក្នុង ៧ ថ្ងៃ</li>
-              <li className="hover:text-[#ff6a00] cursor-pointer">🚚 ព័ត៌មានដឹកជញ្ជូន ២៥ ខេត្ត/ក្រុង</li>
-              <li className="hover:text-[#ff6a00] cursor-pointer">❓ សំណួរដែលសួរញឹកញាប់ (FAQ)</li>
+              <li onClick={() => setTrackModalOpen(true)} className="hover:text-[#ff6a00] cursor-pointer flex items-center gap-1.5 transition">
+                <span>🔍</span>
+                <span>តាមដានការកុម្ម៉ង់ (Track Order)</span>
+              </li>
+              <li>
+                <Link href="/faq" className="hover:text-[#ff6a00] flex items-center gap-1.5 text-orange-600 font-bold transition">
+                  <span>💡</span>
+                  <span>មជ្ឈមណ្ឌលសំណួរញឹកញាប់ (FAQs Hub)</span>
+                </Link>
+              </li>
+              <li className="hover:text-[#ff6a00] cursor-pointer flex items-center gap-1.5 transition">
+                <span>🔄</span>
+                <span>គោលការណ៍ប្តូរទំនិញក្នុង ៧ ថ្ងៃ</span>
+              </li>
+              <li className="hover:text-[#ff6a00] cursor-pointer flex items-center gap-1.5 transition">
+                <span>🚚</span>
+                <span>ព័ត៌មានដឹកជញ្ជូន ២៥ ខេត្ត/ក្រុង</span>
+              </li>
             </ul>
           </div>
 
           <div>
-            <h4 className="font-black text-gray-900 mb-3 text-xs uppercase tracking-wider">អំពីហាង {storeSettings.storeName || 'Sabay Luk'}</h4>
+            <h4 className="font-black text-gray-900 mb-3 text-xs uppercase tracking-wider">ច្បាប់ និងទំនុកចិត្ត (Legal & Trust)</h4>
             <ul className="space-y-2 text-xs">
-              <li className="hover:text-[#ff6a00] cursor-pointer">អំពីយើង (About Us)</li>
-              <li className="hover:text-[#ff6a00] cursor-pointer">ការធានាគុណភាព ១០០%</li>
-              <li className="hover:text-[#ff6a00] cursor-pointer">ទំនាក់ទំនងមកកាន់ហាង</li>
-              <li className="hover:text-[#ff6a00] cursor-pointer">លក្ខខណ្ឌប្រើប្រាស់</li>
+              <li>
+                <Link href="/privacy" className="hover:text-[#ff6a00] flex items-center gap-1.5 font-bold text-emerald-700 transition">
+                  <span>🛡️</span>
+                  <span>គោលការណ៍ឯកជនភាព (Privacy Policy) — ច្បាប់ ១០០%</span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms" className="hover:text-[#ff6a00] flex items-center gap-1.5 font-bold text-blue-700 transition">
+                  <span>⚖️</span>
+                  <span>លក្ខខណ្ឌប្រើប្រាស់សេវាកម្ម (Terms of Service)</span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/faq" className="hover:text-[#ff6a00] flex items-center gap-1.5 text-gray-600 hover:text-orange-600 transition">
+                  <span>❓</span>
+                  <span>សុវត្ថិភាពការទូទាត់ KHQR & ការពារទិន្នន័យ</span>
+                </Link>
+              </li>
+              <li>
+                <Link href="/login" className="hover:text-[#ff6a00] flex items-center gap-1.5 text-gray-600 hover:text-orange-600 transition">
+                  <span>🔑</span>
+                  <span>ផ្ទាំងគ្រប់គ្រងហាង (Store Admin Login)</span>
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -5973,8 +6021,23 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
           </div>
         </div>
 
-        <div className="border-t border-gray-100 py-6 text-center text-xs text-gray-400">
-          © 2026 {storeSettings.storeName || 'Sabay Luk'}. រក្សាសិទ្ធិគ្រប់យ៉ាង។ ផលិតឡើងដោយបច្ចេកវិទ្យា Next.js & Supabase។
+        <div className="border-t border-gray-100 py-6 px-4 max-w-[1440px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
+          <div>
+            © {new Date().getFullYear()} {storeSettings.storeName || 'Sabay Luk'}. រក្សាសិទ្ធិគ្រប់យ៉ាងស្របតាមច្បាប់នៃព្រះរាជាណាចក្រកម្ពុជា។
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3.5 text-xs font-bold">
+            <Link href="/privacy" className="text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 transition">
+              <span>🛡️</span> <span>គោលការណ៍ឯកជនភាព (Privacy Policy)</span>
+            </Link>
+            <span className="text-gray-300">•</span>
+            <Link href="/terms" className="text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 transition">
+              <span>⚖️</span> <span>លក្ខខណ្ឌប្រើប្រាស់ (Terms of Service)</span>
+            </Link>
+            <span className="text-gray-300">•</span>
+            <Link href="/faq" className="text-orange-600 hover:text-orange-700 hover:underline flex items-center gap-1 transition">
+              <span>💡</span> <span>សំណួរញឹកញាប់ (FAQs Hub)</span>
+            </Link>
+          </div>
         </div>
       </footer>
 
