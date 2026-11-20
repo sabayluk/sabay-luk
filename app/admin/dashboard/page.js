@@ -2576,6 +2576,17 @@ export default function UnifiedAdminDashboard() {
   const [ordersViewMode, setOrdersViewMode] = useState('sales'); // 'sales' | 'stock_in'
   const [showOrderItemsBreakdown, setShowOrderItemsBreakdown] = useState(true);
 
+  // ⭐️ STATES សម្រាប់ប្រព័ន្ធ REFUND & RETURN ទំនិញស្វ័យប្រវត្តិ (WORLD-STANDARD RETURN & REFUND SYSTEM) ⭐️
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundOrder, setRefundOrder] = useState(null);
+  const [refundItemsState, setRefundItemsState] = useState([]);
+  const [refundReason, setRefundReason] = useState('WRONG_SIZE');
+  const [refundCustomReason, setRefundCustomReason] = useState('');
+  const [refundMethod, setRefundMethod] = useState('CASH'); // 'CASH' | 'BANK' | 'STORE_CREDIT'
+  const [refundCustomAmount, setRefundCustomAmount] = useState('');
+  const [refundProcessing, setRefundProcessing] = useState(false);
+  const [creditNoteData, setCreditNoteData] = useState(null);
+
   // State សម្រាប់ Modal បោះពុម្ពបាកូដ (Barcode Sticker Modal)
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
   // ⭐️ States សម្រាប់ម៉ាស៊ីនស្កេនបាកូដ Full Option (Camera & USB/Wireless Gun) ⭐️
@@ -2606,14 +2617,32 @@ export default function UnifiedAdminDashboard() {
     const { data, error } = await query.order('id', { ascending: false });
 
     if (!error && data) {
-      const mapped = data.map(o => ({
-        ...o,
-        customer: o.customer_name || o.customer || 'អតិថិជនទូទៅ',
-        total: o.total_amount != null ? o.total_amount : (o.total || 0),
-        payment: o.payment_method || o.payment || 'Cash',
-        phone: o.phone_number || o.phone || '',
-        address: o.delivery_address || o.address || ''
-      }));
+      let localRefunds = [];
+      if (typeof window !== 'undefined') {
+        try {
+          localRefunds = JSON.parse(localStorage.getItem(`sabay_refunds_${storeId}`) || '[]');
+        } catch (_) {}
+      }
+      const refundMap = new Map();
+      localRefunds.forEach(r => {
+        if (r.order_id) refundMap.set(String(r.order_id), r);
+        if (r.order_display_id) refundMap.set(String(r.order_display_id), r);
+      });
+
+      const mapped = data.map(o => {
+        const ref = refundMap.get(String(o.id)) || refundMap.get(String(o.order_id));
+        return {
+          ...o,
+          status: ref ? (ref.is_full ? 'Refunded' : (o.status === 'Refunded' ? 'Refunded' : 'Partially Refunded')) : o.status,
+          refunded_amount: ref ? (parseFloat(ref.refunded_amount) || 0) : (parseFloat(o.refunded_amount) || 0),
+          refund_details: ref || o.refund_details || null,
+          customer: o.customer_name || o.customer || 'អតិថិជនទូទៅ',
+          total: o.total_amount != null ? o.total_amount : (o.total || 0),
+          payment: o.payment_method || o.payment || 'Cash',
+          phone: o.phone_number || o.phone || '',
+          address: o.delivery_address || o.address || ''
+        };
+      });
       setRealOrders(mapped);
     }
     setLoadingOrders(false);
@@ -2932,7 +2961,9 @@ export default function UnifiedAdminDashboard() {
         'Preparing': '🔵 កំពុងរៀបចំវេចខ្ចប់',
         'Shipped': '🚚 កំពុងដឹកជញ្ជូន',
         'Completed': '🟢 ដឹកជញ្ជូនជោគជ័យ',
-        'Cancelled': '❌ បានបោះបង់'
+        'Cancelled': '❌ បានបោះបង់',
+        'Refunded': '🔄 បានបង្វិលប្រាក់ (Refunded)',
+        'Partially Refunded': '🔄 បង្វិលប្រាក់ខ្លះ (Partially Refunded)'
       };
       setToastNotification(`✅ បានប្តូរស្ថានភាពទៅជា "${statusLabels[newStatus] || newStatus}" រួចរាល់!`);
       setTimeout(() => setToastNotification(null), 3000);
@@ -2941,17 +2972,352 @@ export default function UnifiedAdminDashboard() {
     }
   };
 
-  // គណនាស្ថិតិពិតប្រាកដចេញពី orders (Real Analytics Calculation)
+  // គណនាស្ថិតិពិតប្រាកដចេញពី orders (Real Analytics Calculation with Automated Refund Deductions)
   const realTotalRevenue = realOrders
     .filter(o => o.status !== 'Cancelled')
-    .reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
+    .reduce((sum, o) => {
+      if (o.status === 'Refunded') return sum;
+      const refAmt = parseFloat(o.refunded_amount || o.refund_details?.refunded_amount || 0);
+      return sum + Math.max(0, (parseFloat(o.total) || 0) - refAmt);
+    }, 0);
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const realDailySales = realOrders
     .filter(o => o.status !== 'Cancelled' && (o.created_at ? o.created_at.startsWith(todayStr) : true))
-    .reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
+    .reduce((sum, o) => {
+      if (o.status === 'Refunded') return sum;
+      const refAmt = parseFloat(o.refunded_amount || o.refund_details?.refunded_amount || 0);
+      return sum + Math.max(0, (parseFloat(o.total) || 0) - refAmt);
+    }, 0);
 
   const realTotalOrdersCount = realOrders.length;
+
+  // ⭐️ មុខងារបើកផ្ទាំងស្នើសុំបង្វិលទំនិញ & សងប្រាក់វិញ (OPEN PRODUCT REFUND MODAL) ⭐️
+  const handleOpenRefundModal = (order) => {
+    if (!order) return;
+    const items = (Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+    const initialItems = items.map((it, idx) => {
+      const q = parseInt(it.qty || it.quantity || 1) || 1;
+      const p = parseFloat(it.price || 0) || 0;
+      return {
+        key: `${it.id || idx}_${it.size || ''}_${it.color || ''}`,
+        id: it.id || it.product_id,
+        variant_id: it.variant_id || it.variantId || null,
+        name: it.name || 'ទំនិញ',
+        size: it.size || '',
+        color: it.color || '',
+        image_url: it.image_url || it.image || '',
+        price: p,
+        originalQty: q,
+        returnQty: q,
+        selected: true,
+        restock: true
+      };
+    });
+    setRefundOrder(order);
+    setRefundItemsState(initialItems);
+    setRefundReason('WRONG_SIZE');
+    setRefundCustomReason('');
+    const payMeth = order.payment === 'KHQR' ? 'BANK' : (order.payment === 'COD' ? 'CASH' : (order.payment || 'CASH'));
+    setRefundMethod(payMeth === 'BANK' ? 'BANK' : (payMeth === 'Store Credit' ? 'STORE_CREDIT' : 'CASH'));
+    const initialTotal = initialItems.reduce((s, it) => s + (it.price * it.returnQty), 0);
+    setRefundCustomAmount(initialTotal.toFixed(2));
+    setRefundModalOpen(true);
+  };
+
+  // ⭐️ មុខងារដំណើរការ REFUND ស្វ័យប្រវត្ត (AUTO RESTOCK INVENTORY & DEDUCT REVENUE & CREDIT NOTE) ⭐️
+  const handleProcessRefund = async () => {
+    if (!refundOrder) return;
+    const selectedItems = refundItemsState.filter(it => it.selected && it.returnQty > 0);
+    if (selectedItems.length === 0) {
+      alert('⚠️ សូមជ្រើសរើសយ៉ាងហោចណាស់ ១ មុខទំនិញដែលត្រូវបង្វិល (Please select at least 1 item to return)');
+      return;
+    }
+
+    const finalAmount = parseFloat(refundCustomAmount) >= 0 ? parseFloat(refundCustomAmount) : selectedItems.reduce((s, it) => s + (it.price * it.returnQty), 0);
+    const storeId = activeStore?.id || 'store_default_sabayluk';
+    const orderDisplayId = refundOrder.order_id || refundOrder.id;
+
+    // Reason labels
+    const reasonLabels = {
+      'WRONG_SIZE': '👟 ខុសទំហំ / Size មិនត្រូវ (Wrong Size)',
+      'DEFECTIVE': '⚠️ ទំនិញមានបញ្ហា / ខូចគុណភាព (Defective / Damaged)',
+      'CHANGED_MIND': '🔄 ភ្ញៀវប្តូរចិត្ត (Customer Changed Mind)',
+      'WRONG_ITEM': '📦 ដឹកខុសទំនិញ / ខុសពណ៌ (Wrong Item Delivered)',
+      'NOT_AS_DESCRIBED': '🏷️ មិនត្រូវតាមការពិពណ៌នា (Not as Described)',
+      'OTHER': refundCustomReason ? `✍️ ${refundCustomReason}` : '✍️ មូលហេតុផ្សេងៗ (Other Reason)'
+    };
+    const finalReason = reasonLabels[refundReason] || refundReason;
+
+    // Is full refund?
+    const totalOriginalQty = (Array.isArray(refundOrder.items) ? refundOrder.items : [])
+      .filter(it => !it.is_tax_meta)
+      .reduce((s, it) => s + (parseInt(it.qty || it.quantity || 1) || 1), 0);
+    const totalReturnedQty = selectedItems.reduce((s, it) => s + it.returnQty, 0);
+    const isFullRefund = totalReturnedQty >= totalOriginalQty;
+    const newStatus = isFullRefund ? 'Refunded' : 'Partially Refunded';
+
+    setRefundProcessing(true);
+
+    try {
+      // ១. បញ្ចូលស្តុកស្វ័យប្រវត្តិ (AUTO RESTOCK TO PRODUCTS & AUDIT LOGS)
+      const restockItems = selectedItems.filter(it => it.restock && it.returnQty > 0);
+      for (const item of restockItems) {
+        if (!item.id) continue;
+        try {
+          const { data: curP } = await supabase.from('products').select('stock_qty').eq('id', item.id).single();
+          const prevStock = curP ? (curP.stock_qty || 0) : 0;
+          const newStock = prevStock + item.returnQty;
+
+          await supabase.from('products').update({
+            stock_qty: newStock,
+            status: 'In Stock'
+          }).eq('id', item.id);
+
+          if (item.variant_id) {
+            const { data: curV } = await supabase.from('product_variants').select('stock_qty').eq('id', item.variant_id).single();
+            if (curV) {
+              await supabase.from('product_variants').update({
+                stock_qty: (curV.stock_qty || 0) + item.returnQty
+              }).eq('id', item.variant_id);
+            }
+          }
+
+          await supabase.from('stock_movements').insert([{
+            product_id: item.id,
+            variant_id: item.variant_id || null,
+            type: 'IN',
+            qty_change: item.returnQty,
+            previous_qty: prevStock,
+            new_qty: newStock,
+            reason: `[បង្វិលទំនិញចូលស្តុក (Refund)] #${orderDisplayId} - ${finalReason}`,
+            store_id: storeId
+          }]);
+        } catch (stockErr) {
+          console.warn('Could not restock item via cloud:', item.name, stockErr);
+        }
+      }
+
+      // ២. Update State products ភ្លាមៗ (Optimistic Stock Update)
+      const restockMap = new Map();
+      restockItems.forEach(it => {
+        restockMap.set(it.id, (restockMap.get(it.id) || 0) + it.returnQty);
+      });
+      if (restockMap.size > 0) {
+        setProducts(prev => prev.map(p => {
+          if (restockMap.has(p.id)) {
+            const newQ = (p.stock_qty || 0) + restockMap.get(p.id);
+            return { ...p, stock_qty: newQ, status: 'In Stock' };
+          }
+          return p;
+        }));
+      }
+
+      // ៣. បង្កើតទិន្នន័យ Refund Record (Credit Note)
+      const refundRecord = {
+        refund_id: `REF-${Date.now().toString().slice(-6)}`,
+        order_id: refundOrder.id,
+        order_display_id: orderDisplayId,
+        refunded_at: new Date().toISOString(),
+        refunded_amount: finalAmount,
+        refunded_amount_khr: Math.round(finalAmount * (storeSettings.exchangeRate || 4100)),
+        reason: finalReason,
+        reason_notes: refundCustomReason,
+        payment_method: refundMethod === 'BANK' ? 'ABA / Bank Transfer' : (refundMethod === 'STORE_CREDIT' ? 'Store Credit' : 'Cash (សាច់ប្រាក់)'),
+        processed_by: currentStaff?.name || 'Admin / Cashier',
+        is_full: isFullRefund,
+        customer_name: refundOrder.customer || refundOrder.customer_name || 'អតិថិជនទូទៅ',
+        customer_phone: refundOrder.phone || refundOrder.phone_number || '',
+        items: selectedItems.map(it => ({
+          id: it.id,
+          name: it.name,
+          size: it.size,
+          color: it.color,
+          qty: it.returnQty,
+          price: it.price,
+          restocked: it.restock
+        }))
+      };
+
+      // ៤. Update Status ក្នុង Supabase orders
+      try {
+        await supabase.from('orders').update({
+          status: newStatus
+        }).eq('id', refundOrder.id);
+      } catch (orderErr) {
+        console.warn('Could not update order status in Supabase:', orderErr);
+      }
+
+      // ៥. រក្សាទុកក្នុង localStorage (Store Scoped Persistence)
+      if (typeof window !== 'undefined') {
+        try {
+          const existing = JSON.parse(localStorage.getItem(`sabay_refunds_${storeId}`) || '[]');
+          const updated = [refundRecord, ...existing.filter(r => r.order_id !== refundOrder.id)];
+          localStorage.setItem(`sabay_refunds_${storeId}`, JSON.stringify(updated));
+        } catch (_) {}
+      }
+
+      // ៦. Update realOrders state ភ្លាមៗ (Optimistic Orders State)
+      setRealOrders(prev => prev.map(o => {
+        if (o.id === refundOrder.id) {
+          return {
+            ...o,
+            status: newStatus,
+            refunded_amount: (parseFloat(o.refunded_amount || 0) + finalAmount),
+            refund_details: refundRecord
+          };
+        }
+        return o;
+      }));
+
+      // ៧. Update selectedOrderDetails បើកំពុងបើក
+      if (selectedOrderDetails && selectedOrderDetails.id === refundOrder.id) {
+        setSelectedOrderDetails(prev => ({
+          ...prev,
+          status: newStatus,
+          refunded_amount: (parseFloat(prev.refunded_amount || 0) + finalAmount),
+          refund_details: refundRecord
+        }));
+      }
+
+      // ៨. Fetch stock movements ឡើងវិញ
+      fetchStockMovements(storeId);
+
+      // ៩. បង្ហាញ Toast Notification & បើក Credit Note Slip
+      setRefundModalOpen(false);
+      setCreditNoteData(refundRecord);
+      setToastNotification(`✅ បានដំណើរការ Refund ទឹកប្រាក់ ${finalAmount.toFixed(2)} និងបញ្ចូលស្តុក ${restockItems.reduce((s, i) => s + i.returnQty, 0)} ឯកតាជោគជ័យ!`);
+      setTimeout(() => setToastNotification(null), 4000);
+
+    } catch (err) {
+      alert('❌ មានបញ្ហាក្នុងការដំណើរការ Refund: ' + err.message);
+    } finally {
+      setRefundProcessing(false);
+    }
+  };
+
+  // ⭐️ មុខងារបោះពុម្ពប័ណ្ណសងប្រាក់ Credit Note (PRINT CREDIT NOTE / REFUND SLIP) ⭐️
+  const handlePrintCreditNoteSlip = (record) => {
+    if (!record || typeof window === 'undefined') return;
+    const store = getActiveStore();
+    const storeName = store?.name || storeSettings.storeName || 'SABAY LUK';
+    const storePhone = store?.phone || storeSettings.phone || '096 720 5522';
+    const storeAddress = store?.address || storeSettings.address || 'ភ្នំពេញ, កម្ពុជា';
+
+    const printWin = window.open('', '_blank', 'width=450,height=650');
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const itemsHtml = (record.items || []).map(it => `
+      <tr style="border-bottom: 1px dashed #ccc;">
+        <td style="padding: 4px 0; font-size: 11px;">
+          <b>${it.name}</b>
+          ${it.size ? `<span style="font-size: 9px; color: #555;">(Size: ${it.size})</span>` : ''}
+          ${it.restocked ? `<div style="font-size: 9px; color: #16a34a;">✓ ចូលស្តុកវិញ</div>` : `<div style="font-size: 9px; color: #dc2626;">⚠️ មិនចូលស្តុក (ខូច)</div>`}
+        </td>
+        <td style="padding: 4px 0; text-align: center; font-size: 11px;">${it.qty}</td>
+        <td style="padding: 4px 0; text-align: right; font-size: 11px;">${it.price.toFixed(2)}</td>
+        <td style="padding: 4px 0; text-align: right; font-weight: bold; font-size: 11px;">${(it.qty * it.price).toFixed(2)}</td>
+      </tr>
+    `).join('');
+
+    printWin.document.write(`
+      <html>
+        <head>
+          <title>Credit Note ${record.refund_id}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            body { font-family: monospace; width: 76mm; margin: 0 auto; padding: 5mm 2mm; font-size: 11px; line-height: 1.3; color: #000; }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .dashed { border-bottom: 1px dashed #000; margin: 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+          </style>
+        </head>
+        <body>
+          <div class="center">
+            <h2 style="margin: 0; font-size: 16px;">${storeName}</h2>
+            <p style="margin: 2px 0; font-size: 10px;">${storePhone} • ${storeAddress}</p>
+            <div class="dashed"></div>
+            <h3 style="margin: 4px 0; font-size: 13px; letter-spacing: 0.5px;">*** ប័ណ្ណឥណទានសងប្រាក់ ***</h3>
+            <div style="font-size: 10px; font-weight: bold; color: #333;">CREDIT NOTE & REFUND RECEIPT</div>
+            <div class="dashed"></div>
+          </div>
+
+          <div style="font-size: 10px; margin-bottom: 6px;">
+            <div><b>លេខប័ណ្ណ (Slip No):</b> ${record.refund_id}</div>
+            <div><b>យោងវិក្កយបត្រ (Ref Order):</b> #${record.order_display_id}</div>
+            <div><b>កាលបរិច្ឆេទ (Date):</b> ${new Date(record.refunded_at).toLocaleString('km-KH')}</div>
+            <div><b>អតិថិជន (Customer):</b> ${record.customer_name || 'អតិថិជនទូទៅ'} ${record.customer_phone ? '(' + record.customer_phone + ')' : ''}</div>
+          </div>
+
+          <div class="dashed"></div>
+
+          <table>
+            <thead>
+              <tr style="border-bottom: 1px solid #000;">
+                <th style="text-align: left; padding: 2px 0;">មុខទំនិញ</th>
+                <th style="text-align: center; padding: 2px 0;">ចំនួន</th>
+                <th style="text-align: right; padding: 2px 0;">តម្លៃ</th>
+                <th style="text-align: right; padding: 2px 0;">សរុប</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+
+          <div class="dashed"></div>
+
+          <div style="margin: 6px 0; font-size: 11px;">
+            <div style="display: flex; justify-content: space-between; margin: 2px 0;">
+              <span>មូលហេតុ (Reason):</span>
+              <span class="bold" style="text-align: right;">${record.reason}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin: 2px 0;">
+              <span>វិធីសងប្រាក់ (Method):</span>
+              <span class="bold">${record.payment_method}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin: 4px 0; padding-top: 4px; border-top: 1px solid #000; font-size: 13px;" class="bold">
+              <span>ទឹកប្រាក់សងសរុប (REFUND):</span>
+              <span>${parseFloat(record.refunded_amount).toFixed(2)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #444;">
+              <span>ជាប្រាក់រៀល:</span>
+              <span class="bold">${record.refunded_amount_khr.toLocaleString()} ៛</span>
+            </div>
+          </div>
+
+          <div class="dashed"></div>
+
+          <div style="font-size: 9px; margin-top: 8px;">
+            <div><b>បុគ្គលិកទទួលបន្ទុក (Staff):</b> ${record.processed_by}</div>
+            <div style="display: flex; justify-content: space-between; margin-top: 25px; text-align: center;">
+              <div>
+                <div>............................</div>
+                <div>ហត្ថលេខាអតិថិជន</div>
+              </div>
+              <div>
+                <div>............................</div>
+                <div>ហត្ថលេខាបុគ្គលិក</div>
+              </div>
+            </div>
+            <div class="center" style="margin-top: 15px; font-style: italic;">
+              សូមអរគុណសម្រាប់ការគាំទ្រហាងយើងខ្ញុំ!
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() { window.focus(); window.print(); };
+            window.onafterprint = function() { window.close(); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
 
   // ⭐️ Helper ទទួលបាន Invoice Settings តាមហាងនីមួយៗ (Per-Store Scoped Invoice Settings) ⭐️
   const getStoreScopedInvoiceSettings = (store) => {
@@ -12384,6 +12750,8 @@ export default function UnifiedAdminDashboard() {
                                 order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-300' :
                                 order.status === 'Preparing' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
                                 order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-300' :
+                                order.status === 'Refunded' ? 'bg-rose-50 text-rose-700 border-rose-300 font-black' :
+                                order.status === 'Partially Refunded' ? 'bg-amber-50 text-amber-800 border-amber-300 font-black' :
                                 'bg-amber-50 text-amber-700 border-amber-300'
                               }`}
                             >
@@ -12392,6 +12760,8 @@ export default function UnifiedAdminDashboard() {
                               <option value="Shipped">🚚 កំពុងដឹក (Out for Delivery)</option>
                               <option value="Completed">🟢 ជោគជ័យ (Delivered)</option>
                               <option value="Cancelled">❌ បោះបង់ (Cancelled)</option>
+                              <option value="Refunded">🔄 បាន Refund (Refunded)</option>
+                              <option value="Partially Refunded">🔄 Refund ខ្លះ (Partial)</option>
                             </select>
 
                             {/* 1-Click Fast Progress Button */}
@@ -12534,9 +12904,13 @@ export default function UnifiedAdminDashboard() {
       return '';
     };
 
-    // ១. ចម្រាញ់ Order តាម Status, Search, និង Date Filter
+    // ១. ចម្រាញ់ Order តាម Status, Search, និង Date Filter (Supporting Refunded & Partial Refunds)
     const filteredOrders = currentStoreOrders.filter(o => {
-      const matchStatus = orderFilterStatus === 'all' ? true : o.status === orderFilterStatus;
+      const matchStatus = orderFilterStatus === 'all' 
+        ? true 
+        : orderFilterStatus === 'Refunded'
+          ? (o.status === 'Refunded' || o.status === 'Partially Refunded')
+          : o.status === orderFilterStatus;
       const orderIdStr = (o.order_id || o.id || '').toString().toLowerCase();
       const customerStr = (o.customer || '').toLowerCase();
       const matchSearch = orderIdStr.includes(searchOrder.toLowerCase()) || customerStr.includes(searchOrder.toLowerCase());
@@ -12596,13 +12970,21 @@ export default function UnifiedAdminDashboard() {
       return Array.from(map.values()).sort((a, b) => b.qty - a.qty);
     })();
 
-    // ៣. គណនាស្ថិតិលក់សរុប (Summary Metrics)
+    // ៣. គណនាស្ថិតិលក់សរុប (Summary Metrics with Automatic Refund Deductions)
     const totalFilteredRevenue = filteredOrders
       .filter(o => o.status !== 'Cancelled')
-      .reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
+      .reduce((sum, o) => {
+        if (o.status === 'Refunded') return sum;
+        const refAmt = parseFloat(o.refunded_amount || o.refund_details?.refunded_amount || 0);
+        return sum + Math.max(0, (parseFloat(o.total) || 0) - refAmt);
+      }, 0);
     const totalFilteredItemsQty = orderItemsSummary.reduce((sum, it) => sum + it.qty, 0);
     const completedOrdersCount = filteredOrders.filter(o => o.status === 'Completed').length;
     const pendingOrdersCount = filteredOrders.filter(o => !o.status || o.status === 'Pending' || o.status === 'Preparing').length;
+    const refundedOrdersCount = filteredOrders.filter(o => o.status === 'Refunded' || o.status === 'Partially Refunded').length;
+    const totalFilteredRefundAmount = filteredOrders.reduce((sum, o) => {
+      return sum + (parseFloat(o.refunded_amount || o.refund_details?.refunded_amount || 0) || (o.status === 'Refunded' ? parseFloat(o.total || 0) : 0));
+    }, 0);
 
     // ៤. ចម្រាញ់ Stock In Movements ប្រសិនបើ Merchant ចង់ពិនិត្យប្រវត្តិនាំចូលស្តុក
     const filteredStockInMovements = (stockMovements || []).filter(m => {
@@ -12789,7 +13171,7 @@ export default function UnifiedAdminDashboard() {
             {/* Status Filter (សម្រាប់ Sales Orders) */}
             {ordersViewMode === 'sales' && (
               <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-                {['all', 'Completed', 'Preparing', 'Shipped', 'Cancelled'].map(st => (
+                {['all', 'Completed', 'Preparing', 'Shipped', 'Cancelled', 'Refunded'].map(st => (
                   <button
                     key={st}
                     type="button"
@@ -12805,6 +13187,7 @@ export default function UnifiedAdminDashboard() {
                     {st === 'Preparing' && '⏳ កំពុងរៀបចំ'}
                     {st === 'Shipped' && '🚚 កំពុងដឹក'}
                     {st === 'Cancelled' && '✕ បានបោះបង់'}
+                    {st === 'Refunded' && `🔄 បាន Refund${refundedOrdersCount > 0 ? ' (' + refundedOrdersCount + ')' : ''}`}
                   </button>
                 ))}
               </div>
@@ -12925,6 +13308,12 @@ export default function UnifiedAdminDashboard() {
                 <span className="text-emerald-600">✓ {completedOrdersCount}</span>
                 <span className="text-gray-300">•</span>
                 <span className="text-amber-600">⏳ {pendingOrdersCount}</span>
+                {refundedOrdersCount > 0 && (
+                  <>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-rose-600">🔄 {refundedOrdersCount} Refund</span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -13219,6 +13608,20 @@ export default function UnifiedAdminDashboard() {
                             </button>
 
                             <button 
+                              type="button"
+                              onClick={() => handleOpenRefundModal(order)}
+                              className={`font-bold text-xs px-2.5 py-1.5 rounded-xl border transition cursor-pointer inline-flex items-center gap-1 shadow-2xs ${
+                                order.status === 'Refunded' || order.status === 'Partially Refunded'
+                                  ? 'bg-rose-100 hover:bg-rose-200 text-rose-800 border-rose-300'
+                                  : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                              }`}
+                              title={order.status === 'Refunded' ? 'បាន Refund រួចរាល់ (ចុចដើម្បីពិនិត្យ ឬ Refund បន្ថែម)' : 'ស្នើសុំ Refund / បង្វិលទំនិញ'}
+                            >
+                              <span>🔄</span>
+                              <span>{order.status === 'Refunded' ? 'Refunded' : 'Refund'}</span>
+                            </button>
+
+                            <button 
                               onClick={() => {
                                 const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
                                 const orderTax = getOrderTax(order);
@@ -13456,6 +13859,19 @@ export default function UnifiedAdminDashboard() {
                         >
                           <span>👁️</span>
                           <span>លម្អិត</span>
+                        </button>
+
+                        <button 
+                          type="button"
+                          onClick={() => handleOpenRefundModal(order)}
+                          className={`font-bold text-[11px] px-2.5 py-1 rounded-lg border transition cursor-pointer flex items-center gap-1 ${
+                            order.status === 'Refunded' || order.status === 'Partially Refunded'
+                              ? 'bg-rose-100 text-rose-800 border-rose-300'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}
+                        >
+                          <span>🔄</span>
+                          <span>{order.status === 'Refunded' ? 'Refunded' : 'Refund'}</span>
                         </button>
 
                         <button 
@@ -13891,6 +14307,42 @@ export default function UnifiedAdminDashboard() {
                     )}
                   </div>
 
+                  {/* 🔄 Refund Status Banner if Refunded */}
+                  {(ord.status === 'Refunded' || ord.status === 'Partially Refunded' || ord.refund_details) && (
+                    <div className="p-3.5 bg-gradient-to-r from-rose-50 via-pink-50 to-rose-50 rounded-2xl border border-rose-200 text-rose-950 space-y-1.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black flex items-center gap-1.5 text-rose-800">
+                          <span>🔄</span> {ord.status === 'Refunded' ? 'បានបង្វិលប្រាក់ពេញលេញ (Full Refund)' : 'បានបង្វិលប្រាក់ខ្លះ (Partial Refund)'}
+                        </span>
+                        <span className="font-mono text-sm font-black text-rose-700">
+                          -${parseFloat(ord.refunded_amount || ord.refund_details?.refunded_amount || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-rose-800 flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {ord.refund_details?.reason && (
+                          <span><b>មូលហេតុ:</b> {ord.refund_details.reason}</span>
+                        )}
+                        {ord.refund_details?.payment_method && (
+                          <span><b>វិធីសងប្រាក់:</b> {ord.refund_details.payment_method}</span>
+                        )}
+                        {ord.refund_details?.processed_by && (
+                          <span><b>បុគ្គលិក:</b> {ord.refund_details.processed_by}</span>
+                        )}
+                      </div>
+                      {ord.refund_details && (
+                        <div className="pt-1 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setCreditNoteData(ord.refund_details)}
+                            className="text-xs font-black bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-xl shadow-xs transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>🧾</span> មើល / បោះពុម្ពប័ណ្ណ Credit Note (Refund Slip)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* 📦 Ordered Products List */}
                   <div className="space-y-2">
                     <h4 className="font-black text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -14076,12 +14528,24 @@ export default function UnifiedAdminDashboard() {
                     </button>
                   </div>
 
-                  <button 
-                    onClick={() => setSelectedOrderDetails(null)}
-                    className="bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
-                  >
-                    បិទ (Close)
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRefundModal(ord)}
+                      className="bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                      title="ស្នើសុំបង្វិលទំនិញ & សងប្រាក់វិញ (Auto Restock & Revenue Sync)"
+                    >
+                      <span>🔄</span>
+                      <span>{ord.status === 'Refunded' ? 'Refund បន្ថែម' : 'ស្នើសុំ Refund ទំនិញ'}</span>
+                    </button>
+
+                    <button 
+                      onClick={() => setSelectedOrderDetails(null)}
+                      className="bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
+                    >
+                      បិទ (Close)
+                    </button>
+                  </div>
                 </div>
 
               </div>
@@ -32356,6 +32820,532 @@ export default function UnifiedAdminDashboard() {
           </div>
         );
       })()}
+
+
+      {/* ⭐️ MODAL ស្នើសុំ REFUND / បង្វិលទំនិញស្វ័យប្រវត្តិ (WORLD-STANDARD PRODUCT RETURN & REFUND) ⭐️ */}
+      {refundModalOpen && refundOrder && (
+        <div 
+          onClick={() => !refundProcessing && setRefundModalOpen(false)}
+          className="fixed inset-0 z-[65] bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-2xl w-full flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 cursor-default"
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-rose-600 via-pink-600 to-rose-700 p-4 sm:p-5 text-white flex items-center justify-between shadow-xs">
+              <div className="flex items-center gap-3">
+                <span className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-xl shrink-0">
+                  🔄
+                </span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black leading-tight flex items-center gap-2">
+                    ស្នើសុំបង្វិលទំនិញ & សងប្រាក់វិញ
+                    <span className="text-[10px] bg-white/25 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                      Refund & Return
+                    </span>
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-rose-100 font-bold mt-0.5">
+                    Order #{refundOrder.order_id || refundOrder.id} • {refundOrder.customer || refundOrder.customer_name || 'អតិថិជនទូទៅ'} {refundOrder.phone ? '(' + refundOrder.phone + ')' : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={refundProcessing}
+                onClick={() => setRefundModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm font-black transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1">
+              {/* Order Info & Total Overview */}
+              <div className="p-3 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">ទឹកប្រាក់វិក្កយបត្រដើម</span>
+                  <span className="font-mono text-base sm:text-lg font-black text-slate-900">
+                    \${parseFloat(refundOrder.total || refundOrder.total_amount || 0).toFixed(2)}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-bold ml-1.5">
+                    ({Math.round((parseFloat(refundOrder.total || 0)) * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">វិធីទូទាត់ដើម</span>
+                  <span className="font-bold text-slate-800 uppercase bg-white px-2.5 py-1 rounded-lg border border-slate-200 inline-block mt-0.5">
+                    {refundOrder.payment || refundOrder.payment_method || 'Cash'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">ស្ថានភាពបច្ចុប្បន្ន</span>
+                  <span className="font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 inline-block mt-0.5">
+                    {refundOrder.status || 'Completed'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Step 1: Select Items & Return Quantities */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 text-xs flex items-center justify-center font-bold">1</span>
+                    ជ្រើសរើសមុខទំនិញដែលសុំបង្វិល (Items to Return):
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allSelected = refundItemsState.every(it => it.selected);
+                      setRefundItemsState(prev => prev.map(it => ({ ...it, selected: !allSelected })));
+                    }}
+                    className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                  >
+                    {refundItemsState.every(it => it.selected) ? 'ដោះចេញទាំងអស់ (Deselect All)' : 'ជ្រើសរើសទាំងអស់ (Select All)'}
+                  </button>
+                </div>
+
+                <div className="space-y-2 border border-slate-200 rounded-2xl p-2.5 sm:p-3 bg-white divide-y divide-slate-100 max-h-56 overflow-y-auto">
+                  {refundItemsState.map((item, idx) => (
+                    <div key={item.key || idx} className={"pt-2.5 first:pt-0 pb-2.5 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 " + (!item.selected ? "opacity-50" : "")}>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={item.selected}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setRefundItemsState(prev => prev.map((it, i) => i === idx ? { ...it, selected: val } : it));
+                          }}
+                          className="w-4 h-4 rounded text-rose-600 accent-rose-600 cursor-pointer shrink-0"
+                        />
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
+                          <img
+                            src={item.image_url || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=80'}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=120&auto=format&fit=crop&q=80';
+                            }}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <h5 className="text-xs font-black text-slate-900 truncate leading-tight">{item.name}</h5>
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 font-bold">
+                            {item.size && <span className="bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Size: {item.size}</span>}
+                            <span>\${item.price.toFixed(2)}</span>
+                            <span>• បានទិញ: x{item.originalQty}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Return Qty & Restock Checkbox */}
+                      <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pl-6 sm:pl-0">
+                        {/* Qty +/- */}
+                        <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-white shadow-2xs">
+                          <button
+                            type="button"
+                            disabled={!item.selected || item.returnQty <= 1}
+                            onClick={() => {
+                              setRefundItemsState(prev => prev.map((it, i) => i === idx ? { ...it, returnQty: Math.max(1, it.returnQty - 1) } : it));
+                            }}
+                            className="w-7 h-7 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs disabled:opacity-30 cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="w-8 text-center text-xs font-mono font-black text-slate-900">
+                            {item.returnQty}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={!item.selected || item.returnQty >= item.originalQty}
+                            onClick={() => {
+                              setRefundItemsState(prev => prev.map((it, i) => i === idx ? { ...it, returnQty: Math.min(it.originalQty, it.returnQty + 1) } : it));
+                            }}
+                            className="w-7 h-7 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs disabled:opacity-30 cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        {/* Restock Toggle */}
+                        <label className="flex items-center gap-1.5 text-[11px] font-bold cursor-pointer select-none bg-slate-50 px-2 py-1 rounded-xl border border-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={item.restock}
+                            disabled={!item.selected}
+                            onChange={(e) => {
+                              const val = e.target.checked;
+                              setRefundItemsState(prev => prev.map((it, i) => i === idx ? { ...it, restock: val } : it));
+                            }}
+                            className="w-3.5 h-3.5 text-emerald-600 accent-emerald-600 rounded cursor-pointer"
+                          />
+                          <span className={item.restock ? 'text-emerald-700' : 'text-slate-400'}>
+                            {item.restock ? '✓ ចូលស្តុកវិញ' : 'ទំនិញខូច (មិនចូលស្តុក)'}
+                          </span>
+                        </label>
+
+                        {/* Item Subtotal */}
+                        <div className="font-mono text-xs font-black text-slate-900 w-14 text-right">
+                          \${(item.selected ? (item.returnQty * item.price) : 0).toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Step 2: Refund Reason */}
+              <div className="space-y-2">
+                <label className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 text-xs flex items-center justify-center font-bold">2</span>
+                  មូលហេតុនៃការបង្វិលទំនិញ (Reason for Return):
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'WRONG_SIZE', label: '👟 ខុសទំហំ (Wrong Size)' },
+                    { id: 'DEFECTIVE', label: '⚠️ ទំនិញខូច / មានស្នាម' },
+                    { id: 'CHANGED_MIND', label: '🔄 ភ្ញៀវប្តូរចិត្ត' },
+                    { id: 'WRONG_ITEM', label: '📦 ដឹកខុសទំនិញ' },
+                    { id: 'NOT_AS_DESCRIBED', label: '🏷️ មិនដូចការពិពណ៌នា' },
+                    { id: 'OTHER', label: '✍️ ផ្សេងៗ...' }
+                  ].map(r => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setRefundReason(r.id)}
+                      className={"p-2.5 rounded-xl border text-left text-xs font-bold transition cursor-pointer " + (
+                        refundReason === r.id
+                          ? 'bg-rose-50 border-rose-400 text-rose-900 shadow-2xs font-black ring-1 ring-rose-400'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      )}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+                {refundReason === 'OTHER' && (
+                  <input
+                    type="text"
+                    value={refundCustomReason}
+                    onChange={(e) => setRefundCustomReason(e.target.value)}
+                    placeholder="បញ្ជាក់មូលហេតុបន្ថែម..."
+                    className="w-full text-xs font-bold border border-rose-300 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-rose-500 bg-rose-50/30"
+                  />
+                )}
+              </div>
+
+              {/* Step 3: Refund Method */}
+              <div className="space-y-2">
+                <label className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-700 text-xs flex items-center justify-center font-bold">3</span>
+                  វិធីសងប្រាក់ទៅអតិថិជន (Refund Method):
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'CASH', label: '💵 សាច់ប្រាក់ (Cash)' },
+                    { id: 'BANK', label: '📱 ផ្ទេរធនាគារ (ABA)' },
+                    { id: 'STORE_CREDIT', label: '🎟️ ប័ណ្ណហាង (Store Credit)' }
+                  ].map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setRefundMethod(m.id)}
+                      className={"p-2.5 rounded-xl border text-center text-xs font-bold transition cursor-pointer " + (
+                        refundMethod === m.id
+                          ? 'bg-emerald-50 border-emerald-400 text-emerald-900 shadow-2xs font-black ring-1 ring-emerald-400'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      )}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Step 4: Refund Amount Calculation & Adjustments */}
+              {(() => {
+                const selectedItems = refundItemsState.filter(it => it.selected && it.returnQty > 0);
+                const autoCalcAmount = selectedItems.reduce((s, it) => s + (it.price * it.returnQty), 0);
+                const restockUnits = selectedItems.filter(it => it.restock).reduce((s, it) => s + it.returnQty, 0);
+                const totalOrigQty = (Array.isArray(refundOrder.items) ? refundOrder.items : [])
+                  .filter(it => !it.is_tax_meta)
+                  .reduce((s, it) => s + (parseInt(it.qty || it.quantity || 1) || 1), 0);
+                const isFull = selectedItems.reduce((s, it) => s + it.returnQty, 0) >= totalOrigQty;
+
+                return (
+                  <div className="space-y-3">
+                    <div className="p-3.5 sm:p-4 bg-slate-900 text-white rounded-2xl border border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                            ទឹកប្រាក់ត្រូវសងសរុប (REFUND TOTAL)
+                          </span>
+                          <div className="flex items-baseline gap-2 mt-0.5">
+                            <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
+                              \${(parseFloat(refundCustomAmount) || autoCalcAmount).toFixed(2)}
+                            </span>
+                            <span className="text-xs text-slate-400 font-bold">
+                              ({Math.round(((parseFloat(refundCustomAmount) || autoCalcAmount)) * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Quick preset buttons */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setRefundCustomAmount(autoCalcAmount.toFixed(2))}
+                            className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer"
+                          >
+                            100% ពេញ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRefundCustomAmount(Math.max(0, autoCalcAmount - 1.5).toFixed(2))}
+                            className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer"
+                          >
+                            -$1.50 ដឹក
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Custom Amount input */}
+                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-3 text-xs">
+                        <span className="text-slate-300 font-bold">កែប្រែទឹកប្រាក់សងជាក់ស្តែង:</span>
+                        <div className="flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-xl border border-slate-700">
+                          <span className="text-emerald-400 font-black text-sm">\$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={refundCustomAmount}
+                            onChange={(e) => setRefundCustomAmount(e.target.value)}
+                            placeholder={autoCalcAmount.toFixed(2)}
+                            className="w-24 bg-transparent text-white font-mono font-black text-sm outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 5: Automated Sync Indicators */}
+                    <div className="p-3 bg-blue-50/70 rounded-2xl border border-blue-200 text-blue-900 text-xs space-y-1.5">
+                      <div className="font-black flex items-center gap-1.5 text-blue-950">
+                        <span>⚡</span> ប្រព័ន្ធដំណើរការស្វ័យប្រវត្តិ (Automated Engine):
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                        <div className="bg-white/90 p-2 rounded-xl border border-blue-100">
+                          <span className="text-slate-500 block text-[10px]">📦 ស្តុកទំនិញ:</span>
+                          <span className="font-black text-emerald-700">+{restockUnits} ឯកតា</span>
+                          <span className="text-slate-400 block text-[9px]">បញ្ចូលស្តុក & Audit Log</span>
+                        </div>
+                        <div className="bg-white/90 p-2 rounded-xl border border-blue-100">
+                          <span className="text-slate-500 block text-[10px]">💰 ចំណូលសរុប:</span>
+                          <span className="font-black text-rose-700">-\${(parseFloat(refundCustomAmount) || autoCalcAmount).toFixed(2)}</span>
+                          <span className="text-slate-400 block text-[9px]">កាត់ចេញពីរបាយការណ៍លក់</span>
+                        </div>
+                        <div className="bg-white/90 p-2 rounded-xl border border-blue-100">
+                          <span className="text-slate-500 block text-[10px]">📋 ស្ថានភាព:</span>
+                          <span className="font-black text-blue-700">{isFull ? 'Refunded' : 'Partially Refunded'}</span>
+                          <span className="text-slate-400 block text-[9px]">{isFull ? 'បង្វិលពេញលេញ' : 'បង្វិលមួយចំនួន'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+              <button
+                type="button"
+                disabled={refundProcessing}
+                onClick={() => setRefundModalOpen(false)}
+                className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs sm:text-sm px-4 py-2.5 rounded-2xl transition cursor-pointer"
+              >
+                ❌ បោះបង់
+              </button>
+
+              <button
+                type="button"
+                disabled={refundProcessing || refundItemsState.filter(it => it.selected && it.returnQty > 0).length === 0}
+                onClick={handleProcessRefund}
+                className="bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 active:scale-95 text-white font-black text-xs sm:text-sm px-6 py-2.5 rounded-2xl shadow-md transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {refundProcessing ? (
+                  <>
+                    <span className="animate-spin text-base">⏳</span>
+                    <span>កំពុងដំណើរការ Refund...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🔄</span>
+                    <span>បញ្ជាក់ការ Refund & កែប្រែស្តុកស្វ័យប្រវត្តិ</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐️ MODAL ប័ណ្ណឥណទានសងប្រាក់ (CREDIT NOTE / REFUND SLIP PREVIEW) ⭐️ */}
+      {creditNoteData && (
+        <div 
+          onClick={() => setCreditNoteData(null)}
+          className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl border border-slate-300 max-w-sm sm:max-w-md w-full flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 cursor-default font-mono"
+          >
+            {/* Header Controls */}
+            <div className="p-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+              <span className="text-xs font-black flex items-center gap-1.5 font-sans">
+                <span>🧾</span> ប័ណ្ណឥណទានសងប្រាក់ (Credit Note)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintCreditNoteSlip(creditNoteData)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-xs transition flex items-center gap-1 cursor-pointer font-sans"
+                >
+                  <span>🖨️</span> បោះពុម្ព (Print)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreditNoteData(null)}
+                  className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center text-xs font-black transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Slip Paper Body */}
+            <div className="p-5 overflow-y-auto bg-white text-slate-900 text-xs space-y-3 leading-relaxed">
+              <div className="text-center space-y-1">
+                <h3 className="text-base font-black uppercase text-black font-sans">
+                  {activeStore?.name || storeSettings.storeName || 'SABAY LUK'}
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  {activeStore?.phone || storeSettings.phone || '096 720 5522'} • {activeStore?.address || storeSettings.address || 'ភ្នំពេញ, កម្ពុជា'}
+                </p>
+                <div className="border-b border-dashed border-slate-300 my-2"></div>
+                <h4 className="font-black text-sm text-rose-700 font-sans tracking-wide">
+                  *** ប័ណ្ណឥណទានសងប្រាក់ ***
+                </h4>
+                <div className="text-[10px] font-bold text-slate-500">CREDIT NOTE & REFUND RECEIPT</div>
+                <div className="border-b border-dashed border-slate-300 my-2"></div>
+              </div>
+
+              {/* Meta */}
+              <div className="text-[11px] space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">លេខប័ណ្ណ (Slip No):</span>
+                  <span className="font-black">{creditNoteData.refund_id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">យោងវិក្កយបត្រ (Ref Order):</span>
+                  <span className="font-black">#{creditNoteData.order_display_id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">កាលបរិច្ឆេទ (Date):</span>
+                  <span>{new Date(creditNoteData.refunded_at).toLocaleString('km-KH')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">អតិថិជន (Customer):</span>
+                  <span className="font-black font-sans">{creditNoteData.customer_name || 'អតិថិជនទូទៅ'}</span>
+                </div>
+              </div>
+
+              <div className="border-b border-dashed border-slate-300 my-2"></div>
+
+              {/* Table of Items */}
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-12 font-black border-b border-slate-900 pb-1 text-[11px]">
+                  <span className="col-span-6">មុខទំនិញ</span>
+                  <span className="col-span-2 text-center">ចំនួន</span>
+                  <span className="col-span-2 text-right">តម្លៃ</span>
+                  <span className="col-span-2 text-right">សរុប</span>
+                </div>
+                {(creditNoteData.items || []).map((it, idx) => (
+                  <div key={idx} className="grid grid-cols-12 py-1 border-b border-dashed border-slate-200 text-[11px]">
+                    <div className="col-span-6 pr-1">
+                      <div className="font-bold truncate">{it.name}</div>
+                      {it.size && <div className="text-[10px] text-slate-500">Size: {it.size}</div>}
+                      <div className={it.restocked ? 'text-[9px] text-emerald-600 font-bold' : 'text-[9px] text-rose-600 font-bold'}>
+                        {it.restocked ? '✓ បានចូលស្តុកវិញ' : '⚠️ មិនចូលស្តុក (ខូច)'}
+                      </div>
+                    </div>
+                    <div className="col-span-2 text-center">{it.qty}</div>
+                    <div className="col-span-2 text-right">\${it.price.toFixed(2)}</div>
+                    <div className="col-span-2 text-right font-black">\${(it.qty * it.price).toFixed(2)}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-b border-dashed border-slate-300 my-2"></div>
+
+              {/* Summary */}
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">មូលហេតុ (Reason):</span>
+                  <span className="font-bold font-sans text-right">{creditNoteData.reason}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">វិធីសងប្រាក់ (Method):</span>
+                  <span className="font-bold font-sans">{creditNoteData.payment_method}</span>
+                </div>
+                <div className="flex justify-between items-baseline pt-2 border-t border-slate-900 font-black text-sm text-black">
+                  <span>ទឹកប្រាក់សងសរុប (REFUND):</span>
+                  <span className="text-rose-600 font-mono text-base">\${parseFloat(creditNoteData.refunded_amount).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-slate-600">
+                  <span>ជាប្រាក់រៀល:</span>
+                  <span className="font-bold font-mono">{creditNoteData.refunded_amount_khr.toLocaleString()} ៛</span>
+                </div>
+              </div>
+
+              <div className="border-b border-dashed border-slate-300 my-3"></div>
+
+              {/* Signatures */}
+              <div className="text-[10px] space-y-4 pt-1 font-sans">
+                <div className="flex justify-between text-slate-500">
+                  <span>បុគ្គលិកទទួលបន្ទុក:</span>
+                  <span className="font-bold text-slate-900">{creditNoteData.processed_by}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-center pt-2">
+                  <div>
+                    <div className="border-b border-dotted border-slate-400 mb-1 h-8"></div>
+                    <span className="text-[10px] text-slate-500">ហត្ថលេខាអតិថិជន</span>
+                  </div>
+                  <div>
+                    <div className="border-b border-dotted border-slate-400 mb-1 h-8"></div>
+                    <span className="text-[10px] text-slate-500">ហត្ថលេខាបុគ្គលិក</span>
+                  </div>
+                </div>
+                <p className="text-center text-[10px] text-slate-400 italic pt-2">
+                  សូមអរគុណសម្រាប់ការគាំទ្រហាងយើងខ្ញុំ!
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setCreditNoteData(null)}
+                className="w-full bg-slate-900 hover:bg-black text-white font-bold text-xs py-2 rounded-xl transition cursor-pointer font-sans"
+              >
+                បិទ (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* ⭐️ MODAL វិក្កយបត្រកម្តៅស្តង់ដារ (THERMAL RECEIPT 80MM / 58MM WITH KHQR) ⭐️ */}
         {receiptData && (
