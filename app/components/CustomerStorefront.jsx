@@ -628,9 +628,11 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
   const getProductSoldCount = (prod) => {
     if (!prod) return 0;
+    const directSold = Number(prod.sold_count || prod.sold || prod.sales_count || prod.total_sold) || 0;
     const byId = prod.id && productSalesMap[String(prod.id)];
     const byName = prod.name && productSalesMap[prod.name.trim().toLowerCase()];
-    return Math.max(Number(byId) || 0, Number(byName) || 0);
+    const bySku = prod.sku && productSalesMap[prod.sku.trim().toLowerCase()];
+    return Math.max(directSold, Number(byId) || 0, Number(byName) || 0, Number(bySku) || 0);
   };
 
   // ⭐️ States សម្រាប់ Checkout (កុម្ម៉ង់ទិញទំនិញស្ដង់ដារ)
@@ -2015,7 +2017,16 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         {
           cartItemId,
           id: selectedProductForVariant.id,
-          name: selectedProductForVariant.name,
+          name: (() => {
+            const skuCode = (selectedProductForVariant.sku || selectedProductForVariant.barcode || '').trim();
+            const prodName = (selectedProductForVariant.name || '').trim();
+            const isGeneric = !prodName || ['ស្បែកជើង', 'ស្បែកជើងបុរស', 'ស្បែកជើងនារី'].includes(prodName);
+            if (skuCode) {
+              return isGeneric ? `Code: ${skuCode}` : `Code: ${skuCode} (${prodName})`;
+            }
+            return prodName.toLowerCase().startsWith('code:') ? prodName : `Code: ${prodName || 'N/A'}`;
+          })(),
+          sku: selectedProductForVariant.sku || '',
           price: selectedProductForVariant.price,
           image_url: selectedVariant?.image_url || selectedProductForVariant.image_url || selectedProductForVariant.image || selectedProductForVariant.photo_url || '',
           image: selectedVariant?.image_url || selectedProductForVariant.image_url || selectedProductForVariant.image || selectedProductForVariant.photo_url || '',
@@ -2054,20 +2065,60 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
   // ត្រង និងតម្រៀបផលិតផល (Smart Filtering & Sorting)
   const filteredProducts = products.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (item.category || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const itemCat = (item.category || '').trim().toLowerCase();
+    const q = searchQuery.toLowerCase().trim();
+    const itemSku = (item.sku || item.barcode || '').toLowerCase();
+    const itemName = (item.name || '').toLowerCase();
+    const itemCat = (item.category || '').toLowerCase();
+    const itemDesc = (item.description || '').toLowerCase();
+    const matchesSearch = !q ||
+      itemName.includes(q) ||
+      itemSku.includes(q) ||
+      itemCat.includes(q) ||
+      itemDesc.includes(q);
+
+    const itemCatClean = (item.category || '').trim().toLowerCase();
     const selectedCat = selectedCategory.trim().toLowerCase();
-    const matchesCategory = selectedCategory === 'all' || itemCat.includes(selectedCat) || selectedCat.includes(itemCat);
-    const matchesStock = !inStockOnly || item.stock_qty > 0;
+    const matchesCategory = selectedCategory === 'all' || itemCatClean.includes(selectedCat) || selectedCat.includes(itemCatClean);
+    
+    const stockQty = parseInt(item.stock_qty, 10) || 0;
+    const matchesStock = !inStockOnly || stockQty > 0;
+    
     return matchesSearch && matchesCategory && matchesStock;
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
-    if (sortBy === 'price_low') return Number(a.price) - Number(b.price);
-    if (sortBy === 'price_high') return Number(b.price) - Number(a.price);
-    if (sortBy === 'popular') return (b.stock_qty < 5 ? 1 : 0) - (a.stock_qty < 5 ? 1 : 0);
-    return (b.id || 0) > (a.id || 0) ? 1 : -1;
+    // 📉 តម្លៃទាប (Price: Low to High)
+    if (sortBy === 'price_low') {
+      const pA = parseFloat(a.price) || 0;
+      const pB = parseFloat(b.price) || 0;
+      if (pA !== pB) return pA - pB;
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    }
+
+    // 📈 តម្លៃខ្ពស់ (Price: High to Low)
+    if (sortBy === 'price_high') {
+      const pA = parseFloat(a.price) || 0;
+      const pB = parseFloat(b.price) || 0;
+      if (pB !== pA) return pB - pA;
+      return (b.created_at || '').localeCompare(a.created_at || '');
+    }
+
+    // 🔥 លក់ដាច់ (Most Popular / Best Seller)
+    if (sortBy === 'popular') {
+      const soldA = getProductSoldCount(a);
+      const soldB = getProductSoldCount(b);
+      if (soldB !== soldA) return soldB - soldA; // ចំនួនលក់បានច្រើនជាងគេ ឡើងលើមុន
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (timeA && timeB && timeB !== timeA) return timeB - timeA;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    }
+
+    // ✨ ថ្មីៗ (New Arrivals - Newest to Oldest)
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (timeA && timeB && timeB !== timeA) return timeB - timeA;
+    return String(b.id || '').localeCompare(String(a.id || ''));
   });
 
   const subtotalPrice = cart.reduce((sum, item) => sum + Number(item.price) * item.qty, 0);
@@ -3327,13 +3378,42 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                         {product.category || 'ម៉ូតស្បែកជើង'}
                       </span>
 
-                      {/* Title */}
+                      {/* Code / Title (Code: របស់ស្បែកជើង) */}
                       <h3 
                         onClick={() => handleAddToCartClick(product)}
                         className="font-black text-xs sm:text-sm text-gray-900 line-clamp-1 mb-1.5 group-hover:text-[#ff6a00] transition cursor-pointer"
-                        title={product.name}
+                        title={product.sku ? `Code: ${product.sku}` : product.name}
                       >
-                        {product.name}
+                        {(() => {
+                          const skuCode = (product.sku || product.barcode || '').trim();
+                          const prodName = (product.name || '').trim();
+                          const isGeneric = !prodName || ['ស្បែកជើង', 'ស្បែកជើងបុរស', 'ស្បែកជើងនារី', (product.category || '').trim()].includes(prodName);
+
+                          if (skuCode) {
+                            return (
+                              <span className="flex items-center gap-1 font-mono">
+                                <span className="text-slate-900 font-black">
+                                  <span className="text-[#ff6a00] font-sans">Code:</span> {skuCode}
+                                </span>
+                                {!isGeneric && (
+                                  <span className="text-slate-500 font-bold text-[11px] truncate font-sans">
+                                    - {prodName}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          }
+
+                          if (prodName.toLowerCase().startsWith('code:')) {
+                            return <span className="font-mono font-black">{prodName}</span>;
+                          }
+
+                          return (
+                            <span className="font-mono font-black">
+                              <span className="text-[#ff6a00] font-sans">Code:</span> {prodName || 'N/A'}
+                            </span>
+                          );
+                        })()}
                       </h3>
 
                       {/* Rating & Sold Count Row */}
@@ -3853,10 +3933,24 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               <div className="md:col-span-6 flex flex-col justify-between space-y-5">
                 
                 <div className="space-y-4">
-                  {/* Title */}
+                  {/* Title (Code: របស់ស្បែកជើង) */}
                   <div>
                     <h2 className="text-xl sm:text-2xl font-black text-gray-900 leading-snug">
-                      {selectedProductForVariant.name}
+                      {(() => {
+                        const skuCode = (selectedProductForVariant.sku || selectedProductForVariant.barcode || '').trim();
+                        const prodName = (selectedProductForVariant.name || '').trim();
+                        const isGeneric = !prodName || ['ស្បែកជើង', 'ស្បែកជើងបុរស', 'ស្បែកជើងនារី', (selectedProductForVariant.category || '').trim()].includes(prodName);
+                        if (skuCode) {
+                          return (
+                            <span>
+                              <span className="text-[#ff6a00] font-mono">Code: {skuCode}</span>
+                              {!isGeneric && <span className="text-gray-700 ml-2 font-sans font-bold">({prodName})</span>}
+                            </span>
+                          );
+                        }
+                        if (prodName.toLowerCase().startsWith('code:')) return prodName;
+                        return `Code: ${prodName || 'N/A'}`;
+                      })()}
                     </h2>
                   </div>
 
