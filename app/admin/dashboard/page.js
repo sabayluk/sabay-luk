@@ -7576,15 +7576,92 @@ export default function UnifiedAdminDashboard() {
               })()}
             </div>
 
-            {/* ៨. 📸 រូបភាពពិពណ៌នាលម្អិត (1688 Details Images) */}
+            {/* ៨. 📝 អត្ថបទពិពណ៌នាលម្អិតអំពីទំនិញ (Product Description Under YouTube) */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-base font-black">📝</span>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">៨. អត្ថបទពិពណ៌នាលម្អិតអំពីទំនិញ (Product Description)</h3>
+                    <p className="text-[11px] text-slate-400">
+                      សរសេរព័ត៌មានលម្អិតអំពីទំនិញ (អត្ថបទនេះនឹងបង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើមុខ Website)
+                    </p>
+                  </div>
+                </div>
+                {description && (
+                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                    ✓ មានអត្ថបទ ({description.length} តួអក្សរ)
+                  </span>
+                )}
+              </div>
+
+              {/* Quick Template Buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-bold text-slate-400 mr-1">គំរូរហ័ស:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const template = `✨ ចំណុចពិសេស (Key Features):\n• ផលិតពីវត្ថុធាតុដើមគុណភាពខ្ពស់ ប្រើប្រាស់បានយូរអង្វែង\n• ទម្ងន់ស្រាល ទន់ស្រួលពាក់ មិនឈឺជើង\n• ម៉ូដទាន់សម័យ ស័ក្តិសមទាំងការងារ និងដំណើរកម្សាន្ត\n\n📏 ការណែនាំទំហំ (Size Guide):\n• Size ស្តង់ដារពិតប្រាកដ បើជើងធំសូមយកលើស ១ លេខ\n\n🛡️ ការធានា:\n• ធានាប្តូរ Size រយៈពេល ៧ ថ្ងៃ\n• ទំនិញដូចរូបភាព ១០០%`;
+                    setDescription(prev => prev ? `${prev}\n\n${template}` : template);
+                  }}
+                  className="text-[11px] font-black text-[#ff6a00] bg-orange-50 hover:bg-orange-100 px-3 py-1 rounded-xl transition cursor-pointer border border-orange-200 active:scale-95"
+                >
+                  + បញ្ចូលគំរូទូទៅ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const template = `🛡️ ការធានា & ប្តូរទំនិញ:\n• ធានាប្តូរ Size ក្នុងរយៈពេល ៧ ថ្ងៃ\n• ពិនិត្យទំនិញរួចរាល់ទើបបង់ប្រាក់\n• ដឹកជញ្ជូនរហ័សទូទាំង ២៥ ខេត្ត/ក្រុង`;
+                    setDescription(prev => prev ? `${prev}\n\n${template}` : template);
+                  }}
+                  className="text-[11px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-xl transition cursor-pointer border border-blue-200 active:scale-95"
+                >
+                  + បញ្ចូលការធានា & ដឹកជញ្ជូន
+                </button>
+              </div>
+
+              {/* Description Textarea */}
+              <div className="relative">
+                <textarea
+                  rows="6"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="សរសេរព័ត៌មានលម្អិតអំពីទំនិញ គុណភាព សាច់ក្រណាត់ ការណែនាំទំហំ ឬរបៀបប្រើប្រាស់... (អត្ថបទនេះនឹងបង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើមុខគេហទំព័រ Storefront)"
+                  className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-4 rounded-2xl text-xs sm:text-sm text-slate-800 bg-slate-50 focus:bg-white outline-none transition resize-y leading-relaxed"
+                />
+              </div>
+
+              {/* Live Preview of Description */}
+              {description && (
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider">
+                      👁️ ទិដ្ឋភាពបង្ហាញលើ Storefront (Preview):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDescription('')}
+                      className="text-[11px] font-bold text-red-500 hover:text-red-700 cursor-pointer"
+                    >
+                      លុបអត្ថបទ
+                    </button>
+                  </div>
+                  <div className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-2xs">
+                    {description}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ៩. 📸 រូបភាពពិពណ៌នាលម្អិត (1688 Details Images) */}
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
                   <span className="w-8 h-8 rounded-xl bg-orange-50 text-[#ff6a00] flex items-center justify-center text-base font-black">🖼️</span>
                   <div>
-                    <h3 className="text-base font-black text-slate-900">៨. រូបភាពពិពណ៌នាលម្អិត (1688 Details Images)</h3>
+                    <h3 className="text-base font-black text-slate-900">៩. រូបភាពពិពណ៌នាលម្អិត (1688 Details Images)</h3>
                     <p className="text-[11px] text-slate-400">
-                      រូបភាពបង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើ Storefront (1 ជួរ 1 សន្លឹក មិនទាញរូបភាពពីខាងលើ)
+                      រូបភាពបង្ហាញនៅខាងក្រោមអត្ថបទពិពណ៌នាលើ Storefront (1 ជួរ 1 សន្លឹក មិនទាញរូបភាពពីខាងលើ)
                     </p>
                   </div>
                 </div>
@@ -7725,83 +7802,6 @@ export default function UnifiedAdminDashboard() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* ៩. 📝 អត្ថបទពិពណ៌នាលម្អិតអំពីទំនិញ (Product Description Under YouTube) */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-base font-black">📝</span>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900">៩. អត្ថបទពិពណ៌នាលម្អិតអំពីទំនិញ (Product Description)</h3>
-                    <p className="text-[11px] text-slate-400">
-                      សរសេរព័ត៌មានលម្អិតអំពីទំនិញ (អត្ថបទនេះនឹងបង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើមុខ Website)
-                    </p>
-                  </div>
-                </div>
-                {description && (
-                  <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
-                    ✓ មានអត្ថបទ ({description.length} តួអក្សរ)
-                  </span>
-                )}
-              </div>
-
-              {/* Quick Template Buttons */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-bold text-slate-400 mr-1">គំរូរហ័ស:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const template = `✨ ចំណុចពិសេស (Key Features):\n• ផលិតពីវត្ថុធាតុដើមគុណភាពខ្ពស់ ប្រើប្រាស់បានយូរអង្វែង\n• ទម្ងន់ស្រាល ទន់ស្រួលពាក់ មិនឈឺជើង\n• ម៉ូដទាន់សម័យ ស័ក្តិសមទាំងការងារ និងដំណើរកម្សាន្ត\n\n📏 ការណែនាំទំហំ (Size Guide):\n• Size ស្តង់ដារពិតប្រាកដ បើជើងធំសូមយកលើស ១ លេខ\n\n🛡️ ការធានា:\n• ធានាប្តូរ Size រយៈពេល ៧ ថ្ងៃ\n• ទំនិញដូចរូបភាព ១០០%`;
-                    setDescription(prev => prev ? `${prev}\n\n${template}` : template);
-                  }}
-                  className="text-[11px] font-black text-[#ff6a00] bg-orange-50 hover:bg-orange-100 px-3 py-1 rounded-xl transition cursor-pointer border border-orange-200 active:scale-95"
-                >
-                  + បញ្ចូលគំរូទូទៅ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const template = `🛡️ ការធានា & ប្តូរទំនិញ:\n• ធានាប្តូរ Size ក្នុងរយៈពេល ៧ ថ្ងៃ\n• ពិនិត្យទំនិញរួចរាល់ទើបបង់ប្រាក់\n• ដឹកជញ្ជូនរហ័សទូទាំង ២៥ ខេត្ត/ក្រុង`;
-                    setDescription(prev => prev ? `${prev}\n\n${template}` : template);
-                  }}
-                  className="text-[11px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-xl transition cursor-pointer border border-blue-200 active:scale-95"
-                >
-                  + បញ្ចូលការធានា & ដឹកជញ្ជូន
-                </button>
-              </div>
-
-              {/* Description Textarea */}
-              <div className="relative">
-                <textarea
-                  rows="6"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="សរសេរព័ត៌មានលម្អិតអំពីទំនិញ គុណភាព សាច់ក្រណាត់ ការណែនាំទំហំ ឬរបៀបប្រើប្រាស់... (អត្ថបទនេះនឹងបង្ហាញនៅខាងក្រោមវីដេអូ YouTube លើមុខគេហទំព័រ Storefront)"
-                  className="w-full border-2 border-slate-200 focus:border-[#ff6a00] p-4 rounded-2xl text-xs sm:text-sm text-slate-800 bg-slate-50 focus:bg-white outline-none transition resize-y leading-relaxed"
-                />
-              </div>
-
-              {/* Live Preview of Description */}
-              {description && (
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider">
-                      👁️ ទិដ្ឋភាពបង្ហាញលើ Storefront (Preview):
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setDescription('')}
-                      className="text-[11px] font-bold text-red-500 hover:text-red-700 cursor-pointer"
-                    >
-                      លុបអត្ថបទ
-                    </button>
-                  </div>
-                  <div className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium whitespace-pre-wrap bg-white p-3.5 rounded-xl border border-slate-200/60 shadow-2xs">
-                    {description}
                   </div>
                 </div>
               )}
