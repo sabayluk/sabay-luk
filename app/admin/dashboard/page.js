@@ -5709,6 +5709,13 @@ export default function UnifiedAdminDashboard() {
         setToastNotification(`🎉 បានកែប្រែទំនិញ "${name}" ដោយជោគជ័យ!`);
         setTimeout(() => setToastNotification(null), 3500);
         setEditingProductId(null);
+        setFile(null);
+        setPreviewUrl(null);
+        setProductImages([]);
+        setSelectedCoverIndex(0);
+        setDetailImages([]);
+        setDetailImageUrlInput('');
+        fetchProducts();
         setActiveTab('inventory');
       } else {
         // ⭐️ ១. បញ្ចូលផលិតផលថ្មីទៅតារាង products
@@ -5779,8 +5786,7 @@ export default function UnifiedAdminDashboard() {
           }]);
         }
 
-        setMessage('🎉 បញ្ចូលទំនិញថ្មី និងកត់ត្រាស្តុកជោគជ័យ!');
-        
+        // ⭐️ គណនា SKU បន្ទាប់ដោយស្វ័យប្រវត្តិ (ឧ. B-220 -> B-221 ឬ SL-1001 -> SL-1002) ⭐️
         let nextSkuVal = 'SL-1001';
         const match = (sku || '').match(/^([A-Za-z0-9]+-?)(\d+)$/);
         if (match) {
@@ -5797,45 +5803,46 @@ export default function UnifiedAdminDashboard() {
           localStorage.setItem('sabay_current_sku', nextSkuVal);
         }
         setDisabledVariants([]);
+
+        // ⭐️ លុបតែរូបថតចេញបានហើយ ឯព័ត៌មានផ្សេងទៀត (ឈ្មោះ, ប្រភេទ, តម្លៃ, Size, Color, Stock) រក្សាទុកនៅដដែល ដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់ ⭐️
+        setEditingProductId(null);
+        setFile(null);
+        setPreviewUrl(null);
+        setProductImages([]);
+        setSelectedCoverIndex(0);
+        setDetailImages([]);
+        setDetailImageUrlInput('');
+
+        // រក្សាទុក Draft ថ្មីដែលមាន SKU បន្ទាប់ និងព័ត៌មានដដែលក្នុង LocalStorage
+        if (typeof window !== 'undefined') {
+          const sid = activeStore?.id || 'store_default_sabayluk';
+          const retainedDraft = {
+            name,
+            sku: nextSkuVal || sku,
+            category,
+            selectedSizes,
+            selectedColors,
+            customTextSize,
+            color,
+            stockQty,
+            costPrice,
+            wholesalePrice,
+            wholesaleDiscount,
+            sellingPrice,
+            retailDiscount,
+            lowStockAlert,
+            description: description || ''
+          };
+          try {
+            localStorage.setItem(`sabay_product_draft_${sid}`, JSON.stringify(retainedDraft));
+          } catch (_) {}
+        }
+
+        setMessage('🎉 បញ្ចូលទំនិញថ្មី និងកត់ត្រាស្តុកជោគជ័យ!');
+        setToastNotification('🎉 បានរក្សាទុកទំនិញជោគជ័យ! រូបថតត្រូវបានសម្អាតរួចរាល់ ឯព័ត៌មានផ្សេងទៀតត្រូវបានរក្សាទុកដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់។');
+        setTimeout(() => setToastNotification(null), 5000);
+        fetchProducts();
       }
-
-      // ⭐️ លុបតែរូបថតចេញបានហើយ ឯព័ត៌មានផ្សេងទៀត (ឈ្មោះ, ប្រភេទ, តម្លៃ, Size, Color, Stock) រក្សាទុកនៅដដែល ដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់ ⭐️
-      setEditingProductId(null);
-      setFile(null);
-      setPreviewUrl(null);
-      setProductImages([]);
-      setSelectedCoverIndex(0);
-      setDetailImages([]);
-      setDetailImageUrlInput('');
-
-      // រក្សាទុក Draft ថ្មីដែលមាន SKU បន្ទាប់ និងព័ត៌មានដដែលក្នុង LocalStorage
-      if (typeof window !== 'undefined') {
-        const sid = activeStore?.id || 'store_default_sabayluk';
-        const retainedDraft = {
-          name,
-          sku: nextSkuVal || sku,
-          category,
-          selectedSizes,
-          selectedColors,
-          customTextSize,
-          color,
-          stockQty,
-          costPrice,
-          wholesalePrice,
-          wholesaleDiscount,
-          sellingPrice,
-          retailDiscount,
-          lowStockAlert,
-          description: description || ''
-        };
-        try {
-          localStorage.setItem(`sabay_product_draft_${sid}`, JSON.stringify(retainedDraft));
-        } catch (_) {}
-      }
-
-      setToastNotification('🎉 បានរក្សាទុកទំនិញជោគជ័យ! រូបថតត្រូវបានសម្អាតរួចរាល់ ឯព័ត៌មានផ្សេងទៀតត្រូវបានរក្សាទុកដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់។');
-      setTimeout(() => setToastNotification(null), 5000);
-      fetchProducts();
 
     } catch (error) {
       setMessage('❌ មានបញ្ហា: ' + error.message);
