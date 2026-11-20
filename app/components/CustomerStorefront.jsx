@@ -2579,6 +2579,69 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     return renderCategorySvg(cat?.icon || 'shoe', "w-5 h-5 shrink-0");
   };
 
+  // ⭐️ Helper: រចនាបថពណ៌ Gradient & Icon ស្តង់ដារ App 1688 / Shopee សម្រាប់ប្រភេទនីមួយៗ ⭐️
+  const getCategoryTheme = (cat, idx = 0) => {
+    const name = (cat?.name || '').toLowerCase();
+    const icon = (cat?.icon || '').toLowerCase();
+
+    if (name.includes('បុរស') || icon.includes('men') || name.includes('men')) {
+      return {
+        gradient: 'bg-gradient-to-tr from-orange-500 via-amber-500 to-orange-600',
+        fallbackIcon: 'shoe'
+      };
+    }
+    if (name.includes('នារី') || name.includes('ស្រី') || icon.includes('heel') || name.includes('women')) {
+      return {
+        gradient: 'bg-gradient-to-tr from-rose-500 via-pink-500 to-rose-600',
+        fallbackIcon: 'heel'
+      };
+    }
+    if (name.includes('កាបូប') || icon.includes('bag')) {
+      return {
+        gradient: 'bg-gradient-to-tr from-amber-500 via-yellow-500 to-amber-600',
+        fallbackIcon: 'bag'
+      };
+    }
+    if (name.includes('ខ្សែក្រវ៉ាត់') || icon.includes('belt')) {
+      return {
+        gradient: 'bg-gradient-to-tr from-emerald-500 via-teal-500 to-emerald-600',
+        fallbackIcon: 'belt'
+      };
+    }
+    if (name.includes('នាឡិកា') || icon.includes('watch')) {
+      return {
+        gradient: 'bg-gradient-to-tr from-sky-500 via-blue-500 to-indigo-600',
+        fallbackIcon: 'smartwatch'
+      };
+    }
+    if (name.includes('អាវ') || name.includes('ខោ') || name.includes('សម្លៀក') || icon.includes('shirt')) {
+      return {
+        gradient: 'bg-gradient-to-tr from-cyan-500 via-teal-500 to-blue-500',
+        fallbackIcon: 'shirt'
+      };
+    }
+    if (name.includes('សម្អាង') || name.includes('គ្រឿង') || icon.includes('cosmetic')) {
+      return {
+        gradient: 'bg-gradient-to-tr from-fuchsia-500 via-purple-500 to-pink-500',
+        fallbackIcon: 'cosmetics'
+      };
+    }
+
+    const palettes = [
+      'bg-gradient-to-tr from-orange-500 to-amber-500',
+      'bg-gradient-to-tr from-blue-500 to-indigo-600',
+      'bg-gradient-to-tr from-emerald-500 to-teal-600',
+      'bg-gradient-to-tr from-rose-500 to-pink-500',
+      'bg-gradient-to-tr from-purple-500 to-violet-600',
+      'bg-gradient-to-tr from-amber-500 to-yellow-600',
+      'bg-gradient-to-tr from-cyan-500 to-blue-500',
+    ];
+    return {
+      gradient: palettes[idx % palettes.length],
+      fallbackIcon: cat?.icon || 'shoe'
+    };
+  };
+
   return (
     <div className={`min-h-screen font-sans transition-colors duration-300 ${themeMode === 'dark' ? 'bg-[#0b0f19] text-gray-100 dark' : 'bg-[#fafafa] text-gray-900'} selection:bg-orange-500 selection:text-white pb-16 md:pb-0`}>
       
@@ -2809,58 +2872,98 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
       {/* ⭐️ 3. HERO BANNER & CATEGORIES (MODERN BALANCED LAYOUT) ⭐️ */}
       <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-5 pb-3">
-        {/* 📱 ផ្នែកប្រភេទផលិតផលរៀបចំមួយជួរស្អាតសម្រាប់ Mobile App (Shopee / Lazada Standard Single Row) ⭐️ */}
-        <div className="block lg:hidden mb-4">
-          <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1.5 px-0.5">
-            {/* ប៊ូតុងទំនិញទាំងអស់ (All Items) - ពង្រីកធំស្រួលចុច (Enlarged Touch Target) */}
+        {/* 📱 ផ្នែកប្រភេទផលិតផលរចនាបថ 1688 / Shopee App Channel Navigation (Icon-on-top + Label-on-bottom) ⭐️ */}
+        <div className="block lg:hidden mb-4 bg-white dark:bg-slate-900 rounded-3xl p-3.5 border border-slate-100 dark:border-slate-800/80 shadow-xs">
+          <div className="flex items-start gap-4 sm:gap-6 overflow-x-auto no-scrollbar py-1 px-1 scroll-smooth">
+            {/* All Products Channel Button */}
             <button
               type="button"
               onClick={() => setSelectedCategory('all')}
-              className={`flex items-center gap-2.5 px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl text-sm sm:text-base font-black transition whitespace-nowrap shrink-0 shadow-sm cursor-pointer ${
-                selectedCategory === 'all'
-                  ? 'bg-gradient-to-r from-[#18181b] to-[#27272a] text-white shadow-md'
-                  : `${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-gray-200 text-gray-800'} border-2 hover:bg-gray-50`
-              }`}
+              className="flex flex-col items-center min-w-[64px] max-w-[76px] shrink-0 group cursor-pointer active:scale-95 transition-transform select-none"
             >
-              <span className={`p-1.5 rounded-xl ${selectedCategory === 'all' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'}`}>
-                <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" className="w-4 h-4 sm:w-5 sm:h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-                </svg>
+              <div className="relative">
+                <div className={`w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] rounded-2xl flex items-center justify-center text-white shadow-md transition-all duration-200 ${
+                  selectedCategory === 'all'
+                    ? 'bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-600 ring-2 ring-violet-500 ring-offset-2 dark:ring-offset-slate-900 scale-105 shadow-violet-500/30'
+                    : 'bg-gradient-to-tr from-violet-500 to-indigo-600 hover:scale-105 opacity-90 hover:opacity-100'
+                }`}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" className="w-6 h-6 text-white">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                </div>
+                {/* Floating Count Badge */}
+                <span className={`absolute -top-1 -right-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-xs border ${
+                  selectedCategory === 'all'
+                    ? 'bg-orange-500 text-white border-white dark:border-slate-900 animate-pulse'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                }`}>
+                  {products.length}
+                </span>
+              </div>
+
+              <span className={`mt-2 text-[11px] font-bold leading-tight text-center line-clamp-1 truncate w-full ${
+                selectedCategory === 'all'
+                  ? 'text-orange-600 dark:text-orange-400 font-black'
+                  : 'text-slate-700 dark:text-slate-300 group-hover:text-slate-900'
+              }`}>
+                ទំនិញទាំងអស់
               </span>
-              <span>ទំនិញទាំងអស់</span>
-              <span className={`text-xs px-2.5 py-0.5 rounded-full font-black ${selectedCategory === 'all' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
-                {products.length}
-              </span>
+
+              {/* Active Indicator Bar */}
+              {selectedCategory === 'all' && (
+                <span className="w-5 h-1 bg-orange-500 rounded-full mt-1 animate-in zoom-in-50 duration-200" />
+              )}
             </button>
 
-            {/* បញ្ជីប្រភេទផលិតផលនីមួយៗក្នុងមួយជួរ (Categories in 1 Single Row) - ពង្រីកធំស្រួលចុច */}
-            {categories.map((cat) => {
+            {/* Category Channels */}
+            {categories.map((cat, idx) => {
               const count = products.filter(p => {
                 const pCat = (p.category || '').trim().toLowerCase();
                 const catName = (cat.name || '').trim().toLowerCase();
                 return pCat.includes(catName) || catName.includes(pCat);
               }).length;
               const isSelected = selectedCategory === cat.name;
+              const catTheme = getCategoryTheme(cat, idx);
 
               return (
                 <button
                   key={cat.id || cat.name}
                   type="button"
                   onClick={() => setSelectedCategory(cat.name)}
-                  style={isSelected ? { backgroundColor: brandColor } : {}}
-                  className={`flex items-center gap-2.5 px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl text-sm sm:text-base font-black transition whitespace-nowrap shrink-0 shadow-sm cursor-pointer ${
-                    isSelected
-                      ? 'text-white shadow-md'
-                      : `${themeMode === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-200' : 'bg-white border-gray-200 text-gray-800'} border-2 hover:bg-gray-50`
-                  }`}
+                  className="flex flex-col items-center min-w-[64px] max-w-[76px] shrink-0 group cursor-pointer active:scale-95 transition-transform select-none"
                 >
-                  <span className={`p-1.5 rounded-xl ${isSelected ? 'bg-white/20 text-white' : 'bg-orange-50 text-[#ff6a00]'}`}>
-                    {getCategorySvgIcon(cat, isSelected)}
+                  <div className="relative">
+                    <div className={`w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] rounded-2xl flex items-center justify-center text-white shadow-md transition-all duration-200 ${catTheme.gradient} ${
+                      isSelected
+                        ? 'ring-2 ring-orange-500 ring-offset-2 dark:ring-offset-slate-900 scale-105 shadow-orange-500/30'
+                        : 'hover:scale-105 opacity-90 hover:opacity-100'
+                    }`}>
+                      {renderCategorySvg(cat?.icon || catTheme.fallbackIcon, "w-6 h-6 text-white stroke-2")}
+                    </div>
+                    {/* Floating Count Badge */}
+                    {count > 0 && (
+                      <span className={`absolute -top-1 -right-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-xs border ${
+                        isSelected
+                          ? 'bg-orange-500 text-white border-white dark:border-slate-900 animate-pulse'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                      }`}>
+                        {count}
+                      </span>
+                    )}
+                  </div>
+
+                  <span className={`mt-2 text-[11px] font-bold leading-tight text-center line-clamp-1 truncate w-full ${
+                    isSelected
+                      ? 'text-orange-600 dark:text-orange-400 font-black'
+                      : 'text-slate-700 dark:text-slate-300 group-hover:text-slate-900'
+                  }`}>
+                    {cat.name}
                   </span>
-                  <span>{cat.name}</span>
-                  <span className={`text-xs px-2.5 py-0.5 rounded-full font-black ${isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'}`}>
-                    {count}
-                  </span>
+
+                  {/* Active Indicator Bar */}
+                  {isSelected && (
+                    <span className="w-5 h-1 bg-orange-500 rounded-full mt-1 animate-in zoom-in-50 duration-200" />
+                  )}
                 </button>
               );
             })}
