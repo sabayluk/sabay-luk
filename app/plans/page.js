@@ -1,9 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function PlansAndSaaSPage() {
+function PlansContent() {
+  const searchParams = useSearchParams();
+  const storeParam = searchParams?.get('store') || '';
   const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
 
   const plans = [
@@ -221,6 +224,34 @@ export default function PlansAndSaaSPage() {
           និងមើលរបាយការណ៍ចំណេញខាតបានយ៉ាងងាយស្រួល ពីគ្រប់ទីកន្លែងលើទូរស័ព្ទដៃ និងកុំព្យូទ័រ។
         </p>
 
+        {/* ⭐️ STORE EXPIRY / RENEWAL CALLOUT BANNER (IF ACCESSED VIA ALERT LINK) ⭐️ */}
+        {storeParam && (
+          <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl border-2 border-blue-400/40 text-left max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
+            <div className="flex items-start gap-3.5">
+              <span className="text-3xl shrink-0 p-2.5 bg-white/10 rounded-2xl border border-white/20">🏪</span>
+              <div>
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 shadow-2xs mb-1">
+                  ⚡ បន្តសុពលភាព / ដំឡើងកញ្ចប់សេវាហាង
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  ហាង៖ <span className="text-amber-300 font-mono underline decoration-amber-400 underline-offset-2">{storeParam}</span>
+                </h3>
+                <p className="text-xs text-blue-100 mt-1 leading-relaxed">
+                  សូមជ្រើសរើសកញ្ចប់សេវាខាងក្រោម ដើម្បីបន្តដំណើរការលក់ កាត់ស្តុក និងចេញវិក្កយបត្រដោយរលូន គ្មានការរអាក់រអួល។
+                </p>
+              </div>
+            </div>
+            <Link
+              href={`/admin/dashboard?store=${encodeURIComponent(storeParam)}`}
+              className="shrink-0 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black shadow-md transition active:scale-95 flex items-center gap-1.5"
+            >
+              <span>⚡</span>
+              <span>ចូលផ្ទាំងគ្រប់គ្រងហាង</span>
+              <span>➔</span>
+            </Link>
+          </div>
+        )}
+
         {/* ⭐️ STRATEGIC YEARLY PAYMENT CALLOUT BANNER ⭐️ */}
         <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/15 to-amber-500/10 border-2 border-amber-300 rounded-3xl p-5 sm:p-6 text-left max-w-4xl mx-auto shadow-md">
           <div className="flex items-start gap-3.5">
@@ -350,14 +381,22 @@ export default function PlansAndSaaSPage() {
 
                 <div className="pt-6 mt-6 border-t border-slate-100">
                   <Link
-                    href={`/register?plan=${p.key}&cycle=${billingCycle}`}
+                    href={
+                      storeParam 
+                        ? `/admin/dashboard?store=${encodeURIComponent(storeParam)}&upgrade=${p.key}&cycle=${billingCycle}`
+                        : `/register?plan=${p.key}&cycle=${billingCycle}`
+                    }
                     className={`w-full py-3.5 rounded-2xl font-black text-xs transition flex items-center justify-center gap-1.5 active:scale-95 shadow-md ${
                       p.popular
                         ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25'
                         : 'bg-slate-900 hover:bg-black text-white'
                     }`}
                   >
-                    <span>{p.priceMonthly === 0 ? '🎁 ចុះឈ្មោះប្រើ Free ឥឡូវនេះ' : `⚡ ជ្រើសរើស ${p.name}`}</span>
+                    <span>
+                      {storeParam 
+                        ? `⚡ បន្តជាវ ${p.name} សម្រាប់ហាង ${storeParam}` 
+                        : (p.priceMonthly === 0 ? '🎁 ចុះឈ្មោះប្រើ Free ឥឡូវនេះ' : `⚡ ជ្រើសរើស ${p.name}`)}
+                    </span>
                     <span>➔</span>
                   </Link>
                 </div>
@@ -431,10 +470,14 @@ export default function PlansAndSaaSPage() {
                     </td>
                     <td className="px-4 py-4 text-right whitespace-nowrap">
                       <Link
-                        href={`/register?plan=${p.key}&cycle=yearly`}
+                        href={
+                          storeParam 
+                            ? `/admin/dashboard?store=${encodeURIComponent(storeParam)}&upgrade=${p.key}&cycle=yearly`
+                            : `/register?plan=${p.key}&cycle=yearly`
+                        }
                         className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-[11px] hover:from-blue-700 hover:to-indigo-700 transition active:scale-95 shadow-xs"
                       >
-                        ជ្រើសរើស ➔
+                        {storeParam ? 'បន្តជាវ ➔' : 'ជ្រើសរើស ➔'}
                       </Link>
                     </td>
                   </tr>
@@ -567,5 +610,20 @@ export default function PlansAndSaaSPage() {
         </p>
       </footer>
     </div>
+  );
+}
+
+export default function PlansAndSaaSPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="p-6 bg-white rounded-2xl shadow-sm border border-slate-200 text-center">
+          <div className="animate-spin text-3xl mb-2">⏳</div>
+          <p className="text-xs font-bold text-slate-600">កំពុងដំណើរការគម្រោងសេវាកម្ម...</p>
+        </div>
+      </div>
+    }>
+      <PlansContent />
+    </Suspense>
   );
 }

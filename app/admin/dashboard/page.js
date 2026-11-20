@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { supabase, normalizeEnableTax } from '../../../supabase';
 import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, fetchAllStores, deleteStoreRecord, STORE_PLANS, checkStorePlanLimit, getStorePlanExpiryInfo, renewStoreSubscription, getSubscriptionPayments, saveSubscriptionPayments, submitSubscriptionPayment, approveSubscriptionPayment, rejectSubscriptionPayment, approveStoreDirectly, isStoreNameOrSlugTaken, getStoreInactivityDays, isStoreInactive, updateStoreActivity, suspendStore, reactivateStore } from '../../../lib/stores';
+import { sendStorePlanExpiryTelegramAlert, sendAllExpiringStoresTelegramAlerts, filterExpiringStores } from '../../../lib/planExpiryAlertEngine';
 import * as XLSX from 'xlsx';
 import { CATEGORY_DEPARTMENTS, CATEGORY_ICONS_LIST, renderCategorySvg } from '../../../lib/categoryIcons';
 import WorldStandardFinanceView from '../../components/WorldStandardFinanceView';
@@ -1251,6 +1252,29 @@ export default function UnifiedAdminDashboard() {
   const [upgradeSlipPreview, setUpgradeSlipPreview] = useState(null);
   const [upgradeTxRef, setUpgradeTxRef] = useState('');
   const [upgradeSubmitting, setUpgradeSubmitting] = useState(false);
+
+  // ⭐️ Auto-open Upgrade / Renewal Modal if navigated with ?upgrade=... or from Telegram/Plans Alert ⭐️
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const upgradeKey = urlParams.get('upgrade');
+      const cycleKey = urlParams.get('cycle');
+      if (upgradeKey) {
+        const target = UPGRADE_PLANS_LIST.find(p => p.key === upgradeKey) || UPGRADE_PLANS_LIST.find(p => p.key === 'PRO');
+        if (target) {
+          setSelectedUpgradePlan(target);
+          if (cycleKey === 'monthly' || cycleKey === 'yearly') {
+            setUpgradeBillingCycle(cycleKey);
+          }
+          setUpgradeSlipFile(null);
+          setUpgradeSlipPreview(null);
+          setUpgradeTxRef('');
+          setUpgradePlanModalOpen(true);
+        }
+      }
+    } catch (_) {}
+  }, []);
 
   // ⭐️ CUTTING-EDGE TOP UP / PLAN LIMIT MODAL STATE ⭐️
   const [planLimitInfo, setPlanLimitInfo] = useState(null);
@@ -5173,6 +5197,7 @@ export default function UnifiedAdminDashboard() {
   const [approvalModalData, setApprovalModalData] = useState(null);
   const [approvalModalRejectReason, setApprovalModalRejectReason] = useState('');
   const [isSubmittingApprovalModal, setIsSubmittingApprovalModal] = useState(false);
+  const [isSendingAllExpiryAlerts, setIsSendingAllExpiryAlerts] = useState(false);
 
   // ⭐️ TOP-LEVEL HANDLERS FOR APPROVAL MODAL (ACCESSIBLE TO MODAL & ALL VIEWS) ⭐️
   const handleApprovePayment = (paymentId, directItem = null) => {
@@ -14649,6 +14674,8 @@ export default function UnifiedAdminDashboard() {
     const suspendedCount = registeredStores.filter(s => s.status === 'SUSPENDED').length;
     const paidCount = registeredStores.filter(s => s.plan && s.plan !== 'FREE').length;
     const freeCount = totalStores - paidCount;
+    const expiringStores = filterExpiringStores(registeredStores);
+    const expiringCount = expiringStores.length;
 
     // Monthly Recurring Revenue (MRR)
     const estimatedMRR = registeredStores.reduce((sum, s) => {
@@ -15048,7 +15075,8 @@ export default function UnifiedAdminDashboard() {
       const matchStatus = storeFilterStatus === 'ALL' || 
         (storeFilterStatus === 'ACTIVE' && s.status !== 'SUSPENDED' && !isStoreInactive(s, 30)) ||
         (storeFilterStatus === 'INACTIVE' && s.status !== 'SUSPENDED' && isStoreInactive(s, 30)) ||
-        (storeFilterStatus === 'SUSPENDED' && s.status === 'SUSPENDED');
+        (storeFilterStatus === 'SUSPENDED' && s.status === 'SUSPENDED') ||
+        (storeFilterStatus === 'EXPIRING' && s.plan !== 'FREE' && s.id !== 'store_default_sabayluk' && getStorePlanExpiryInfo(s).daysLeft <= 7);
       return matchSearch && matchPlan && matchStatus;
     });
 
@@ -15163,7 +15191,7 @@ export default function UnifiedAdminDashboard() {
           <div className="space-y-6 animate-in fade-in duration-150">
 
                 {/* ⭐️ PLATFORM KPI ANALYTICS CARDS ⭐️ */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-3">
           
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">🏬 ហាងសរុប</span>
@@ -15176,6 +15204,25 @@ export default function UnifiedAdminDashboard() {
             <span className="text-2xl font-black text-emerald-600">{activeCount}</span>
             <span className="text-[10px] text-emerald-700/70 block">ហាងកំពុងលក់សកម្ម</span>
           </div>
+
+          {/* ⭐️ ហាងជិតផុតកំណត់ <= ៧ ថ្ងៃ ⭐️ */}
+          <button
+            type="button"
+            onClick={() => setStoreFilterStatus(storeFilterStatus === 'EXPIRING' ? 'ALL' : 'EXPIRING')}
+            className={`p-4 rounded-2xl border text-left transition cursor-pointer space-y-1 ${
+              storeFilterStatus === 'EXPIRING'
+                ? 'bg-amber-100 border-amber-400 ring-2 ring-amber-300'
+                : 'bg-white hover:bg-amber-50/50 border-amber-300/80 shadow-2xs'
+            }`}
+            title="ចុចដើម្បីច្រោះមើលតែហាងជិតផុតកំណត់ (សល់ <= ៧ ថ្ងៃ)"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-amber-700 uppercase tracking-wider block">⚠️ ជិតផុត (≤៧ថ្ងៃ)</span>
+              {expiringCount > 0 && <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />}
+            </div>
+            <span className="text-2xl font-black text-amber-700">{expiringCount}</span>
+            <span className="text-[10px] text-amber-800/80 block">រង់ចាំបន្តសុពលភាព</span>
+          </button>
 
           <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
             <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider block">🔴 បានផ្អាក</span>
@@ -15220,6 +15267,66 @@ export default function UnifiedAdminDashboard() {
           </div>
 
         </div>
+
+        {/* 🚨 EXPIRING STORES ALERT & ACTION BAR (<= 7 DAYS) 🚨 */}
+        {expiringCount > 0 && (
+          <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 border-2 border-amber-400 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <span className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center text-2xl font-bold shadow-xs shrink-0 animate-bounce">
+                ⏳
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-black text-amber-950 text-sm sm:text-base">
+                    មានចំនួន {expiringCount} ហាងជិតដល់ថ្ងៃផុតកំណត់ (នៅសល់ &le; ៧ ថ្ងៃ)
+                  </h4>
+                  <span className="bg-amber-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
+                    ត្រូវបន្តសុពលភាព
+                  </span>
+                </div>
+                <p className="text-xs text-amber-900 mt-1 font-medium leading-relaxed">
+                  ហាងទាំងនេះរួមមាន៖ {expiringStores.map(item => `${item.store.name} (សល់ ${item.expiry.daysLeft} ថ្ងៃ, ប្រើអស់ ${item.expiry.daysUsed} ថ្ងៃ)`).slice(0, 3).join(', ')}{expiringStores.length > 3 ? '...' : ''}។ បងអាចផ្ញើការរំលឹកតាម Telegram ទៅកាន់ម្ចាស់ហាង និង Telegram Owner ភ្លាមៗ។
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setStoreFilterStatus(storeFilterStatus === 'EXPIRING' ? 'ALL' : 'EXPIRING')}
+                className="px-3.5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-black transition cursor-pointer shadow-xs active:scale-95"
+              >
+                🔍 ច្រោះមើលហាងជិតផុត ({expiringCount})
+              </button>
+              <button
+                type="button"
+                disabled={isSendingAllExpiryAlerts}
+                onClick={async () => {
+                  setIsSendingAllExpiryAlerts(true);
+                  setToastNotification('⏳ កំពុងផ្ញើ Telegram Alert ទៅគ្រប់ហាងជិតផុតកំណត់...');
+                  const res = await sendAllExpiringStoresTelegramAlerts(registeredStores, { force: true });
+                  setIsSendingAllExpiryAlerts(false);
+                  if (res.success) {
+                    setToastNotification(`✅ បានផ្ញើ Telegram Alert ទៅកាន់ ${res.sentCount}/${res.totalExpiring} ហាងជោគជ័យ!`);
+                  } else {
+                    setToastNotification('⚠️ បរាជ័យក្នុងការផ្ញើ Telegram Alert');
+                  }
+                  setTimeout(() => setToastNotification(null), 4000);
+                }}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+              >
+                <span>📲</span>
+                <span>{isSendingAllExpiryAlerts ? 'កំពុងផ្ញើ...' : `ផ្ញើ Telegram Alert គ្រប់ហាង (${expiringCount})`}</span>
+              </button>
+              <Link
+                href="/plans"
+                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+              >
+                <span>💳</span>
+                <span>គម្រោងបង់ប្រាក់ ↗</span>
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* 🚨 INACTIVE STORES WARNING & ACTION BAR 🚨 */}
         {inactiveCount > 0 && (
@@ -15293,6 +15400,7 @@ export default function UnifiedAdminDashboard() {
               className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none cursor-pointer"
             >
               <option value="ALL">គ្រប់ស្ថានភាព (All Status)</option>
+              <option value="EXPIRING">⚠️ ជិតផុតកំណត់ (≤ ៧ ថ្ងៃ) ({expiringCount})</option>
               <option value="ACTIVE">🟢 កំពុងដំណើរការសកម្ម (Active)</option>
               <option value="INACTIVE">⚠️ អសកម្ម ៣០+ ថ្ងៃ ({inactiveCount})</option>
               <option value="SUSPENDED">🔴 បានផ្អាក (Suspended)</option>
@@ -15313,7 +15421,7 @@ export default function UnifiedAdminDashboard() {
                   <th className="px-5 py-3.5">ហាង (Store Details)</th>
                   <th className="px-5 py-3.5">ម្ចាស់ & ទំនាក់ទំនង</th>
                   <th className="px-5 py-3.5">កញ្ចប់សេវា (Plan)</th>
-                  <th className="px-5 py-3.5">សុពលភាព (Expiry)</th>
+                  <th className="px-5 py-3.5">សុពលភាព & រយៈពេលប្រើប្រាស់ (Usage & Expiry)</th>
                   <th className="px-5 py-3.5 text-center">សកម្មភាព/អសកម្ម</th>
                   <th className="px-5 py-3.5 text-center">កម្រិតទំនិញ</th>
                   <th className="px-5 py-3.5 text-center">ស្ថានភាព (Status)</th>
@@ -15452,48 +15560,107 @@ export default function UnifiedAdminDashboard() {
                         </div>
                       </td>
 
-                      {/* Subscription Expiry & Quick Renewal */}
+                      {/* Subscription Expiry, Usage & Quick Renewal */}
                       <td className="px-5 py-4 whitespace-nowrap">
                         {(() => {
                           const expiry = getStorePlanExpiryInfo(st);
                           return (
-                            <div className="space-y-1">
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black border ${expiry.badgeColor}`}>
-                                {expiry.badgeText}
-                              </span>
+                            <div className="space-y-1.5 min-w-[155px]">
+                              {/* Status Badge */}
+                              <div className="flex items-center gap-1.5">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black border shadow-2xs ${expiry.badgeColor}`}>
+                                  {expiry.badgeText}
+                                </span>
+                              </div>
+
                               {!expiry.isLifetime && (
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      const renewed = await renewStoreSubscription(st.id, 1);
-                                      if (renewed) {
-                                        setRegisteredStores(getLocalStores());
-                                        setToastNotification(`🎉 បានបន្តសុពលភាពហាង "${st.name}" +១ ខែ ជោគជ័យ!`);
-                                        setTimeout(() => setToastNotification(null), 3000);
-                                      }
-                                    }}
-                                    className="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition cursor-pointer"
-                                    title="បន្តសុពលភាព ១ ខែ"
-                                  >
-                                    +១ ខែ
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      const renewed = await renewStoreSubscription(st.id, 12);
-                                      if (renewed) {
-                                        setRegisteredStores(getLocalStores());
-                                        setToastNotification(`🎉 បានបន្តសុពលភាពហាង "${st.name}" +១ ឆ្នាំ ជោគជ័យ!`);
-                                        setTimeout(() => setToastNotification(null), 3000);
-                                      }
-                                    }}
-                                    className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
-                                    title="បន្តសុពលភាព ១ ឆ្នាំ"
-                                  >
-                                    +១ ឆ្នាំ
-                                  </button>
-                                </div>
+                                <>
+                                  {/* ពេលវេលាប្រើអស់ & នៅសល់ */}
+                                  <div className="text-[10px] space-y-0.5">
+                                    <div className="flex items-center justify-between text-slate-600 font-bold">
+                                      <span>⏳ ប្រើអស់៖</span>
+                                      <span className="font-mono text-slate-900 font-black">{expiry.daysUsed} ថ្ងៃ ({expiry.usedPercent}%)</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-slate-600 font-bold">
+                                      <span>⚠️ នៅសល់៖</span>
+                                      <span className={`font-mono font-black ${expiry.isExpiringSoon || expiry.isExpired ? 'text-amber-700 font-black' : 'text-blue-600'}`}>
+                                        {Math.max(0, expiry.daysLeft)} ថ្ងៃ
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Progress Bar ពេលវេលាប្រើប្រាស់ */}
+                                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200">
+                                    <div 
+                                      className={`h-full rounded-full transition-all duration-300 ${
+                                        expiry.isExpired ? 'bg-rose-500' :
+                                        expiry.isExpiringSoon ? 'bg-amber-500 animate-pulse' :
+                                        'bg-blue-600'
+                                      }`} 
+                                      style={{ width: `${expiry.usedPercent}%` }}
+                                      title={`ប្រើអស់ ${expiry.daysUsed}/${expiry.totalCycleDays} ថ្ងៃ`}
+                                    />
+                                  </div>
+
+                                  <div className="text-[9px] text-slate-400 font-mono">
+                                    📅 ផុត៖ {expiry.formattedExpiry}
+                                  </div>
+
+                                  {/* Quick Actions & Direct Telegram Alert */}
+                                  <div className="flex items-center flex-wrap gap-1 pt-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const renewed = await renewStoreSubscription(st.id, 1);
+                                        if (renewed) {
+                                          setRegisteredStores(getLocalStores());
+                                          setToastNotification(`🎉 បានបន្តសុពលភាពហាង "${st.name}" +១ ខែ ជោគជ័យ!`);
+                                          setTimeout(() => setToastNotification(null), 3000);
+                                        }
+                                      }}
+                                      className="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition cursor-pointer"
+                                      title="បន្តសុពលភាព ១ ខែ"
+                                    >
+                                      +១ ខែ
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const renewed = await renewStoreSubscription(st.id, 12);
+                                        if (renewed) {
+                                          setRegisteredStores(getLocalStores());
+                                          setToastNotification(`🎉 បានបន្តសុពលភាពហាង "${st.name}" +១ ឆ្នាំ ជោគជ័យ!`);
+                                          setTimeout(() => setToastNotification(null), 3000);
+                                        }
+                                      }}
+                                      className="text-[9px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
+                                      title="បន្តសុពលភាព ១ ឆ្នាំ"
+                                    >
+                                      +១ ឆ្នាំ
+                                    </button>
+
+                                    {/* ⭐️ Telegram Alert Button ⭐️ */}
+                                    {(expiry.isExpiringSoon || expiry.isExpired) && (
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          setToastNotification(`⏳ កំពុងផ្ញើ Alert Telegram សម្រាប់ហាង "${st.name}"...`);
+                                          const res = await sendStorePlanExpiryTelegramAlert(st, { force: true });
+                                          if (res.success) {
+                                            setToastNotification(`✅ បានផ្ញើ Alert ទៅ Telegram ម្ចាស់ហាង និង Owner ជោគជ័យ!`);
+                                          } else {
+                                            setToastNotification(`⚠️ ផ្ញើមិនបាន: ${res.error || res.reason}`);
+                                          }
+                                          setTimeout(() => setToastNotification(null), 4000);
+                                        }}
+                                        className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition cursor-pointer flex items-center gap-0.5 shadow-2xs"
+                                        title="ផ្ញើសារ Alert រំលឹកទៅ Telegram ម្ចាស់ហាង និង Telegram Owner ភ្លាមៗ"
+                                      >
+                                        <span>📲</span> Alert TG
+                                      </button>
+                                    )}
+                                  </div>
+                                </>
                               )}
                             </div>
                           );
@@ -16041,6 +16208,7 @@ export default function UnifiedAdminDashboard() {
                           const isPending = item.status === 'PENDING';
                           const isApproved = item.status === 'APPROVED';
                           const targetStore = registeredStores.find(s => s.id === item.store_id);
+                          const targetExp = targetStore ? getStorePlanExpiryInfo(targetStore) : null;
 
                           return (
                             <tr key={item.id} className={`hover:bg-slate-50/70 transition ${isPending ? 'bg-amber-50/20' : ''}`}>
@@ -16143,6 +16311,15 @@ export default function UnifiedAdminDashboard() {
                                 <span className="text-[10px] text-slate-500 block mt-0.5">
                                   {item.billing_cycle === 'yearly' ? '🗓️ បង់ប្រចាំឆ្នាំ (៣៦៥ ថ្ងៃ)' : '🗓️ បង់ប្រចាំខែ (៣០ ថ្ងៃ)'}
                                 </span>
+                                {targetExp && targetExp.status !== 'LIFETIME' && (
+                                  <div className="mt-1 text-[9px] text-slate-500 font-medium leading-tight">
+                                    <span className="text-slate-600 font-bold">⏳ ប្រើអស់៖ {targetExp.daysUsed} ថ្ងៃ ({targetExp.usedPercent}%)</span>
+                                    <br />
+                                    <span className={`font-black ${targetExp.isExpiringSoon ? 'text-amber-600' : targetExp.isExpired ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                      {targetExp.isExpired ? `⛔ ផុត ${Math.abs(targetExp.daysLeft)} ថ្ងៃ` : `⚠️ នៅសល់៖ ${targetExp.daysLeft} ថ្ងៃ`}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
 
                               {/* Amount */}
@@ -29239,44 +29416,67 @@ export default function UnifiedAdminDashboard() {
           if (expiryInfo.status !== 'EXPIRING_SOON' && expiryInfo.status !== 'EXPIRED') return null;
 
           const isExpired = expiryInfo.status === 'EXPIRED';
+          const renewalPlansUrl = `/plans?store=${encodeURIComponent(activeStore.slug || activeStore.id)}`;
+
           return (
-            <div className={`mb-4 p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md animate-in slide-in-from-top-2 ${
+            <div className={`mb-4 p-4 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-md animate-in slide-in-from-top-2 ${
               isExpired 
                 ? 'bg-rose-50 border-rose-200 text-rose-900' 
                 : 'bg-amber-50 border-amber-200 text-amber-900'
             }`}>
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3">
                 <span className="text-2xl shrink-0 animate-bounce">
                   {isExpired ? '🚨' : '⏳'}
                 </span>
                 <div>
-                  <p className="text-xs font-black">
-                    {isExpired
-                      ? `កញ្ចប់សេវា ${STORE_PLANS[activeStore?.plan]?.name || 'Plan'} របស់ហាងអ្នកបានផុតកំណត់ហើយ!`
-                      : `កញ្ចប់សេវា ${STORE_PLANS[activeStore?.plan]?.name || 'Plan'} របស់ហាងអ្នកនៅសល់តែ ${expiryInfo.daysLeft} ថ្ងៃទៀតនឹងផុតកំណត់!`}
-                  </p>
-                  <p className="text-[11px] opacity-80 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-black">
+                      {isExpired
+                        ? `កញ្ចប់សេវា ${STORE_PLANS[activeStore?.plan]?.name || 'Plan'} របស់ហាងអ្នកបានផុតកំណត់ហើយ!`
+                        : `កញ្ចប់សេវា ${STORE_PLANS[activeStore?.plan]?.name || 'Plan'} របស់ហាងអ្នកនៅសល់តែ ${expiryInfo.daysLeft} ថ្ងៃទៀតនឹងផុតកំណត់!`}
+                    </p>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                      isExpired ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-amber-100 text-amber-800 border-amber-300'
+                    }`}>
+                      {expiryInfo.remainingText}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold mt-1 opacity-90">
+                    <span>⏳ {expiryInfo.usedText} ({expiryInfo.usedPercent}%)</span>
+                    <span>•</span>
+                    <span>📅 ផុតកំណត់៖ {expiryInfo.formattedExpiry}</span>
+                  </div>
+                  <p className="text-[11px] opacity-80 mt-1">
                     សូមស្កេនបន្តការជាវ ($1, $2, $3.../ខែ) ដើម្បីកុំឱ្យខកខាន ឬរអាក់រអួលដល់ប្រតិបត្តិការលក់ និងកត់ត្រាស្តុក។
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const curKey = activeStore?.plan || 'STARTER';
-                  const target = UPGRADE_PLANS_LIST.find(p => p.key === curKey) || UPGRADE_PLANS_LIST[1];
-                  setSelectedUpgradePlan(target);
-                  setUpgradeSlipFile(null);
-                  setUpgradeSlipPreview(null);
-                  setUpgradeTxRef('');
-                  setUpgradePlanModalOpen(true);
-                }}
-                className={`shrink-0 px-4 py-2 rounded-xl text-xs font-black text-white shadow-md transition active:scale-95 cursor-pointer ${
-                  isExpired ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'
-                }`}
-              >
-                បន្តការជាវភ្លាម (Renew Now) ⚡
-              </button>
+              <div className="flex items-center gap-2 shrink-0 w-full md:w-auto justify-end">
+                <Link
+                  href={renewalPlansUrl}
+                  className="px-3.5 py-2 rounded-xl text-xs font-black bg-white/90 hover:bg-white text-slate-800 border border-slate-300/80 shadow-2xs transition active:scale-95 flex items-center gap-1.5"
+                >
+                  <span>💳</span>
+                  <span>គម្រោងបង់ប្រាក់ ↗</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const curKey = activeStore?.plan || 'STARTER';
+                    const target = UPGRADE_PLANS_LIST.find(p => p.key === curKey) || UPGRADE_PLANS_LIST[1];
+                    setSelectedUpgradePlan(target);
+                    setUpgradeSlipFile(null);
+                    setUpgradeSlipPreview(null);
+                    setUpgradeTxRef('');
+                    setUpgradePlanModalOpen(true);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-black text-white shadow-md transition active:scale-95 cursor-pointer ${
+                    isExpired ? 'bg-rose-600 hover:bg-rose-700' : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  បន្តការជាវភ្លាម (Renew Now) ⚡
+                </button>
+              </div>
             </div>
           );
         })()}

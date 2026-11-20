@@ -271,6 +271,107 @@ export async function POST(request) {
         `━━━━━━━━━━━━━━━━━━\n` +
         `⏰ <b>កាលបរិច្ឆេទបន្ត:</b> ${new Date().toLocaleString('km-KH')}\n` +
         `⚡ <i>គណនីហាងត្រូវបានបើក និងដំណើរការបន្តដោយរលូន!</i>`;
+    } else if (action === 'store_plan_expiring_alert') {
+      const stName = body.storeName || 'ហាង';
+      const stSlug = body.storeSlug || '';
+      const ownerName = body.ownerName || 'ម្ចាស់ហាង';
+      const phone = body.phone || '—';
+      const planName = body.planName || body.planKey || 'PRO';
+      const daysUsed = body.daysUsed ?? 0;
+      const daysLeft = body.daysLeft ?? 0;
+      const isExpired = body.isExpired || daysLeft <= 0;
+      const formattedExpiry = body.formattedExpiry || '—';
+      const renewalUrl = body.renewalUrl || `${origin}/plans?store=${stSlug}`;
+
+      finalMessage = `⚠️ <b>ការជូនដំណឹង៖ គម្រោងសេវាកម្មហាងជិតផុតកំណត់! (Plan Expiring Alert)</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🏬 <b>ហាង៖</b> <b>${stName}</b> (<code>${stSlug}</code>)\n` +
+        `👤 <b>ម្ចាស់ហាង៖</b> <b>${ownerName}</b>\n` +
+        `📞 <b>លេខទូរស័ព្ទ៖</b> <code>${phone}</code>\n` +
+        `💎 <b>គម្រោងបច្ចុប្បន្ន៖</b> <b>${planName}</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⏳ <b>រយៈពេលប្រើអស់៖</b> <b>${daysUsed} ថ្ងៃ</b>\n` +
+        (isExpired 
+          ? `🔴 <b>ស្ថានភាព៖</b> <b>ផុតកំណត់ ${Math.abs(daysLeft)} ថ្ងៃមុន</b> (ថ្ងៃទី ${formattedExpiry})\n` 
+          : `⚠️ <b>រយៈពេលនៅសល់៖</b> <b>${daysLeft} ថ្ងៃ</b> (ផុតកំណត់ថ្ងៃទី ${formattedExpiry})\n`) +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💡 <i>សូមបន្តសុពលភាព ឬដំឡើងគម្រោង ដើម្បីកុំឱ្យរអាក់រអួលដល់ការលក់ និងការគ្រប់គ្រងស្តុកទំនិញ។</i>`;
+
+      if (isValidTelegramUrl(renewalUrl)) {
+        inlineKeyboard = [
+          [
+            { text: '💳 បន្តបង់ប្រាក់ & គម្រោងសេវាកម្ម (Renew Plan)', url: renewalUrl }
+          ]
+        ];
+      }
+
+      // ⭐️ DUAL DISPATCH: ផ្ញើទៅទាំង Telegram ម្ចាស់ហាង និង Telegram Master Owner ⭐️
+      let masterToken = '';
+      let masterChat = '';
+      try {
+        const { data: defaultRow } = await supabase
+          .from('stores')
+          .select('settings')
+          .eq('id', 'store_default_sabayluk')
+          .maybeSingle();
+        if (defaultRow?.settings) {
+          masterToken = (defaultRow.settings.telegramBotToken || '').trim();
+          masterChat = (defaultRow.settings.telegramChatId || '').trim();
+        }
+      } catch (_) {}
+
+      if (!masterToken) masterToken = (process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || DEFAULT_PLATFORM_BOT_TOKEN).trim();
+      if (!masterChat) masterChat = (process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || DEFAULT_PLATFORM_CHAT_ID).trim();
+
+      const alertPayload = {
+        chat_id: chat,
+        text: finalMessage,
+        parse_mode: 'HTML'
+      };
+      if (inlineKeyboard) {
+        alertPayload.reply_markup = { inline_keyboard: inlineKeyboard };
+      }
+
+      // 1. Send to Store Owner's Telegram
+      let storeSendRes = null;
+      if (token && chat) {
+        try {
+          const sRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(alertPayload)
+          });
+          storeSendRes = await sRes.json();
+        } catch (e) {
+          console.warn('Telegram send to store owner failed:', e);
+        }
+      }
+
+      // 2. Send to Platform Master Owner Telegram (if different destination)
+      let masterSendRes = null;
+      if (masterToken && masterChat && (masterChat !== chat || masterToken !== token)) {
+        try {
+          const mPayload = {
+            ...alertPayload,
+            chat_id: masterChat
+          };
+          const mRes = await fetch(`https://api.telegram.org/bot${masterToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(mPayload)
+          });
+          masterSendRes = await mRes.json();
+        } catch (e) {
+          console.warn('Telegram send to master owner failed:', e);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'បានផ្ញើសារ Alert ជិតផុតកំណត់ទៅ Telegram ម្ចាស់ហាង និង Owner ជោគជ័យ!',
+        storeSend: storeSendRes,
+        masterSend: masterSendRes
+      });
     } else if (action === 'test') {
       finalMessage = `🔔 <b>សាកល្បងការតភ្ជាប់ Telegram Bot (Test Connection)</b>\n\n` +
         `🏪 <b>ហាង:</b> ${storeName || 'SABAY LUK'}\n` +
