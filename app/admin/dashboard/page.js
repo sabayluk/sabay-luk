@@ -50,58 +50,89 @@ const getPlanProrationInfo = (store, targetPlanPrice = 0) => {
   // 1. Determine plan cycle and base price
   const isYearly = store?.billing_cycle === 'yearly' || store?.settings?.billing_cycle === 'yearly';
   const planCyclePrice = isFree ? 0 : (isYearly ? (planInfo.priceYearly || 0) : (planInfo.priceMonthly || planInfo.price || 0));
-  const totalCycleDays = isFree ? 0 : (isYearly ? 365 : 30);
+  const standardCycleDays = isFree ? 0 : (isYearly ? 365 : 30);
 
-  // 2. Compute days left & used days
+  // 2. Compute true remaining days & expiry date
   const expiresAt = store?.plan_expires_at;
   let remainingDays = 0;
   let isExpired = false;
   let formattedExpiry = 'ឥតកំណត់';
+  let totalCycleDays = standardCycleDays;
+  let usedDays = 0;
 
   if (isFree) {
     remainingDays = 0;
-  } else if (expiresAt) {
-    const expiryDate = new Date(expiresAt);
-    if (!isNaN(expiryDate.getTime())) {
-      formattedExpiry = expiryDate.toLocaleDateString('km-KH');
-      const now = new Date();
-      const diffMs = expiryDate.getTime() - now.getTime();
-      const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      if (days <= 0) {
-        isExpired = true;
-        remainingDays = 0;
-      } else {
-        remainingDays = Math.min(totalCycleDays, days);
+    usedDays = 0;
+    totalCycleDays = 0;
+    formattedExpiry = 'ឥតកំណត់';
+  } else {
+    const now = new Date();
+    let expiryDate = null;
+
+    if (expiresAt) {
+      const parsed = new Date(expiresAt);
+      if (!isNaN(parsed.getTime())) {
+        expiryDate = parsed;
       }
     }
-  } else if (store?.created_at) {
-    const createdDate = new Date(store.created_at);
-    if (!isNaN(createdDate.getTime())) {
-      const expiryDate = new Date(createdDate.getTime() + totalCycleDays * 24 * 60 * 60 * 1000);
+
+    if (!expiryDate && store?.created_at) {
+      const created = new Date(store.created_at);
+      if (!isNaN(created.getTime())) {
+        expiryDate = new Date(created.getTime() + standardCycleDays * 24 * 60 * 60 * 1000);
+      }
+    }
+
+    if (expiryDate) {
       formattedExpiry = expiryDate.toLocaleDateString('km-KH');
-      const now = new Date();
       const diffMs = expiryDate.getTime() - now.getTime();
-      const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      if (days <= 0) {
+      const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      if (daysLeft <= 0) {
         isExpired = true;
         remainingDays = 0;
       } else {
-        remainingDays = Math.min(totalCycleDays, days);
+        // ⭐️ Sync with real remaining days (e.g. 790 ថ្ងៃ), don't artificially clamp to 30 days!
+        remainingDays = daysLeft;
       }
+    }
+
+    // Determine start date of current plan/cycle
+    let startDate = null;
+    if (store?.settings?.plan_start_date) {
+      const parsedStart = new Date(store.settings.plan_start_date);
+      if (!isNaN(parsedStart.getTime())) startDate = parsedStart;
+    }
+    if (!startDate && store?.created_at) {
+      const parsedCreated = new Date(store.created_at);
+      if (!isNaN(parsedCreated.getTime())) startDate = parsedCreated;
+    }
+
+    if (isExpired) {
+      usedDays = standardCycleDays;
+      totalCycleDays = standardCycleDays;
+    } else {
+      if (startDate) {
+        const elapsedMs = Math.max(0, now.getTime() - startDate.getTime());
+        usedDays = Math.max(0, Math.floor(elapsedMs / (1000 * 60 * 60 * 24)));
+      } else if (expiryDate) {
+        usedDays = Math.max(0, standardCycleDays - Math.min(standardCycleDays, remainingDays));
+      }
+
+      // If store has accumulated days (e.g. 790 days), total span is dynamically calculated
+      totalCycleDays = Math.max(standardCycleDays, usedDays + remainingDays);
     }
   }
 
-  // Used days
-  const usedDays = isFree ? 0 : (isExpired ? totalCycleDays : Math.max(0, totalCycleDays - remainingDays));
+  // 3. Compute progress percentages
   const usedPercent = totalCycleDays > 0 ? Math.min(100, Math.round((usedDays / totalCycleDays) * 100)) : 0;
-  const remainingPercent = 100 - usedPercent;
+  const remainingPercent = Math.max(0, 100 - usedPercent);
 
-  // 3. Compute monetary values: used amount & remaining balance
-  const dailyRate = totalCycleDays > 0 ? planCyclePrice / totalCycleDays : 0;
+  // 4. Compute monetary values: daily rate, used amount & remaining balance
+  const dailyRate = standardCycleDays > 0 ? (planCyclePrice / standardCycleDays) : 0;
   const usedAmount = isFree ? 0 : Number((dailyRate * usedDays).toFixed(2));
   const remainingCredit = (isFree || isExpired) ? 0 : Number((dailyRate * remainingDays).toFixed(2));
 
-  // 4. Upgrade calculation for target plan
+  // 5. Upgrade calculation for target plan
   const creditDiscount = Math.min(targetPlanPrice, remainingCredit);
   const amountToPay = Math.max(0, Number((targetPlanPrice - creditDiscount).toFixed(2)));
 
@@ -112,6 +143,7 @@ const getPlanProrationInfo = (store, targetPlanPrice = 0) => {
     isExpired,
     isYearly,
     planCyclePrice,
+    standardCycleDays,
     totalCycleDays,
     usedDays,
     remainingDays,
@@ -19091,7 +19123,7 @@ export default function UnifiedAdminDashboard() {
                   <span>📅</span> រយៈពេល & ថ្ងៃនៅសល់
                 </span>
                 <span className="text-[10px] text-slate-500 font-mono">
-                  {proration.isFree ? 'Free Forever' : `${proration.totalCycleDays} ថ្ងៃ/វដ្ត`}
+                  {proration.isFree ? 'Free Forever' : `${proration.totalCycleDays} ថ្ងៃសរុប`}
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
@@ -19100,7 +19132,7 @@ export default function UnifiedAdminDashboard() {
                 </span>
                 {!proration.isFree && (
                   <span className="text-xs text-slate-400">
-                    (បានដំណើរការ ${proration.usedDays} ថ្ងៃ)
+                    (បានដំណើរការ {proration.usedDays} ថ្ងៃ)
                   </span>
                 )}
               </div>
@@ -19115,8 +19147,8 @@ export default function UnifiedAdminDashboard() {
                     />
                   </div>
                   <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                    <span>ចាយពេលអស់ ${proration.usedPercent}%</span>
-                    <span className="text-amber-400 font-bold">នៅសល់ ${proration.remainingPercent}%</span>
+                    <span>ចាយពេលអស់ {proration.usedPercent}%</span>
+                    <span className="text-amber-400 font-bold">នៅសល់ {proration.remainingPercent}%</span>
                   </div>
                 </div>
               )}
@@ -19129,7 +19161,7 @@ export default function UnifiedAdminDashboard() {
                   <span>💸</span> ទឹកប្រាក់បានចាយអស់
                 </span>
                 <span className="text-[10px] text-slate-500 font-mono">
-                  ${proration.planCyclePrice}/${proration.isYearly ? 'ឆ្នាំ' : 'ខែ'}
+                  ${proration.planCyclePrice}/{proration.isYearly ? 'ឆ្នាំ' : 'ខែ'}
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
@@ -19143,7 +19175,7 @@ export default function UnifiedAdminDashboard() {
               <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
                 {proration.isFree
                   ? 'គម្រោង Free មិនគិតថ្លៃសេវាឡើយ'
-                  : `គណនាតាម ${proration.usedDays} ថ្ងៃដែលបានដំណើរការរួច (${proration.dailyRate}/ថ្ងៃ)`}
+                  : `គណនាតាម ${proration.usedDays} ថ្ងៃដែលបានដំណើរការរួច ($${proration.dailyRate}/ថ្ងៃ)`}
               </p>
             </div>
 
@@ -19183,7 +19215,7 @@ export default function UnifiedAdminDashboard() {
                   'បច្ចុប្បន្នហាងរបស់លោកអ្នកកំពុងប្រើគម្រោង 🎁 FREE។ នៅពេលលោកអ្នកជ្រើសរើសដំឡើងទៅគម្រោងណាមួយ លោកអ្នកនឹងបង់តាមតម្លៃគម្រោងនោះ ហើយទទួលបានការកាត់កងសមាមាត្រស្វ័យប្រវត្តិនៅរាល់ពេលដំឡើងបន្ទាប់!'
                 ) : (
                   <>
-                    ហាងដំណើរការគម្រោង <b>${proration.planCyclePrice}/ខែ</b> បាន <b>{proration.usedDays} ថ្ងៃ</b> (ចាយអស់ <b>${proration.usedAmount.toFixed(2)}</b> នៅសល់ <b>${proration.remainingCredit.toFixed(2)}</b>)។ ប្រសិនបើតម្រូវការដំឡើងទៅគម្រោងថ្មី (ឧ. <b>$2/ខែ</b>) ប្រព័ន្ធនឹងយកទឹកប្រាក់នៅសល់មកកាត់កងភ្លាមៗ ដូច្នេះលោកអ្នកត្រូវថែមតែ <b>${Math.max(0, 2 - proration.remainingCredit).toFixed(2)}</b> ប៉ុណ្ណោះ!
+                    ហាងដំណើរការគម្រោង <b>${proration.planCyclePrice}/{proration.isYearly ? 'ឆ្នាំ' : 'ខែ'}</b> បាន <b>{proration.usedDays} ថ្ងៃ</b> (ចាយអស់ <b>${proration.usedAmount.toFixed(2)}</b> នៅសល់ <b>${proration.remainingCredit.toFixed(2)}</b>)។ ប្រសិនបើតម្រូវការដំឡើងទៅគម្រោងថ្មី ប្រព័ន្ធនឹងយកទឹកប្រាក់នៅសល់មកកាត់កងភ្លាមៗ មិនអោយបាត់បង់ផលប្រយោជន៍របស់ហាងឡើយ!
                   </>
                 )}
               </p>
