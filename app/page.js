@@ -9,16 +9,7 @@ export default function SaaSPlatformLandingPage() {
   const [lang, setLang] = useState('km');
   const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
   const [openFaq, setOpenFaq] = useState(null);
-  const [partnerStores, setPartnerStores] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const local = getLocalStores();
-        const active = (local || []).filter(s => s && s.slug && s.status === 'ACTIVE');
-        if (active.length > 0) return active;
-      } catch (e) {}
-    }
-    return [DEFAULT_FLAGSHIP_STORE];
-  });
+  const [partnerStores, setPartnerStores] = useState([DEFAULT_FLAGSHIP_STORE]);
   const [loadingStores, setLoadingStores] = useState(false);
 
   useEffect(() => {
@@ -27,6 +18,13 @@ export default function SaaSPlatformLandingPage() {
       if (savedLang === 'en' || savedLang === 'km') {
         setLang(savedLang);
       }
+      try {
+        const local = getLocalStores();
+        const active = (local || []).filter(s => s && s.slug && s.status === 'ACTIVE');
+        if (active.length > 0) {
+          setPartnerStores(active);
+        }
+      } catch (e) {}
     }
   }, []);
 
@@ -423,7 +421,7 @@ export default function SaaSPlatformLandingPage() {
                   return (
                     <a
                       key={st.slug || st.id}
-                      href={getCleanStoreUrl(st.slug)}
+                      href={`/store/${st.slug}`}
                       onClick={(e) => handleOpenStoreInBrowser(e, st.slug)}
                       className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-300 shadow-xs hover:shadow-sm transition transform active:scale-95 cursor-pointer"
                       title={lang === 'km' ? `បើកទំព័រ ${st.name} លើ Browser` : `Open ${st.name} in Web Browser`}
@@ -725,7 +723,7 @@ export default function SaaSPlatformLandingPage() {
                       {/* Browser Link Address & Quick Copy Button */}
                       <div className="flex items-center justify-between gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] font-mono text-slate-600">
                         <a
-                          href={storefrontUrl}
+                          href={`/store/${st.slug}`}
                           onClick={(e) => handleOpenStoreInBrowser(e, st.slug)}
                           className="hover:text-orange-600 hover:underline truncate flex items-center gap-1.5"
                           title="ចុចដើម្បីបើកលើ Web Browser"
