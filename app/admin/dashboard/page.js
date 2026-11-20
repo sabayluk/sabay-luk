@@ -30245,34 +30245,39 @@ export default function UnifiedAdminDashboard() {
                       <span>👀</span> ស្លាកគំរូជាក់ស្តែង (1:1 Live Preview):
                     </span>
 
-                    {/* THE PHYSICAL LABEL STICKER */}
+                    {/* THE PHYSICAL LABEL STICKER (1:1 LIVE PREVIEW) */}
                     <div 
                       id="barcode-sticker-print-target"
-                      className="bg-white text-black p-3.5 rounded-xl border-2 border-dashed border-gray-400 shadow-md w-full max-w-[260px] text-center font-sans select-none flex flex-col justify-between"
-                      style={{ minHeight: barcodeLabelFormat === '60x40' ? '180px' : '150px' }}
+                      className="bg-white text-black p-3 rounded-2xl border-2 border-dashed border-gray-400 shadow-lg w-full max-w-[270px] text-center font-sans select-none flex flex-col justify-between transition-all"
+                      style={{ 
+                        aspectRatio: barcodeLabelFormat === '60x40' ? '60 / 40' : (barcodeLabelFormat === '40x30' ? '40 / 30' : '50 / 30'),
+                        minHeight: barcodeLabelFormat === '60x40' ? '180px' : (barcodeLabelFormat === '40x30' ? '135px' : '160px')
+                      }}
                     >
                       {/* Store Name */}
                       {barcodeShowStoreName && (
-                        <div className="border-b border-black pb-1 mb-1">
-                          <p className="font-black text-[11px] tracking-wider uppercase leading-none font-mono">
-                            {storeSettings.storeName || 'SABAY LUK STORE'}
+                        <div className="border-b border-black pb-0.5 mb-1">
+                          <p className="font-black text-[11px] tracking-wider uppercase leading-none font-mono truncate">
+                            {storeSettings.storeName || activeStore?.name || 'SABAY LUK STORE'}
                           </p>
                         </div>
                       )}
 
                       {/* Product Name */}
-                      <p className="font-black text-xs line-clamp-1 leading-tight text-gray-900 mt-0.5">
+                      <p className="font-black text-xs line-clamp-1 leading-tight text-gray-900 mt-0.5 truncate">
                         {activeProd.name}
                       </p>
 
                       {/* Variant Tag: Size & Color */}
-                      {barcodeShowSize && (
+                      {barcodeShowSize && (effectiveSize || activeProd.color) && (
                         <div className="flex items-center justify-center gap-1.5 my-1 text-[10px] font-black">
-                          <span className="bg-black text-white px-1.5 py-0.2 rounded text-[9px]">
-                            SIZE: {effectiveSize}
-                          </span>
+                          {effectiveSize && (
+                            <span className="bg-black text-white px-2 py-0.5 rounded text-[10px] font-black tracking-wider">
+                              SIZE: {effectiveSize}
+                            </span>
+                          )}
                           {activeProd.color && (
-                            <span className="text-gray-700 text-[9px] uppercase">
+                            <span className="border border-black text-black px-1.5 py-0.5 rounded text-[9px] uppercase font-bold">
                               {activeProd.color}
                             </span>
                           )}
@@ -30280,12 +30285,16 @@ export default function UnifiedAdminDashboard() {
                       )}
 
                       {/* REAL SCANNABLE CODE 128 SVG BARCODE OR QR CODE */}
-                      <div className="my-1.5 flex flex-col items-center justify-center px-1">
+                      <div className="my-1 flex flex-col items-center justify-center px-1 w-full">
                         {barcodeSymbology === 'code128' ? (
                           <div 
-                            className="w-full flex justify-center py-1 overflow-hidden"
+                            className="w-full flex justify-center py-0.5 overflow-hidden"
                             dangerouslySetInnerHTML={{
-                              __html: generateCode128SvgString(currentSku, { height: 42, barWidth: 1.6 })
+                              __html: generateCode128SvgString(currentSku, { 
+                                height: barcodeLabelFormat === '60x40' ? 36 : (barcodeLabelFormat === '40x30' ? 24 : 28), 
+                                barWidth: barcodeLabelFormat === '40x30' ? 1.2 : 1.5,
+                                quietZone: 6
+                              })
                             }}
                           />
                         ) : (
@@ -30293,7 +30302,7 @@ export default function UnifiedAdminDashboard() {
                             <img 
                               src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(currentSku)}`}
                               alt="QR" 
-                              className="w-20 h-20 object-contain"
+                              className="w-16 h-16 object-contain"
                             />
                           </div>
                         )}
@@ -30332,149 +30341,628 @@ export default function UnifiedAdminDashboard() {
                   🖨️ នឹងបោះពុម្ពចំនួន <b>{barcodePrintQty} សន្លឹក</b> ({barcodeLabelFormat}) • Size: <b>{effectiveSize}</b>
                 </span>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <button 
-                    type="button" 
-                    onClick={() => setBarcodeModalOpen(false)}
-                    className="px-5 py-3 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xs transition cursor-pointer"
-                  >
-                    បិទ
-                  </button>
-                  
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      const targetEl = document.getElementById('barcode-sticker-print-target');
-                      if (!targetEl) return;
-                      const stickerHtml = targetEl.innerHTML;
-                      const isA4 = barcodeLabelFormat === 'a4_grid';
-                      const copies = Math.min(200, Math.max(1, parseInt(barcodePrintQty) || 1));
-                      const sizeStyle = barcodeLabelFormat === '60x40' 
-                        ? '@page { size: 60mm 40mm; margin: 0; }' 
-                        : barcodeLabelFormat === '40x30' 
-                        ? '@page { size: 40mm 30mm; margin: 0; }' 
-                        : isA4
-                        ? '@page { size: A4 portrait; margin: 6mm; }'
-                        : '@page { size: 50mm 30mm; margin: 0; }';
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 font-bold hidden md:inline">
+                      🖨️ នឹងបោះពុម្ពចំនួន <b>{barcodePrintQty} សន្លឹក</b> ({barcodeLabelFormat}) • Size: <b>{effectiveSize}</b>
+                    </span>
+                    <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
+                      💡 ក្នុង Print Preview សូមដោះធីក (Uncheck) "Headers and footers"
+                    </span>
+                  </div>
 
-                      let stickersList = '';
-                      for (let i = 0; i < copies; i++) {
-                        stickersList += `
-                          <div class="sticker-container">
-                            ${stickerHtml}
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button 
+                      type="button" 
+                      onClick={() => setBarcodeModalOpen(false)}
+                      className="px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xs transition cursor-pointer"
+                    >
+                      បិទ
+                    </button>
+                    
+                    {/* Secondary button: Open in dedicated print window (100% fail-safe) */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isA4 = barcodeLabelFormat === 'a4_grid';
+                        const copies = Math.min(200, Math.max(1, parseInt(barcodePrintQty) || 1));
+                        const storeNameText = (storeSettings.storeName || activeStore?.name || 'SABAY LUK').trim();
+                        const prodNameText = (activeProd.name || 'ស្បែកជើង').trim();
+                        const skuText = String(currentSku || activeProd.sku || '000000').trim();
+                        const sizeText = String(effectiveSize || activeProd.size || '').trim();
+                        const colorText = String(activeProd.color || '').trim();
+                        const khrText = (currentPrice * (exchangeRate || 4100)).toLocaleString();
+                        const usdText = Number(currentPrice || 0).toFixed(2);
+
+                        const labelWidth = barcodeLabelFormat === '60x40' ? '60mm' : barcodeLabelFormat === '40x30' ? '40mm' : '50mm';
+                        const labelHeight = barcodeLabelFormat === '60x40' ? '40mm' : '30mm';
+                        const pageSize = isA4 ? 'A4 portrait' : `${labelWidth} ${labelHeight}`;
+
+                        const barcodeHeight = barcodeLabelFormat === '60x40' ? 34 : (barcodeLabelFormat === '40x30' ? 22 : 28);
+                        const barcodeBarWidth = barcodeLabelFormat === '40x30' ? 1.2 : 1.5;
+
+                        const svgBarcodeHtml = barcodeSymbology === 'code128'
+                          ? generateCode128SvgString(skuText, { height: barcodeHeight, barWidth: barcodeBarWidth, quietZone: 6 })
+                          : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(skuText)}" alt="QR" style="width:30px;height:30px;object-fit:contain;display:block;margin:0 auto;" />`;
+
+                        const singleStickerHtml = `
+                          <div class="sticker-card">
+                            ${barcodeShowStoreName ? `
+                              <div class="sticker-header">
+                                <span class="sticker-store-name">${storeNameText}</span>
+                              </div>
+                            ` : ''}
+
+                            <div class="sticker-prod-title">${prodNameText}</div>
+
+                            ${barcodeShowSize && (sizeText || colorText) ? `
+                              <div class="sticker-meta-row">
+                                ${sizeText ? `<span class="sticker-size-pill">SIZE: ${sizeText}</span>` : ''}
+                                ${colorText ? `<span class="sticker-color-pill">${colorText}</span>` : ''}
+                              </div>
+                            ` : ''}
+
+                            <div class="sticker-barcode-area">
+                              <div class="sticker-barcode-svg">
+                                ${svgBarcodeHtml}
+                              </div>
+                              <div class="sticker-sku-digits">${skuText}</div>
+                            </div>
+
+                            ${barcodeShowPrice ? `
+                              <div class="sticker-price-footer">
+                                <span class="sticker-khr">${khrText} ៛</span>
+                                <span class="sticker-usd">$${usdText}</span>
+                              </div>
+                            ` : ''}
                           </div>
                         `;
-                      }
 
-                      const fullPrintDoc = `
-                        <!DOCTYPE html>
-                        <html>
-                          <head>
-                            <meta charset="utf-8" />
-                            <title>Print Barcodes - ${(activeProd.name || '').replace(/</g, '&lt;')}</title>
-                            <style>
-                              ${sizeStyle}
-                              * { box-sizing: border-box; }
-                              body {
-                                margin: 0;
-                                padding: 0;
-                                background: #fff;
-                                color: #000;
-                                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hanuman", sans-serif;
-                                -webkit-print-color-adjust: exact;
-                                print-color-adjust: exact;
-                              }
-                              ${isA4 ? `
-                                .a4-grid {
-                                  display: grid;
-                                  grid-template-columns: repeat(3, 1fr);
-                                  gap: 3mm;
-                                  padding: 2mm;
+                        let stickersList = '';
+                        for (let i = 0; i < copies; i++) {
+                          stickersList += singleStickerHtml;
+                        }
+
+                        const fullPrintDoc = `
+                          <!DOCTYPE html>
+                          <html>
+                            <head>
+                              <meta charset="utf-8" />
+                              <title>Print Barcodes - ${prodNameText}</title>
+                              <style>
+                                *, *::before, *::after {
+                                  box-sizing: border-box !important;
+                                  margin: 0 !important;
+                                  padding: 0 !important;
+                                  -webkit-print-color-adjust: exact !important;
+                                  print-color-adjust: exact !important;
                                 }
-                                .sticker-container {
-                                  border: 1px dashed #aaa;
-                                  border-radius: 4px;
-                                  padding: 2mm;
-                                  height: 32mm;
-                                  display: flex;
-                                  flex-direction: column;
-                                  justify-content: space-between;
-                                  text-align: center;
-                                  page-break-inside: avoid;
-                                  background: #fff;
+                                @page {
+                                  size: ${pageSize};
+                                  margin: 0mm !important;
                                 }
-                              ` : `
-                                .sticker-container {
-                                  width: ${barcodeLabelFormat === '60x40' ? '60mm' : barcodeLabelFormat === '40x30' ? '40mm' : '50mm'};
-                                  height: ${barcodeLabelFormat === '60x40' ? '40mm' : '30mm'};
-                                  padding: 1.5mm 2mm;
-                                  display: flex;
-                                  flex-direction: column;
-                                  justify-content: space-between;
-                                  text-align: center;
-                                  page-break-after: always;
+                                @media print {
+                                  @page {
+                                    size: ${pageSize};
+                                    margin: 0mm !important;
+                                  }
+                                  html, body {
+                                    width: 100% !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    background: #fff !important;
+                                  }
+                                  .sticker-card {
+                                    page-break-after: always !important;
+                                    page-break-inside: avoid !important;
+                                  }
+                                }
+                                body {
+                                  margin: 0 !important;
+                                  padding: 0 !important;
+                                  background: #ffffff;
+                                  color: #000000;
+                                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hanuman", "Kantumruy Pro", sans-serif;
+                                }
+                                ${isA4 ? `
+                                  .a4-grid {
+                                    display: grid;
+                                    grid-template-columns: repeat(3, 1fr);
+                                    gap: 3mm;
+                                    padding: 4mm;
+                                    width: 100%;
+                                  }
+                                  .sticker-card {
+                                    width: 100%;
+                                    height: 32mm;
+                                    border: 1px dashed #999;
+                                    border-radius: 4px;
+                                    padding: 1.5mm 2mm;
+                                    display: flex;
+                                    flex-direction: column;
+                                    justify-content: space-between;
+                                    align-items: center;
+                                    text-align: center;
+                                    page-break-inside: avoid;
+                                    background: #fff;
+                                    overflow: hidden;
+                                  }
+                                ` : `
+                                  .sticker-card {
+                                    width: ${labelWidth};
+                                    height: ${labelHeight};
+                                    max-width: ${labelWidth};
+                                    max-height: ${labelHeight};
+                                    padding: 1.2mm 2mm;
+                                    display: flex;
+                                    flex-direction: column;
+                                    justify-content: space-between;
+                                    align-items: center;
+                                    text-align: center;
+                                    page-break-after: always;
+                                    page-break-inside: avoid;
+                                    overflow: hidden;
+                                    background: #fff;
+                                  }
+                                `}
+                                .sticker-header {
+                                  width: 100%;
+                                  border-bottom: 1px solid #000000;
+                                  padding-bottom: 0.5px;
+                                  margin-bottom: 1px;
+                                  line-height: 1;
                                   overflow: hidden;
-                                  background: #fff;
                                 }
-                              `}
-                              svg { width: 100% !important; max-height: 42px !important; display: block; margin: 0 auto; }
-                              img { max-height: 40px; object-fit: contain; margin: 0 auto; }
-                            </style>
-                          </head>
-                          <body>
-                            ${isA4 ? `<div class="a4-grid">${stickersList}</div>` : stickersList}
-                          </body>
-                        </html>
-                      `;
+                                .sticker-store-name {
+                                  font-family: monospace, sans-serif;
+                                  font-size: 7.5pt;
+                                  font-weight: 900;
+                                  text-transform: uppercase;
+                                  letter-spacing: 0.5px;
+                                  color: #000000;
+                                  white-space: nowrap;
+                                  overflow: hidden;
+                                  text-overflow: ellipsis;
+                                  display: block;
+                                }
+                                .sticker-prod-title {
+                                  font-size: 8.5pt;
+                                  font-weight: 800;
+                                  line-height: 1.15;
+                                  color: #000000;
+                                  width: 100%;
+                                  white-space: nowrap;
+                                  overflow: hidden;
+                                  text-overflow: ellipsis;
+                                  margin-bottom: 1px;
+                                }
+                                .sticker-meta-row {
+                                  display: flex;
+                                  align-items: center;
+                                  justify-content: center;
+                                  gap: 4px;
+                                  width: 100%;
+                                  line-height: 1;
+                                  margin-bottom: 1px;
+                                }
+                                .sticker-size-pill {
+                                  background: #000000 !important;
+                                  color: #ffffff !important;
+                                  font-size: 8pt;
+                                  font-weight: 900;
+                                  padding: 1px 5px;
+                                  border-radius: 2px;
+                                  display: inline-block;
+                                  letter-spacing: 0.5px;
+                                  -webkit-print-color-adjust: exact !important;
+                                  print-color-adjust: exact !important;
+                                }
+                                .sticker-color-pill {
+                                  border: 1px solid #000000;
+                                  color: #000000;
+                                  font-size: 7pt;
+                                  font-weight: 800;
+                                  padding: 0.5px 3px;
+                                  border-radius: 2px;
+                                  text-transform: uppercase;
+                                  display: inline-block;
+                                }
+                                .sticker-barcode-area {
+                                  width: 100%;
+                                  display: flex;
+                                  flex-direction: column;
+                                  align-items: center;
+                                  justify-content: center;
+                                  margin: 0;
+                                }
+                                .sticker-barcode-svg {
+                                  width: 95%;
+                                  max-width: 95%;
+                                  display: flex;
+                                  justify-content: center;
+                                  align-items: center;
+                                  overflow: hidden;
+                                }
+                                .sticker-barcode-svg svg {
+                                  width: 100% !important;
+                                  height: ${barcodeHeight}px !important;
+                                  max-height: ${barcodeHeight}px !important;
+                                  display: block !important;
+                                  margin: 0 auto !important;
+                                }
+                                .sticker-sku-digits {
+                                  font-family: monospace;
+                                  font-size: 8pt;
+                                  font-weight: 900;
+                                  letter-spacing: 1.5px;
+                                  color: #000000;
+                                  line-height: 1;
+                                  margin-top: 1px;
+                                }
+                                .sticker-price-footer {
+                                  width: 100%;
+                                  border-top: 1px dashed #000000;
+                                  padding-top: 1px;
+                                  display: flex;
+                                  justify-content: space-between;
+                                  align-items: center;
+                                  line-height: 1;
+                                }
+                                .sticker-khr {
+                                  font-size: 7.5pt;
+                                  font-weight: 700;
+                                  color: #333333;
+                                }
+                                .sticker-usd {
+                                  font-family: monospace, sans-serif;
+                                  font-size: 9.5pt;
+                                  font-weight: 900;
+                                  color: #000000;
+                                }
+                              </style>
+                            </head>
+                            <body>
+                              ${isA4 ? `<div class="a4-grid">${stickersList}</div>` : stickersList}
+                            </body>
+                          </html>
+                        `;
 
-                      // Silent hidden iframe print: 0 delays, 0 blank windows, no pop-up blocker
-                      let printFrame = document.getElementById('sabay-barcode-print-frame');
-                      if (!printFrame) {
-                        printFrame = document.createElement('iframe');
-                        printFrame.id = 'sabay-barcode-print-frame';
-                        printFrame.style.position = 'fixed';
-                        printFrame.style.right = '0';
-                        printFrame.style.bottom = '0';
-                        printFrame.style.width = '0px';
-                        printFrame.style.height = '0px';
-                        printFrame.style.border = 'none';
-                        printFrame.style.zIndex = '-999';
-                        document.body.appendChild(printFrame);
-                      }
+                        const printWin = window.open('', '_blank', 'width=550,height=650,menubar=no,toolbar=no,location=no,status=no');
+                        if (printWin) {
+                          printWin.document.open();
+                          printWin.document.write(fullPrintDoc);
+                          printWin.document.close();
+                          printWin.focus();
+                          setTimeout(() => {
+                            printWin.print();
+                          }, 350);
+                        }
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
+                      title="បើកផ្ទាំង Print ដាច់ដោយឡែក"
+                    >
+                      <span>📄</span>
+                      <span className="hidden sm:inline">បើកផ្ទាំង Print ធំ</span>
+                    </button>
+                    
+                    {/* Primary button: Instant Print */}
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const isA4 = barcodeLabelFormat === 'a4_grid';
+                        const copies = Math.min(200, Math.max(1, parseInt(barcodePrintQty) || 1));
+                        const storeNameText = (storeSettings.storeName || activeStore?.name || 'SABAY LUK').trim();
+                        const prodNameText = (activeProd.name || 'ស្បែកជើង').trim();
+                        const skuText = String(currentSku || activeProd.sku || '000000').trim();
+                        const sizeText = String(effectiveSize || activeProd.size || '').trim();
+                        const colorText = String(activeProd.color || '').trim();
+                        const khrText = (currentPrice * (exchangeRate || 4100)).toLocaleString();
+                        const usdText = Number(currentPrice || 0).toFixed(2);
 
-                      try {
-                        const fDoc = printFrame.contentWindow.document;
-                        fDoc.open();
-                        fDoc.write(fullPrintDoc);
-                        fDoc.close();
+                        const labelWidth = barcodeLabelFormat === '60x40' ? '60mm' : barcodeLabelFormat === '40x30' ? '40mm' : '50mm';
+                        const labelHeight = barcodeLabelFormat === '60x40' ? '40mm' : '30mm';
+                        const pageSize = isA4 ? 'A4 portrait' : `${labelWidth} ${labelHeight}`;
 
-                        setTimeout(() => {
-                          try {
-                            printFrame.contentWindow.focus();
-                            printFrame.contentWindow.print();
-                          } catch (frameErr) {
-                            console.warn('Iframe print error, falling back to window.open:', frameErr);
-                            const fallbackWin = window.open('', '_blank', 'width=800,height=600');
-                            if (fallbackWin) {
-                              fallbackWin.document.open();
-                              fallbackWin.document.write(fullPrintDoc);
-                              fallbackWin.document.close();
-                              fallbackWin.focus();
-                              setTimeout(() => fallbackWin.print(), 300);
-                              fallbackWin.onafterprint = () => { try { fallbackWin.close(); } catch(e){} };
+                        const barcodeHeight = barcodeLabelFormat === '60x40' ? 34 : (barcodeLabelFormat === '40x30' ? 22 : 28);
+                        const barcodeBarWidth = barcodeLabelFormat === '40x30' ? 1.2 : 1.5;
+
+                        const svgBarcodeHtml = barcodeSymbology === 'code128'
+                          ? generateCode128SvgString(skuText, { height: barcodeHeight, barWidth: barcodeBarWidth, quietZone: 6 })
+                          : `<img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(skuText)}" alt="QR" style="width:30px;height:30px;object-fit:contain;display:block;margin:0 auto;" />`;
+
+                        const singleStickerHtml = `
+                          <div class="sticker-card">
+                            ${barcodeShowStoreName ? `
+                              <div class="sticker-header">
+                                <span class="sticker-store-name">${storeNameText}</span>
+                              </div>
+                            ` : ''}
+
+                            <div class="sticker-prod-title">${prodNameText}</div>
+
+                            ${barcodeShowSize && (sizeText || colorText) ? `
+                              <div class="sticker-meta-row">
+                                ${sizeText ? `<span class="sticker-size-pill">SIZE: ${sizeText}</span>` : ''}
+                                ${colorText ? `<span class="sticker-color-pill">${colorText}</span>` : ''}
+                              </div>
+                            ` : ''}
+
+                            <div class="sticker-barcode-area">
+                              <div class="sticker-barcode-svg">
+                                ${svgBarcodeHtml}
+                              </div>
+                              <div class="sticker-sku-digits">${skuText}</div>
+                            </div>
+
+                            ${barcodeShowPrice ? `
+                              <div class="sticker-price-footer">
+                                <span class="sticker-khr">${khrText} ៛</span>
+                                <span class="sticker-usd">$${usdText}</span>
+                              </div>
+                            ` : ''}
+                          </div>
+                        `;
+
+                        let stickersList = '';
+                        for (let i = 0; i < copies; i++) {
+                          stickersList += singleStickerHtml;
+                        }
+
+                        const fullPrintDoc = `
+                          <!DOCTYPE html>
+                          <html>
+                            <head>
+                              <meta charset="utf-8" />
+                              <title>Print Barcodes - ${prodNameText}</title>
+                              <style>
+                                *, *::before, *::after {
+                                  box-sizing: border-box !important;
+                                  margin: 0 !important;
+                                  padding: 0 !important;
+                                  -webkit-print-color-adjust: exact !important;
+                                  print-color-adjust: exact !important;
+                                }
+                                @page {
+                                  size: ${pageSize};
+                                  margin: 0mm !important;
+                                }
+                                @media print {
+                                  @page {
+                                    size: ${pageSize};
+                                    margin: 0mm !important;
+                                  }
+                                  html, body {
+                                    width: 100% !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    background: #fff !important;
+                                  }
+                                  .sticker-card {
+                                    page-break-after: always !important;
+                                    page-break-inside: avoid !important;
+                                  }
+                                }
+                                body {
+                                  margin: 0 !important;
+                                  padding: 0 !important;
+                                  background: #ffffff;
+                                  color: #000000;
+                                  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hanuman", "Kantumruy Pro", sans-serif;
+                                }
+                                ${isA4 ? `
+                                  .a4-grid {
+                                    display: grid;
+                                    grid-template-columns: repeat(3, 1fr);
+                                    gap: 3mm;
+                                    padding: 4mm;
+                                    width: 100%;
+                                  }
+                                  .sticker-card {
+                                    width: 100%;
+                                    height: 32mm;
+                                    border: 1px dashed #999;
+                                    border-radius: 4px;
+                                    padding: 1.5mm 2mm;
+                                    display: flex;
+                                    flex-direction: column;
+                                    justify-content: space-between;
+                                    align-items: center;
+                                    text-align: center;
+                                    page-break-inside: avoid;
+                                    background: #fff;
+                                    overflow: hidden;
+                                  }
+                                ` : `
+                                  .sticker-card {
+                                    width: ${labelWidth};
+                                    height: ${labelHeight};
+                                    max-width: ${labelWidth};
+                                    max-height: ${labelHeight};
+                                    padding: 1.2mm 2mm;
+                                    display: flex;
+                                    flex-direction: column;
+                                    justify-content: space-between;
+                                    align-items: center;
+                                    text-align: center;
+                                    page-break-after: always;
+                                    page-break-inside: avoid;
+                                    overflow: hidden;
+                                    background: #fff;
+                                  }
+                                `}
+                                .sticker-header {
+                                  width: 100%;
+                                  border-bottom: 1px solid #000000;
+                                  padding-bottom: 0.5px;
+                                  margin-bottom: 1px;
+                                  line-height: 1;
+                                  overflow: hidden;
+                                }
+                                .sticker-store-name {
+                                  font-family: monospace, sans-serif;
+                                  font-size: 7.5pt;
+                                  font-weight: 900;
+                                  text-transform: uppercase;
+                                  letter-spacing: 0.5px;
+                                  color: #000000;
+                                  white-space: nowrap;
+                                  overflow: hidden;
+                                  text-overflow: ellipsis;
+                                  display: block;
+                                }
+                                .sticker-prod-title {
+                                  font-size: 8.5pt;
+                                  font-weight: 800;
+                                  line-height: 1.15;
+                                  color: #000000;
+                                  width: 100%;
+                                  white-space: nowrap;
+                                  overflow: hidden;
+                                  text-overflow: ellipsis;
+                                  margin-bottom: 1px;
+                                }
+                                .sticker-meta-row {
+                                  display: flex;
+                                  align-items: center;
+                                  justify-content: center;
+                                  gap: 4px;
+                                  width: 100%;
+                                  line-height: 1;
+                                  margin-bottom: 1px;
+                                }
+                                .sticker-size-pill {
+                                  background: #000000 !important;
+                                  color: #ffffff !important;
+                                  font-size: 8pt;
+                                  font-weight: 900;
+                                  padding: 1px 5px;
+                                  border-radius: 2px;
+                                  display: inline-block;
+                                  letter-spacing: 0.5px;
+                                  -webkit-print-color-adjust: exact !important;
+                                  print-color-adjust: exact !important;
+                                }
+                                .sticker-color-pill {
+                                  border: 1px solid #000000;
+                                  color: #000000;
+                                  font-size: 7pt;
+                                  font-weight: 800;
+                                  padding: 0.5px 3px;
+                                  border-radius: 2px;
+                                  text-transform: uppercase;
+                                  display: inline-block;
+                                }
+                                .sticker-barcode-area {
+                                  width: 100%;
+                                  display: flex;
+                                  flex-direction: column;
+                                  align-items: center;
+                                  justify-content: center;
+                                  margin: 0;
+                                }
+                                .sticker-barcode-svg {
+                                  width: 95%;
+                                  max-width: 95%;
+                                  display: flex;
+                                  justify-content: center;
+                                  align-items: center;
+                                  overflow: hidden;
+                                }
+                                .sticker-barcode-svg svg {
+                                  width: 100% !important;
+                                  height: ${barcodeHeight}px !important;
+                                  max-height: ${barcodeHeight}px !important;
+                                  display: block !important;
+                                  margin: 0 auto !important;
+                                }
+                                .sticker-sku-digits {
+                                  font-family: monospace;
+                                  font-size: 8pt;
+                                  font-weight: 900;
+                                  letter-spacing: 1.5px;
+                                  color: #000000;
+                                  line-height: 1;
+                                  margin-top: 1px;
+                                }
+                                .sticker-price-footer {
+                                  width: 100%;
+                                  border-top: 1px dashed #000000;
+                                  padding-top: 1px;
+                                  display: flex;
+                                  justify-content: space-between;
+                                  align-items: center;
+                                  line-height: 1;
+                                }
+                                .sticker-khr {
+                                  font-size: 7.5pt;
+                                  font-weight: 700;
+                                  color: #333333;
+                                }
+                                .sticker-usd {
+                                  font-family: monospace, sans-serif;
+                                  font-size: 9.5pt;
+                                  font-weight: 900;
+                                  color: #000000;
+                                }
+                              </style>
+                            </head>
+                            <body>
+                              ${isA4 ? `<div class="a4-grid">${stickersList}</div>` : stickersList}
+                            </body>
+                          </html>
+                        `;
+
+                        // Print iframe with proper size dimensions
+                        let printFrame = document.getElementById('sabay-barcode-print-frame');
+                        if (!printFrame) {
+                          printFrame = document.createElement('iframe');
+                          printFrame.id = 'sabay-barcode-print-frame';
+                          printFrame.style.position = 'fixed';
+                          printFrame.style.left = '-9999px';
+                          printFrame.style.top = '0';
+                          printFrame.style.width = labelWidth;
+                          printFrame.style.height = labelHeight;
+                          printFrame.style.border = 'none';
+                          printFrame.style.zIndex = '-999';
+                          document.body.appendChild(printFrame);
+                        } else {
+                          printFrame.style.width = labelWidth;
+                          printFrame.style.height = labelHeight;
+                        }
+
+                        try {
+                          const fDoc = printFrame.contentWindow.document;
+                          fDoc.open();
+                          fDoc.write(fullPrintDoc);
+                          fDoc.close();
+
+                          setTimeout(() => {
+                            try {
+                              printFrame.contentWindow.focus();
+                              printFrame.contentWindow.print();
+                            } catch (frameErr) {
+                              console.warn('Iframe print error, falling back to window.open:', frameErr);
+                              const fallbackWin = window.open('', '_blank', 'width=550,height=650');
+                              if (fallbackWin) {
+                                fallbackWin.document.open();
+                                fallbackWin.document.write(fullPrintDoc);
+                                fallbackWin.document.close();
+                                fallbackWin.focus();
+                                setTimeout(() => fallbackWin.print(), 350);
+                              }
                             }
-                          }
-                        }, 200);
-                      } catch (e) {
-                        console.error('Print initialization error:', e);
-                      }
-                    }}
-                    className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                    title="បោះពុម្ពស្លាក Barcode ភ្លាមៗ (មិនគាំង មិនបាច់បើកផ្ទាំងច្រើន)"
-                  >
-                    <span>🖨️</span>
-                    <span>បោះពុម្ពស្លាកឥឡូវនេះ ({barcodePrintQty})</span>
-                  </button>
+                          }, 250);
+                        } catch (e) {
+                          console.error('Print initialization error:', e);
+                        }
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                      title="បោះពុម្ពស្លាក Barcode ភ្លាមៗ"
+                    >
+                      <span>🖨️</span>
+                      <span>បោះពុម្ពស្លាក ({barcodePrintQty})</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
