@@ -3625,6 +3625,7 @@ export default function UnifiedAdminDashboard() {
   const [confirmStorePasswordInput, setConfirmStorePasswordInput] = useState('');
   const [showStorePassword, setShowStorePassword] = useState(false);
   const [isUpdatingStorePassword, setIsUpdatingStorePassword] = useState(false);
+  const [securityTargetStaffId, setSecurityTargetStaffId] = useState('OWNER');
 
   // ⭐️ States សម្រាប់សាកល្បងទេសអតិថិជនបញ្ជាទិញផ្ទាល់ពី Website (Live Customer Order Simulator) ⭐️
   const [testOrderModalOpen, setTestOrderModalOpen] = useState(false);
@@ -3763,13 +3764,14 @@ export default function UnifiedAdminDashboard() {
     setTimeout(() => setStoreSettingsSavedMsg(''), 3500);
   };
 
-  // ⭐️ មុខងារប្តូរលេខសម្ងាត់ហាង (Change Store Admin Password / PIN) ⭐️
+  // ⭐️ មុខងារប្តូរលេខសម្ងាត់ហាង & បុគ្គលិក (Change Store Admin / Staff Password / PIN) ⭐️
   const handleUpdateStorePassword = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    if (guardDemoAction("ប្តូរពាក្យសម្ងាត់ហាង")) return;
+    if (guardDemoAction("ប្តូរពាក្យសម្ងាត់")) return;
 
     const storeId = activeStore?.id || 'store_default_sabayluk';
-    const currentPin = (activeStore?.pin || activeStore?.password || '1234').toString().trim();
+    const isTargetOwner = securityTargetStaffId === 'OWNER';
+    const currentOwnerPin = (activeStore?.pin || activeStore?.password || '1234').toString().trim();
     const inputOld = currentStorePasswordInput.trim();
     const inputNew = newStorePasswordInput.trim();
     const inputConfirm = confirmStorePasswordInput.trim();
@@ -3788,13 +3790,13 @@ export default function UnifiedAdminDashboard() {
       return;
     }
 
-    // Check old password (if not master owner)
-    if (!isMasterOwner) {
+    // Check old password (if updating owner and not master owner)
+    if (isTargetOwner && !isMasterOwner) {
       if (!inputOld) {
         alert('សូមបញ្ចូលលេខសម្ងាត់ចាស់ដើម្បីផ្ទៀងផ្ទាត់សុវត្ថិភាព!');
         return;
       }
-      const matchesOld = inputOld === currentPin || 
+      const matchesOld = inputOld === currentOwnerPin || 
                          inputOld === (currentStaff?.pin || '').toString().trim() || 
                          inputOld === (currentStaff?.password || '').toString().trim() ||
                          (activeStore?.settings?.pin && inputOld === activeStore.settings.pin.toString().trim()) ||
@@ -3805,80 +3807,133 @@ export default function UnifiedAdminDashboard() {
       }
     }
 
+    // ⭐️ UNIQUE PIN VALIDATION: Prevent setting staff PIN identical to owner or another staff ⭐️
+    if (!isTargetOwner) {
+      if (inputNew === currentOwnerPin) {
+        alert(`⚠️ លេខសម្ងាត់ "${inputNew}" នេះជាន់គ្នាជាមួយលេខសម្ងាត់របស់ម្ចាស់ហាង (Admin)!\n\nតាមស្តង់ដារអន្តរជាតិ បុគ្គលិកត្រូវតែមានលេខសម្ងាត់ផ្ទាល់ខ្លួនរៀងៗខ្លួន ដាច់ដោយឡែកពីម្ចាស់ហាង។ សូមជ្រើសរើសលេខផ្សេង (ឧ. 1111, 2222, 3333...)។`);
+        return;
+      }
+      const otherStaff = staffList.find(s => s.id !== securityTargetStaffId && (s.pin === inputNew || s.password === inputNew));
+      if (otherStaff) {
+        alert(`⚠️ លេខសម្ងាត់ "${inputNew}" នេះត្រូវបានប្រើដោយបុគ្គលិក «${otherStaff.name}» រួចហើយ!\n\nបុគ្គលិកម្នាក់ៗត្រូវតែមានលេខសម្ងាត់រៀងខ្លួន។ សូមជ្រើសរើសលេខផ្សេង។`);
+        return;
+      }
+    } else {
+      // If changing owner PIN, make sure it doesn't collide with existing staff PINs
+      const collidingStaff = staffList.find(s => s.role !== 'ADMIN' && (s.pin === inputNew || s.password === inputNew));
+      if (collidingStaff) {
+        alert(`⚠️ លេខសម្ងាត់ "${inputNew}" នេះជាន់គ្នាជាមួយលេខសម្ងាត់របស់បុគ្គលិក «${collidingStaff.name}»!\n\nម្ចាស់ហាងត្រូវតែមានលេខសម្ងាត់ផ្ទាល់ខ្លួនដាច់ដោយឡែកពីបុគ្គលិក។`);
+        return;
+      }
+    }
+
     setIsUpdatingStorePassword(true);
 
     try {
-      // 2. Update activeStore object
-      const updatedStore = {
-        ...activeStore,
-        pin: inputNew,
-        password: inputNew,
-        settings: {
-          ...(activeStore?.settings || {}),
+      if (isTargetOwner) {
+        // 2. Update activeStore object
+        const updatedStore = {
+          ...activeStore,
           pin: inputNew,
-          owner_password: inputNew
-        }
-      };
-      setActiveStore(updatedStore);
-      setActiveStoreState(updatedStore);
+          password: inputNew,
+          settings: {
+            ...(activeStore?.settings || {}),
+            pin: inputNew,
+            owner_password: inputNew
+          }
+        };
+        setActiveStore(updatedStore);
+        setActiveStoreState(updatedStore);
 
-      // 3. Update registeredStores in state & localStorage
-      const allStores = getLocalStores();
-      const updatedStoresList = allStores.map(s => s.id === storeId ? {
-        ...s,
-        pin: inputNew,
-        password: inputNew,
-        settings: {
-          ...(s.settings || {}),
+        // 3. Update registeredStores in state & localStorage
+        const allStores = getLocalStores();
+        const updatedStoresList = allStores.map(s => s.id === storeId ? {
+          ...s,
           pin: inputNew,
-          owner_password: inputNew
-        }
-      } : s);
-      setRegisteredStores(updatedStoresList);
-      saveLocalStores(updatedStoresList);
-
-      // 4. Update Staff List of this store (owner account)
-      const currentStoreStaff = getStoreStaffList(activeStore);
-      const updatedStaffList = currentStoreStaff.map(stf => {
-        if (stf.role === 'ADMIN' || stf.id === 'STAFF-1' || stf.id === `STAFF-${storeId}-OWNER`) {
-          return {
-            ...stf,
+          password: inputNew,
+          settings: {
+            ...(s.settings || {}),
             pin: inputNew,
-            password: inputNew
-          };
-        }
-        return stf;
-      });
-      localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(updatedStaffList));
-      if (storeId === 'store_default_sabayluk') {
-        localStorage.setItem('sabay_staff_list', JSON.stringify(updatedStaffList));
-      }
-      setStaffList(updatedStaffList);
+            owner_password: inputNew
+          }
+        } : s);
+        setRegisteredStores(updatedStoresList);
+        saveLocalStores(updatedStoresList);
 
-      // Update current logged-in staff if they are the owner
-      if (currentStaff?.role === 'ADMIN' || currentStaff?.id === 'STAFF-1' || currentStaff?.id === `STAFF-${storeId}-OWNER`) {
-        const updatedCurrentStaff = { ...currentStaff, pin: inputNew, password: inputNew };
-        setCurrentStaff(updatedCurrentStaff);
-        localStorage.setItem(`sabay_active_staff_${storeId}`, JSON.stringify(updatedCurrentStaff));
-      }
-
-      // 5. Sync to Supabase cloud database (stores table)
-      try {
-        await supabase
-          .from('stores')
-          .update({
-            pin: inputNew,
-            password: inputNew,
-            settings: {
-              ...(activeStore?.settings || {}),
+        // 4. Update Staff List of this store (owner account)
+        const currentStoreStaff = getStoreStaffList(activeStore);
+        const updatedStaffList = currentStoreStaff.map(stf => {
+          if (stf.role === 'ADMIN' || stf.id === 'STAFF-1' || stf.id === `STAFF-${storeId}-OWNER`) {
+            return {
+              ...stf,
               pin: inputNew,
-              owner_password: inputNew
-            },
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', storeId);
-      } catch (dbErr) {
-        console.warn('Stores table pin update notice:', dbErr);
+              password: inputNew
+            };
+          }
+          return stf;
+        });
+        localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(updatedStaffList));
+        if (storeId === 'store_default_sabayluk') {
+          localStorage.setItem('sabay_staff_list', JSON.stringify(updatedStaffList));
+        }
+        setStaffList(updatedStaffList);
+        syncStoreStaffToDatabase(storeId, updatedStaffList);
+
+        // Update current logged-in staff if they are the owner
+        if (currentStaff?.role === 'ADMIN' || currentStaff?.id === 'STAFF-1' || currentStaff?.id === `STAFF-${storeId}-OWNER`) {
+          const updatedCurrentStaff = { ...currentStaff, pin: inputNew, password: inputNew };
+          setCurrentStaff(updatedCurrentStaff);
+          localStorage.setItem(`sabay_active_staff_${storeId}`, JSON.stringify(updatedCurrentStaff));
+        }
+
+        // 5. Sync to Supabase cloud database (stores table)
+        try {
+          await supabase
+            .from('stores')
+            .update({
+              pin: inputNew,
+              password: inputNew,
+              settings: {
+                ...(activeStore?.settings || {}),
+                pin: inputNew,
+                owner_password: inputNew
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', storeId);
+        } catch (dbErr) {
+          console.warn('Stores table pin update notice:', dbErr);
+        }
+
+        setToastNotification(`🎉 បានប្តូរលេខសម្ងាត់ម្ចាស់ហាង "${activeStore?.name || storeSettings.storeName}" ជោគជ័យ!`);
+      } else {
+        // Update specific staff member's personal PIN
+        const currentStoreStaff = getStoreStaffList(activeStore);
+        const targetStaffObj = currentStoreStaff.find(s => s.id === securityTargetStaffId);
+        const updatedStaffList = currentStoreStaff.map(stf => {
+          if (stf.id === securityTargetStaffId) {
+            return {
+              ...stf,
+              pin: inputNew,
+              password: inputNew
+            };
+          }
+          return stf;
+        });
+        localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(updatedStaffList));
+        if (storeId === 'store_default_sabayluk') {
+          localStorage.setItem('sabay_staff_list', JSON.stringify(updatedStaffList));
+        }
+        setStaffList(updatedStaffList);
+        syncStoreStaffToDatabase(storeId, updatedStaffList);
+
+        if (currentStaff?.id === securityTargetStaffId) {
+          const updatedCurrentStaff = { ...currentStaff, pin: inputNew, password: inputNew };
+          setCurrentStaff(updatedCurrentStaff);
+          localStorage.setItem(`sabay_active_staff_${storeId}`, JSON.stringify(updatedCurrentStaff));
+        }
+
+        setToastNotification(`🎉 បានប្តូរលេខសម្ងាត់ PIN ផ្ទាល់ខ្លួនរបស់បុគ្គលិក "${targetStaffObj?.name || 'បុគ្គលិក'}" ជោគជ័យ!`);
       }
 
       // Clear input fields
@@ -3886,7 +3941,6 @@ export default function UnifiedAdminDashboard() {
       setNewStorePasswordInput('');
       setConfirmStorePasswordInput('');
 
-      setToastNotification(`🎉 បានប្តូរលេខសម្ងាត់ហាង "${activeStore?.name || storeSettings.storeName}" ជោគជ័យ!`);
       setTimeout(() => setToastNotification(null), 5000);
     } catch (err) {
       alert('មានបញ្ហាក្នុងការប្តូរលេខសម្ងាត់: ' + err.message);
@@ -19414,6 +19468,26 @@ export default function UnifiedAdminDashboard() {
         return;
       }
 
+      // ⭐️ STANDARD VALIDATION: Check for duplicate PIN against owner and other staff ⭐️
+      const targetPin = staffFormPin.trim();
+      const currentOwnerPin = (activeStore?.pin || activeStore?.password || '1234').toString().trim();
+      const isEditingOwner = editingStaff && (editingStaff.role === 'ADMIN' || editingStaff.id?.includes('OWNER') || editingStaff.id === 'STAFF-1');
+
+      if (!isEditingOwner && staffFormRole !== 'ADMIN' && targetPin === currentOwnerPin) {
+        alert(`⚠️ លេខកូដ PIN "${targetPin}" នេះជាន់គ្នាជាមួយលេខសម្ងាត់របស់ម្ចាស់ហាង (Admin)!\n\nតាមស្តង់ដារអន្តរជាតិ បុគ្គលិកត្រូវតែមានលេខសម្ងាត់ផ្ទាល់ខ្លួនរៀងៗខ្លួន ដាច់ដោយឡែកពីម្ចាស់ហាង។ សូមជ្រើសរើសលេខសម្ងាត់ផ្សេង (ឧ. 1111, 2222, 3333...)។`);
+        return;
+      }
+
+      // Check collision with other staff
+      const duplicateStaff = staffList.find(s => 
+        s.id !== (editingStaff?.id) && 
+        (s.pin === targetPin || s.password === targetPin)
+      );
+      if (duplicateStaff) {
+        alert(`⚠️ លេខកូដ PIN "${targetPin}" នេះត្រូវបានប្រើប្រាស់ដោយបុគ្គលិក «${duplicateStaff.name}» រួចហើយ!\n\nតាមស្តង់ដារ បុគ្គលិកម្នាក់ៗត្រូវតែមានលេខសម្ងាត់ផ្ទាល់ខ្លួនរៀងៗខ្លួន។ សូមជ្រើសរើសលេខផ្សេង។`);
+        return;
+      }
+
       const roleObj = {
         'ADMIN': { label: 'ម្ចាស់ហាង (Super Admin)', avatar: '👑', color: 'from-amber-500 to-orange-600' },
         'CASHIER': { label: 'អ្នកគិតលុយ (Cashier)', avatar: '💻', color: 'from-blue-500 to-indigo-600' },
@@ -19639,7 +19713,21 @@ export default function UnifiedAdminDashboard() {
                 setEditingStaff(null);
                 setStaffFormName('');
                 setStaffFormUsername('');
-                setStaffFormPin('');
+                // ⭐️ Auto-suggest next unique non-colliding PIN ⭐️
+                const currentOwnerPin = (activeStore?.pin || activeStore?.password || '1234').toString().trim();
+                const usedPins = new Set([currentOwnerPin, ...staffList.map(s => (s.pin || s.password || '').toString().trim())]);
+                let suggestedPin = '1111';
+                if (usedPins.has(suggestedPin)) {
+                  if (!usedPins.has('2222')) suggestedPin = '2222';
+                  else if (!usedPins.has('3333')) suggestedPin = '3333';
+                  else if (!usedPins.has('4444')) suggestedPin = '4444';
+                  else if (!usedPins.has('5555')) suggestedPin = '5555';
+                  else if (!usedPins.has('6666')) suggestedPin = '6666';
+                  else if (!usedPins.has('7777')) suggestedPin = '7777';
+                  else if (!usedPins.has('8888')) suggestedPin = '8888';
+                  else suggestedPin = String(Math.floor(1000 + Math.random() * 9000));
+                }
+                setStaffFormPin(suggestedPin);
                 setStaffFormRole('CASHIER');
                 setStaffFormPhone('');
                 setStaffFormPermissions({ ...ROLE_PRESET_PERMISSIONS.CASHIER });
@@ -20005,18 +20093,24 @@ export default function UnifiedAdminDashboard() {
                       />
                     </div>
                     <div>
-                      <label className="font-bold text-gray-700 block mb-1">
-                        លេខសម្ងាត់ PIN (៤-៦ ខ្ទង់) <span className="text-red-500">*</span>
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-gray-700">
+                          លេខសម្ងាត់ PIN ផ្ទាល់ខ្លួន (៤-៦ ខ្ទង់) <span className="text-red-500">*</span>
+                        </label>
+                        <span className="text-[10px] text-blue-600 font-mono font-bold">Unique PIN</span>
+                      </div>
                       <input
-                        type="password"
+                        type="text"
                         maxLength={6}
                         required
                         value={staffFormPin}
                         onChange={(e) => setStaffFormPin(e.target.value.replace(/\D/g, ''))}
-                        placeholder="1234"
+                        placeholder="1111"
                         className="w-full bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl px-3.5 py-2.5 font-mono font-black text-center tracking-widest text-base outline-none transition"
                       />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        🔒 ស្តង់ដាសុវត្ថិភាព៖ បុគ្គលិកម្នាក់ៗត្រូវមាន PIN ដាច់ដោយឡែកពីម្ចាស់ហាង និងបុគ្គលិកដទៃ
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -27874,41 +27968,140 @@ export default function UnifiedAdminDashboard() {
             <div className="space-y-6 animate-in fade-in">
               <div className="border-b border-gray-100 pb-4">
                 <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide flex items-center gap-2">
-                  <span>🔒</span> ប្តូរពាក្យសម្ងាត់ហាង (Change Store Admin Password / PIN)
+                  <span>🔒</span> គ្រប់គ្រង & ប្តូរលេខសម្ងាត់ (Store & Staff Security Manager)
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN សម្រាប់ Login ចូលផ្ទាំងគ្រប់គ្រងហាង «{activeStore?.name || storeSettings.storeName}» នេះ
+                  ប្តូរលេខសម្ងាត់ ឬកូដ PIN ផ្ទាល់ខ្លួនរបស់ម្ចាស់ហាង (Admin) ឬបុគ្គលិកម្នាក់ៗតាមស្តង់ដារអន្តរជាតិ (ម្នាក់ៗមានលេខកូដរៀងខ្លួន)
                 </p>
               </div>
 
-              {/* Current Account Card */}
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg font-black shrink-0">
-                    🏪
-                  </div>
-                  <div>
-                    <p className="text-xs font-black text-slate-800">
-                      ហាង: {activeStore?.name || storeSettings.storeName} ({activeStore?.slug || 'sabayluk'})
-                    </p>
-                    <p className="text-[11px] text-slate-500 font-mono">
-                      គណនី Admin: {activeStore?.owner_email || activeStore?.owner_username || currentStaff?.email || currentStaff?.username || 'admin'}
-                    </p>
-                  </div>
+              {/* ⭐️ 1. ACCOUNT SELECTOR (Owner vs Staff Members) ⭐️ */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <span>👥</span>
+                    <span>ជ្រើសរើសគណនីដែលចង់ប្តូរលេខសម្ងាត់ (Select Account to Change Password) *</span>
+                  </label>
+                  <span className="text-[10px] text-blue-600 font-mono font-bold">Standard Role-Based Access</span>
                 </div>
-                <div className="text-left sm:text-right">
-                  <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    🟢 Active Store
-                  </span>
-                </div>
+
+                {(() => {
+                  const staffOnly = staffList.filter(s => s.role !== 'ADMIN' && !s.id?.includes('OWNER') && s.id !== 'STAFF-1');
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                      {/* Owner Card */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSecurityTargetStaffId('OWNER');
+                          setCurrentStorePasswordInput('');
+                          setNewStorePasswordInput('');
+                          setConfirmStorePasswordInput('');
+                        }}
+                        className={`p-3 rounded-2xl text-left border transition cursor-pointer flex items-center gap-2.5 ${
+                          securityTargetStaffId === 'OWNER'
+                            ? 'border-orange-500 bg-orange-50/70 text-slate-900 ring-2 ring-orange-500/20 shadow-xs'
+                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-600 text-white flex items-center justify-center text-lg font-black shrink-0 shadow-xs">
+                          👑
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black truncate block">
+                              {activeStore?.owner_name || activeStore?.name || 'ម្ចាស់ហាង'}
+                            </span>
+                            {securityTargetStaffId === 'OWNER' && <span className="text-orange-600 text-xs font-bold">✓ កំពុងរើស</span>}
+                          </div>
+                          <span className="text-[10px] text-orange-700 font-bold block">ម្ចាស់ហាង (Store Admin)</span>
+                          <span className="text-[9px] text-slate-400 font-mono block">PIN: {showStorePassword ? (activeStore?.pin || '1234') : '••••'}</span>
+                        </div>
+                      </button>
+
+                      {/* Staff Cards */}
+                      {staffOnly.map((stf) => {
+                        const isSelected = securityTargetStaffId === stf.id;
+                        return (
+                          <button
+                            key={stf.id}
+                            type="button"
+                            onClick={() => {
+                              setSecurityTargetStaffId(stf.id);
+                              setCurrentStorePasswordInput('');
+                              setNewStorePasswordInput('');
+                              setConfirmStorePasswordInput('');
+                            }}
+                            className={`p-3 rounded-2xl text-left border transition cursor-pointer flex items-center gap-2.5 ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-50/70 text-slate-900 ring-2 ring-blue-500/20 shadow-xs'
+                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                            }`}
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 text-white flex items-center justify-center text-base font-black shrink-0 shadow-xs">
+                              {stf.avatar || '🧑‍💼'}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black truncate block">{stf.name}</span>
+                                {isSelected && <span className="text-blue-600 text-xs font-bold">✓ កំពុងរើស</span>}
+                              </div>
+                              <span className="text-[10px] text-blue-700 font-bold block">{stf.roleLabel || stf.role}</span>
+                              <span className="text-[9px] text-slate-400 font-mono block">PIN: {showStorePassword ? (stf.pin || '••••') : '••••'}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
+
+              {/* ⭐️ Current Account Card Details ⭐️ */}
+              {(() => {
+                const isTargetOwner = securityTargetStaffId === 'OWNER';
+                const targetStaff = isTargetOwner ? null : staffList.find(s => s.id === securityTargetStaffId);
+
+                return (
+                  <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    isTargetOwner ? 'bg-orange-50/40 border-orange-200' : 'bg-blue-50/40 border-blue-200'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-black shrink-0 ${
+                        isTargetOwner ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        {isTargetOwner ? '👑' : (targetStaff?.avatar || '🧑‍💼')}
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-800">
+                          {isTargetOwner
+                            ? `គណនីម្ចាស់ហាង: ${activeStore?.owner_name || activeStore?.name} (Admin)`
+                            : `គណនីបុគ្គលិក: ${targetStaff?.name || 'បុគ្គលិក'} (${targetStaff?.roleLabel || 'Staff'})`}
+                        </p>
+                        <p className="text-[11px] text-slate-500 font-mono">
+                          {isTargetOwner
+                            ? `Email: ${activeStore?.owner_email || 'admin'} • ហាង: ${activeStore?.name}`
+                            : `Username: @${targetStaff?.username || 'user'} • ID: ${targetStaff?.id}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${
+                        isTargetOwner ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-blue-100 text-blue-800 border-blue-200'
+                      }`}>
+                        {isTargetOwner ? 'Full Admin Access' : '🔑 Individual Staff PIN'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Password Change Form */}
               <form onSubmit={handleUpdateStorePassword} className="space-y-4 max-w-xl">
-                {!isMasterOwner && (
+                {securityTargetStaffId === 'OWNER' && !isMasterOwner && (
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
-                      <span>លេខសម្ងាត់ចាស់ (Current Password / PIN) *</span>
+                      <span>លេខសម្ងាត់ចាស់របស់ Admin (Current Password / PIN) *</span>
                       <span className="text-[10px] text-gray-400 font-normal">លេខកូដដែលកំពុងប្រើបច្ចុប្បន្ន</span>
                     </label>
                     <div className="relative">
@@ -27926,7 +28119,11 @@ export default function UnifiedAdminDashboard() {
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
-                    <span>លេខសម្ងាត់ថ្មី (New Password / PIN) *</span>
+                    <span>
+                      {securityTargetStaffId === 'OWNER'
+                        ? 'លេខសម្ងាត់ថ្មីរបស់ម្ចាស់ហាង (New Admin Password / PIN) *'
+                        : `លេខសម្ងាត់ PIN ថ្មីសម្រាប់ ${staffList.find(s => s.id === securityTargetStaffId)?.name || 'បុគ្គលិក'} *`}
+                    </span>
                     <span className="text-[10px] text-gray-400 font-normal">យ៉ាងហោចណាស់ ៤ ខ្ទង់</span>
                   </label>
                   <div className="relative">
@@ -27934,12 +28131,15 @@ export default function UnifiedAdminDashboard() {
                       type={showStorePassword ? 'text' : 'password'}
                       value={newStorePasswordInput}
                       onChange={(e) => setNewStorePasswordInput(e.target.value)}
-                      placeholder="បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password អក្សរ+លេខ)..."
+                      placeholder={securityTargetStaffId === 'OWNER' ? 'បញ្ចូលលេខសម្ងាត់ថ្មី (ឧ. 1234 ឬ Password)...' : 'បញ្ចូលលេខ PIN ថ្មី (ឧ. 1111, 2222)...'}
                       required
                       minLength={4}
                       className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-bold focus:border-[#ff6a00] outline-none transition bg-white"
                     />
                   </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    🔒 ស្តង់ដាសុវត្ថិភាព៖ លេខកូដនេះមិនអាចជាន់គ្នាជាមួយគណនីផ្សេងក្នុងហាងឡើយ
+                  </span>
                 </div>
 
                 <div>
@@ -30335,11 +30535,22 @@ export default function UnifiedAdminDashboard() {
                                 {loginShowGmailPassword ? '🙈' : '👁️'}
                               </button>
                             </div>
-                            <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                              🔒 {loginAccountType === 'owner'
-                                ? 'សិទ្ធិ Admin: គ្រប់គ្រងទិន្នន័យហាង ប្រព័ន្ធហិរញ្ញវត្ថុ និងរបាយការណ៍ទាំងអស់'
-                                : `សិទ្ធិបុគ្គលិក (${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'Staff'}): ${loginSelectedStaffMember?.roleLabel || staffMembers[0]?.roleLabel || 'ប្រតិបត្តិការលក់ និងស្តុកតាមតួនាទី'}`}
-                            </p>
+                            <div className="mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 text-[10px] text-slate-500 space-y-1">
+                              <div className="flex items-center justify-between font-bold text-slate-700">
+                                <span className="flex items-center gap-1.5">
+                                  <span>🛡️</span>
+                                  <span>ស្តង់ដាសុវត្ថិភាពអន្តរជាតិ (Unique Password per Role)</span>
+                                </span>
+                                <span className="text-[9px] font-mono text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                  ✓ ដាច់ដោយឡែកពីគ្នា
+                                </span>
+                              </div>
+                              <p className="leading-relaxed">
+                                {loginAccountType === 'owner'
+                                  ? 'គណនីម្ចាស់ហាង (Admin) ត្រូវប្រើលេខសម្ងាត់ ឬ PIN ផ្ទាល់ខ្លួនរបស់ Admin សម្រាប់គ្រប់គ្រងទិន្នន័យ ប្រព័ន្ធហិរញ្ញវត្ថុ និងរបាយការណ៍ទាំងអស់។'
+                                  : `គណនី «${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'}» ត្រូវប្រើលេខសម្ងាត់ PIN ផ្ទាល់ខ្លួនរៀងខ្លួន ដាច់ដោយឡែកពីម្ចាស់ហាង និងបុគ្គលិកដទៃទៀត។`}
+                              </p>
+                            </div>
                           </div>
 
                           {/* Remember Me */}
