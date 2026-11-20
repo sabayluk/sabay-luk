@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { supabase } from '../../../supabase';
+import { supabase, normalizeEnableTax } from '../../../supabase';
 import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, fetchAllStores, deleteStoreRecord, STORE_PLANS, checkStorePlanLimit, getStorePlanExpiryInfo, renewStoreSubscription, getSubscriptionPayments, saveSubscriptionPayments, submitSubscriptionPayment, approveSubscriptionPayment, rejectSubscriptionPayment, approveStoreDirectly, isStoreNameOrSlugTaken, getStoreInactivityDays, isStoreInactive, updateStoreActivity, suspendStore, reactivateStore } from '../../../lib/stores';
 import * as XLSX from 'xlsx';
 import { CATEGORY_DEPARTMENTS, CATEGORY_ICONS_LIST, renderCategorySvg } from '../../../lib/categoryIcons';
@@ -2873,7 +2873,15 @@ export default function UnifiedAdminDashboard() {
       }
     }
     const dbSettings = store?.settings || {};
+    const isTaxActive = normalizeEnableTax(dbSettings?.enableTax) || normalizeEnableTax(savedParsed?.enableTax);
     const merged = { ...DEFAULT_STORE_SETTINGS, ...dbSettings, ...(savedParsed || {}) };
+    merged.enableTax = isTaxActive;
+    if (isTaxActive) {
+      merged.taxRate = parseFloat(savedParsed?.taxRate ?? dbSettings?.taxRate ?? 10) || 10;
+      merged.taxMode = savedParsed?.taxMode || dbSettings?.taxMode || 'exclusive';
+      merged.vatTin = savedParsed?.vatTin || dbSettings?.vatTin || 'K001-90218821';
+      merged.taxLabel = savedParsed?.taxLabel || dbSettings?.taxLabel || 'ពន្ធអាករ (VAT 10%)';
+    }
     return {
       ...merged,
       storeName: merged.storeName || store?.name || (isDefault ? 'SABAY LUK' : 'ហាងថ្មី'),
@@ -2904,7 +2912,7 @@ export default function UnifiedAdminDashboard() {
 
   const [storeSettings, setStoreSettings] = useState(() => getStoreScopedSettings(getActiveStore()));
 
-  // ⭐️ Instant Auto-Save Helper សម្រាប់ Settings (ធានាពេលប្តូរ Toggle ឬ តម្លៃ Sync ភ្លាមៗទៅ Website & LocalStorage) ⭐️
+  // ⭐️ Instant Auto-Save Helper សម្រាប់ Settings (ធានាពេលប្តូរ Toggle ឬ តម្លៃ Sync ភ្លាមៗទៅ Website & LocalStorage & Supabase Cloud) ⭐️
   const updateStoreSettingsImmediate = (newPartial) => {
     const updated = { ...storeSettings, ...newPartial };
     setStoreSettings(updated);
@@ -2925,6 +2933,22 @@ export default function UnifiedAdminDashboard() {
       });
       setRegisteredStores(updatedStores);
       saveLocalStores(updatedStores);
+
+      // ⭐️ Cloud Sync ភ្លាមៗ ធានា localhost និង 127.0.0.1 ត្រូវគ្នា 100% ⭐️
+      try {
+        supabase
+          .from('stores')
+          .update({
+            settings: updated,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', storeId)
+          .then(({ error }) => {
+            if (error) console.warn('Cloud store settings auto-sync error:', error);
+          });
+      } catch (err) {
+        console.warn('Failed cloud store auto-sync:', err);
+      }
 
       try {
         window.dispatchEvent(new CustomEvent('sabay_store_settings_updated', { detail: updated }));
@@ -4000,7 +4024,7 @@ export default function UnifiedAdminDashboard() {
     const fontSize = thermalPaperSize === '58mm' ? '10px' : '11px';
 
     const isLogoVisible = (storeSettings.showInvoiceLogo !== false && invoiceSettings.showLogo !== false) && storeSettings.logoUrl;
-    const isTaxEnabled = storeSettings.enableTax !== false;
+    const isTaxEnabled = normalizeEnableTax(storeSettings.enableTax);
     const taxRate = storeSettings.taxRate ?? 10;
     const taxMode = storeSettings.taxMode || 'exclusive';
     const taxLabel = storeSettings.taxLabel || `ពន្ធអាករ (VAT ${taxRate}%)`;
@@ -24539,8 +24563,8 @@ export default function UnifiedAdminDashboard() {
                   </div>
                   <input
                     type="checkbox"
-                    checked={storeSettings.enableTax !== false}
-                    onChange={(e) => setStoreSettings({ ...storeSettings, enableTax: e.target.checked })}
+                    checked={normalizeEnableTax(storeSettings.enableTax)}
+                    onChange={(e) => updateStoreSettingsImmediate({ enableTax: e.target.checked })}
                     className="w-5 h-5 rounded text-blue-600 cursor-pointer accent-blue-600"
                   />
                 </div>
@@ -24752,7 +24776,7 @@ export default function UnifiedAdminDashboard() {
               <div className="flex justify-between"><p>Discount</p><p className="font-bold">-$0.00</p></div>
               
               {/* ⭐️ TAX / VAT LINE ITEM ⭐️ */}
-              {storeSettings.enableTax !== false && (
+              {normalizeEnableTax(storeSettings.enableTax) && (
                 <div className="flex justify-between text-blue-700 font-bold">
                   <p>{storeSettings.taxLabel || `ពន្ធអាករ VAT (${storeSettings.taxRate ?? 10}%)`}{storeSettings.taxMode === 'inclusive' ? ' (រួមបញ្ចូល)' : ''}:</p>
                   <p>{storeSettings.taxMode === 'inclusive' ? `(${(40 * (storeSettings.taxRate ?? 10) / (100 + (storeSettings.taxRate ?? 10))).toFixed(2)})` : `+${(40 * (storeSettings.taxRate ?? 10) / 100).toFixed(2)}`}</p>
@@ -24761,11 +24785,11 @@ export default function UnifiedAdminDashboard() {
 
               <div className="flex justify-between font-black text-sm pt-1 border-t border-black">
                 <p>TOTAL (USD)</p>
-                <p>${(40 + (storeSettings.enableTax !== false && storeSettings.taxMode !== 'inclusive' ? (40 * (storeSettings.taxRate ?? 10) / 100) : 0)).toFixed(2)}</p>
+                <p>${(40 + (normalizeEnableTax(storeSettings.enableTax) && storeSettings.taxMode !== 'inclusive' ? (40 * (storeSettings.taxRate ?? 10) / 100) : 0)).toFixed(2)}</p>
               </div>
               <div className="flex justify-between font-black text-xs text-gray-700">
                 <p>TOTAL (KHR)</p>
-                <p>${Math.round((40 + (storeSettings.enableTax !== false && storeSettings.taxMode !== 'inclusive' ? (40 * (storeSettings.taxRate ?? 10) / 100) : 0)) * (invoiceSettings.exchangeRate || 4100)).toLocaleString()} ៛</p>
+                <p>${Math.round((40 + (normalizeEnableTax(storeSettings.enableTax) && storeSettings.taxMode !== 'inclusive' ? (40 * (storeSettings.taxRate ?? 10) / 100) : 0)) * (invoiceSettings.exchangeRate || 4100)).toLocaleString()} ៛</p>
               </div>
             </div>
 
@@ -25927,7 +25951,7 @@ export default function UnifiedAdminDashboard() {
                     <div>
                       <h4 className="text-sm font-black text-blue-950 flex items-center gap-2">
                         <span>ការកំណត់ពន្ធអាករ (Tax & VAT Configuration)</span>
-                        {storeSettings.enableTax ? (
+                        {normalizeEnableTax(storeSettings.enableTax) ? (
                           <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-600 text-white">
                             🟢 កំពុងបើក ({storeSettings.taxRate ?? 10}%)
                           </span>
@@ -25947,7 +25971,7 @@ export default function UnifiedAdminDashboard() {
                   <label className="relative inline-flex items-center cursor-pointer shrink-0 self-start sm:self-auto">
                     <input
                       type="checkbox"
-                      checked={Boolean(storeSettings.enableTax)}
+                      checked={normalizeEnableTax(storeSettings.enableTax)}
                       onChange={(e) => updateStoreSettingsImmediate({ enableTax: e.target.checked })}
                       className="sr-only peer"
                     />
@@ -25955,7 +25979,7 @@ export default function UnifiedAdminDashboard() {
                   </label>
                 </div>
 
-                {storeSettings.enableTax ? (
+                {normalizeEnableTax(storeSettings.enableTax) ? (
                   <div className="space-y-4 pt-1 animate-in fade-in duration-200">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                       {/* Tax Rate */}
@@ -27151,12 +27175,7 @@ export default function UnifiedAdminDashboard() {
 
             {/* ================= 6️⃣ DELIVERY & EXCHANGE RATE VIEW ================= */}
             {activeSettingsSubTab === 'delivery' && (() => {
-              const isTaxOn = Boolean(
-                storeSettings.enableTax === true || 
-                String(storeSettings.enableTax) === 'true' || 
-                storeSettings.enableTax === 1 || 
-                storeSettings.enableTax === '1'
-              );
+              const isTaxOn = normalizeEnableTax(storeSettings.enableTax);
               const taxRateNum = parseFloat(storeSettings.taxRate) > 0 ? parseFloat(storeSettings.taxRate) : 10;
               const taxMode = storeSettings.taxMode || 'exclusive';
               const demoSubtotal = 20.00;

@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '../../supabase';
+import { supabase, normalizeEnableTax } from '../../supabase';
 
 function InvoiceContent() {
   const searchParams = useSearchParams();
@@ -71,11 +71,12 @@ function InvoiceContent() {
           setStoreSettings(prev => ({
             ...prev,
             ...data.settings,
-            // Preserve local tax setting if configured by user
-            enableTax: prev.enableTax !== undefined ? prev.enableTax : data.settings.enableTax,
-            taxRate: prev.taxRate || data.settings.taxRate,
-            taxMode: prev.taxMode || data.settings.taxMode,
-            taxLabel: prev.taxLabel || data.settings.taxLabel,
+            // Prioritize cloud tax settings or fallback to local
+            enableTax: normalizeEnableTax(data.settings.enableTax) || normalizeEnableTax(prev.enableTax),
+            taxRate: data.settings.taxRate || prev.taxRate || 10,
+            taxMode: data.settings.taxMode || prev.taxMode || 'exclusive',
+            taxLabel: data.settings.taxLabel || prev.taxLabel || 'ពន្ធអាករ (VAT 10%)',
+            vatTin: data.settings.vatTin || prev.vatTin || 'K001-90218821',
             storeName: data.name || data.settings.storeName || prev.storeName,
             phone: data.phone || data.settings.phone || prev.phone,
             telegram: (() => {
@@ -325,10 +326,7 @@ function InvoiceContent() {
   const deliveryFee = parseFloat(order?.delivery_fee || order?.shipping_fee || deliveryMeta?.delivery_fee || 0);
 
   const isTaxEnabled = Boolean(
-    storeSettings?.enableTax === true ||
-    String(storeSettings?.enableTax) === 'true' ||
-    storeSettings?.enableTax === 1 ||
-    storeSettings?.enableTax === '1' ||
+    normalizeEnableTax(storeSettings?.enableTax) ||
     taxMeta ||
     parseFloat(order?.tax_amount) > 0
   );

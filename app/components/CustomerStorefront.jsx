@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { supabase } from '../../supabase';
+import { supabase, normalizeEnableTax } from '../../supabase';
 import { renderCategorySvg } from '../../lib/categoryIcons';
 import { getActiveStore, isItemBelongsToStore, fetchStoreBySlug, DEFAULT_FLAGSHIP_STORE } from '../../lib/stores';
 import { getInvoiceUrl, openInvoiceInBrowser } from '../../lib/openInvoice';
@@ -1544,15 +1544,36 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       const active = target || DEFAULT_FLAGSHIP_STORE;
       setCurrentStore(active);
 
-      // Load settings specific to this store
-      let scopedSettings = active.settings || {};
+      // Load settings specific to this store (Cloud DB + Cross-Origin Sync)
+      const dbSettings = active.settings || {};
+      let scopedSettings = { ...dbSettings };
       const savedKey = `sabay_store_settings_${active.id}`;
       const savedStoreSpecific = localStorage.getItem(savedKey) || (active.id === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
+      let localParsed = null;
       if (savedStoreSpecific) {
         try {
-          scopedSettings = { ...scopedSettings, ...JSON.parse(savedStoreSpecific) };
+          localParsed = JSON.parse(savedStoreSpecific);
+          scopedSettings = { ...scopedSettings, ...localParsed };
         } catch (e) {}
       }
+
+      // ⭐️ Tax Resolution: Cloud Database takes precedence, or enabled if either source is true
+      const isTaxActive = normalizeEnableTax(dbSettings.enableTax) || normalizeEnableTax(localParsed?.enableTax);
+      scopedSettings.enableTax = isTaxActive;
+      if (isTaxActive) {
+        scopedSettings.taxRate = parseFloat(localParsed?.taxRate ?? dbSettings.taxRate ?? 10) || 10;
+        scopedSettings.taxMode = localParsed?.taxMode || dbSettings.taxMode || 'exclusive';
+        scopedSettings.vatTin = localParsed?.vatTin || dbSettings.vatTin || 'K001-90218821';
+        scopedSettings.taxLabel = localParsed?.taxLabel || dbSettings.taxLabel || 'ពន្ធអាករ (VAT 10%)';
+      }
+
+      // Write merged settings back so localhost & 127.0.0.1 caches immediately align
+      try {
+        localStorage.setItem(savedKey, JSON.stringify(scopedSettings));
+        if (active.id === 'store_default_sabayluk') {
+          localStorage.setItem('sabay_store_settings', JSON.stringify(scopedSettings));
+        }
+      } catch (_) {}
 
       setStoreSettings(prev => ({
         ...prev,
@@ -2133,12 +2154,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   }
 
   // ⭐️ គណនាពន្ធ VAT (បើហាងបានបើកដំណើរការក្នុង Settings) ⭐️
-  const isTaxEnabled = Boolean(
-    storeSettings.enableTax === true || 
-    String(storeSettings.enableTax) === 'true' || 
-    storeSettings.enableTax === 1 || 
-    storeSettings.enableTax === '1'
-  );
+  const isTaxEnabled = normalizeEnableTax(storeSettings.enableTax);
   const taxRatePercent = isTaxEnabled ? (parseFloat(storeSettings.taxRate) > 0 ? parseFloat(storeSettings.taxRate) : 10) : 0;
   const taxMode = storeSettings.taxMode || 'exclusive'; // 'exclusive' | 'inclusive'
 
