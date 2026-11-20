@@ -345,7 +345,12 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         const savedLang = localStorage.getItem('sabay_luk_lang');
         if (savedLang) setLanguage(savedLang);
         const savedTheme = localStorage.getItem('sabay_luk_theme_mode');
-        if (savedTheme) setThemeMode(savedTheme);
+        if (savedTheme) {
+          setThemeMode(savedTheme);
+          document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
       } catch (e) {}
 
       // ⭐️ Instant Reactive Sync when Settings are altered in Admin Dashboard ⭐️
@@ -2641,17 +2646,27 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               </div>
             ) : (
               <div suppressHydrationWarning style={{ backgroundColor: brandColor }} className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-md shrink-0 group-hover:scale-105 transition ring-2 ring-orange-500/20">
-                {(storeSettings.storeName || 'S').trim().charAt(0).toUpperCase()}
+                {((storeSettings.storeName || currentStore?.name || 'S').trim().charAt(0) || 'S').toUpperCase()}
               </div>
             )}
             <div className="min-w-0">
-              <div suppressHydrationWarning className="text-base sm:text-xl font-black text-gray-900 dark:text-white tracking-tight leading-tight group-hover:text-[#ff6a00] transition truncate max-w-[150px] xs:max-w-[200px] sm:max-w-none">
-                {storeSettings.storeName || 'SABAY LUK'}
+              <div 
+                suppressHydrationWarning 
+                className={`text-base sm:text-xl font-black tracking-tight leading-tight group-hover:text-[#ff6a00] transition truncate max-w-[170px] sm:max-w-none ${
+                  themeMode === 'dark' ? 'text-white' : 'text-slate-900'
+                }`}
+              >
+                {(storeSettings.storeName || currentStore?.name || 'SABAY LUK').trim() || 'SABAY LUK'}
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-                <p suppressHydrationWarning className="text-[9px] sm:text-[10px] font-extrabold text-gray-400 dark:text-gray-400 tracking-wider uppercase truncate leading-none">
-                  {storeSettings.storeSlogan || 'Premium Store'}
+                <p 
+                  suppressHydrationWarning 
+                  className={`text-[9px] sm:text-[10px] font-extrabold tracking-wider uppercase truncate leading-none ${
+                    themeMode === 'dark' ? 'text-slate-400' : 'text-slate-500'
+                  }`}
+                >
+                  {(storeSettings.storeSlogan || 'Premium Store').trim() || 'Premium Store'}
                 </p>
               </div>
             </div>
