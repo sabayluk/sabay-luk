@@ -18,7 +18,11 @@ function InvoiceContent() {
     phone: '096 720 5522',
     telegram: 'sabay_luk',
     vatTin: 'K001-902345678',
-    exchangeRate: 4100
+    exchangeRate: 4100,
+    enableTax: false,
+    taxRate: 10,
+    taxMode: 'exclusive',
+    taxLabel: 'ពន្ធអាករ (VAT 10%)'
   });
 
   const [loading, setLoading] = useState(true);
@@ -67,6 +71,11 @@ function InvoiceContent() {
           setStoreSettings(prev => ({
             ...prev,
             ...data.settings,
+            // Preserve local tax setting if configured by user
+            enableTax: prev.enableTax !== undefined ? prev.enableTax : data.settings.enableTax,
+            taxRate: prev.taxRate || data.settings.taxRate,
+            taxMode: prev.taxMode || data.settings.taxMode,
+            taxLabel: prev.taxLabel || data.settings.taxLabel,
             storeName: data.name || data.settings.storeName || prev.storeName,
             phone: data.phone || data.settings.phone || prev.phone,
             telegram: (() => {
@@ -313,10 +322,36 @@ function InvoiceContent() {
   const items = Array.isArray(order?.items) ? order.items.filter(it => !it.is_tax_meta && !it.is_delivery_meta) : [];
   const subtotal = parseFloat(order?.subtotal || order?.total_amount || order?.total || 0);
   const discount = parseFloat(order?.discount || 0);
-  const tax = parseFloat(order?.tax_amount || taxMeta?.tax_amount || 0);
   const deliveryFee = parseFloat(order?.delivery_fee || order?.shipping_fee || deliveryMeta?.delivery_fee || 0);
-  const taxLabel = taxMeta?.tax_label || (taxMeta?.tax_rate ? `ពន្ធអាករ (VAT ${taxMeta.tax_rate}%)` : (storeSettings?.taxLabel || 'ពន្ធអាករ (VAT 10%)'));
-  const total = parseFloat(order?.total_amount || order?.total || 0);
+
+  const isTaxEnabled = Boolean(
+    storeSettings?.enableTax === true ||
+    String(storeSettings?.enableTax) === 'true' ||
+    storeSettings?.enableTax === 1 ||
+    storeSettings?.enableTax === '1' ||
+    taxMeta ||
+    parseFloat(order?.tax_amount) > 0
+  );
+  const taxRatePercent = isTaxEnabled
+    ? (parseFloat(taxMeta?.tax_rate || storeSettings?.taxRate) > 0 ? parseFloat(taxMeta?.tax_rate || storeSettings?.taxRate) : 10)
+    : 0;
+  const taxMode = storeSettings?.taxMode || 'exclusive'; // 'exclusive' | 'inclusive'
+
+  let tax = parseFloat(order?.tax_amount || taxMeta?.tax_amount || 0);
+  if (isTaxEnabled && tax === 0 && subtotal > 0) {
+    if (taxMode === 'inclusive') {
+      tax = Math.round((subtotal - (subtotal / (1 + (taxRatePercent / 100)))) * 100) / 100;
+    } else {
+      tax = Math.round((subtotal * (taxRatePercent / 100)) * 100) / 100;
+    }
+  }
+
+  const taxLabel = taxMeta?.tax_label || (taxRatePercent > 0 ? `ពន្ធអាករ (VAT ${taxRatePercent}%)` : (storeSettings?.taxLabel || 'ពន្ធអាករ (VAT 10%)'));
+
+  let total = parseFloat(order?.total_amount || order?.total || 0);
+  if (total === 0 || (isTaxEnabled && tax > 0 && total <= subtotal + deliveryFee && taxMode === 'exclusive' && !parseFloat(order?.tax_amount))) {
+    total = Math.max(0, subtotal - discount + deliveryFee + (taxMode === 'exclusive' ? tax : 0));
+  }
   const exchangeRate = storeSettings.exchangeRate || 4100;
   const totalKHR = Math.round(total * exchangeRate);
 
@@ -678,10 +713,10 @@ function InvoiceContent() {
                 </div>
               )}
 
-              {tax > 0 && (
-                <div className="flex justify-between items-center text-gray-600">
+              {(tax > 0 || isTaxEnabled) && (
+                <div className="flex justify-between items-center text-blue-700 font-bold bg-blue-50/70 px-2.5 py-1.5 rounded-xl border border-blue-100">
                   <span>{taxLabel}:</span>
-                  <span className="font-mono font-bold">+${tax.toFixed(2)}</span>
+                  <span className="font-mono font-black">{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${tax.toFixed(2)}</span>
                 </div>
               )}
 

@@ -2904,6 +2904,34 @@ export default function UnifiedAdminDashboard() {
 
   const [storeSettings, setStoreSettings] = useState(() => getStoreScopedSettings(getActiveStore()));
 
+  // ⭐️ Instant Auto-Save Helper សម្រាប់ Settings (ធានាពេលប្តូរ Toggle ឬ តម្លៃ Sync ភ្លាមៗទៅ Website & LocalStorage) ⭐️
+  const updateStoreSettingsImmediate = (newPartial) => {
+    const updated = { ...storeSettings, ...newPartial };
+    setStoreSettings(updated);
+
+    if (typeof window !== 'undefined') {
+      const storeId = activeStore?.id || 'store_default_sabayluk';
+      localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(updated));
+      if (storeId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_store_settings', JSON.stringify(updated));
+      }
+
+      // Sync activeStore object in state and localStorage
+      const updatedStores = (registeredStores || []).map(s => {
+        if (s.id === storeId) {
+          return { ...s, settings: { ...(s.settings || {}), ...updated } };
+        }
+        return s;
+      });
+      setRegisteredStores(updatedStores);
+      saveLocalStores(updatedStores);
+
+      try {
+        window.dispatchEvent(new CustomEvent('sabay_store_settings_updated', { detail: updated }));
+      } catch (_) {}
+    }
+  };
+
   useEffect(() => {
     if (!activeStore) return;
     setStoreSettings(getStoreScopedSettings(activeStore));
@@ -25920,7 +25948,7 @@ export default function UnifiedAdminDashboard() {
                     <input
                       type="checkbox"
                       checked={Boolean(storeSettings.enableTax)}
-                      onChange={(e) => setStoreSettings({ ...storeSettings, enableTax: e.target.checked })}
+                      onChange={(e) => updateStoreSettingsImmediate({ enableTax: e.target.checked })}
                       className="sr-only peer"
                     />
                     <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -25942,7 +25970,7 @@ export default function UnifiedAdminDashboard() {
                           min="0"
                           max="100"
                           value={storeSettings.taxRate ?? 10}
-                          onChange={(e) => setStoreSettings({ ...storeSettings, taxRate: parseFloat(e.target.value) || 0 })}
+                          onChange={(e) => updateStoreSettingsImmediate({ taxRate: parseFloat(e.target.value) || 0 })}
                           className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-xs font-black text-blue-900 focus:border-blue-500 outline-none transition bg-white"
                         />
                         {/* Preset Buttons */}
@@ -25956,7 +25984,7 @@ export default function UnifiedAdminDashboard() {
                             <button
                               key={btn.r}
                               type="button"
-                              onClick={() => setStoreSettings({ ...storeSettings, taxRate: btn.r })}
+                              onClick={() => updateStoreSettingsImmediate({ taxRate: btn.r })}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
                                 (storeSettings.taxRate ?? 10) === btn.r 
                                   ? 'bg-blue-600 text-white font-black' 
@@ -25976,7 +26004,7 @@ export default function UnifiedAdminDashboard() {
                         </label>
                         <select
                           value={storeSettings.taxMode || 'exclusive'}
-                          onChange={(e) => setStoreSettings({ ...storeSettings, taxMode: e.target.value })}
+                          onChange={(e) => updateStoreSettingsImmediate({ taxMode: e.target.value })}
                           className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-xs font-black text-blue-900 focus:border-blue-500 outline-none transition bg-white cursor-pointer"
                         >
                           <option value="exclusive">បូកបន្ថែមលើតម្លៃ (Exclusive: +VAT)</option>
@@ -25995,7 +26023,7 @@ export default function UnifiedAdminDashboard() {
                         <input
                           type="text"
                           value={storeSettings.taxLabel || `ពន្ធអាករ (VAT ${storeSettings.taxRate ?? 10}%)`}
-                          onChange={(e) => setStoreSettings({ ...storeSettings, taxLabel: e.target.value })}
+                          onChange={(e) => updateStoreSettingsImmediate({ taxLabel: e.target.value })}
                           placeholder="ពន្ធអាករ (VAT 10%)"
                           className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-xs font-bold text-blue-900 focus:border-blue-500 outline-none transition bg-white"
                         />
@@ -26012,7 +26040,7 @@ export default function UnifiedAdminDashboard() {
                       <input
                         type="text"
                         value={storeSettings.vatTin || ''}
-                        onChange={(e) => setStoreSettings({ ...storeSettings, vatTin: e.target.value })}
+                        onChange={(e) => updateStoreSettingsImmediate({ vatTin: e.target.value })}
                         placeholder="ឧ. K001-90218821"
                         className="w-full border-2 border-blue-200 p-2.5 rounded-xl text-xs font-mono font-bold text-blue-900 focus:border-blue-500 outline-none transition bg-white"
                       />
@@ -26059,7 +26087,7 @@ export default function UnifiedAdminDashboard() {
                     <input
                       type="checkbox"
                       checked={storeSettings.enableDeliveryFee !== false}
-                      onChange={(e) => setStoreSettings({ ...storeSettings, enableDeliveryFee: e.target.checked })}
+                      onChange={(e) => updateStoreSettingsImmediate({ enableDeliveryFee: e.target.checked })}
                       className="sr-only peer"
                     />
                     <div className="w-12 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
@@ -26080,7 +26108,7 @@ export default function UnifiedAdminDashboard() {
                           step="0.1"
                           min="0"
                           value={storeSettings.deliveryPhnomPenh ?? '1.50'}
-                          onChange={(e) => setStoreSettings({ ...storeSettings, deliveryPhnomPenh: e.target.value })}
+                          onChange={(e) => updateStoreSettingsImmediate({ deliveryPhnomPenh: e.target.value })}
                           placeholder="1.50"
                           className="w-full border-2 border-emerald-200 p-2.5 rounded-xl text-xs font-black text-emerald-900 focus:border-emerald-500 outline-none transition bg-white"
                         />
@@ -26098,7 +26126,7 @@ export default function UnifiedAdminDashboard() {
                           step="0.1"
                           min="0"
                           value={storeSettings.deliveryProvince ?? '2.50'}
-                          onChange={(e) => setStoreSettings({ ...storeSettings, deliveryProvince: e.target.value })}
+                          onChange={(e) => updateStoreSettingsImmediate({ deliveryProvince: e.target.value })}
                           placeholder="2.50"
                           className="w-full border-2 border-emerald-200 p-2.5 rounded-xl text-xs font-black text-emerald-900 focus:border-emerald-500 outline-none transition bg-white"
                         />
@@ -26116,7 +26144,7 @@ export default function UnifiedAdminDashboard() {
                           step="1"
                           min="0"
                           value={storeSettings.freeShippingThreshold ?? '0'}
-                          onChange={(e) => setStoreSettings({ ...storeSettings, freeShippingThreshold: e.target.value })}
+                          onChange={(e) => updateStoreSettingsImmediate({ freeShippingThreshold: e.target.value })}
                           placeholder="0 (គ្មាន Free)"
                           className="w-full border-2 border-emerald-200 p-2.5 rounded-xl text-xs font-black text-emerald-900 focus:border-emerald-500 outline-none transition bg-white"
                         />
@@ -26148,11 +26176,11 @@ export default function UnifiedAdminDashboard() {
                   <input
                     type="number"
                     value={storeSettings.exchangeRate || 4100}
-                    onChange={(e) => setStoreSettings({ ...storeSettings, exchangeRate: Number(e.target.value) })}
+                    onChange={(e) => updateStoreSettingsImmediate({ exchangeRate: Number(e.target.value) || 4100 })}
                     placeholder="4100"
                     className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-xs font-black text-emerald-600 focus:border-emerald-500 outline-none transition bg-white"
                   />
-                  <p className="text-[10px] text-gray-400 mt-1">ប្តូរប្រាក់រៀលស្វ័យប្រវត្តិតាមអត្រានេះលើ POS & Website</p>
+                  <p className="text-[10px] text-gray-400 mt-1">ប្តូរប្រាក់រៀលស្វវត្តិតាមអត្រានេះលើ POS & Website</p>
                 </div>
 
                 <div>
@@ -26162,7 +26190,7 @@ export default function UnifiedAdminDashboard() {
                   <input
                     type="text"
                     value={storeSettings.policyNote || ''}
-                    onChange={(e) => setStoreSettings({ ...storeSettings, policyNote: e.target.value })}
+                    onChange={(e) => updateStoreSettingsImmediate({ policyNote: e.target.value })}
                     placeholder="ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)"
                     className="w-full border-2 border-gray-200 p-2.5 rounded-xl text-xs font-medium focus:border-[#ff6a00] outline-none transition bg-white"
                   />
@@ -27122,42 +27150,80 @@ export default function UnifiedAdminDashboard() {
             )}
 
             {/* ================= 6️⃣ DELIVERY & EXCHANGE RATE VIEW ================= */}
-            {activeSettingsSubTab === 'delivery' && (
-              <div className="space-y-3 animate-in fade-in">
-                <div className="bg-white text-gray-900 rounded-2xl p-3.5 border border-gray-200 shadow-sm space-y-2 text-xs">
-                  <div className="flex items-center justify-between font-bold border-b border-gray-100 pb-2">
-                    <span className="text-gray-500">ទំនិញសរុប (Subtotal):</span>
-                    <span className="font-black text-gray-900">$20.00</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-700 font-bold flex items-center gap-1">
-                      <span>🛵</span> ថ្លៃដឹកភ្នំពេញ:
-                    </span>
-                    <span className="font-mono font-black text-emerald-600">+${storeSettings.deliveryPhnomPenh || '1.50'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-700 font-bold flex items-center gap-1">
-                      <span>🚚</span> ថ្លៃដឹកតាមខេត្ត:
-                    </span>
-                    <span className="font-mono font-black text-blue-600">+${storeSettings.deliveryProvince || '2.00'}</span>
-                  </div>
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                    <span className="font-bold text-gray-500">អត្រាប្តូរប្រាក់:</span>
-                    <span className="font-mono font-black text-orange-600">$1 = {storeSettings.exchangeRate || 4100} ៛</span>
-                  </div>
-                  <div className="p-2 bg-orange-50 rounded-xl text-center font-black text-[#ff6a00] border border-orange-200">
-                    ឧ. $21.50 ≈ {((21.5) * (Number(storeSettings.exchangeRate) || 4100)).toLocaleString()} ៛
-                  </div>
-                </div>
+            {activeSettingsSubTab === 'delivery' && (() => {
+              const isTaxOn = Boolean(
+                storeSettings.enableTax === true || 
+                String(storeSettings.enableTax) === 'true' || 
+                storeSettings.enableTax === 1 || 
+                storeSettings.enableTax === '1'
+              );
+              const taxRateNum = parseFloat(storeSettings.taxRate) > 0 ? parseFloat(storeSettings.taxRate) : 10;
+              const taxMode = storeSettings.taxMode || 'exclusive';
+              const demoSubtotal = 20.00;
+              const deliveryFeeNum = parseFloat(storeSettings.deliveryPhnomPenh) >= 0 ? parseFloat(storeSettings.deliveryPhnomPenh) : 1.50;
+              let demoTax = 0;
+              let demoTotal = demoSubtotal + deliveryFeeNum;
+              if (isTaxOn) {
+                if (taxMode === 'inclusive') {
+                  demoTax = Math.round((demoSubtotal - (demoSubtotal / (1 + (taxRateNum / 100)))) * 100) / 100;
+                  demoTotal = demoSubtotal + deliveryFeeNum;
+                } else {
+                  demoTax = Math.round((demoSubtotal * (taxRateNum / 100)) * 100) / 100;
+                  demoTotal = demoSubtotal + deliveryFeeNum + demoTax;
+                }
+              }
+              const exchangeRateNum = Number(storeSettings.exchangeRate) || 4100;
+              const demoTotalKhr = Math.round(demoTotal * exchangeRateNum);
 
-                {storeSettings.policyNote && (
-                  <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 text-[10px] text-slate-300">
-                    <span className="font-bold text-amber-400 block mb-0.5">គោលការណ៍ហាង (Policy Note):</span>
-                    {storeSettings.policyNote}
+              return (
+                <div className="space-y-3 animate-in fade-in">
+                  <div className="bg-white text-gray-900 rounded-2xl p-3.5 border border-gray-200 shadow-sm space-y-2 text-xs">
+                    <div className="flex items-center justify-between font-bold border-b border-gray-100 pb-2">
+                      <span className="text-gray-500">ទំនិញសរុប (Subtotal):</span>
+                      <span className="font-black text-gray-900">${demoSubtotal.toFixed(2)}</span>
+                    </div>
+
+                    {isTaxOn && (
+                      <div className="flex items-center justify-between bg-blue-50/80 px-2 py-1.5 rounded-xl border border-blue-100 font-bold text-blue-700">
+                        <span className="flex items-center gap-1">
+                          <span>🧾</span> {storeSettings.taxLabel || `ពន្ធអាករ (VAT ${taxRateNum}%)`}:
+                        </span>
+                        <span className="font-mono font-black">
+                          {taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${demoTax.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700 font-bold flex items-center gap-1">
+                        <span>🛵</span> ថ្លៃដឹកភ្នំពេញ:
+                      </span>
+                      <span className="font-mono font-black text-emerald-600">+${storeSettings.deliveryPhnomPenh || '1.50'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-700 font-bold flex items-center gap-1">
+                        <span>🚚</span> ថ្លៃដឹកតាមខេត្ត:
+                      </span>
+                      <span className="font-mono font-black text-blue-600">+${storeSettings.deliveryProvince || '2.00'}</span>
+                    </div>
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                      <span className="font-bold text-gray-500">អត្រាប្តូរប្រាក់:</span>
+                      <span className="font-mono font-black text-orange-600">$1 = {storeSettings.exchangeRate || 4100} ៛</span>
+                    </div>
+                    <div className="p-2 bg-orange-50 rounded-xl text-center font-black text-[#ff6a00] border border-orange-200">
+                      ឧ. ${demoTotal.toFixed(2)} ≈ {demoTotalKhr.toLocaleString()} ៛
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
+
+                  {storeSettings.policyNote && (
+                    <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 text-[10px] text-slate-300">
+                      <span className="font-bold text-amber-400 block mb-0.5">គោលការណ៍ហាង (Policy Note):</span>
+                      {storeSettings.policyNote}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* ================= 🔒 SECURITY VIEW ================= */}
             {activeSettingsSubTab === 'security' && (

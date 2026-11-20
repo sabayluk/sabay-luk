@@ -322,15 +322,20 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   useEffect(() => {
     setIsMounted(true);
     if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('sabay_store_settings');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          let tg = (parsed.telegram || 'sabay_luk').replace(/^@/, '').trim();
-          if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
-          setStoreSettings(prev => ({ ...prev, ...parsed, telegram: tg }));
-        }
-      } catch (_) {}
+      const loadSettingsFromStorage = () => {
+        try {
+          const storeKey = currentStore?.id ? `sabay_store_settings_${currentStore.id}` : 'sabay_store_settings';
+          const saved = localStorage.getItem(storeKey) || localStorage.getItem('sabay_store_settings');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            let tg = (parsed.telegram || 'sabay_luk').replace(/^@/, '').trim();
+            if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
+            setStoreSettings(prev => ({ ...prev, ...parsed, telegram: tg }));
+          }
+        } catch (_) {}
+      };
+
+      loadSettingsFromStorage();
 
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -342,8 +347,25 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         const savedTheme = localStorage.getItem('sabay_luk_theme_mode');
         if (savedTheme) setThemeMode(savedTheme);
       } catch (e) {}
+
+      // ⭐️ Instant Reactive Sync when Settings are altered in Admin Dashboard ⭐️
+      const handleSettingsSync = (e) => {
+        if (e?.detail?.settings) {
+          setStoreSettings(prev => ({ ...prev, ...e.detail.settings }));
+        } else {
+          loadSettingsFromStorage();
+        }
+      };
+
+      window.addEventListener('sabay_store_settings_updated', handleSettingsSync);
+      window.addEventListener('storage', handleSettingsSync);
+
+      return () => {
+        window.removeEventListener('sabay_store_settings_updated', handleSettingsSync);
+        window.removeEventListener('storage', handleSettingsSync);
+      };
     }
-  }, []);
+  }, [currentStore?.id]);
 
   // Apply dark mode class to document
   useEffect(() => {
@@ -2060,8 +2082,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   }
 
   // ⭐️ គណនាពន្ធ VAT (បើហាងបានបើកដំណើរការក្នុង Settings) ⭐️
-  const isTaxEnabled = storeSettings.enableTax === true;
-  const taxRatePercent = isTaxEnabled ? (Number(storeSettings.taxRate) || 0) : 0;
+  const isTaxEnabled = Boolean(
+    storeSettings.enableTax === true || 
+    String(storeSettings.enableTax) === 'true' || 
+    storeSettings.enableTax === 1 || 
+    storeSettings.enableTax === '1'
+  );
+  const taxRatePercent = isTaxEnabled ? (parseFloat(storeSettings.taxRate) > 0 ? parseFloat(storeSettings.taxRate) : 10) : 0;
   const taxMode = storeSettings.taxMode || 'exclusive'; // 'exclusive' | 'inclusive'
 
   const netBeforeTax = Math.max(0, subtotalPrice - couponDiscountAmount);
@@ -2069,12 +2096,12 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   let totalPrice = netBeforeTax;
 
   if (isTaxEnabled && taxRatePercent > 0) {
-    if (taxMode === 'exclusive') {
-      taxAmount = Math.round((netBeforeTax * (taxRatePercent / 100)) * 100) / 100;
-      totalPrice = netBeforeTax + taxAmount;
-    } else {
+    if (taxMode === 'inclusive') {
       taxAmount = Math.round((netBeforeTax - (netBeforeTax / (1 + (taxRatePercent / 100)))) * 100) / 100;
       totalPrice = netBeforeTax;
+    } else {
+      taxAmount = Math.round((netBeforeTax * (taxRatePercent / 100)) * 100) / 100;
+      totalPrice = netBeforeTax + taxAmount;
     }
   }
 
@@ -5140,8 +5167,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                         <span className="font-mono">-${couponDiscountAmount.toFixed(2)}</span>
                       </div>
                     )}
-                    {isTaxEnabled && taxAmount > 0 && (
-                      <div className="flex justify-between items-center text-xs font-bold text-blue-600">
+                    {isTaxEnabled && (
+                      <div className="flex justify-between items-center text-xs font-bold text-blue-600 bg-blue-50/70 px-2 py-1 rounded-md border border-blue-100">
                         <span>{storeSettings.taxLabel || `ពន្ធអាករ (VAT ${taxRatePercent}%)`}:</span>
                         <span className="font-mono">{taxMode === 'inclusive' ? '(រួមបញ្ចូល) ' : '+'}${taxAmount.toFixed(2)}</span>
                       </div>
