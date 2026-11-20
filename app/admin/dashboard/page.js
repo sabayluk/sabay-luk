@@ -28236,8 +28236,8 @@ export default function UnifiedAdminDashboard() {
       if (loginAccountType === 'owner') {
         const storeStaff = getStoreStaffList(targetStore);
         const ownerStaff = storeStaff.find(s => s.role === 'ADMIN') || getStoreDefaultStaff(targetStore)[0];
-        const validPin = ownerStaff.pin || targetStore.pin || '1234';
-        const validPass = ownerStaff.password || targetStore.password || validPin;
+        const validPin = (ownerStaff.pin || targetStore.pin || '1234').toString().trim();
+        const validPass = (ownerStaff.password || targetStore.password || validPin).toString().trim();
 
         if (passInput !== validPin && passInput !== validPass) {
           setLoginError('❌ លេខកូដ PIN ឬលេខសម្ងាត់របស់ម្ចាស់ហាងមិនត្រឹមត្រូវ!');
@@ -28264,15 +28264,18 @@ export default function UnifiedAdminDashboard() {
         const storeStaffList = getStoreStaffList(targetStore);
         let targetStaff = loginSelectedStaffMember;
         if (!targetStaff) {
-          targetStaff = storeStaffList.find(s => s.pin === passInput || s.password === passInput);
+          targetStaff = storeStaffList.find(s => s.role !== 'ADMIN') || storeStaffList.find(s => s.pin === passInput || s.password === passInput);
         }
 
         if (!targetStaff) {
-          setLoginError('❌ សូមជ្រើសរើសបុគ្គលិកដែលចង់ចូលប្រើ!');
+          setLoginError('❌ សូមជ្រើសរើសបុគ្គលិកដែលចង់ចូលប្រើ ឬបង្កើតគណនីបុគ្គលិកជាមុនសិន!');
           return;
         }
 
-        if (passInput !== targetStaff.pin && passInput !== targetStaff.password) {
+        const validStaffPin = (targetStaff.pin || '').toString().trim();
+        const validStaffPass = (targetStaff.password || validStaffPin || '1234').toString().trim();
+
+        if (passInput !== validStaffPin && passInput !== validStaffPass) {
           setLoginError(`❌ លេខកូដ PIN ឬពាក្យសម្ងាត់សម្រាប់ ${targetStaff.name} មិនត្រឹមត្រូវ!`);
           return;
         }
@@ -28584,88 +28587,283 @@ export default function UnifiedAdminDashboard() {
                       </div>
                     )}
 
-                    {/* ⭐️ Verified Store Account Identity Banner (Clean & Standard) ⭐️ */}
-                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-2xl flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base font-black shrink-0 shadow-xs">
-                          👑
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-black text-blue-700 uppercase tracking-wider">គណនីម្ចាស់ហាង (Store Owner)</p>
-                          <p className="text-xs font-black text-slate-900 truncate">
-                            {loginTargetStore.owner_name || 'ម្ចាស់ហាង'}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono font-bold bg-white text-blue-700 px-2.5 py-1 rounded-xl border border-blue-200 shadow-2xs shrink-0">
-                        Gmail Verified
-                      </span>
-                    </div>
+                    {(() => {
+                      const storeStaffList = getStoreStaffList(loginTargetStore);
+                      const ownerStaff = storeStaffList.find(s => s.role === 'ADMIN' || s.isOwner) || getStoreDefaultStaff(loginTargetStore)[0];
+                      const staffMembers = storeStaffList.filter(s => s.id !== ownerStaff?.id && s.role !== 'ADMIN');
 
-
-
-                    {/* PIN / Password Input */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-bold text-slate-700">
-                          លេខកូដសម្ងាត់ ឬ PIN របស់ម្ចាស់ហាង <span className="text-rose-500">*</span>
-                        </label>
-                        <span className="text-[10px] text-slate-400 font-mono">Password / PIN</span>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type={loginShowGmailPassword ? 'text' : 'password'}
-                          value={loginGmailPassword}
-                          onChange={(e) => setLoginGmailPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-sm font-mono font-black outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition pr-10"
-                          required
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setLoginShowGmailPassword(!loginShowGmailPassword)}
-                          className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
-                        >
-                          {loginShowGmailPassword ? '🙈' : '👁️'}
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1 font-medium">
-                        🔒 ព័ត៌មានសម្ងាត់ត្រូវបានការពារដោយប្រព័ន្ធសុវត្ថិភាព 256-bit
-                      </p>
-                    </div>
-
-                    {/* Remember Me */}
-                    <div className="flex items-center justify-between text-xs pt-0.5">
-                      <label className="flex items-center gap-2 cursor-pointer text-slate-600 select-none">
-                        <input
-                          type="checkbox"
-                          checked={rememberMe}
-                          onChange={(e) => setRememberMe(e.target.checked)}
-                          className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
-                        />
-                        <span>ចងចាំការចូលប្រើ (Remember Me)</span>
-                      </label>
-                    </div>
-
-                    {/* Submit Button */}
-                    <button
-                      type="submit"
-                      disabled={isLoggingIn}
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      {isLoggingIn ? (
+                      return (
                         <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>កំពុងផ្ទៀងផ្ទាត់...</span>
+                          {/* ⭐️ ROLE SELECTOR (Admin / ម្ចាស់ហាង vs បុគ្គលិក / Staff) ⭐️ */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                <span>🎭</span>
+                                <span>ជ្រើសរើសតួនាទីចូលប្រើ (Login Role) <span className="text-rose-500">*</span></span>
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-mono">Select Role</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLoginAccountType('owner');
+                                  setLoginSelectedStaffMember(null);
+                                  setLoginGmailPassword('');
+                                  setLoginError('');
+                                }}
+                                className={`py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                                  loginAccountType === 'owner'
+                                    ? 'bg-white text-blue-700 shadow-xs border border-blue-200'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                <span className="text-base">👑</span>
+                                <span>Admin / ម្ចាស់ហាង</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setLoginAccountType('staff');
+                                  if (staffMembers.length > 0 && !loginSelectedStaffMember) {
+                                    setLoginSelectedStaffMember(staffMembers[0]);
+                                  }
+                                  setLoginGmailPassword('');
+                                  setLoginError('');
+                                }}
+                                className={`py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                                  loginAccountType === 'staff'
+                                    ? 'bg-white text-blue-700 shadow-xs border border-blue-200'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                <span className="text-base">👥</span>
+                                <span>បុគ្គលិក (Staff)</span>
+                                {staffMembers.length > 0 && (
+                                  <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full font-mono font-bold">
+                                    {staffMembers.length}
+                                  </span>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* ⭐️ OPTION 1: STORE OWNER / ADMIN BANNER ⭐️ */}
+                          {loginAccountType === 'owner' && (
+                            <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-200 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base font-black shrink-0 shadow-xs">
+                                  👑
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-[10px] font-black text-blue-700 uppercase tracking-wider">គណនីម្ចាស់ហាង (Store Admin)</p>
+                                    <span className="text-[9px] font-mono font-bold bg-white text-blue-700 px-1.5 py-0.2 rounded-md border border-blue-200">
+                                      Full Access
+                                    </span>
+                                  </div>
+                                  <p className="text-xs font-black text-slate-900 truncate">
+                                    {loginTargetStore.owner_name || loginTargetStore.name || 'ម្ចាស់ហាង'}
+                                  </p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-mono font-bold bg-white text-emerald-700 px-2.5 py-1 rounded-xl border border-emerald-200 shadow-2xs shrink-0 flex items-center gap-1">
+                                <span>✓</span> Gmail Verified
+                              </span>
+                            </div>
+                          )}
+
+                          {/* ⭐️ OPTION 2: STORE STAFF MEMBERS SELECTOR ⭐️ */}
+                          {loginAccountType === 'staff' && (
+                            <div className="space-y-2 animate-in fade-in">
+                              {staffMembers.length > 0 ? (
+                                <div className="space-y-1.5">
+                                  <label className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
+                                    <span>ជ្រើសរើសគណនីបុគ្គលិក ({staffMembers.length} នាក់)៖</span>
+                                    <span className="text-[10px] text-blue-600 font-mono">Staff Selection</span>
+                                  </label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-0.5">
+                                    {staffMembers.map((stf) => {
+                                      const isSelected = (loginSelectedStaffMember?.id === stf.id) || (!loginSelectedStaffMember && stf.id === staffMembers[0]?.id);
+                                      return (
+                                        <button
+                                          key={stf.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setLoginSelectedStaffMember(stf);
+                                            setLoginGmailPassword('');
+                                            setLoginError('');
+                                          }}
+                                          className={`p-2.5 rounded-2xl text-left border transition flex items-center gap-2.5 cursor-pointer ${
+                                            isSelected
+                                              ? 'border-blue-600 bg-blue-50/90 text-blue-950 font-black shadow-xs ring-2 ring-blue-500/20'
+                                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold'
+                                          }`}
+                                        >
+                                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ${
+                                            stf.avatar ? 'bg-slate-100' : 'bg-gradient-to-tr from-blue-500 to-indigo-600 text-white'
+                                          }`}>
+                                            {stf.avatar || '🧑‍💼'}
+                                          </div>
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-center justify-between gap-1">
+                                              <span className="text-xs truncate block font-black">{stf.name}</span>
+                                              {isSelected && <span className="text-blue-600 text-xs">✓</span>}
+                                            </div>
+                                            <span className="text-[10px] text-slate-500 font-medium truncate block">
+                                              {stf.roleLabel || stf.role || 'បុគ្គលិក'}
+                                            </span>
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-base">👥</span>
+                                    <div className="text-xs text-amber-900 leading-relaxed font-bold">
+                                      <p className="font-black text-amber-950">ហាង «{loginTargetStore.name}» មិនទាន់មានគណនីបុគ្គលិកនៅឡើយទេ</p>
+                                      <p className="text-[11px] font-medium text-amber-800 mt-0.5">
+                                        លោកអ្នកអាចចុចបង្កើតគណនីបុគ្គលិកគំរូសាកល្បងភ្លាមៗ ឬជ្រើសរើសចូលជា "Admin / ម្ចាស់ហាង"។
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const newCashier = {
+                                          id: `STAFF-${loginTargetStore.id}-CASHIER-1`,
+                                          name: 'បុគ្គលិកគិតលុយ (Cashier)',
+                                          email: `cashier@${loginTargetStore.slug || 'store'}.com`,
+                                          username: `cashier_${loginTargetStore.slug || 'store'}`,
+                                          pin: '1234',
+                                          password: '1234',
+                                          role: 'CASHIER',
+                                          roleLabel: 'អ្នកគិតលុយ (Cashier)',
+                                          phone: '098 112 233',
+                                          avatar: '👩‍💼',
+                                          color: 'from-blue-500 to-cyan-600',
+                                          permissions: ROLE_PRESET_PERMISSIONS.CASHIER,
+                                          active: true,
+                                          store_id: loginTargetStore.id,
+                                          created_at: new Date().toISOString()
+                                        };
+                                        const existing = getStoreStaffList(loginTargetStore);
+                                        const updated = [...existing, newCashier];
+                                        if (typeof window !== 'undefined') {
+                                          localStorage.setItem(`sabay_staff_list_${loginTargetStore.id}`, JSON.stringify(updated));
+                                        }
+                                        setStaffList(updated);
+                                        setLoginSelectedStaffMember(newCashier);
+                                      }}
+                                      className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1"
+                                    >
+                                      <span>➕</span>
+                                      <span>បង្កើតគណនីអ្នកគិតលុយគំរូ (PIN: 1234)</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setLoginAccountType('owner');
+                                        setLoginSelectedStaffMember(null);
+                                        setLoginGmailPassword('');
+                                      }}
+                                      className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-black transition border border-slate-200 cursor-pointer shadow-2xs"
+                                    >
+                                      👑 ចូលជា Admin
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* PIN / Password Input */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs font-bold text-slate-700">
+                                {loginAccountType === 'owner' ? (
+                                  <span>លេខកូដសម្ងាត់ ឬ PIN របស់ម្ចាស់ហាង (Admin) <span className="text-rose-500">*</span></span>
+                                ) : (
+                                  <span>លេខកូដសម្ងាត់ ឬ PIN របស់ {loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'} <span className="text-rose-500">*</span></span>
+                                )}
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {loginAccountType === 'owner' ? 'Admin Password / PIN' : 'Staff Password / PIN'}
+                              </span>
+                            </div>
+                            <div className="relative">
+                              <input
+                                type={loginShowGmailPassword ? 'text' : 'password'}
+                                value={loginGmailPassword}
+                                onChange={(e) => setLoginGmailPassword(e.target.value)}
+                                placeholder={
+                                  loginAccountType === 'owner'
+                                    ? '•••••••• (PIN ឬ Password របស់ Admin)'
+                                    : `•••••••• (PIN ឬ Password របស់ ${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'})`
+                                }
+                                className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-sm font-mono font-black outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition pr-10"
+                                required
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setLoginShowGmailPassword(!loginShowGmailPassword)}
+                                className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                              >
+                                {loginShowGmailPassword ? '🙈' : '👁️'}
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                              🔒 {loginAccountType === 'owner'
+                                ? 'សិទ្ធិ Admin: គ្រប់គ្រងទិន្នន័យហាង ប្រព័ន្ធហិរញ្ញវត្ថុ និងរបាយការណ៍ទាំងអស់'
+                                : `សិទ្ធិបុគ្គលិក (${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'Staff'}): ${loginSelectedStaffMember?.roleLabel || staffMembers[0]?.roleLabel || 'ប្រតិបត្តិការលក់ និងស្តុកតាមតួនាទី'}`}
+                            </p>
+                          </div>
+
+                          {/* Remember Me */}
+                          <div className="flex items-center justify-between text-xs pt-0.5">
+                            <label className="flex items-center gap-2 cursor-pointer text-slate-600 select-none">
+                              <input
+                                type="checkbox"
+                                checked={rememberMe}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+                              />
+                              <span>ចងចាំការចូលប្រើ (Remember Me)</span>
+                            </label>
+                          </div>
+
+                          {/* Submit Button */}
+                          <button
+                            type="submit"
+                            disabled={isLoggingIn || (loginAccountType === 'staff' && !loginSelectedStaffMember && staffMembers.length === 0)}
+                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {isLoggingIn ? (
+                              <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <span>កំពុងផ្ទៀងផ្ទាត់...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>🚀</span>
+                                <span>
+                                  {loginAccountType === 'owner'
+                                    ? `ចូលគ្រប់គ្រងហាង «${loginTargetStore.name}» (Admin)`
+                                    : `ចូលប្រើប្រាស់ជា ${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'}`}
+                                </span>
+                              </>
+                            )}
+                          </button>
                         </>
-                      ) : (
-                        <>
-                          <span>🚀</span>
-                          <span>ចូលគ្រប់គ្រងហាង «{loginTargetStore.name}»</span>
-                        </>
-                      )}
-                    </button>
+                      );
+                    })()}
 
                   </div>
                 )}
