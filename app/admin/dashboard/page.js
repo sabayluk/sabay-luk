@@ -1541,21 +1541,78 @@ export default function UnifiedAdminDashboard() {
     }
   }, []);
 
-  // ⭐️ AUTHENTICATION STATES (FULL OPTION LOGIN SYSTEM) ⭐️
+  // ⭐️ AUTHENTICATION STATES (FULL OPTION LOGIN SYSTEM — 30-DAY PERSISTENT SESSION) ⭐️
+  const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000; // 30 ថ្ងៃ (1 ខែ)
+
+  const savePersistentAdminSession = (staffObj, storeObj) => {
+    if (typeof window === 'undefined') return;
+    const expiryTimestamp = Date.now() + ONE_MONTH_MS;
+    localStorage.removeItem('sabay_admin_logged_out');
+    localStorage.setItem('sabay_admin_authenticated', 'true');
+    localStorage.setItem('sabay_admin_session_expires_at', expiryTimestamp.toString());
+    localStorage.setItem('sabay_admin_logged_in_at', Date.now().toString());
+    localStorage.setItem('sabay_admin_remember_me', 'true');
+    if (staffObj) {
+      try {
+        localStorage.setItem('sabay_current_staff', JSON.stringify(staffObj));
+      } catch (_) {}
+    }
+    if (storeObj && storeObj.id) {
+      try {
+        localStorage.setItem('sabay_active_store_id', storeObj.id);
+      } catch (_) {}
+    }
+    // Backup session ក្នុង Cookie សម្រាប់ PWA / Cross-tab
+    try {
+      document.cookie = `sabay_admin_session=active; max-age=${30 * 24 * 60 * 60}; path=/; SameSite=Lax`;
+    } catch (_) {}
+    // សម្អាត ?login=true ចេញពី Browser URL ភ្លាមៗកុំឱ្យ refresh ជាប់ម្តងទៀត
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch (_) {}
+  };
+
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
 
-      // ⭐️ បើអ្នកប្រើប្រាស់ចុច Login ច្បាស់លាស់ (?login=true ឬ ?logout=true) ត្រូវបង្ហាញផ្ទាំង Login ភ្លាមៗ ⭐️
-      if (urlParams.get('login') === 'true' || urlParams.get('logout') === 'true') {
+      // ⭐️ បើអ្នកប្រើប្រាស់ចុច Logout ច្បាស់លាស់ (?logout=true) ទើបសម្អាត Session ចោល ⭐️
+      if (urlParams.get('logout') === 'true') {
+        localStorage.setItem('sabay_admin_logged_out', 'true');
         localStorage.removeItem('sabay_admin_authenticated');
+        localStorage.removeItem('sabay_admin_session_expires_at');
+        localStorage.removeItem('sabay_admin_logged_in_at');
         return false;
       }
 
       const isLoggedOut = localStorage.getItem('sabay_admin_logged_out') === 'true';
       if (isLoggedOut) return false;
+
       const isAuthSaved = localStorage.getItem('sabay_admin_authenticated') === 'true';
-      return isAuthSaved;
+      if (isAuthSaved) {
+        const expiresAtStr = localStorage.getItem('sabay_admin_session_expires_at');
+        if (expiresAtStr) {
+          const expiresAt = parseInt(expiresAtStr, 10);
+          if (Date.now() > expiresAt) {
+            // ផុតកំណត់ ១ ខែ (Session expired after 30 days)
+            localStorage.removeItem('sabay_admin_authenticated');
+            localStorage.removeItem('sabay_admin_session_expires_at');
+            return false;
+          }
+        } else {
+          // បើធ្លាប់ Login ពីមុន ផ្តល់សុពលភាព ១ ខែបន្ថែមស្វ័យប្រវត្តិ
+          localStorage.setItem('sabay_admin_session_expires_at', (Date.now() + ONE_MONTH_MS).toString());
+        }
+
+        // ប្រសិនបើ URL មាន ?login=true តែមាន Session ជាប់ ១ ខែរួចហើយ
+        // ត្រូវសម្អាត ?login=true ចេញពី Browser URL ដោយមិនបាច់សួរ Password ឡើយ!
+        if (urlParams.get('login') === 'true') {
+          try {
+            window.history.replaceState(null, '', window.location.pathname);
+          } catch (_) {}
+        }
+        return true;
+      }
     }
     return false;
   });
@@ -1567,6 +1624,18 @@ export default function UnifiedAdminDashboard() {
     }
     return true;
   });
+
+  // ⭐️ សម្អាត Query String (?login=true) ចេញពី Browser URL ពេល Authenticated ⭐️
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isAuthenticated) {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('login') === 'true') {
+        try {
+          window.history.replaceState(null, '', window.location.pathname);
+        } catch (_) {}
+      }
+    }
+  }, [isAuthenticated]);
 
   const [loginMode, setLoginMode] = useState('gmail'); // 'gmail' | 'credentials'
   // ⭐️ States សម្រាប់ Standard 2-Step Gmail Store Lookup & Account Selection ⭐️
@@ -1632,7 +1701,12 @@ export default function UnifiedAdminDashboard() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('sabay_admin_logged_out', 'true');
       localStorage.removeItem('sabay_admin_authenticated');
+      localStorage.removeItem('sabay_admin_session_expires_at');
+      localStorage.removeItem('sabay_admin_logged_in_at');
       localStorage.removeItem('sabay_demo_mode');
+      try {
+        document.cookie = 'sabay_admin_session=; max-age=0; path=/;';
+      } catch (_) {}
     }
   };
 
@@ -1673,8 +1747,19 @@ export default function UnifiedAdminDashboard() {
     return getStoreDefaultStaff(store)[0];
   };
 
-  // Current logged in staff
-  const [currentStaff, setCurrentStaff] = useState(() => getStoreActiveStaff(getActiveStore()));
+  // Current logged in staff (Restored from 30-day persistent session)
+  const [currentStaff, setCurrentStaff] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sabay_current_staff');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.id) return parsed;
+        }
+      } catch (_) {}
+    }
+    return getStoreActiveStaff(getActiveStore());
+  });
 
   // ⭐️ ពេលប្តូរហាង ធ្វើសមកាលកម្មទិន្នន័យដាច់ដោយឡែក ១០០% (Zero Cross-Over Across Stores) ⭐️
   useEffect(() => {
@@ -27657,11 +27742,7 @@ export default function UnifiedAdminDashboard() {
         setTimeout(() => {
           setCurrentStaff(targetStaff);
           setIsAuthenticated(true);
-          if (rememberMe) {
-            localStorage.removeItem('sabay_admin_logged_out');
-          localStorage.setItem('sabay_admin_authenticated', 'true');
-            localStorage.setItem('sabay_admin_remember_me', 'true');
-          }
+          savePersistentAdminSession(targetStaff, activeStore);
           if (targetStaff.role === 'CASHIER') setActiveTab('pos');
           else if (targetStaff.role === 'STOCK') setActiveTab('inventory');
           else setActiveTab('pos');
@@ -27850,11 +27931,7 @@ export default function UnifiedAdminDashboard() {
           setCurrentStaff(masterStaff);
           updateStoreActivity(targetStore.id);
           setIsAuthenticated(true);
-          if (rememberMe) {
-            localStorage.removeItem('sabay_admin_logged_out');
-            localStorage.setItem('sabay_admin_authenticated', 'true');
-            localStorage.setItem('sabay_admin_remember_me', 'true');
-          }
+          savePersistentAdminSession(masterStaff, targetStore);
           setActiveTab('pos');
           setIsLoggingIn(false);
         }, 400);
@@ -27881,11 +27958,7 @@ export default function UnifiedAdminDashboard() {
           setCurrentStaff(ownerStaff);
           updateStoreActivity(targetStore.id);
           setIsAuthenticated(true);
-          if (rememberMe) {
-            localStorage.removeItem('sabay_admin_logged_out');
-            localStorage.setItem('sabay_admin_authenticated', 'true');
-            localStorage.setItem('sabay_admin_remember_me', 'true');
-          }
+          savePersistentAdminSession(ownerStaff, targetStore);
           setActiveTab('pos');
           setIsLoggingIn(false);
         }, 400);
@@ -27918,11 +27991,7 @@ export default function UnifiedAdminDashboard() {
           setActiveStoreState(targetStore);
           setCurrentStaff(targetStaff);
           setIsAuthenticated(true);
-          if (rememberMe) {
-            localStorage.removeItem('sabay_admin_logged_out');
-            localStorage.setItem('sabay_admin_authenticated', 'true');
-            localStorage.setItem('sabay_admin_remember_me', 'true');
-          }
+          savePersistentAdminSession(targetStaff, targetStore);
           if (targetStaff.role === 'CASHIER') setActiveTab('pos');
           else if (targetStaff.role === 'STOCK') setActiveTab('inventory');
           else setActiveTab('pos');
@@ -27965,11 +28034,7 @@ export default function UnifiedAdminDashboard() {
         setTimeout(() => {
           setCurrentStaff(masterOwnerAccount);
           setIsAuthenticated(true);
-          if (rememberMe) {
-            localStorage.removeItem('sabay_admin_logged_out');
-            localStorage.setItem('sabay_admin_authenticated', 'true');
-            localStorage.setItem('sabay_admin_remember_me', 'true');
-          }
+          savePersistentAdminSession(masterOwnerAccount, activeStore);
           setActiveTab('stores');
           setIsLoggingIn(false);
         }, 400);
@@ -27987,11 +28052,7 @@ export default function UnifiedAdminDashboard() {
         setTimeout(() => {
           setCurrentStaff(matched);
           setIsAuthenticated(true);
-          if (rememberMe) {
-            localStorage.removeItem('sabay_admin_logged_out');
-            localStorage.setItem('sabay_admin_authenticated', 'true');
-            localStorage.setItem('sabay_admin_remember_me', 'true');
-          }
+          savePersistentAdminSession(matched, activeStore);
           if (matched.role === 'CASHIER') setActiveTab('pos');
           else if (matched.role === 'STOCK') setActiveTab('inventory');
           else setActiveTab('pos');

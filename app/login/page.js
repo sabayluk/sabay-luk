@@ -6,6 +6,18 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // ⭐️ ប្រសិនបើបាន Login រួចរាល់ក្នុងរង្វង់ ៣០ ថ្ងៃ (១ ខែ) ចូល Dashboard ភ្លាមៗដោយមិនបាច់សួរ Password ⭐️
+    if (typeof window !== 'undefined') {
+      const isAuth = localStorage.getItem('sabay_admin_authenticated') === 'true';
+      const isLoggedOut = localStorage.getItem('sabay_admin_logged_out') === 'true';
+      const expiresAtStr = localStorage.getItem('sabay_admin_session_expires_at');
+      const isExpired = expiresAtStr && (Date.now() > parseInt(expiresAtStr, 10));
+
+      if (isAuth && !isLoggedOut && !isExpired) {
+        router.replace('/admin/dashboard');
+        return;
+      }
+    }
     // Redirect directly to the Admin / Store Login Portal
     router.replace('/admin/dashboard?login=true');
   }, [router]);
