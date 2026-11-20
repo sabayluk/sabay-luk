@@ -2763,8 +2763,11 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             <div className="min-w-0">
               <div 
                 suppressHydrationWarning 
-                className={`text-base sm:text-xl font-black tracking-tight leading-tight group-hover:text-[#ff6a00] transition truncate max-w-[170px] sm:max-w-none ${
-                  themeMode === 'dark' ? 'text-white' : 'text-slate-900'
+                style={storeSettings.brandColor && storeSettings.brandColor !== '#ff6a00' ? { color: storeSettings.brandColor } : {}}
+                className={`text-base sm:text-xl font-black tracking-tight leading-tight transition truncate max-w-[170px] sm:max-w-none ${
+                  storeSettings.brandColor && storeSettings.brandColor !== '#ff6a00'
+                    ? ''
+                    : 'bg-gradient-to-r from-orange-600 via-[#ff6a00] to-amber-500 bg-clip-text text-transparent'
                 }`}
               >
                 {(storeSettings.storeName || currentStore?.name || 'SABAY LUK').trim() || 'SABAY LUK'}
@@ -2920,104 +2923,6 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
       {/* ⭐️ 3. HERO BANNER & CATEGORIES (MODERN BALANCED LAYOUT) ⭐️ */}
       <section className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-5 pb-3">
-        {/* 📱 ផ្នែកប្រភេទផលិតផលរចនាបថ 1688 / Shopee App Channel Navigation (Icon-on-top + Label-on-bottom) ⭐️ */}
-        <div className="block lg:hidden mb-4 bg-white dark:bg-slate-900 rounded-3xl p-3.5 border border-slate-100 dark:border-slate-800/80 shadow-xs">
-          <div className="flex items-start gap-4 sm:gap-6 overflow-x-auto no-scrollbar py-1 px-1 scroll-smooth">
-            {/* All Products Channel Button */}
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('all')}
-              className="flex flex-col items-center min-w-[64px] max-w-[76px] shrink-0 group cursor-pointer active:scale-95 transition-transform select-none"
-            >
-              <div className="relative">
-                <div className={`w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] rounded-2xl flex items-center justify-center text-white shadow-md transition-all duration-200 ${
-                  selectedCategory === 'all'
-                    ? 'bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-600 ring-2 ring-violet-500 ring-offset-2 dark:ring-offset-slate-900 scale-105 shadow-violet-500/30'
-                    : 'bg-gradient-to-tr from-violet-500 to-indigo-600 hover:scale-105 opacity-90 hover:opacity-100'
-                }`}>
-                  <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" className="w-6 h-6 text-white">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                  </svg>
-                </div>
-                {/* Floating Count Badge */}
-                <span className={`absolute -top-1 -right-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-xs border ${
-                  selectedCategory === 'all'
-                    ? 'bg-orange-500 text-white border-white dark:border-slate-900 animate-pulse'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
-                }`}>
-                  {products.length}
-                </span>
-              </div>
-
-              <span className={`mt-2 text-[11px] font-bold leading-tight text-center line-clamp-1 truncate w-full ${
-                selectedCategory === 'all'
-                  ? 'text-orange-600 dark:text-orange-400 font-black'
-                  : 'text-slate-700 dark:text-slate-300 group-hover:text-slate-900'
-              }`}>
-                ទំនិញទាំងអស់
-              </span>
-
-              {/* Active Indicator Bar */}
-              {selectedCategory === 'all' && (
-                <span className="w-5 h-1 bg-orange-500 rounded-full mt-1 animate-in zoom-in-50 duration-200" />
-              )}
-            </button>
-
-            {/* Category Channels */}
-            {categories.map((cat, idx) => {
-              const count = products.filter(p => {
-                const pCat = (p.category || '').trim().toLowerCase();
-                const catName = (cat.name || '').trim().toLowerCase();
-                return pCat.includes(catName) || catName.includes(pCat);
-              }).length;
-              const isSelected = selectedCategory === cat.name;
-              const catTheme = getCategoryTheme(cat, idx);
-
-              return (
-                <button
-                  key={cat.id || cat.name}
-                  type="button"
-                  onClick={() => setSelectedCategory(cat.name)}
-                  className="flex flex-col items-center min-w-[64px] max-w-[76px] shrink-0 group cursor-pointer active:scale-95 transition-transform select-none"
-                >
-                  <div className="relative">
-                    <div className={`w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] rounded-2xl flex items-center justify-center text-white shadow-md transition-all duration-200 ${catTheme.gradient} ${
-                      isSelected
-                        ? 'ring-2 ring-orange-500 ring-offset-2 dark:ring-offset-slate-900 scale-105 shadow-orange-500/30'
-                        : 'hover:scale-105 opacity-90 hover:opacity-100'
-                    }`}>
-                      {renderCategorySvg(cat?.icon || catTheme.fallbackIcon, "w-6 h-6 text-white stroke-2")}
-                    </div>
-                    {/* Floating Count Badge */}
-                    {count > 0 && (
-                      <span className={`absolute -top-1 -right-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-xs border ${
-                        isSelected
-                          ? 'bg-orange-500 text-white border-white dark:border-slate-900 animate-pulse'
-                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
-                      }`}>
-                        {count}
-                      </span>
-                    )}
-                  </div>
-
-                  <span className={`mt-2 text-[11px] font-bold leading-tight text-center line-clamp-1 truncate w-full ${
-                    isSelected
-                      ? 'text-orange-600 dark:text-orange-400 font-black'
-                      : 'text-slate-700 dark:text-slate-300 group-hover:text-slate-900'
-                  }`}>
-                    {cat.name}
-                  </span>
-
-                  {/* Active Indicator Bar */}
-                  {isSelected && (
-                    <span className="w-5 h-1 bg-orange-500 rounded-full mt-1 animate-in zoom-in-50 duration-200" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
           
           {/* Categories Sidebar (លាក់លើ Mobile / Phone App, បង្ហាញតែលើ Desktop Website តាមតម្រូវការ) */}
@@ -3417,6 +3322,106 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             </div>
           </div>
 
+        </div>
+      </section>
+
+      {/* ⭐️ 4.5 CATEGORIES 1688 APP NAVIGATION (ដាក់ពីក្រោម Live Orders និងនៅលើទំនិញពេញនិយម - BACKGROUND ពណ៌ស) ⭐️ */}
+      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 py-2.5">
+        <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-100 shadow-sm">
+          <div className="flex items-start gap-4 sm:gap-6 overflow-x-auto no-scrollbar py-1 px-1 scroll-smooth">
+            {/* All Products Channel Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('all')}
+              className="flex flex-col items-center min-w-[64px] max-w-[76px] shrink-0 group cursor-pointer active:scale-95 transition-transform select-none"
+            >
+              <div className="relative">
+                <div className={`w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] rounded-2xl flex items-center justify-center text-white shadow-md transition-all duration-200 ${
+                  selectedCategory === 'all'
+                    ? 'bg-gradient-to-tr from-violet-600 via-indigo-600 to-purple-600 ring-2 ring-violet-500 ring-offset-2 ring-offset-white scale-105 shadow-violet-500/30'
+                    : 'bg-gradient-to-tr from-violet-500 to-indigo-600 hover:scale-105 opacity-90 hover:opacity-100'
+                }`}>
+                  <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" className="w-6 h-6 text-white">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                </div>
+                {/* Floating Count Badge */}
+                <span className={`absolute -top-1 -right-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-xs border ${
+                  selectedCategory === 'all'
+                    ? 'bg-orange-500 text-white border-white animate-pulse'
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  {products.length}
+                </span>
+              </div>
+
+              <span className={`mt-2 text-[11px] font-bold leading-tight text-center line-clamp-1 truncate w-full ${
+                selectedCategory === 'all'
+                  ? 'text-[#ff6a00] font-black'
+                  : 'text-slate-800 group-hover:text-black'
+              }`}>
+                ទំនិញទាំងអស់
+              </span>
+
+              {/* Active Indicator Bar */}
+              {selectedCategory === 'all' && (
+                <span className="w-5 h-1 bg-[#ff6a00] rounded-full mt-1 animate-in zoom-in-50 duration-200" />
+              )}
+            </button>
+
+            {/* Category Channels */}
+            {categories.map((cat, idx) => {
+              const count = products.filter(p => {
+                const pCat = (p.category || '').trim().toLowerCase();
+                const catName = (cat.name || '').trim().toLowerCase();
+                return pCat.includes(catName) || catName.includes(pCat);
+              }).length;
+              const isSelected = selectedCategory === cat.name;
+              const catTheme = getCategoryTheme(cat, idx);
+
+              return (
+                <button
+                  key={cat.id || cat.name}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat.name)}
+                  className="flex flex-col items-center min-w-[64px] max-w-[76px] shrink-0 group cursor-pointer active:scale-95 transition-transform select-none"
+                >
+                  <div className="relative">
+                    <div className={`w-[52px] h-[52px] sm:w-[56px] sm:h-[56px] rounded-2xl flex items-center justify-center text-white shadow-md transition-all duration-200 ${catTheme.gradient} ${
+                      isSelected
+                        ? 'ring-2 ring-orange-500 ring-offset-2 ring-offset-white scale-105 shadow-orange-500/30'
+                        : 'hover:scale-105 opacity-90 hover:opacity-100'
+                    }`}>
+                      {renderCategorySvg(cat?.icon || catTheme.fallbackIcon, "w-6 h-6 text-white stroke-2")}
+                    </div>
+                    {/* Floating Count Badge */}
+                    {count > 0 && (
+                      <span className={`absolute -top-1 -right-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-black shadow-xs border ${
+                        isSelected
+                          ? 'bg-orange-500 text-white border-white animate-pulse'
+                          : 'bg-slate-100 text-slate-700 border-slate-200'
+                      }`}>
+                        {count}
+                      </span>
+                    )}
+                  </div>
+
+                  <span className={`mt-2 text-[11px] font-bold leading-tight text-center line-clamp-1 truncate w-full ${
+                    isSelected
+                      ? 'text-[#ff6a00] font-black'
+                      : 'text-slate-800 group-hover:text-black'
+                  }`}>
+                    {cat.name}
+                  </span>
+
+                  {/* Active Indicator Bar */}
+                  {isSelected && (
+                    <span className="w-5 h-1 bg-[#ff6a00] rounded-full mt-1 animate-in zoom-in-50 duration-200" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </section>
 
