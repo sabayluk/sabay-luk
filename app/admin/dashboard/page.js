@@ -2974,18 +2974,29 @@ export default function UnifiedAdminDashboard() {
       if (sk) { try { storeLocalParsed = JSON.parse(sk); } catch (_) {} }
     }
 
-    // ៣. khqrImageUrl — priority: storeLocal > dbSettings > default
-    const khqrImageUrl = storeLocalParsed?.khqrImageUrl || dbSettings?.khqrImageUrl || (storeId === 'store_default_sabayluk' ? '/khqr-aba.jpg' : '');
-
-    if (localParsed) {
-      // Merge khqrImageUrl ចូល localStorage invoice settings (ពេលខ្វះ)
-      const fixedName = (store && storeId !== 'store_default_sabayluk' && (localParsed.storeName === 'SABAY LUK' || !localParsed.storeName))
-        ? store.name || 'ហាងរបស់ខ្ញុំ'
-        : localParsed.storeName;
-      return { ...localParsed, storeName: fixedName, khqrImageUrl: localParsed.khqrImageUrl || khqrImageUrl };
+    // ៣. khqrImageUrl — priority: storeLocal > dbSettings > default (ហាងអតិថិជន ទុកទំនេរឱ្យ Upload ផ្ទាល់ ហាមទាញ /khqr-aba.jpg)
+    const isTenant = store && storeId !== 'store_default_sabayluk' && store?.slug !== 'sabay-luk';
+    let khqrImageUrl = storeLocalParsed?.khqrImageUrl || dbSettings?.khqrImageUrl || (isTenant ? '' : '/khqr-aba.jpg');
+    if (isTenant && khqrImageUrl === '/khqr-aba.jpg') {
+      khqrImageUrl = ''; // ទុកឱ្យទំនេរ ១០០% ស្របតាមការចង់បានរបស់ម្ចាស់ហាង
     }
 
-    if (store && storeId !== 'store_default_sabayluk') {
+    if (localParsed) {
+      const fixedName = (isTenant && (localParsed.storeName === 'SABAY LUK' || !localParsed.storeName))
+        ? store.name || 'ហាងរបស់ខ្ញុំ'
+        : localParsed.storeName;
+      let finalQr = localParsed.khqrImageUrl || khqrImageUrl;
+      if (isTenant && finalQr === '/khqr-aba.jpg') finalQr = '';
+      return {
+        ...localParsed,
+        storeName: fixedName,
+        phone: (isTenant && (localParsed.phone === '096 720 5522' || !localParsed.phone)) ? store.phone || '' : localParsed.phone,
+        address: (isTenant && (!localParsed.address || localParsed.address.includes('Phnom Penh, Cambodia'))) ? store.address || '' : localParsed.address,
+        khqrImageUrl: finalQr
+      };
+    }
+
+    if (isTenant) {
       return {
         storeName: store.name || 'ហាងរបស់ខ្ញុំ',
         address: store.address || dbSettings?.address || '',
@@ -2995,7 +3006,7 @@ export default function UnifiedAdminDashboard() {
         cashierName: 'Admin',
         showKHR: true,
         showLogo: true,
-        khqrImageUrl,
+        khqrImageUrl: '',
         thankYouMsg: 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត',
         policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ'
       };
@@ -3222,6 +3233,7 @@ export default function UnifiedAdminDashboard() {
   useEffect(() => {
     if (!activeStore) return;
     setStoreSettings(getStoreScopedSettings(activeStore));
+    setInvoiceSettings(getStoreScopedInvoiceSettings(activeStore));
   }, [activeStore?.id]);
 
   useEffect(() => {
@@ -4381,7 +4393,7 @@ export default function UnifiedAdminDashboard() {
         ${(storeSettings.showReceiptQr !== false && storeSettings.khqrImageUrl) ? `
           <div style="margin: 6px 0; padding: 2px; text-align: center;">
             <img src="${storeSettings.khqrImageUrl}" style="width: 76px; height: 76px; margin: 0 auto; object-fit: contain; display: block;" />
-            <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; margin: 3px 0 0 0;">${storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK'}</p>
+            <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; margin: 3px 0 0 0;">${storeSettings.bankAccountName || (activeStore?.id !== 'store_default_sabayluk' ? activeStore?.name : storeSettings.storeName) || ''}</p>
           </div>
         ` : '<div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>'}
 
@@ -24835,8 +24847,7 @@ export default function UnifiedAdminDashboard() {
                     const nextVal = storeSettings.showReceiptQr === false;
                     setStoreSettings(prev => ({ 
                       ...prev, 
-                      showReceiptQr: nextVal,
-                      khqrImageUrl: (!prev.khqrImageUrl && nextVal) ? '/khqr-aba.jpg' : prev.khqrImageUrl 
+                      showReceiptQr: nextVal
                     }));
                   }}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition border cursor-pointer ${
@@ -24852,43 +24863,71 @@ export default function UnifiedAdminDashboard() {
               {storeSettings.showReceiptQr !== false && (
                 <div className="flex items-center gap-3 pt-2.5 border-t border-slate-200">
                   <div className="w-14 h-14 rounded-xl border border-slate-200 bg-white p-1 flex items-center justify-center shrink-0">
-                    <img 
-                      src={storeSettings.khqrImageUrl || '/khqr-aba.jpg'} 
-                      alt="KHQR Code" 
-                      className="w-full h-full object-contain" 
-                      onError={(e) => { e.currentTarget.src = '/khqr-aba.jpg'; }}
-                    />
+                    {storeSettings.khqrImageUrl ? (
+                      <img 
+                        src={storeSettings.khqrImageUrl} 
+                        alt="KHQR Code" 
+                        className="w-full h-full object-contain" 
+                      />
+                    ) : (
+                      <div className="text-center p-1">
+                        <span className="text-lg">📷</span>
+                        <p className="text-[7.5px] font-bold text-slate-400 leading-tight">គ្មាន QR</p>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-1">
-                    <label className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold cursor-pointer transition shadow-2xs">
-                      <span>📁 ជ្រើសរើសរូបភាព QR ថ្មី</span>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const dataUrl = await compressImageToDataUrl(file, 'logo');
-                              if (dataUrl) {
-                                setStoreSettings(prev => ({ ...prev, khqrImageUrl: dataUrl }));
-                                setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: dataUrl }));
+                    <div className="flex items-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold cursor-pointer transition shadow-2xs">
+                        <span>📁 ជ្រើសរើសរូបភាព QR ថ្មី</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const dataUrl = await compressImageToDataUrl(file, 'logo');
+                                if (dataUrl) {
+                                  setStoreSettings(prev => ({ ...prev, khqrImageUrl: dataUrl }));
+                                  setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: dataUrl }));
+                                }
+                              } catch (_) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const url = event.target.result;
+                                  setStoreSettings(prev => ({ ...prev, khqrImageUrl: url }));
+                                  setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: url }));
+                                };
+                                reader.readAsDataURL(file);
                               }
-                            } catch (_) {
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
-                                const url = event.target.result;
-                                setStoreSettings(prev => ({ ...prev, khqrImageUrl: url }));
-                                setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: url }));
-                              };
-                              reader.readAsDataURL(file);
                             }
-                          }
-                        }} 
-                      />
-                    </label>
-                    <p className="text-[10px] text-slate-500 font-medium">គណនី: {storeSettings.bankAccountName || 'SABAY LUK'} ({storeSettings.bankAccountUsd || '010 723 080'})</p>
+                          }} 
+                        />
+                      </label>
+                      {storeSettings.khqrImageUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStoreSettings(prev => ({ ...prev, khqrImageUrl: '' }));
+                            setInvoiceSettings(prev => ({ ...prev, khqrImageUrl: '' }));
+                          }}
+                          className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                        >
+                          ✕ លុប QR ចេញ
+                        </button>
+                      )}
+                    </div>
+                    {storeSettings.khqrImageUrl ? (
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        គណនី: {storeSettings.bankAccountName || activeStore?.name || 'ម្ចាស់ហាង'} {storeSettings.bankAccountUsd ? `(${storeSettings.bankAccountUsd})` : ''}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-amber-700 font-medium">
+                        ⚠️ ទុកទំនេរ៖ មិនទាន់បាន Upload QR ផ្ទាល់ខ្លួនរបស់ហាងនៅឡើយទេ
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -26264,14 +26303,14 @@ export default function UnifiedAdminDashboard() {
                   ) : (
                     <div className="text-center p-2">
                       <span className="text-2xl">📱</span>
-                      <p className="text-[9px] font-bold text-gray-400 mt-1">KHQR ស្វ័យប្រវត្តិ</p>
+                      <p className="text-[9px] font-bold text-gray-400 mt-1">គ្មាន QR (ទុកទំនេរ)</p>
                     </div>
                   )}
                 </div>
 
                 <div className="flex-1 space-y-2 text-center sm:text-left">
                   <p className="text-xs font-black text-gray-800">
-                    {storeSettings.khqrImageUrl ? '✅ បាន Upload រូបភាព KHQR ផ្ទាល់របស់ហាង' : '📷 កំពុងប្រើប្រាស់ KHQR Code ស្វ័យប្រវត្តិតាមទឹកប្រាក់'}
+                    {storeSettings.khqrImageUrl ? '✅ បាន Upload រូបភាព KHQR ផ្ទាល់របស់ហាង' : '📷 មិនទាន់មាន QR Code (ទុកទំនេរឱ្យម្ចាស់ហាង Upload ផ្ទាល់)'}
                   </p>
                   <p className="text-[11px] text-gray-400 font-medium">
                     បងអាច Upload រូបភាព Bakong / ABA KHQR ផ្ទាល់របស់ហាង ដើម្បីឱ្យអតិថិជនស្កេនបាញ់លុយចូលគណនីផ្ទាល់បានរហ័ស
