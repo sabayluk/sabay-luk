@@ -1395,6 +1395,23 @@ export default function UnifiedAdminDashboard() {
       active: true,
       store_id: 'store_default_sabayluk',
       created_at: new Date().toISOString()
+    },
+    {
+      id: 'STAFF-4',
+      name: 'ចិន្តា (អ្នកគ្រប់គ្រង)',
+      email: 'chinda@gmail.com',
+      username: 'manager',
+      pin: '3333',
+      password: '3333',
+      role: 'MANAGER',
+      roleLabel: 'អ្នកគ្រប់គ្រង (Store Manager)',
+      phone: '0889900112',
+      avatar: '💼',
+      color: 'from-emerald-500 to-teal-600',
+      permissions: ROLE_PRESET_PERMISSIONS.MANAGER,
+      active: true,
+      store_id: 'store_default_sabayluk',
+      created_at: new Date().toISOString()
     }
   ];
 
@@ -1471,7 +1488,7 @@ export default function UnifiedAdminDashboard() {
           return !s.store_id || s.store_id === 'store_default_sabayluk';
         }
         // Tenant store: MUST NOT be flagship Seng Soveasna / Sokha / Dara
-        if (s.id === 'STAFF-1' || s.id === 'STAFF-2' || s.id === 'STAFF-3' || s.email?.toLowerCase() === 'sengsoveasna93@gmail.com') {
+        if (s.id === 'STAFF-1' || s.id === 'STAFF-2' || s.id === 'STAFF-3' || s.id === 'STAFF-4' || s.email?.toLowerCase() === 'sengsoveasna93@gmail.com') {
           return false;
         }
         return !s.store_id || s.store_id === storeId;
@@ -1481,7 +1498,44 @@ export default function UnifiedAdminDashboard() {
       // Ensure owner account exists
       const ownerAccount = defaultStaff[0];
       const hasOwner = strictlyThisStore.some(s => s.role === 'ADMIN' || s.id === ownerAccount?.id);
-      const finalList = hasOwner ? strictlyThisStore : [ownerAccount, ...strictlyThisStore];
+      const rawFinalList = hasOwner ? strictlyThisStore : [ownerAccount, ...strictlyThisStore];
+
+      // ⭐️ STANDARD UNIQUE PIN / PASSWORD ENFORCEMENT PER PERSON (ម្នាក់ៗមាន PIN រៀងខ្លួន) ⭐️
+      const usedPins = new Set();
+      const rawOwner = rawFinalList.find(s => s.role === 'ADMIN' || s.id === ownerAccount?.id) || rawFinalList[0];
+      const ownerPin = (rawOwner?.pin || rawOwner?.password || store?.pin || store?.password || '1234').toString().trim();
+      usedPins.add(ownerPin);
+
+      const finalList = rawFinalList.map((staff, idx) => {
+        const isOwner = staff.role === 'ADMIN' || staff.id === ownerAccount?.id;
+        let staffPin = (staff.pin || staff.password || '').toString().trim();
+
+        if (isOwner) {
+          const finalOwnerPin = staffPin || ownerPin || '1234';
+          usedPins.add(finalOwnerPin);
+          return { ...staff, pin: finalOwnerPin, password: finalOwnerPin };
+        }
+
+        // Non-owner staff MUST NOT share owner's PIN or another staff's PIN
+        if (!staffPin || staffPin === ownerPin || usedPins.has(staffPin)) {
+          if (staff.role === 'CASHIER' && !usedPins.has('1111')) staffPin = '1111';
+          else if (staff.role === 'STOCK' && !usedPins.has('2222')) staffPin = '2222';
+          else if (staff.role === 'MANAGER' && !usedPins.has('3333')) staffPin = '3333';
+          else if (!usedPins.has('5555')) staffPin = '5555';
+          else if (!usedPins.has('6666')) staffPin = '6666';
+          else if (!usedPins.has('7777')) staffPin = '7777';
+          else if (!usedPins.has('8888')) staffPin = '8888';
+          else staffPin = String(1000 + ((idx * 1111) % 8999));
+        }
+
+        usedPins.add(staffPin);
+        return {
+          ...staff,
+          pin: staffPin,
+          password: staffPin
+        };
+      });
+
       try {
         const jsonStr = JSON.stringify(finalList);
         if (saved !== jsonStr) {
@@ -2925,7 +2979,10 @@ export default function UnifiedAdminDashboard() {
 
     if (localParsed) {
       // Merge khqrImageUrl ចូល localStorage invoice settings (ពេលខ្វះ)
-      return { ...localParsed, khqrImageUrl: localParsed.khqrImageUrl || khqrImageUrl };
+      const fixedName = (store && storeId !== 'store_default_sabayluk' && (localParsed.storeName === 'SABAY LUK' || !localParsed.storeName))
+        ? store.name || 'ហាងរបស់ខ្ញុំ'
+        : localParsed.storeName;
+      return { ...localParsed, storeName: fixedName, khqrImageUrl: localParsed.khqrImageUrl || khqrImageUrl };
     }
 
     if (store && storeId !== 'store_default_sabayluk') {
@@ -3009,7 +3066,7 @@ export default function UnifiedAdminDashboard() {
   // Helper ទទួលបានការកំណត់ហាងនីមួយៗ (Store-specific Settings Isolation)
   const getStoreScopedSettings = (store) => {
     const storeId = store?.id || 'store_default_sabayluk';
-    const isDefault = storeId === 'store_default_sabayluk';
+    const isDefault = storeId === 'store_default_sabayluk' || store?.slug === 'sabay-luk';
     const storeSpecificKey = `sabay_store_settings_${storeId}`;
     let savedParsed = null;
     if (typeof window !== 'undefined') {
@@ -3020,7 +3077,63 @@ export default function UnifiedAdminDashboard() {
     }
     const dbSettings = store?.settings || {};
     const isTaxActive = normalizeEnableTax(dbSettings?.enableTax) || normalizeEnableTax(savedParsed?.enableTax);
-    const merged = { ...DEFAULT_STORE_SETTINGS, ...dbSettings, ...(savedParsed || {}) };
+
+    // ⭐️ STRICT TENANT ISOLATION (ហាមទាញ Logo, ឈ្មោះហាង ឬ Brand ពី Sabay Luk មកលើហាងអតិថិជនដាច់ខាត) ⭐️
+    const baseSettings = isDefault ? DEFAULT_STORE_SETTINGS : {
+      ...DEFAULT_STORE_SETTINGS,
+      storeName: store?.name || '',
+      storeSlogan: '',
+      storeDescription: '',
+      logoUrl: store?.settings?.logoUrl || '',
+      phone: store?.phone || '',
+      telegram: store?.telegram || '',
+      address: store?.address || '',
+      bankAccountName: store?.owner_name || '',
+      announcementText: '',
+      showAnnouncement: false
+    };
+
+    const merged = { ...baseSettings, ...dbSettings, ...(savedParsed || {}) };
+
+    let finalStoreName = merged.storeName;
+    if (!isDefault) {
+      if (!finalStoreName || finalStoreName === 'SABAY LUK' || finalStoreName === 'ហាងថ្មី') {
+        finalStoreName = store?.name || 'ហាងរបស់ខ្ញុំ';
+      }
+    } else {
+      finalStoreName = finalStoreName || 'SABAY LUK';
+    }
+
+    let finalStoreSlogan = merged.storeSlogan;
+    if (!isDefault && finalStoreSlogan === 'Premium Store') {
+      finalStoreSlogan = dbSettings?.storeSlogan || '';
+    }
+
+    let finalStoreDesc = merged.storeDescription;
+    if (!isDefault && (finalStoreDesc === DEFAULT_STORE_SETTINGS.storeDescription || !finalStoreDesc)) {
+      finalStoreDesc = dbSettings?.storeDescription || '';
+    }
+
+    let finalPhone = merged.phone;
+    if (!isDefault && finalPhone === '096 720 5522') {
+      finalPhone = store?.phone || dbSettings?.phone || '';
+    }
+
+    let finalTelegram = merged.telegram;
+    if (!isDefault && (finalTelegram === 'sabay_luk' || finalTelegram === 'sabayluk')) {
+      finalTelegram = store?.telegram || dbSettings?.telegram || '';
+    }
+
+    let finalBankName = merged.bankAccountName;
+    if (!isDefault && finalBankName === 'SENG SOVEASNA') {
+      finalBankName = store?.owner_name || dbSettings?.bankAccountName || '';
+    }
+
+    let finalLogoUrl = merged.logoUrl;
+    if (!isDefault && (finalLogoUrl === DEFAULT_STORE_SETTINGS.logoUrl || finalLogoUrl === '/logo.png')) {
+      finalLogoUrl = store?.settings?.logoUrl || dbSettings?.logoUrl || '';
+    }
+
     merged.enableTax = isTaxActive;
     if (isTaxActive) {
       merged.taxRate = parseFloat(savedParsed?.taxRate ?? dbSettings?.taxRate ?? 10) || 10;
@@ -3030,14 +3143,18 @@ export default function UnifiedAdminDashboard() {
     }
     return {
       ...merged,
-      storeName: merged.storeName || store?.name || (isDefault ? 'SABAY LUK' : 'ហាងថ្មី'),
-      phone: merged.phone || store?.phone || (isDefault ? '096 720 5522' : ''),
+      storeName: finalStoreName,
+      storeSlogan: finalStoreSlogan,
+      storeDescription: finalStoreDesc,
+      logoUrl: finalLogoUrl,
+      phone: finalPhone,
       telegram: (() => {
-        let tg = (merged.telegram || store?.telegram || (isDefault ? 'sabay_luk' : '')).replace(/^@/, '').trim();
-        if (tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
+        let tg = (finalTelegram || '').replace(/^@/, '').trim();
+        if (isDefault && tg.toLowerCase() === 'sabayluk') tg = 'sabay_luk';
         return tg;
       })(),
       address: merged.address || store?.address || (isDefault ? 'Street 271, Phnom Penh, Cambodia' : ''),
+      bankAccountName: finalBankName,
       // ⭐️ 100% STRICT MULTI-TENANT ISOLATION: មួយហាង ត្រូវមានតែមួយ មិនឱ្យជាន់គ្នាដាច់ខាត ⭐️
       telegramBotToken: isDefault 
         ? (savedParsed?.telegramBotToken ?? dbSettings.telegramBotToken ?? DEFAULT_STORE_SETTINGS.telegramBotToken ?? '')
@@ -28356,6 +28473,12 @@ export default function UnifiedAdminDashboard() {
         const validPass = (ownerStaff.password || targetStore.password || validPin).toString().trim();
 
         if (passInput !== validPin && passInput !== validPass) {
+          // Check if user accidentally entered a staff member's PIN while on Admin role
+          const matchedStaff = storeStaff.find(s => s.role !== 'ADMIN' && (s.pin === passInput || s.password === passInput));
+          if (matchedStaff) {
+            setLoginError(`⚠️ លេខ PIN "${passInput}" នេះជាលេខសម្ងាត់របស់បុគ្គលិក «${matchedStaff.name}» (${matchedStaff.roleLabel || 'បុគ្គលិក'}) មិនមែនរបស់ Admin ទេ! សូមចុចជ្រើសរើសផ្ទាំង «👥 បុគ្គលិក» ដើម្បីចូលប្រើប្រាស់។`);
+            return;
+          }
           setLoginError('❌ លេខកូដ PIN ឬលេខសម្ងាត់របស់ម្ចាស់ហាងមិនត្រឹមត្រូវ!');
           return;
         }
@@ -28380,7 +28503,8 @@ export default function UnifiedAdminDashboard() {
         const storeStaffList = getStoreStaffList(targetStore);
         let targetStaff = loginSelectedStaffMember;
         if (!targetStaff) {
-          targetStaff = storeStaffList.find(s => s.role !== 'ADMIN') || storeStaffList.find(s => s.pin === passInput || s.password === passInput);
+          const nonAdminStaff = storeStaffList.filter(s => s.role !== 'ADMIN');
+          targetStaff = nonAdminStaff[0];
         }
 
         if (!targetStaff) {
@@ -28388,11 +28512,27 @@ export default function UnifiedAdminDashboard() {
           return;
         }
 
-        const validStaffPin = (targetStaff.pin || '').toString().trim();
-        const validStaffPass = (targetStaff.password || validStaffPin || '1234').toString().trim();
+        const validStaffPin = (targetStaff.pin || targetStaff.password || '').toString().trim();
 
-        if (passInput !== validStaffPin && passInput !== validStaffPass) {
-          setLoginError(`❌ លេខកូដ PIN ឬពាក្យសម្ងាត់សម្រាប់ ${targetStaff.name} មិនត្រឹមត្រូវ!`);
+        // Check if user entered Admin password instead of this staff member's PIN
+        const ownerStaff = storeStaffList.find(s => s.role === 'ADMIN') || getStoreDefaultStaff(targetStore)[0];
+        const validAdminPin = (ownerStaff?.pin || targetStore.pin || '').toString().trim();
+        const validAdminPass = (ownerStaff?.password || targetStore.password || validAdminPin).toString().trim();
+        
+        if (passInput === validAdminPin || (validAdminPass && passInput === validAdminPass)) {
+          setLoginError(`⚠️ លេខកូដនេះជាលេខសម្ងាត់របស់ «ម្ចាស់ហាង (Admin)»! បុគ្គលិក «${targetStaff.name}» មានលេខសម្ងាត់ (PIN) ផ្ទាល់ខ្លួនរៀងៗខ្លួន។ បើចង់ចូលជា Admin សូមជ្រើសរើសផ្ទាំង «👑 Admin / ម្ចាស់ហាង»។`);
+          return;
+        }
+
+        // Check if user entered another staff's PIN
+        const otherStaff = storeStaffList.find(s => s.id !== targetStaff.id && s.role !== 'ADMIN' && (s.pin === passInput || s.password === passInput));
+        if (otherStaff) {
+          setLoginError(`⚠️ លេខកូដ PIN "${passInput}" នេះជាលេខសម្ងាត់របស់បុគ្គលិក «${otherStaff.name}» (${otherStaff.roleLabel || 'បុគ្គលិក'})! សូមចុចជ្រើសរើសឈ្មោះ «${otherStaff.name}» ឬបញ្ចូលលេខកូដត្រឹមត្រូវរបស់ «${targetStaff.name}»។`);
+          return;
+        }
+
+        if (passInput !== validStaffPin) {
+          setLoginError(`❌ លេខកូដ PIN មិនត្រឹមត្រូវសម្រាប់ ${targetStaff.name} ឡើយ! (គណនីនីមួយៗត្រូវមានលេខ PIN ផ្ទាល់ខ្លួនរៀងខ្លួន)`);
           return;
         }
 
@@ -28978,9 +29118,14 @@ export default function UnifiedAdminDashboard() {
                                               <span className="text-xs truncate block font-black">{stf.name}</span>
                                               {isSelected && <span className="text-blue-600 text-xs">✓</span>}
                                             </div>
-                                            <span className="text-[10px] text-slate-500 font-medium truncate block">
-                                              {stf.roleLabel || stf.role || 'បុគ្គលិក'}
-                                            </span>
+                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                <span className="text-[10px] text-slate-500 font-medium truncate block">
+                                                  {stf.roleLabel || stf.role || 'បុគ្គលិក'}
+                                                </span>
+                                                <span className="text-[9px] bg-blue-100/80 text-blue-800 px-1.5 py-0.2 rounded font-mono font-bold shrink-0">
+                                                  🔑 PIN ផ្ទាល់ខ្លួន
+                                                </span>
+                                              </div>
                                           </div>
                                         </button>
                                       );
@@ -29007,8 +29152,8 @@ export default function UnifiedAdminDashboard() {
                                           name: 'បុគ្គលិកគិតលុយ (Cashier)',
                                           email: `cashier@${loginTargetStore.slug || 'store'}.com`,
                                           username: `cashier_${loginTargetStore.slug || 'store'}`,
-                                          pin: '1234',
-                                          password: '1234',
+                                          pin: '1111',
+                                          password: '1111',
                                           role: 'CASHIER',
                                           roleLabel: 'អ្នកគិតលុយ (Cashier)',
                                           phone: '098 112 233',
@@ -29030,7 +29175,7 @@ export default function UnifiedAdminDashboard() {
                                       className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1"
                                     >
                                       <span>➕</span>
-                                      <span>បង្កើតគណនីអ្នកគិតលុយគំរូ (PIN: 1234)</span>
+                                      <span>បង្កើតគណនីអ្នកគិតលុយគំរូ (PIN: 1111)</span>
                                     </button>
                                     <button
                                       type="button"
@@ -29071,7 +29216,7 @@ export default function UnifiedAdminDashboard() {
                                 placeholder={
                                   loginAccountType === 'owner'
                                     ? '•••••••• (PIN ឬ Password របស់ Admin)'
-                                    : `•••••••• (PIN ឬ Password របស់ ${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'})`
+                                    : `•••• (បញ្ចូល PIN ផ្ទាល់ខ្លួនរបស់ ${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'})`
                                 }
                                 className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-sm font-mono font-black outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition pr-10"
                                 required
@@ -29493,23 +29638,23 @@ export default function UnifiedAdminDashboard() {
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {/* Luxury Logo / Brand Avatar Frame */}
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-800 via-slate-850 to-slate-900 border border-slate-700/90 p-1 flex items-center justify-center shrink-0 shadow-lg shadow-black/40 relative overflow-hidden group">
-              {storeSettings.logoUrl ? (
+              {(activeStore?.id !== 'store_default_sabayluk' ? (storeSettings.logoUrl || activeStore?.settings?.logoUrl) : storeSettings.logoUrl) ? (
                 <img 
-                  src={storeSettings.logoUrl} 
+                  src={activeStore?.id !== 'store_default_sabayluk' ? (storeSettings.logoUrl || activeStore?.settings?.logoUrl) : storeSettings.logoUrl} 
                   alt="Store Logo" 
                   className="w-full h-full object-contain rounded-xl" 
                 />
               ) : (
                 <div className="w-full h-full rounded-xl bg-gradient-to-tr from-orange-500 to-amber-400 flex items-center justify-center text-white font-black text-lg shadow-inner">
-                  {(storeSettings.storeName || 'S').trim().charAt(0).toUpperCase()}
+                  {((activeStore?.id !== 'store_default_sabayluk' ? (storeSettings.storeName || activeStore?.name) : storeSettings.storeName) || 'S').trim().charAt(0).toUpperCase()}
                 </div>
               )}
             </div>
 
             {/* Store Name & Workspace Live Indicator */}
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm sm:text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-400 tracking-wider truncate drop-shadow-xs" title={storeSettings.storeName || 'SABAY LUK'}>
-                {storeSettings.storeName || 'SABAY LUK'}
+              <h2 className="text-sm sm:text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-400 tracking-wider truncate drop-shadow-xs" title={(activeStore?.id !== 'store_default_sabayluk' ? (storeSettings.storeName || activeStore?.name) : storeSettings.storeName) || 'SABAY LUK'}>
+                {(activeStore?.id !== 'store_default_sabayluk' ? (storeSettings.storeName || activeStore?.name) : storeSettings.storeName) || 'SABAY LUK'}
               </h2>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399] shrink-0"></span>
