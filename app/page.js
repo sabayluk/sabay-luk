@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { LANDING_TRANSLATIONS, getLandingPlans, getLandingFaqs } from '../lib/landingTranslations';
-import { fetchAllStores, getLocalStores, DEFAULT_FLAGSHIP_STORE } from '../lib/stores';
+import { fetchAllStores, getLocalStores, DEFAULT_FLAGSHIP_STORE, fetchPartnerStoresWithStats, sortStoresByPerformance } from '../lib/stores';
 
 export default function SaaSPlatformLandingPage() {
   const [lang, setLang] = useState('km');
@@ -22,21 +22,21 @@ export default function SaaSPlatformLandingPage() {
         const local = getLocalStores();
         const active = (local || []).filter(s => s && s.slug && s.status === 'ACTIVE');
         if (active.length > 0) {
-          setPartnerStores(active);
+          setPartnerStores(sortStoresByPerformance(active));
         }
       } catch (e) {}
     }
   }, []);
 
-  // Fetch real active partner stores directly for live showcase
+  // Fetch real active partner stores with smart product & sales ranking (Top stores first, new stores last)
   useEffect(() => {
     let isMounted = true;
     async function loadStores() {
       try {
-        const list = await fetchAllStores();
+        const ranked = await fetchPartnerStoresWithStats();
         if (!isMounted) return;
         // Strictly filter active stores with a valid slug for public storefront
-        const active = (list || []).filter(s => s && s.slug && s.status === 'ACTIVE');
+        const active = (ranked || []).filter(s => s && s.slug && s.status === 'ACTIVE');
         if (active.length > 0) {
           setPartnerStores(active);
         }
@@ -652,7 +652,7 @@ export default function SaaSPlatformLandingPage() {
                 {lang === 'km' ? 'មិនទាន់មានហាងដៃគូបង្ហាញ' : 'No partner stores to display yet'}
               </div>
             ) : (
-              partnerStores.map((st) => {
+              partnerStores.map((st, idx) => {
                 const logo = getStoreLogoUrl(st);
                 const catName = getStoreCategoryName(st.business_type);
                 const storefrontUrl = getCleanStoreUrl(st.slug);
@@ -693,16 +693,69 @@ export default function SaaSPlatformLandingPage() {
                           </div>
                         </div>
 
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black shrink-0">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>Live</span>
-                        </span>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Live</span>
+                          </span>
+
+                          {idx === 0 && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 via-orange-400 to-amber-400 text-slate-950 text-[10px] font-black shadow-xs border border-amber-300 animate-in fade-in" title="ហាងជួរមុខគេ មានទំនិញ និងការលក់ច្រើនជាងគេ">
+                              <span>🏆</span>
+                              <span>#1 Top</span>
+                            </span>
+                          )}
+                          {idx === 1 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-black" title="ចំណាត់ថ្នាក់លេខ ២">
+                              <span>⭐</span>
+                              <span>#2</span>
+                            </span>
+                          )}
+                          {idx > 1 && (st.productCount > 0 || st.orderCount > 0) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[9px] font-black">
+                              <span>#{idx + 1}</span>
+                            </span>
+                          )}
+                          {idx > 1 && (!st.productCount && !st.orderCount) && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-black" title="ហាងទើបបង្កើតថ្មី">
+                              <span>🌱</span>
+                              <span>{lang === 'km' ? 'ហាងថ្មី' : 'New'}</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Store Description */}
-                      <p className="text-slate-600 text-xs leading-relaxed line-clamp-2 font-medium mb-4">
+                      <p className="text-slate-600 text-xs leading-relaxed line-clamp-2 font-medium mb-3">
                         {desc}
                       </p>
+
+                      {/* ⭐️ Product Count & Sales Badges (Visual Ranking Highlights) ⭐️ */}
+                      <div className="flex flex-wrap items-center gap-2 mb-4">
+                        {(st.productCount > 0) ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-orange-50 border border-orange-200 text-orange-800 text-[11px] font-black shadow-2xs">
+                            <span>📦</span>
+                            <span>{st.productCount} {lang === 'km' ? 'មុខទំនិញ' : 'Products'}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 text-[10px] font-bold">
+                            <span>📦</span>
+                            <span>{lang === 'km' ? 'ទំនិញថ្មីៗ (Coming Soon)' : 'Products soon'}</span>
+                          </span>
+                        )}
+
+                        {(st.orderCount > 0) ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-black shadow-2xs">
+                            <span>⚡</span>
+                            <span>{st.orderCount} {lang === 'km' ? 'ការលក់ & បញ្ជាទិញ' : 'Orders'}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50/70 border border-amber-200/60 text-amber-800 text-[10px] font-bold">
+                            <span>🌱</span>
+                            <span>{lang === 'km' ? 'ហាងទើបបង្កើតថ្មី' : 'Newly Registered'}</span>
+                          </span>
+                        )}
+                      </div>
 
                       {/* Quick Metadata */}
                       <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-500 font-medium mb-5">
