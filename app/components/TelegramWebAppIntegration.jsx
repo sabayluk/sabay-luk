@@ -22,7 +22,19 @@ export default function TelegramWebAppIntegration() {
           tg.setHeaderColor('#ff6a00');
         }
         if (typeof tg.setBackgroundColor === 'function') {
-          tg.setBackgroundColor(tg.colorScheme === 'dark' ? '#0f172a' : '#ffffff');
+          tg.setBackgroundColor(tg.colorScheme === 'dark' ? '#0b0f19' : '#ffffff');
+        }
+
+        // 3.1 Synchronize theme dynamically if Telegram theme changes
+        const syncTgTheme = () => {
+          const isDark = tg.colorScheme === 'dark';
+          document.documentElement.classList.toggle('dark', isDark);
+          if (typeof tg.setBackgroundColor === 'function') {
+            tg.setBackgroundColor(isDark ? '#0b0f19' : '#ffffff');
+          }
+        };
+        if (typeof tg.onEvent === 'function') {
+          tg.onEvent('themeChanged', syncTgTheme);
         }
 
         // 4. Enable confirmation when user swipes down to close (prevents accidental closing)

@@ -1534,45 +1534,73 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     await fetchProductsForStore(currentStore?.id);
   };
 
-  // ⭐️ ដំណើរការ Store Detection (propStoreSlug ឬ ?store=slug ឬ Active Store ពី Dashboard) ⭐️
+  // ⭐️ ដំណើរការ Store Detection & Cloud Database Synchronization ⭐️
+  // (Syncs 100% identically across Desktop Web, Mobile Safari/Chrome, and Telegram Mini App)
   useEffect(() => {
+    let realtimeChannel = null;
+
     const initStoreAndSettings = async () => {
       if (typeof window === 'undefined') return;
       const params = new URLSearchParams(window.location.search);
-      const storeSlug = propStoreSlug || params.get('store');
+      // Support Telegram WebApp start_param (TMA deep-linking)
+      const tgStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+      const storeSlug = propStoreSlug || params.get('store') || tgStartParam;
+      
       let target = null;
       if (storeSlug) {
         target = await fetchStoreBySlug(storeSlug);
       }
-      // ⭐️ FIX: URL គឺជា Source of Truth ១០០% ធានារាល់ពេល Refresh មិនច្រឡំឆ្លងហាងគ្នា
-      // បើគ្មាន storeSlug (ដូចជាលើទំព័រដើម http://localhost:3000) គឺរក្សាជា DEFAULT_FLAGSHIP_STORE (SABAY LUK) ជានិច្ច
+      if (!target && (!storeSlug || storeSlug === 'sabay-luk')) {
+        // Fetch flagship store from Supabase directly to get real-time store settings
+        try {
+          const { data: dbFlagship } = await supabase.from('stores').select('*').eq('id', 'store_default_sabayluk').maybeSingle();
+          if (dbFlagship) target = dbFlagship;
+        } catch (_) {}
+      }
+
       const active = target || DEFAULT_FLAGSHIP_STORE;
       setCurrentStore(active);
 
-      // Load settings specific to this store (Cloud DB + Cross-Origin Sync)
+      // Load settings specific to this store (Cloud DB is Authoritative)
       const dbSettings = active.settings || {};
-      let scopedSettings = { ...dbSettings };
       const savedKey = `sabay_store_settings_${active.id}`;
       const savedStoreSpecific = localStorage.getItem(savedKey) || (active.id === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
-      let localParsed = null;
+      let localParsed = {};
       if (savedStoreSpecific) {
         try {
-          localParsed = JSON.parse(savedStoreSpecific);
-          scopedSettings = { ...scopedSettings, ...localParsed };
+          localParsed = JSON.parse(savedStoreSpecific) || {};
         } catch (e) {}
       }
 
-      // ⭐️ Tax Resolution: Cloud Database takes precedence, or enabled if either source is true
+      // Merge: Local cache as baseline, but fresh Cloud Database takes precedence
+      let scopedSettings = {
+        ...DEFAULT_STORE_SETTINGS,
+        ...localParsed,
+        ...dbSettings,
+        storeName: dbSettings.storeName || active.name || localParsed.storeName || DEFAULT_STORE_SETTINGS.storeName,
+        phone: dbSettings.phone || active.phone || localParsed.phone || DEFAULT_STORE_SETTINGS.phone,
+        phone2: dbSettings.phone2 || localParsed.phone2 || DEFAULT_STORE_SETTINGS.phone2,
+        address: dbSettings.address || active.address || localParsed.address || DEFAULT_STORE_SETTINGS.address,
+        storeSlogan: dbSettings.storeSlogan || localParsed.storeSlogan || DEFAULT_STORE_SETTINGS.storeSlogan,
+        announcementText: dbSettings.announcementText || localParsed.announcementText || DEFAULT_STORE_SETTINGS.announcementText
+      };
+
+      // Tax Resolution
       const isTaxActive = normalizeEnableTax(dbSettings.enableTax) || normalizeEnableTax(localParsed?.enableTax);
       scopedSettings.enableTax = isTaxActive;
       if (isTaxActive) {
-        scopedSettings.taxRate = parseFloat(localParsed?.taxRate ?? dbSettings.taxRate ?? 10) || 10;
-        scopedSettings.taxMode = localParsed?.taxMode || dbSettings.taxMode || 'exclusive';
-        scopedSettings.vatTin = localParsed?.vatTin || dbSettings.vatTin || 'K001-90218821';
-        scopedSettings.taxLabel = localParsed?.taxLabel || dbSettings.taxLabel || 'ពន្ធអាករ (VAT 10%)';
+        scopedSettings.taxRate = parseFloat(dbSettings.taxRate ?? localParsed?.taxRate ?? 10) || 10;
+        scopedSettings.taxMode = dbSettings.taxMode || localParsed?.taxMode || 'exclusive';
+        scopedSettings.vatTin = dbSettings.vatTin || localParsed?.vatTin || 'K001-90218821';
+        scopedSettings.taxLabel = dbSettings.taxLabel || localParsed?.taxLabel || 'ពន្ធអាករ (VAT 10%)';
       }
 
-      // Write merged settings back so localhost & 127.0.0.1 caches immediately align
+      // Sync coverData from store settings if available
+      if (dbSettings.coverData) {
+        setCoverData(prev => ({ ...prev, ...dbSettings.coverData }));
+      }
+
+      // Write merged settings back to cache so offline works smoothly
       try {
         localStorage.setItem(savedKey, JSON.stringify(scopedSettings));
         if (active.id === 'store_default_sabayluk') {
@@ -1611,11 +1639,31 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     initStoreAndSettings();
     window.addEventListener('storage', initStoreAndSettings);
     window.addEventListener('sabay_store_changed', initStoreAndSettings);
+
+    // ⭐️ Realtime Supabase Channel: Auto-sync products, categories & store updates across all devices ⭐️
+    try {
+      realtimeChannel = supabase
+        .channel('public_storefront_live_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+          fetchProductsForStore(currentStore?.id);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, () => {
+          fetchCategoriesForStore(currentStore?.id);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sliders' }, () => {
+          if (typeof loadStorefrontSlides === 'function') loadStorefrontSlides();
+        })
+        .subscribe();
+    } catch (_) {}
+
     return () => {
       window.removeEventListener('storage', initStoreAndSettings);
       window.removeEventListener('sabay_store_changed', initStoreAndSettings);
+      if (realtimeChannel) {
+        supabase.removeChannel(realtimeChannel);
+      }
     };
-  }, []);
+  }, [propStoreSlug]);
 
   useEffect(() => {
     const savedCover = localStorage.getItem('sabay_luk_cover');
