@@ -1620,7 +1620,7 @@ export default function UnifiedAdminDashboard() {
     }
 
     // Strict isolation & store_id auto-tagging
-    const strictlyThisStore = candidateList
+    let strictlyThisStore = candidateList
       .map(s => (!s.store_id && storeId !== 'store_default_sabayluk' ? { ...s, store_id: storeId } : s))
       .filter(s => {
         if (storeId === 'store_default_sabayluk') {
@@ -1632,6 +1632,13 @@ export default function UnifiedAdminDashboard() {
         }
         return !s.store_id || s.store_id === storeId;
       });
+
+    // ⭐️ Clean up any accidental demo cashiers or stale mock staff from tenant stores if not in DB ⭐️
+    if (storeId !== 'store_default_sabayluk' && (!dbStaff || dbStaff.length === 0)) {
+      strictlyThisStore = strictlyThisStore.filter(s => 
+        s.role === 'ADMIN' || (!s.id?.includes('CASHIER-1') && s.name !== 'បុគ្គលិកគិតលុយ (Cashier)' && s.name !== 'បុគ្គលិកគិតលុយ')
+      );
+    }
 
     if (strictlyThisStore.length > 0) {
       // Ensure owner account exists
@@ -1746,15 +1753,21 @@ export default function UnifiedAdminDashboard() {
     if (typeof window !== 'undefined' && activeStore) {
       try {
         const storeId = activeStore.id || 'store_default_sabayluk';
-        localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(staffList));
-        if (storeId === 'store_default_sabayluk') {
-          localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
+        // ⭐️ ការពារកុំឱ្យ save staffList ចាស់ទៅលើ storeId ថ្មីពេលប្តូរហាង (Cross-store data isolation) ⭐️
+        const isListMatchingStore = Array.isArray(staffList) && staffList.length > 0 &&
+          staffList.every(s => !s.store_id || s.store_id === storeId || storeId === 'store_default_sabayluk');
+
+        if (isListMatchingStore) {
+          localStorage.setItem(`sabay_staff_list_${storeId}`, JSON.stringify(staffList));
+          if (storeId === 'store_default_sabayluk') {
+            localStorage.setItem('sabay_staff_list', JSON.stringify(staffList));
+          }
         }
       } catch (err) {
         console.warn('⚠️ Quota exceeded while saving staffList:', err);
       }
     }
-  }, [staffList, activeStore?.id]);
+  }, [staffList]);
 
   // ⭐️ DEMO MODE & SECURITY ACCESS CONTROL ⭐️
   const [isDemoMode, setIsDemoMode] = useState(false);
@@ -33682,50 +33695,17 @@ export default function UnifiedAdminDashboard() {
                                   </div>
                                 </div>
                               ) : (
-                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-base">👥</span>
-                                    <div className="text-xs text-amber-900 leading-relaxed font-bold">
-                                      <p className="font-black text-amber-950">ហាង «{loginTargetStore.name}» មិនទាន់មានគណនីបុគ្គលិកនៅឡើយទេ</p>
-                                      <p className="text-[11px] font-medium text-amber-800 mt-0.5">
-                                        លោកអ្នកអាចចុចបង្កើតគណនីបុគ្គលិកគំរូសាកល្បងភ្លាមៗ ឬជ្រើសរើសចូលជា "Admin / ម្ចាស់ហាង"។
-                                      </p>
-                                    </div>
+                                <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2 text-center">
+                                  <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg mx-auto font-black shadow-2xs">
+                                    👥
                                   </div>
-                                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const newCashier = {
-                                          id: `STAFF-${loginTargetStore.id}-CASHIER-1`,
-                                          name: 'បុគ្គលិកគិតលុយ (Cashier)',
-                                          email: `cashier@${loginTargetStore.slug || 'store'}.com`,
-                                          username: `cashier_${loginTargetStore.slug || 'store'}`,
-                                          pin: '1111',
-                                          password: '1111',
-                                          role: 'CASHIER',
-                                          roleLabel: 'អ្នកគិតលុយ (Cashier)',
-                                          phone: '098 112 233',
-                                          avatar: '👩‍💼',
-                                          color: 'from-orange-500 to-amber-500',
-                                          permissions: ROLE_PRESET_PERMISSIONS.CASHIER,
-                                          active: true,
-                                          store_id: loginTargetStore.id,
-                                          created_at: new Date().toISOString()
-                                        };
-                                        const existing = getStoreStaffList(loginTargetStore);
-                                        const updated = [...existing, newCashier];
-                                        if (typeof window !== 'undefined') {
-                                          localStorage.setItem(`sabay_staff_list_${loginTargetStore.id}`, JSON.stringify(updated));
-                                        }
-                                        setStaffList(updated);
-                                        setLoginSelectedStaffMember(newCashier);
-                                      }}
-                                      className="px-2.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-[11px] font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1"
-                                    >
-                                      <span>➕</span>
-                                      <span>បង្កើតគណនីអ្នកគិតលុយគំរូ (PIN: 1111)</span>
-                                    </button>
+                                  <div className="text-xs text-slate-800 leading-relaxed font-bold">
+                                    <p className="font-black text-sm text-slate-900">ហាង «{loginTargetStore.name}» មិនទាន់មានគណនីបុគ្គលិកនៅឡើយទេ</p>
+                                    <p className="text-[11px] font-medium text-slate-500 mt-1">
+                                      សូមជ្រើសរើសចូលជា "Admin / ម្ចាស់ហាង" ដើម្បីចូលគ្រប់គ្រង ឬបង្កើតគណនីបុគ្គលិកថ្មីនៅក្នុង Dashboard (ការកំណត់ &gt; បុគ្គលិក)។
+                                    </p>
+                                  </div>
+                                  <div className="pt-1.5 flex justify-center">
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -33733,9 +33713,10 @@ export default function UnifiedAdminDashboard() {
                                         setLoginSelectedStaffMember(null);
                                         setLoginGmailPassword('');
                                       }}
-                                      className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-black transition border border-slate-200 cursor-pointer shadow-2xs"
+                                      className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
                                     >
-                                      👑 ចូលជា Admin
+                                      <span>👑</span>
+                                      <span>ចូលជា Admin / ម្ចាស់ហាង</span>
                                     </button>
                                   </div>
                                 </div>
