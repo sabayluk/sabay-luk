@@ -26178,12 +26178,11 @@ export default function UnifiedAdminDashboard() {
         {/* ⭐️ MOBILE FLOATING CART ACTION BAR (Shown on Mobile when Cart has items) ⭐️ */}
         {posCart.length > 0 && (
           <div className="lg:hidden fixed bottom-16 left-2.5 right-2.5 z-30 animate-in slide-in-from-bottom-2 duration-300">
-            <button
-              type="button"
-              onClick={() => setIsMobileCartOpen(true)}
-              className="w-full bg-slate-950/95 backdrop-blur-md hover:bg-black text-white p-3 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.5)] border-2 border-amber-400/60 flex items-center justify-between gap-2.5 active:scale-[0.98] transition cursor-pointer"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-full bg-slate-950/95 backdrop-blur-md hover:bg-black text-white p-3 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.5)] border-2 border-amber-400/60 flex items-center justify-between gap-2.5 transition">
+              <div
+                onClick={() => setIsMobileCartOpen(true)}
+                className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer active:scale-[0.98] transition select-none"
+              >
                 <div className="relative shrink-0">
                   <span className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 text-white flex items-center justify-center text-lg font-black shadow-md">
                     🛒
@@ -26206,11 +26205,20 @@ export default function UnifiedAdminDashboard() {
                   </span>
                 </div>
               </div>
-              <span className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 shrink-0 hover:brightness-110 transition">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAmountTendered(posTotal.toString());
+                  setIsMobileCartOpen(false);
+                  setPaymentModalOpen(true);
+                }}
+                className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 shrink-0 hover:brightness-110 active:scale-95 transition cursor-pointer"
+              >
                 <span>គិតលុយ</span>
                 <span className="text-sm">➔</span>
-              </span>
-            </button>
+              </button>
+            </div>
           </div>
         )}
 
@@ -26335,10 +26343,10 @@ export default function UnifiedAdminDashboard() {
                     <span>តម្លៃដើមសរុប:</span>
                     <span>${(posSubtotal || 0).toFixed(2)}</span>
                   </div>
-                  {posDiscountAmount > 0 && (
+                  {posDiscountValue > 0 && (
                     <div className="flex justify-between items-center font-bold text-rose-600">
                     <span>បញ្ចុះតម្លៃ:</span>
-                    <span>-${(posDiscountAmount || 0).toFixed(2)}</span>
+                    <span>-${(posDiscountValue || 0).toFixed(2)}</span>
                   </div>
                 )}
                 <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
