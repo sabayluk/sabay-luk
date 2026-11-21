@@ -33144,27 +33144,27 @@ export default function UnifiedAdminDashboard() {
 
   const renderLoginPortal = () => {
     return (
-      <div className="min-h-screen w-full bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100/70 flex flex-col justify-between p-4 sm:p-6 md:p-8 font-sans relative overflow-hidden select-none">
-        {/* Soft Ambient Light Orbs (Cool-Toned & Eye-Friendly) */}
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-sky-200/60 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-indigo-200/50 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="min-h-screen w-full bg-[#f8fafc] flex flex-col justify-between p-4 sm:p-6 md:p-8 font-sans relative overflow-hidden select-none">
+        {/* Soft Animated Ambient Mesh Orbs (Lively & Modern) */}
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-orange-200/40 rounded-full blur-3xl pointer-events-none animate-pulse duration-1000"></div>
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-amber-200/40 rounded-full blur-3xl pointer-events-none animate-pulse duration-700"></div>
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-sky-100/35 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* Top Navbar */}
         <header className="flex justify-between items-center relative z-10 max-w-5xl mx-auto w-full">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-md shadow-orange-500/25">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 via-amber-500 to-yellow-500 text-white flex items-center justify-center font-black text-2xl shadow-md shadow-orange-500/25">
               🛍️
             </div>
             <div>
-              <h1 className="text-slate-900 font-black text-lg tracking-tight leading-none flex items-center gap-2">
+              <h1 className="text-slate-900 font-black text-lg tracking-normal leading-none flex items-center gap-2">
                 {storeSettings.storeName || 'SABAY LUK'}
-                <span className="text-[10px] bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-mono font-bold">
-                  v2.5 PRO
+                <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded-full font-mono font-black">
+                  POS Cloud
                 </span>
               </h1>
-              <p className="text-[11px] text-slate-500 font-bold mt-0.5">
-                Cloud POS & Store Management
+              <p className="text-[11px] text-slate-500 font-bold mt-1">
+                ប្រព័ន្ធគ្រប់គ្រងការលក់ & ស្តុកទំនើប
               </p>
             </div>
           </div>
@@ -33172,7 +33172,7 @@ export default function UnifiedAdminDashboard() {
           <div className="flex items-center gap-2">
             <Link
               href="/register"
-              className="flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 px-3.5 py-2 rounded-xl border border-blue-200 transition shadow-xs"
+              className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100/80 px-3.5 py-2 rounded-xl border border-orange-200 transition shadow-xs"
             >
               <span>✨</span>
               <span className="hidden sm:inline">ចុះឈ្មោះហាងថ្មី</span>
@@ -33190,43 +33190,42 @@ export default function UnifiedAdminDashboard() {
           </div>
         </header>
 
-        {/* Center Login Box */}
-        <main className="relative z-10 my-auto py-6 flex justify-center">
-          <div className="w-full max-w-md bg-white/95 backdrop-blur-2xl p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-2xl shadow-blue-900/10 space-y-5">
+        {/* Center Login Card (Clean World-Class Standard) */}
+        <main className="relative z-10 my-auto py-8 flex justify-center">
+          <div className="w-full max-w-md bg-white/95 backdrop-blur-2xl p-7 sm:p-9 rounded-3xl border border-slate-200/90 shadow-[0_20px_50px_rgba(15,23,42,0.06)] space-y-6">
             
-            {/* Header Badge & Title */}
-            <div className="text-center space-y-1.5">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                ប្រព័ន្ធសុវត្ថិភាពខ្ពស់ 256-bit Secure
-              </span>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-                {loginStep === 1 ? 'ស្វែងរកហាងរបស់អ្នក' : 'ផ្ទៀងផ្ទាត់លេខសម្ងាត់ចូលហាង'}
-              </h2>
-              <p className="text-xs text-slate-500 font-medium">
-                {loginStep === 1 
-                  ? 'សូមវាយបញ្ចូល Gmail របស់ម្ចាស់ហាង ដើម្បីស្វែងរកហាងរបស់អ្នក' 
-                  : 'សូមបញ្ចូលលេខសម្ងាត់ ឬ PIN ឱ្យបានត្រឹមត្រូវដើម្បីចូលផ្ទាំងគ្រប់គ្រង'}
-              </p>
+            {/* Brand Logo & Header - Zero Overlap, Ample Spacing */}
+            <div className="text-center space-y-3">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-orange-500 via-amber-500 to-yellow-500 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-orange-500/25 ring-4 ring-orange-50">
+                {loginStep === 1 ? '🛍️' : (loginTargetStore?.settings?.logoUrl ? <img src={loginTargetStore.settings.logoUrl} alt="Logo" className="w-10 h-10 object-contain rounded-xl" /> : '🏪')}
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-2xl font-black text-slate-900 tracking-normal leading-snug">
+                  {loginStep === 1 ? 'ចូលប្រើប្រព័ន្ធ' : 'ផ្ទៀងផ្ទាត់លេខកូដ'}
+                </h2>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  {loginStep === 1 
+                    ? 'សូមបញ្ចូល Email ឬ ឈ្មោះហាង ដើម្បីបន្ត' 
+                    : `សូមបញ្ចូល PIN ដើម្បីចូលគ្រប់គ្រង «${loginTargetStore?.name || 'ហាង'}»`}
+                </p>
+              </div>
             </div>
-
-
 
             {/* Error & Success Messages */}
             {loginError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-600 text-xs font-bold text-center animate-in shake">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-600 text-xs font-bold text-center animate-in shake">
                 {loginError}
               </div>
             )}
             {loginSuccessMsg && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-xs font-bold text-center animate-pulse">
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-700 text-xs font-bold text-center animate-pulse">
                 {loginSuccessMsg}
               </div>
             )}
 
             {/* STANDARD 2-STEP STORE AUTHENTICATION */}
             {loginMode === 'gmail' && (
-              <form onSubmit={handleGmailSubmit} className="space-y-4 animate-in fade-in">
+              <form onSubmit={handleGmailSubmit} className="space-y-5 animate-in fade-in">
                 
                 {/* ⭐️ STEP 1: LOOKUP STORE BY GMAIL / STORE IDENTIFIER ⭐️ */}
                 {loginStep === 1 && (
@@ -33265,11 +33264,11 @@ export default function UnifiedAdminDashboard() {
                                 setLoginGmail(acc.email);
                                 handleLookupGmailStores(acc.email);
                               }}
-                              className="group flex items-center justify-between p-2.5 bg-white hover:bg-blue-50/70 border border-slate-200 hover:border-blue-400 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-99"
+                              className="group flex items-center justify-between p-2.5 bg-white hover:bg-orange-50/70 border border-slate-200 hover:border-orange-400 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer active:scale-99"
                               title={`ចុចដើម្បី Login ចូលហាង ${acc.storeName || acc.name}`}
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs shrink-0 overflow-hidden">
+                                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-2xs shrink-0 overflow-hidden">
                                   {acc.logoUrl ? (
                                     <img src={acc.logoUrl} alt="Logo" className="w-full h-full object-cover" />
                                   ) : (
@@ -33278,7 +33277,7 @@ export default function UnifiedAdminDashboard() {
                                 </div>
                                 <div className="min-w-0 text-left">
                                   <div className="flex items-center gap-1.5">
-                                    <h5 className="text-xs font-black text-slate-800 group-hover:text-blue-600 transition truncate">
+                                    <h5 className="text-xs font-black text-slate-800 group-hover:text-orange-600 transition truncate">
                                       {acc.storeName || acc.name}
                                     </h5>
                                     {acc.roleLabel && (
@@ -33286,7 +33285,7 @@ export default function UnifiedAdminDashboard() {
                                         acc.role === 'MASTER_ADMIN'
                                           ? 'bg-amber-100 text-amber-700 border border-amber-200'
                                           : acc.role === 'OWNER'
-                                          ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                          ? 'bg-orange-100 text-orange-700 border border-orange-200'
                                           : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                                       }`}>
                                         {acc.roleLabel}
@@ -33300,7 +33299,7 @@ export default function UnifiedAdminDashboard() {
                               </div>
 
                               <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                                <span className="text-blue-600 font-bold text-xs group-hover:translate-x-0.5 transition hidden sm:inline-block">
+                                <span className="text-orange-600 font-bold text-xs group-hover:translate-x-0.5 transition hidden sm:inline-block">
                                   ចូល ›
                                 </span>
                                 <button
@@ -33333,17 +33332,17 @@ export default function UnifiedAdminDashboard() {
                     )}
 
                     <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                        អាសយដ្ឋាន Gmail ឬ Email របស់ហាង <span className="text-blue-600">*</span>
+                      <label className="text-xs font-black text-slate-700 block mb-1.5">
+                        Email ឬ ឈ្មោះហាង <span className="text-orange-500">*</span>
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3.5 top-3.5 text-slate-400 text-sm">📧</span>
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base">📧</span>
                         <input
                           type="text"
                           value={loginGmail}
                           onChange={(e) => setLoginGmail(e.target.value)}
                           placeholder="ឧ. yourstore@gmail.com ឬ ឈ្មោះហាង"
-                          className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl pl-10 pr-9 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition"
+                          className="w-full bg-slate-50/80 focus:bg-white border-2 border-slate-200 focus:border-orange-500 text-slate-900 rounded-2xl pl-11 pr-10 py-3.5 text-xs font-bold outline-none focus:ring-4 focus:ring-orange-500/10 transition shadow-inner placeholder-slate-400"
                           required
                           list="remembered-emails-list"
                           autoFocus={!rememberedAccounts || rememberedAccounts.length === 0}
@@ -33352,7 +33351,7 @@ export default function UnifiedAdminDashboard() {
                           <button
                             type="button"
                             onClick={() => setLoginGmail('')}
-                            className="absolute right-3 top-3 w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full text-xs font-bold transition cursor-pointer"
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-full text-xs font-bold transition cursor-pointer"
                             title="សម្អាត"
                           >
                             ✕
@@ -33369,7 +33368,7 @@ export default function UnifiedAdminDashboard() {
                       </datalist>
 
                       {/* Remember Gmail Checkbox */}
-                      <div className="flex items-center justify-between mt-2 px-0.5">
+                      <div className="flex items-center justify-between mt-2.5 px-0.5">
                         <label className="flex items-center gap-2 cursor-pointer select-none">
                           <input
                             type="checkbox"
@@ -33380,34 +33379,29 @@ export default function UnifiedAdminDashboard() {
                                 localStorage.setItem('sabay_remember_email_enabled', e.target.checked.toString());
                               } catch (_) {}
                             }}
-                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer accent-blue-600"
+                            className="w-4 h-4 rounded text-orange-500 focus:ring-orange-400 border-slate-300 cursor-pointer accent-orange-500"
                           />
-                          <span className="text-[11px] font-bold text-slate-600">
-                            ចងចាំ Gmail នេះលើឧបករណ៍នេះ (Remember account)
+                          <span className="text-xs font-bold text-slate-600">
+                            ចងចាំគណនីលើឧបករណ៍នេះ (Remember me)
                           </span>
                         </label>
                       </div>
-
-                      <p className="text-[11px] text-slate-400 mt-2 font-medium flex items-center gap-1">
-                        <span>💡</span>
-                        <span>បញ្ចូល Gmail ដែលបានចុះឈ្មោះហាង ដើម្បីស្វែងរកហាងរបស់អ្នក</span>
-                      </p>
                     </div>
 
                     <button
                       type="submit"
                       disabled={isLoggingIn}
-                      className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
+                      className="w-full bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-orange-500/25 hover:shadow-orange-500/35 active:scale-[0.99] transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       {isLoggingIn ? (
                         <>
                           <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          <span>កំពុងស្វែងរកហាង...</span>
+                          <span>កំពុងស្វែងរក...</span>
                         </>
                       ) : (
                         <>
-                          <span>🔍</span>
-                          <span>ស្វែងរកហាងរបស់ខ្ញុំ (Find Store)</span>
+                          <span>បន្តទៅមុខទៀត</span>
+                          <span className="text-base">➔</span>
                         </>
                       )}
                     </button>
@@ -33419,19 +33413,19 @@ export default function UnifiedAdminDashboard() {
                   <div className="space-y-4 animate-in fade-in">
                     
                     {/* Found Store Card Banner */}
-                    <div className="p-3.5 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl border border-slate-700 flex items-center justify-between gap-3 shadow-md">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center text-lg font-black shrink-0 shadow-xs">
+                    <div className="p-3.5 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-2xl border border-slate-800 flex items-center justify-between gap-3 shadow-md">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center text-lg font-black shrink-0 shadow-sm overflow-hidden">
                           {loginTargetStore.settings?.logoUrl ? (
-                            <img src={loginTargetStore.settings.logoUrl} alt="Logo" className="w-8 h-8 object-contain rounded-lg" />
+                            <img src={loginTargetStore.settings.logoUrl} alt="Logo" className="w-full h-full object-cover" />
                           ) : '🏪'}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <h4 className="font-black text-xs text-white truncate">{loginTargetStore.name}</h4>
-                            <span className="text-[9px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.2 rounded-full font-bold">✓ ហាងត្រឹមត្រូវ</span>
+                            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded-full font-bold">✓ ហាងត្រឹមត្រូវ</span>
                           </div>
-                          <p className="text-[10px] text-slate-300 font-mono truncate">
+                          <p className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
                             sabayluk.com/store/{loginTargetStore.slug}
                           </p>
                         </div>
@@ -33444,7 +33438,7 @@ export default function UnifiedAdminDashboard() {
                           setLoginError('');
                           setLoginGmailPassword('');
                         }}
-                        className="text-[11px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2.5 py-1.5 rounded-xl transition cursor-pointer shrink-0"
+                        className="text-[11px] font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1.5 rounded-xl transition cursor-pointer shrink-0"
                         title="ប្តូរទៅស្វែងរកហាងផ្សេង"
                       >
                         ‹ ប្តូរហាង
@@ -33510,15 +33504,12 @@ export default function UnifiedAdminDashboard() {
                         <>
                           {/* ⭐️ ROLE SELECTOR (Admin / ម្ចាស់ហាង vs បុគ្គលិក / Staff) ⭐️ */}
                           <div className="space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                                <span>🎭</span>
-                                <span>ជ្រើសរើសតួនាទីចូលប្រើ (Login Role) <span className="text-rose-500">*</span></span>
-                              </label>
-                              <span className="text-[10px] text-slate-400 font-mono">Select Role</span>
-                            </div>
+                            <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                              <span>🎭</span>
+                              <span>ជ្រើសរើសតួនាទី (Role) <span className="text-orange-500">*</span></span>
+                            </label>
 
-                            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner">
+                            <div className="grid grid-cols-2 gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -33529,11 +33520,11 @@ export default function UnifiedAdminDashboard() {
                                 }}
                                 className={`py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
                                   loginAccountType === 'owner'
-                                    ? 'bg-white text-blue-700 shadow-xs border border-blue-200'
+                                    ? 'bg-white text-orange-600 shadow-xs border border-orange-200'
                                     : 'text-slate-600 hover:text-slate-900'
                                 }`}
                               >
-                                <span className="text-base">👑</span>
+                                <span>👑</span>
                                 <span>Admin / ម្ចាស់ហាង</span>
                               </button>
 
@@ -33549,14 +33540,14 @@ export default function UnifiedAdminDashboard() {
                                 }}
                                 className={`py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
                                   loginAccountType === 'staff'
-                                    ? 'bg-white text-blue-700 shadow-xs border border-blue-200'
+                                    ? 'bg-white text-orange-600 shadow-xs border border-orange-200'
                                     : 'text-slate-600 hover:text-slate-900'
                                 }`}
                               >
-                                <span className="text-base">👥</span>
-                                <span>បុគ្គលិក (Staff)</span>
+                                <span>👥</span>
+                                <span>បុគ្គលិក</span>
                                 {staffMembers.length > 0 && (
-                                  <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full font-mono font-bold">
+                                  <span className="text-[9px] bg-orange-100 text-orange-800 px-1.5 py-0.2 rounded-full font-mono font-bold">
                                     {staffMembers.length}
                                   </span>
                                 )}
@@ -33566,15 +33557,15 @@ export default function UnifiedAdminDashboard() {
 
                           {/* ⭐️ OPTION 1: STORE OWNER / ADMIN BANNER ⭐️ */}
                           {loginAccountType === 'owner' && (
-                            <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-blue-200 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in">
+                            <div className="p-3 bg-gradient-to-r from-orange-50 to-amber-50/70 border border-orange-200/80 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in">
                               <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-base font-black shrink-0 shadow-xs">
+                                <div className="w-9 h-9 rounded-xl bg-orange-500 text-white flex items-center justify-center text-base font-black shrink-0 shadow-xs">
                                   👑
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5">
-                                    <p className="text-[10px] font-black text-blue-700 uppercase tracking-wider">គណនីម្ចាស់ហាង (Store Admin)</p>
-                                    <span className="text-[9px] font-mono font-bold bg-white text-blue-700 px-1.5 py-0.2 rounded-md border border-blue-200">
+                                    <p className="text-[10px] font-black text-orange-700 uppercase tracking-wider">គណនីម្ចាស់ហាង</p>
+                                    <span className="text-[9px] font-mono font-bold bg-white text-orange-700 px-1.5 py-0.2 rounded-md border border-orange-200">
                                       Full Access
                                     </span>
                                   </div>
@@ -33583,8 +33574,8 @@ export default function UnifiedAdminDashboard() {
                                   </p>
                                 </div>
                               </div>
-                              <span className="text-[10px] font-mono font-bold bg-white text-emerald-700 px-2.5 py-1 rounded-xl border border-emerald-200 shadow-2xs shrink-0 flex items-center gap-1">
-                                <span>✓</span> Gmail Verified
+                              <span className="text-[10px] font-mono font-bold bg-white text-emerald-700 px-2 py-0.5 rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1">
+                                <span>✓</span> Verified
                               </span>
                             </div>
                           )}
@@ -33596,7 +33587,7 @@ export default function UnifiedAdminDashboard() {
                                 <div className="space-y-1.5">
                                   <label className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
                                     <span>ជ្រើសរើសគណនីបុគ្គលិក ({staffMembers.length} នាក់)៖</span>
-                                    <span className="text-[10px] text-blue-600 font-mono">Staff Selection</span>
+                                    <span className="text-[10px] text-orange-600 font-mono">Staff Selection</span>
                                   </label>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-0.5">
                                     {staffMembers.map((stf) => {
@@ -33612,26 +33603,23 @@ export default function UnifiedAdminDashboard() {
                                           }}
                                           className={`p-2.5 rounded-2xl text-left border transition flex items-center gap-2.5 cursor-pointer ${
                                             isSelected
-                                              ? 'border-blue-600 bg-blue-50/90 text-blue-950 font-black shadow-xs ring-2 ring-blue-500/20'
+                                              ? 'border-orange-500 bg-orange-50/90 text-orange-950 font-black shadow-xs ring-2 ring-orange-500/20'
                                               : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold'
                                           }`}
                                         >
                                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ${
-                                            stf.avatar ? 'bg-slate-100' : 'bg-gradient-to-tr from-blue-500 to-indigo-600 text-white'
+                                            stf.avatar ? 'bg-slate-100' : 'bg-gradient-to-tr from-orange-500 to-amber-500 text-white'
                                           }`}>
                                             {stf.avatar || '🧑‍💼'}
                                           </div>
                                           <div className="min-w-0 flex-1">
                                             <div className="flex items-center justify-between gap-1">
                                               <span className="text-xs truncate block font-black">{stf.name}</span>
-                                              {isSelected && <span className="text-blue-600 text-xs">✓</span>}
+                                              {isSelected && <span className="text-orange-600 text-xs">✓</span>}
                                             </div>
                                             <div className="flex items-center gap-1.5 mt-0.5">
                                                 <span className="text-[10px] text-slate-500 font-medium truncate block">
                                                   {stf.roleLabel || stf.role || 'បុគ្គលិក'}
-                                                </span>
-                                                <span className="text-[9px] bg-blue-100/80 text-blue-800 px-1.5 py-0.2 rounded font-mono font-bold shrink-0">
-                                                  🔑 PIN ផ្ទាល់ខ្លួន
                                                 </span>
                                               </div>
                                           </div>
@@ -33666,7 +33654,7 @@ export default function UnifiedAdminDashboard() {
                                           roleLabel: 'អ្នកគិតលុយ (Cashier)',
                                           phone: '098 112 233',
                                           avatar: '👩‍💼',
-                                          color: 'from-blue-500 to-cyan-600',
+                                          color: 'from-orange-500 to-amber-500',
                                           permissions: ROLE_PRESET_PERMISSIONS.CASHIER,
                                           active: true,
                                           store_id: loginTargetStore.id,
@@ -33680,7 +33668,7 @@ export default function UnifiedAdminDashboard() {
                                         setStaffList(updated);
                                         setLoginSelectedStaffMember(newCashier);
                                       }}
-                                      className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1"
+                                      className="px-2.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-[11px] font-black transition cursor-pointer shadow-xs active:scale-95 flex items-center gap-1"
                                     >
                                       <span>➕</span>
                                       <span>បង្កើតគណនីអ្នកគិតលុយគំរូ (PIN: 1111)</span>
@@ -33704,55 +33692,39 @@ export default function UnifiedAdminDashboard() {
 
                           {/* PIN / Password Input */}
                           <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs font-bold text-slate-700">
-                                {loginAccountType === 'owner' ? (
-                                  <span>លេខកូដសម្ងាត់ ឬ PIN របស់ម្ចាស់ហាង (Admin) <span className="text-rose-500">*</span></span>
-                                ) : (
-                                  <span>លេខកូដសម្ងាត់ ឬ PIN របស់ {loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'} <span className="text-rose-500">*</span></span>
-                                )}
-                              </label>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                {loginAccountType === 'owner' ? 'Admin Password / PIN' : 'Staff Password / PIN'}
-                              </span>
-                            </div>
+                            <label className="text-xs font-black text-slate-700 block mb-1.5">
+                              {loginAccountType === 'owner' ? (
+                                <span>លេខកូដសម្ងាត់ ឬ PIN របស់ម្ចាស់ហាង (Admin) <span className="text-orange-500">*</span></span>
+                              ) : (
+                                <span>លេខកូដសម្ងាត់ ឬ PIN របស់ {loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'} <span className="text-orange-500">*</span></span>
+                              )}
+                            </label>
                             <div className="relative">
+                              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔑</span>
                               <input
                                 type={loginShowGmailPassword ? 'text' : 'password'}
                                 value={loginGmailPassword}
                                 onChange={(e) => setLoginGmailPassword(e.target.value)}
-                                placeholder={
-                                  loginAccountType === 'owner'
-                                    ? '•••••••• (PIN ឬ Password របស់ Admin)'
-                                    : `•••• (បញ្ចូល PIN ផ្ទាល់ខ្លួនរបស់ ${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'})`
-                                }
-                                className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-sm font-mono font-black outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition pr-10"
+                                placeholder="បញ្ចូល PIN ឬ Password"
+                                className="w-full bg-slate-50/80 focus:bg-white border-2 border-slate-200 focus:border-orange-500 text-slate-900 rounded-2xl pl-10 pr-10 py-3.5 text-sm font-mono font-black outline-none focus:ring-4 focus:ring-orange-500/10 transition shadow-inner placeholder-slate-400"
                                 required
                                 autoFocus
                               />
                               <button
                                 type="button"
                                 onClick={() => setLoginShowGmailPassword(!loginShowGmailPassword)}
-                                className="absolute right-3 top-3 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm cursor-pointer p-1"
                               >
                                 {loginShowGmailPassword ? '🙈' : '👁️'}
                               </button>
                             </div>
-                            <div className="mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 text-[10px] text-slate-500 space-y-1">
-                              <div className="flex items-center justify-between font-bold text-slate-700">
-                                <span className="flex items-center gap-1.5">
-                                  <span>🛡️</span>
-                                  <span>ស្តង់ដាសុវត្ថិភាពអន្តរជាតិ (Unique Password per Role)</span>
-                                </span>
-                                <span className="text-[9px] font-mono text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                                  ✓ ដាច់ដោយឡែកពីគ្នា
-                                </span>
-                              </div>
-                              <p className="leading-relaxed">
-                                {loginAccountType === 'owner'
-                                  ? 'គណនីម្ចាស់ហាង (Admin) ត្រូវប្រើលេខសម្ងាត់ ឬ PIN ផ្ទាល់ខ្លួនរបស់ Admin សម្រាប់គ្រប់គ្រងទិន្នន័យ ប្រព័ន្ធហិរញ្ញវត្ថុ និងរបាយការណ៍ទាំងអស់។'
-                                  : `គណនី «${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'}» ត្រូវប្រើលេខសម្ងាត់ PIN ផ្ទាល់ខ្លួនរៀងខ្លួន ដាច់ដោយឡែកពីម្ចាស់ហាង និងបុគ្គលិកដទៃទៀត។`}
-                              </p>
+                            <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold px-1 pt-1.5">
+                              <span className="flex items-center gap-1">
+                                <span>🔒</span> 256-Bit SSL Encryption
+                              </span>
+                              <span className="text-emerald-600 flex items-center gap-1">
+                                <span>✓</span> សុវត្ថិភាពខ្ពស់
+                              </span>
                             </div>
                           </div>
 
@@ -33763,7 +33735,7 @@ export default function UnifiedAdminDashboard() {
                                 type="checkbox"
                                 checked={rememberMe}
                                 onChange={(e) => setRememberMe(e.target.checked)}
-                                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+                                className="w-4 h-4 rounded text-orange-500 focus:ring-orange-400 accent-orange-500 cursor-pointer"
                               />
                               <span>ចងចាំការចូលប្រើ (Remember Me)</span>
                             </label>
@@ -33773,21 +33745,17 @@ export default function UnifiedAdminDashboard() {
                           <button
                             type="submit"
                             disabled={isLoggingIn || (loginAccountType === 'staff' && !loginSelectedStaffMember && staffMembers.length === 0)}
-                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                            className="w-full bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-orange-500/25 hover:shadow-orange-500/35 active:scale-[0.99] transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                           >
                             {isLoggingIn ? (
                               <>
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                 <span>កំពុងផ្ទៀងផ្ទាត់...</span>
                               </>
                             ) : (
                               <>
-                                <span>🚀</span>
-                                <span>
-                                  {loginAccountType === 'owner'
-                                    ? `ចូលគ្រប់គ្រងហាង «${loginTargetStore.name}» (Admin)`
-                                    : `ចូលប្រើប្រាស់ជា ${loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'}`}
-                                </span>
+                                <span>ចូលគ្រប់គ្រងហាង</span>
+                                <span className="text-base">➔</span>
                               </>
                             )}
                           </button>
@@ -33798,12 +33766,12 @@ export default function UnifiedAdminDashboard() {
                   </div>
                 )}
 
-                <div className="text-center pt-2">
+                <div className="text-center pt-1">
                   <Link
                     href="/register"
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline"
+                    className="text-xs font-bold text-slate-500 hover:text-orange-600 transition"
                   >
-                    មិនទាន់មានហាងផ្ទាល់ខ្លួន? ចុះឈ្មោះហាងថ្មីដោយឥតគិតថ្លៃ ↗
+                    មិនទាន់មានហាង? <span className="text-orange-600 font-black underline underline-offset-4">ចុះឈ្មោះហាងថ្មីដោយឥតគិតថ្លៃ ↗</span>
                   </Link>
                 </div>
               </form>
@@ -33821,7 +33789,7 @@ export default function UnifiedAdminDashboard() {
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
                     placeholder="ឈ្មោះគណនី ឬ Gmail"
-                    className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition"
+                    className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100 shadow-xs transition"
                     required
                     autoFocus
                   />
@@ -33837,7 +33805,7 @@ export default function UnifiedAdminDashboard() {
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-xs transition pr-10"
+                      className="w-full bg-slate-50 focus:bg-white border border-slate-300 text-slate-900 rounded-xl px-4 py-3 text-xs font-bold outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100 shadow-xs transition pr-10"
                       required
                     />
                     <button
@@ -33856,7 +33824,7 @@ export default function UnifiedAdminDashboard() {
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+                      className="w-4 h-4 rounded text-orange-500 focus:ring-orange-400 accent-orange-500 cursor-pointer"
                     />
                     <span>ចងចាំការចូលប្រើ (Remember Me)</span>
                   </label>
@@ -33865,11 +33833,11 @@ export default function UnifiedAdminDashboard() {
                 <button
                   type="submit"
                   disabled={isLoggingIn}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-orange-500/25 transition active:scale-98 cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isLoggingIn ? (
                     <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                       <span>កំពុងផ្ទៀងផ្ទាត់...</span>
                     </>
                   ) : (
@@ -33887,7 +33855,7 @@ export default function UnifiedAdminDashboard() {
                       setLoginMode('gmail');
                       setLoginError('');
                     }}
-                    className="text-xs font-bold text-slate-500 hover:text-blue-600 transition cursor-pointer"
+                    className="text-xs font-bold text-slate-500 hover:text-orange-600 transition cursor-pointer"
                   >
                     ‹ ត្រឡប់ទៅស្វែងរកហាងតាម Gmail
                   </button>
@@ -33895,20 +33863,18 @@ export default function UnifiedAdminDashboard() {
               </form>
             )}
 
-
-
           </div>
         </main>
 
         {/* Secure Enterprise Footer */}
-        <footer className="text-center text-[11px] text-slate-500 font-medium relative z-10 space-y-1 mt-6">
-          <p className="font-bold text-slate-600">
-            © 2026 SABAY LUK ERP • Cloud POS & Multi-Store Management System
+        <footer className="text-center text-[11px] text-slate-400 font-medium relative z-10 space-y-1 mt-6">
+          <p className="font-bold text-slate-500">
+            © 2026 SABAY LUK ERP • Cloud POS & Store Management
           </p>
           <p className="text-slate-400 text-[10px] flex items-center justify-center gap-2">
-            <span>🔒 256-Bit SSL Enterprise Security</span>
+            <span>🔒 256-Bit SSL Encryption</span>
             <span>•</span>
-            <span>🛡️ Multi-Tenant Isolated Protection</span>
+            <span>🛡️ Multi-Tenant Protection</span>
             <span>•</span>
             <span>⚡ High Availability Cloud</span>
           </p>
