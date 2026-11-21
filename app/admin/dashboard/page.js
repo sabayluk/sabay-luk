@@ -2301,6 +2301,22 @@ export default function UnifiedAdminDashboard() {
   const [debtReceiptModalOpen, setDebtReceiptModalOpen] = useState(false);
   const [lastDebtReceiptData, setLastDebtReceiptData] = useState(null);
 
+  // ⭐️ STATES សម្រាប់ CUSTOMER SUB-VIEWS, DEBT LEDGER, MANUAL DEBT & DIGITAL CARD ⭐️
+  const [customerSubView, setCustomerSubView] = useState('all'); // 'all' | 'debt' | 'loyalty'
+  const [selectedDebtCustomerForLedger, setSelectedDebtCustomerForLedger] = useState(null);
+  const [debtLedgerModalOpen, setDebtLedgerModalOpen] = useState(false);
+  const [manualDebtModalOpen, setManualDebtModalOpen] = useState(false);
+  const [manualDebtCustomerId, setManualDebtCustomerId] = useState('');
+  const [manualDebtAmount, setManualDebtAmount] = useState('');
+  const [manualDebtDueDate, setManualDebtDueDate] = useState('');
+  const [manualDebtNote, setManualDebtNote] = useState('');
+  const [digitalCardCustomer, setDigitalCardCustomer] = useState(null);
+  const [digitalCardModalOpen, setDigitalCardModalOpen] = useState(false);
+  const [pointsHistoryCustomer, setPointsHistoryCustomer] = useState(null);
+  const [pointsHistoryModalOpen, setPointsHistoryModalOpen] = useState(false);
+  const [debtReminderCustomer, setDebtReminderCustomer] = useState(null);
+  const [debtReminderModalOpen, setDebtReminderModalOpen] = useState(false);
+
   // Customer Form - Additional Debt & Loyalty fields
   const [custFormDebtLimit, setCustFormDebtLimit] = useState('200');
   const [custFormDueDate, setCustFormDueDate] = useState('');
@@ -2595,6 +2611,162 @@ export default function UnifiedAdminDashboard() {
     }
   };
 
+  // ⭐️ មុខងារកត់ត្រាជំពាក់ដោយដៃ (MANUAL ADD DEBT CHARGE) ⭐️
+  const handleManualAddDebtSubmit = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!manualDebtCustomerId) {
+      alert('⚠️ សូមជ្រើសរើសអតិថិជនដែលត្រូវកត់ត្រាជំពាក់!');
+      return;
+    }
+    const amountVal = parseFloat(manualDebtAmount);
+    if (isNaN(amountVal) || amountVal <= 0) {
+      alert('⚠️ សូមបញ្ចូលចំនួនទឹកប្រាក់ជំពាក់ឱ្យបានត្រឹមត្រូវ!');
+      return;
+    }
+    const targetCust = (currentStoreCustomers || []).find(c => c.id === manualDebtCustomerId);
+    if (!targetCust) return;
+
+    const currentBalance = parseFloat(targetCust.debt_balance || 0);
+    const newBalance = currentBalance + amountVal;
+    const nowIso = new Date().toISOString();
+    const historyEntry = {
+      id: `DH-${Date.now()}`,
+      date: nowIso,
+      type: 'CHARGE',
+      amount: amountVal,
+      prev_balance: currentBalance,
+      remaining_balance: newBalance,
+      due_date: manualDebtDueDate || targetCust.debt_due_date || null,
+      note: manualDebtNote.trim() || 'កត់ត្រាជំពាក់ដោយដៃ (Manual Charge)',
+      recorded_by: currentStaff?.name || 'Admin / Cashier'
+    };
+
+    setCustomers(prev => prev.map(c => {
+      if (c.id === targetCust.id) {
+        return {
+          ...c,
+          debt_balance: newBalance,
+          debt_due_date: manualDebtDueDate || c.debt_due_date,
+          debt_history: [historyEntry, ...(c.debt_history || [])]
+        };
+      }
+      return c;
+    }));
+
+    setManualDebtModalOpen(false);
+    setManualDebtCustomerId('');
+    setManualDebtAmount('');
+    setManualDebtDueDate('');
+    setManualDebtNote('');
+    setToastNotification(`✅ បានកត់ត្រាការជំពាក់ $${amountVal.toFixed(2)} លើ "${targetCust.name}" ជោគជ័យ! បំណុលសរុប: $${newBalance.toFixed(2)}`);
+    setTimeout(() => setToastNotification(null), 4000);
+  };
+
+  // ⭐️ មុខងារបោះពុម្ពរបាយការណ៍បំណុលអតិថិជន (PRINT DEBT STATEMENT SLIP) ⭐️
+  const handlePrintDebtLedgerSlip = (customer) => {
+    if (!customer || typeof window === 'undefined') return;
+    const store = getActiveStore();
+    const storeName = store?.name || storeSettings.storeName || 'SABAY LUK';
+    const storePhone = store?.phone || storeSettings.phone || '096 720 5522';
+    const storeAddress = store?.address || storeSettings.address || 'ភ្នំពេញ, កម្ពុជា';
+    const curBalance = parseFloat(customer.debt_balance || 0);
+    const history = customer.debt_history || [];
+
+    const printWin = window.open('', '_blank', 'width=500,height=700');
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const rowsHtml = history.length === 0 ? `
+      <tr><td colspan="4" style="text-align:center; padding:10px; color:#888;">មិនមានប្រវត្តិប្រតិបត្តិការឡើយ</td></tr>
+    ` : history.map(h => `
+      <tr style="border-bottom: 1px dashed #ddd; font-size: 10px;">
+        <td style="padding: 4px 0;">${new Date(h.date).toLocaleDateString('km-KH')}</td>
+        <td style="padding: 4px 0;">${h.type === 'CHARGE' ? '📦 ជំពាក់' : '💵 សង'} (${h.note || ''})</td>
+        <td style="padding: 4px 0; text-align: right; color: ${h.type === 'CHARGE' ? '#dc2626' : '#16a34a'}; font-weight: bold;">
+          ${h.type === 'CHARGE' ? '+' : '-'}$${parseFloat(h.amount || 0).toFixed(2)}
+        </td>
+        <td style="padding: 4px 0; text-align: right; font-weight: bold;">$${parseFloat(h.remaining_balance || 0).toFixed(2)}</td>
+      </tr>
+    `).join('');
+
+    printWin.document.write(`
+      <html>
+        <head>
+          <title>Debt Statement - ${customer.name}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            body { font-family: monospace; width: 76mm; margin: 0 auto; padding: 5mm 2mm; font-size: 11px; line-height: 1.3; color: #000; }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .dashed { border-bottom: 1px dashed #000; margin: 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+          </style>
+        </head>
+        <body>
+          <div class="center">
+            <h2 style="margin: 0; font-size: 16px;">${storeName}</h2>
+            <p style="margin: 2px 0; font-size: 10px;">${storePhone} • ${storeAddress}</p>
+            <div class="dashed"></div>
+            <h3 style="margin: 4px 0; font-size: 13px;">*** របាយការណ៍បំណុលអតិថិជន ***</h3>
+            <div style="font-size: 10px; font-weight: bold; color: #333;">STATEMENT OF ACCOUNT</div>
+            <div class="dashed"></div>
+          </div>
+
+          <div style="font-size: 10px; margin-bottom: 6px;">
+            <div><b>អតិថិជន:</b> ${customer.name}</div>
+            <div><b>ទូរស័ព្ទ:</b> ${customer.phone || 'មិនមាន'}</div>
+            ${customer.address ? `<div><b>អាសយដ្ឋាន:</b> ${customer.address}</div>` : ''}
+            <div><b>កាលបរិច្ឆេទចេញ:</b> ${new Date().toLocaleString('km-KH')}</div>
+            ${customer.debt_due_date ? `<div><b>កាលកំណត់សង:</b> ${customer.debt_due_date}</div>` : ''}
+          </div>
+
+          <div class="dashed"></div>
+
+          <table>
+            <thead>
+              <tr style="border-bottom: 1px solid #000; font-size: 10px;">
+                <th style="text-align: left; padding: 2px 0;">កាលបរិច្ឆេទ</th>
+                <th style="text-align: left; padding: 2px 0;">ប្រតិបត្តិការ</th>
+                <th style="text-align: right; padding: 2px 0;">ទឹកប្រាក់</th>
+                <th style="text-align: right; padding: 2px 0;">នៅសល់</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+
+          <div class="dashed"></div>
+
+          <div style="margin: 6px 0; font-size: 12px;">
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; color: #dc2626;">
+              <span>បំណុលនៅសល់សរុប:</span>
+              <span>$${curBalance.toFixed(2)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #444;">
+              <span>ជាប្រាក់រៀល:</span>
+              <span class="bold">${Math.round(curBalance * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛</span>
+            </div>
+          </div>
+
+          <div class="dashed"></div>
+
+          <div style="font-size: 9px; margin-top: 15px; text-align: center; color: #555;">
+            សូមពិនិត្យ និងទូទាត់ប្រាក់ឱ្យបានទាន់ពេលវេលា។ សូមអរគុណ!
+          </div>
+
+          <script>
+            window.onload = function() { window.focus(); window.print(); };
+            window.onafterprint = function() { window.close(); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
   // លក់ជូនអតិថិជននេះផ្ទាល់ក្នុង POS (Quick Sell)
   const handleQuickSellToCustomer = (c) => {
     setCustomerName(c.name);
@@ -2625,7 +2797,7 @@ export default function UnifiedAdminDashboard() {
       return;
     }
 
-    const headers = ['ID', 'ឈ្មោះអតិថិជន', 'លេខទូរស័ព្ទ', 'Telegram', 'ប្រភេទអតិថិជន', 'បញ្ចុះតម្លៃ (%)', 'ចំនួនកុម្ម៉ង់', 'ចំណាយសរុប ($)', 'អាសយដ្ឋាន', 'កំណត់ចំណាំ', 'កាលបរិច្ឆេទចុះឈ្មោះ'];
+    const headers = ['ID', 'ឈ្មោះអតិថិជន', 'លេខទូរស័ព្ទ', 'Telegram', 'ប្រភេទអតិថិជន', 'ពិន្ទុ Loyalty (pts)', 'បំណុលបច្ចុប្បន្ន ($)', 'ថ្ងៃកំណត់សង', 'ទំហំឥណទាន ($)', 'បញ្ចុះតម្លៃ (%)', 'ចំនួនកុម្ម៉ង់', 'ចំណាយសរុប ($)', 'អាសយដ្ឋាន', 'កំណត់ចំណាំ', 'កាលបរិច្ឆេទចុះឈ្មោះ'];
     
     const rows = customers.map(c => {
       const metric = getCustomerMetrics(c);
@@ -2636,6 +2808,10 @@ export default function UnifiedAdminDashboard() {
         `"${(c.phone || '').replace(/"/g, '""')}"`,
         `"${(c.telegram ? '@' + c.telegram : '').replace(/"/g, '""')}"`,
         `"${tierLabel}"`,
+        `"${metric.loyaltyPoints || 0}"`,
+        `"${metric.debtBalance ? metric.debtBalance.toFixed(2) : '0.00'}"`,
+        `"${metric.debtDueDate || ''}"`,
+        `"${metric.debtLimit || 200}"`,
         `"${c.discount_percent || 0}%"`,
         `"${metric.totalOrders}"`,
         `"${metric.totalSpent.toFixed(2)}"`,
@@ -3085,6 +3261,18 @@ export default function UnifiedAdminDashboard() {
       return cStore === storeId;
     });
   }, [customers, activeStore?.id]);
+
+  const debtorsCountGlobal = useMemo(() => {
+    return (currentStoreCustomers || []).filter(c => (parseFloat(c.debt_balance) || 0) > 0).length;
+  }, [currentStoreCustomers]);
+
+  const overdueDebtorsCountGlobal = useMemo(() => {
+    const now = Date.now();
+    return (currentStoreCustomers || []).filter(c => {
+      const bal = parseFloat(c.debt_balance) || 0;
+      return bal > 0 && c.debt_due_date && new Date(c.debt_due_date).getTime() < now;
+    }).length;
+  }, [currentStoreCustomers]);
 
   // ⭐️ States & Realtime Alert សម្រាប់គ្រប់គ្រងការកុម្ម៉ង់ថ្មី (ADMIN & SALES ALERT) ⭐️
   const [newOrderAlert, setNewOrderAlert] = useState(null);
@@ -27729,27 +27917,19 @@ export default function UnifiedAdminDashboard() {
     </div>
   );
 
-  const CustomersView = () => {
+  const CustomersView = (initialSubView) => {
     const storeCustomers = currentStoreCustomers;
-    // ត្រងទិន្នន័យអតិថិជនតាមការស្វែងរក និងប្រភេទ Tier / Debt / Loyalty
-    const filteredCustomers = storeCustomers.filter(c => {
-      const m = getCustomerMetrics(c);
-      const matchSearch = 
-        (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
-        (c.phone || '').includes(customerSearch) ||
-        (c.telegram || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
-        (c.address || '').toLowerCase().includes(customerSearch.toLowerCase());
-      
-      let matchTier = true;
-      if (customerFilterTier === 'all') matchTier = true;
-      else if (customerFilterTier === 'DEBT') matchTier = m.debtBalance > 0;
-      else if (customerFilterTier === 'LOYALTY') matchTier = m.loyaltyPoints > 0;
-      else matchTier = c.tier === customerFilterTier;
 
-      return matchSearch && matchTier;
-    });
+    // Determine current sub-view mode ('all' | 'debt' | 'loyalty')
+    const effectiveSubView = customerSubView !== 'all' 
+      ? customerSubView 
+      : (initialSubView === 'debt' || activeTab === 'debt_management' 
+          ? 'debt' 
+          : (initialSubView === 'loyalty' || activeTab === 'loyalty_system' 
+              ? 'loyalty' 
+              : 'all'));
 
-    // គណនាស្ថិតិសរុប
+    // គណនាស្ថិតិសរុប (Global Calculations)
     const totalCustomersCount = storeCustomers.length;
     const vipCount = storeCustomers.filter(c => c.tier === 'VIP' || c.tier === 'LOYAL').length;
     const wholesaleCount = storeCustomers.filter(c => c.tier === 'WHOLESALE').length;
@@ -27762,103 +27942,493 @@ export default function UnifiedAdminDashboard() {
       return sum + m.totalSpent;
     }, 0);
 
+    // Overdue debt calculations
+    const overdueCustomers = storeCustomers.filter(c => {
+      const m = getCustomerMetrics(c);
+      return m.debtBalance > 0 && m.isOverdue;
+    });
+    const overdueDebtorsCount = overdueCustomers.length;
+    const overdueDebtAmount = overdueCustomers.reduce((sum, c) => sum + (getCustomerMetrics(c).debtBalance), 0);
+
+    // Total Repaid Debt across all customers' debt_history
+    const totalRepaidAmount = storeCustomers.reduce((sum, c) => {
+      const history = Array.isArray(c.debt_history) ? c.debt_history : [];
+      const repaid = history
+        .filter(h => h && h.type === 'REPAYMENT')
+        .reduce((hSum, h) => hSum + (Number(h.amount) || 0), 0);
+      return sum + repaid;
+    }, 0);
+
+    // Total Credit / Debt Limit
+    const totalCreditLimit = storeCustomers.reduce((sum, c) => sum + (Number(c.debt_limit) || 200), 0);
+
+    // Loyalty Calculations
+    const estimatedPointsValue = totalLoyaltyPoints * 0.01;
+    const vipLoyaltyCount = storeCustomers.filter(c => c.tier === 'VIP' || c.tier === 'DIAMOND').length;
+
+    // ត្រងទិន្នន័យអតិថិជនតាមការស្វែងរក និងប្រភេទ Tier / Debt / Loyalty
+    const filteredCustomers = storeCustomers.filter(c => {
+      const m = getCustomerMetrics(c);
+      const matchSearch = 
+        (c.name || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+        (c.phone || '').includes(customerSearch) ||
+        (c.telegram || '').toLowerCase().includes(customerSearch.toLowerCase()) ||
+        (c.address || '').toLowerCase().includes(customerSearch.toLowerCase());
+      
+      if (!matchSearch) return false;
+
+      if (effectiveSubView === 'debt') {
+        if (customerFilterTier === 'OVERDUE') return m.debtBalance > 0 && m.isOverdue;
+        if (customerFilterTier === 'CLEAR') return m.debtBalance === 0;
+        if (customerFilterTier === 'ALL_DIRECTORY') return true;
+        // Default in debt subview is debtors
+        return m.debtBalance > 0;
+      }
+
+      if (effectiveSubView === 'loyalty') {
+        if (customerFilterTier === 'ALL_DIRECTORY') return true;
+        if (customerFilterTier === 'DIAMOND') return c.tier === 'DIAMOND';
+        if (customerFilterTier === 'VIP') return c.tier === 'VIP';
+        if (customerFilterTier === 'LOYAL') return c.tier === 'LOYAL';
+        if (customerFilterTier === 'REGULAR') return c.tier === 'REGULAR' || !c.tier;
+        // Default in loyalty subview is members with points or any non-regular tier
+        if (customerFilterTier === 'all') return true;
+        return m.loyaltyPoints > 0 || c.tier === customerFilterTier;
+      }
+
+      // Normal 'all' CRM view
+      if (customerFilterTier === 'all') return true;
+      if (customerFilterTier === 'DEBT') return m.debtBalance > 0;
+      if (customerFilterTier === 'LOYALTY') return m.loyaltyPoints > 0;
+      return c.tier === customerFilterTier;
+    });
+
     return (
       <div className="animate-in fade-in pb-16 space-y-6">
-        
-        {/* ១. Header & Action Bar */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-gray-200/80 shadow-xs">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="p-3 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-2xl text-xl shadow-md shadow-blue-500/20">
-                👥
+
+        {/* ⭐️ Top Navigation Segmented Switcher (All vs Debt vs Loyalty) ⭐️ */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-3xl border border-gray-200/80 shadow-xs">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-gray-100/90 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => {
+                setCustomerSubView('all');
+                setCustomerFilterTier('all');
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+                effectiveSubView === 'all'
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <span>👥</span>
+              <span>បញ្ជីអតិថិជនទាំងអស់</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                effectiveSubView === 'all' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+              }`}>
+                {totalCustomersCount}
               </span>
-              <div>
-                <h2 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-                  ប្រព័ន្ធគ្រប់គ្រងអតិថិជន & បំណុល <span className="text-xs font-black bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full uppercase">Full CRM & Loyalty</span>
-                </h2>
-                <p className="text-xs text-gray-500 mt-0.5">គ្រប់គ្រងព័ត៌មានអតិថិជន, បំណុលជំពាក់, ពិន្ទុរង្វាន់ Loyalty និងប្រវត្តិទិញទំនិញ</p>
-              </div>
-            </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCustomerSubView('debt');
+                setCustomerFilterTier('all');
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+                effectiveSubView === 'debt'
+                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <span>⚠️</span>
+              <span>គ្រប់គ្រងបំណុល (Debt)</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                effectiveSubView === 'debt' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700'
+              }`}>
+                {debtorsCount}
+              </span>
+              {overdueDebtorsCount > 0 && (
+                <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCustomerSubView('loyalty');
+                setCustomerFilterTier('all');
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 cursor-pointer ${
+                effectiveSubView === 'loyalty'
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-600 text-white shadow-md shadow-amber-500/20'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <span>🎁</span>
+              <span>ប្រព័ន្ធ Loyalty & Rewards</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                effectiveSubView === 'loyalty' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-800'
+              }`}>
+                {totalLoyaltyPoints.toLocaleString()} pts
+              </span>
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 pr-1">
+            {effectiveSubView === 'debt' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setManualDebtCustomerId('');
+                  setManualDebtAmount('');
+                  setManualDebtDueDate(new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10));
+                  setManualDebtNote('');
+                  setManualDebtModalOpen(true);
+                }}
+                className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-md shadow-rose-600/30 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>➕</span> កត់ត្រាការជំពាក់ថ្មី
+              </button>
+            )}
+
+            {effectiveSubView === 'loyalty' && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (storeCustomers.length > 0) {
+                    const first = storeCustomers[0];
+                    setLoyaltyAdjustCustomer(first);
+                    setLoyaltyPointsDelta('');
+                    setLoyaltyAdjustType('ADD');
+                    setLoyaltyAdjustReason('ប្រគល់ពិន្ទុរង្វាន់ពិសេស (Special Bonus)');
+                    setLoyaltyAdjustModalOpen(true);
+                  }
+                }}
+                className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-md shadow-amber-600/30 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>🎁</span> ផ្តល់/កែពិន្ទុរង្វាន់
+              </button>
+            )}
+
             <button
               type="button"
               onClick={exportCustomersToCSV}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 border border-gray-200 shadow-2xs cursor-pointer"
+              className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 border border-gray-200 shadow-2xs cursor-pointer"
+              title="នាំចេញទិន្នន័យជា Excel"
             >
-              <span>📥</span> នាំចេញ Excel / CSV
+              <span>📥</span> នាំចេញ Excel
             </button>
+
             <button
               type="button"
               onClick={openCreateCustomerModal}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 rounded-2xl text-xs font-black shadow-lg shadow-blue-600/30 transition transform hover:scale-[1.02] active:scale-95 flex items-center gap-2 cursor-pointer"
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-md shadow-blue-600/25 transition flex items-center gap-1.5 cursor-pointer"
             >
-              <span className="text-base">➕</span> បង្កើតអតិថិជនថ្មី
+              <span>➕</span> អតិថិជនថ្មី
             </button>
           </div>
         </div>
-
-        {/* ២. កាតស្ថិតិអតិថិជនសំខាន់ៗ (KPIs 6 Cards) */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
-          <div className="bg-gradient-to-br from-blue-50/80 to-white p-4.5 rounded-3xl border border-blue-100 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-blue-900 uppercase">អតិថិជនសរុប</span>
-              <span className="w-7 h-7 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-black">👥</span>
+        
+        {/* ១. Header Banner (Dynamically adapted by view) */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-gray-200/80 shadow-xs">
+          <div>
+            <div className="flex items-center gap-3">
+              {effectiveSubView === 'debt' ? (
+                <span className="p-3 bg-gradient-to-tr from-rose-600 to-red-600 text-white rounded-2xl text-xl shadow-md shadow-rose-500/20">
+                  ⚠️
+                </span>
+              ) : effectiveSubView === 'loyalty' ? (
+                <span className="p-3 bg-gradient-to-tr from-amber-500 to-yellow-600 text-white rounded-2xl text-xl shadow-md shadow-amber-500/20">
+                  🎁
+                </span>
+              ) : (
+                <span className="p-3 bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-2xl text-xl shadow-md shadow-blue-500/20">
+                  👥
+                </span>
+              )}
+              <div>
+                <h2 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                  {effectiveSubView === 'debt' ? (
+                    <>
+                      គ្រប់គ្រងបំណុលអតិថិជន & កាលវិភាគសង{' '}
+                      <span className="text-xs font-black bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full uppercase">
+                        Debt Management & Ledger
+                      </span>
+                    </>
+                  ) : effectiveSubView === 'loyalty' ? (
+                    <>
+                      ប្រព័ន្ធពិន្ទុរង្វាន់ Loyalty & កាត VIP ឌីជីថល{' '}
+                      <span className="text-xs font-black bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full uppercase">
+                        Loyalty Program & Tiers
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      ប្រព័ន្ធគ្រប់គ្រងអតិថិជន & CRM{' '}
+                      <span className="text-xs font-black bg-blue-100 text-blue-700 px-2.5 py-0.5 rounded-full uppercase">
+                        Full CRM & Loyalty
+                      </span>
+                    </>
+                  )}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {effectiveSubView === 'debt'
+                    ? 'តាមដានបំណុលជំពាក់សរុប, ថ្ងៃកំណត់សង, ចេញវិក្កយបត្របំណុល (Statement of Account) & ផ្ញើសាររំលឹក'
+                    : effectiveSubView === 'loyalty'
+                    ? 'សន្សំពិន្ទុពីការទិញ, ប្តូរជាការបញ្ចុះតម្លៃក្នុង POS, ចេញកាត VIP ឌីជីថល និងប្រវត្តិពិន្ទុ'
+                    : 'គ្រប់គ្រងព័ត៌មានអតិថិជន, បំណុលជំពាក់, ពិន្ទុរង្វាន់ Loyalty និងប្រវត្តិទិញទំនិញ'}
+                </p>
+              </div>
             </div>
-            <p className="text-2xl font-black text-blue-950 mt-2">{totalCustomersCount}</p>
-            <p className="text-[10px] text-gray-400 font-bold mt-0.5">បានចុះឈ្មោះក្នុងប្រព័ន្ធ</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-amber-50/80 to-white p-4.5 rounded-3xl border border-amber-100 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-amber-900 uppercase">VIP & ស្មោះត្រង់</span>
-              <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-black">🥇</span>
-            </div>
-            <p className="text-2xl font-black text-amber-950 mt-2">{vipCount}</p>
-            <p className="text-[10px] text-amber-600 font-bold mt-0.5">បញ្ចុះតម្លៃពិសេស</p>
-          </div>
-
-          {/* ⚠️ Total Unpaid Debt KPI */}
-          <div className="bg-gradient-to-br from-rose-50 to-white p-4.5 rounded-3xl border-2 border-rose-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-rose-900 uppercase">បំណុលមិនទាន់ទូទាត់</span>
-              <span className="w-7 h-7 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xs font-black">⚠️</span>
-            </div>
-            <p className="text-2xl font-black text-rose-600 mt-2">${totalDebtBalance.toFixed(2)}</p>
-            <p className="text-[10px] text-rose-700 font-bold mt-0.5">{debtorsCount} នាក់កំពុងជំពាក់</p>
-          </div>
-
-          {/* 🎁 Loyalty Points in circulation */}
-          <div className="bg-gradient-to-br from-yellow-50 to-white p-4.5 rounded-3xl border border-yellow-200 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-amber-900 uppercase">ពិន្ទុ Loyalty សរុប</span>
-              <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-black">🎁</span>
-            </div>
-            <p className="text-2xl font-black text-amber-700 mt-2">{totalLoyaltyPoints.toLocaleString()}</p>
-            <p className="text-[10px] text-amber-800 font-bold mt-0.5">{loyaltyMembersCount} នាក់មានពិន្ទុ</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-purple-50/80 to-white p-4.5 rounded-3xl border border-purple-100 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-purple-900 uppercase">ម៉ូយបោះដុំ</span>
-              <span className="w-7 h-7 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-black">💼</span>
-            </div>
-            <p className="text-2xl font-black text-purple-950 mt-2">{wholesaleCount}</p>
-            <p className="text-[10px] text-purple-600 font-bold mt-0.5">ទិញបរិមាណច្រើន</p>
-          </div>
-
-          <div className="bg-gradient-to-br from-emerald-50/80 to-white p-4.5 rounded-3xl border border-emerald-100 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-emerald-900 uppercase">ចំណូលសរុប</span>
-              <span className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-black">💰</span>
-            </div>
-            <p className="text-2xl font-black text-emerald-950 mt-2">${lifetimeRevenue.toFixed(2)}</p>
-            <p className="text-[10px] text-emerald-600 font-bold mt-0.5">Lifetime Value</p>
           </div>
         </div>
 
-        {/* ៣. របារស្វែងរក & តម្រង (Search & Filters) */}
+        {/* 🚨 Overdue Debt Alert Banner (Debt view only, when overdue debtors exist) */}
+        {effectiveSubView === 'debt' && overdueDebtorsCount > 0 && (
+          <div className="bg-gradient-to-r from-rose-600 via-rose-700 to-red-800 text-white p-5 rounded-3xl shadow-xl shadow-rose-900/20 border border-rose-500/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in slide-in-from-top-2">
+            <div className="flex items-start gap-3.5">
+              <span className="p-3 bg-white/20 rounded-2xl text-2xl backdrop-blur-xs shrink-0">
+                🚨
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-black text-lg tracking-tight">
+                    មានអតិថិជន {overdueDebtorsCount} នាក់បានហួសកាលកំណត់សងបំណុល!
+                  </h4>
+                  <span className="bg-rose-900/60 text-rose-200 border border-rose-400/40 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                    សរុប ${overdueDebtAmount.toFixed(2)}
+                  </span>
+                </div>
+                <p className="text-xs text-rose-100 font-medium mt-1">
+                  សូមទាក់ទងទារបំណុល ឬចុចផ្ញើសាររំលឹក (Telegram / Call) ដើម្បីតាមដានលំហូរសាច់ប្រាក់ហាង។
+                </p>
+
+                {/* Quick overdue debtor list */}
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  {overdueCustomers.slice(0, 3).map(oc => {
+                    const m = getCustomerMetrics(oc);
+                    return (
+                      <div key={oc.id} className="bg-white/15 backdrop-blur-xs rounded-xl px-2.5 py-1 text-xs flex items-center gap-2 border border-white/20">
+                        <span className="font-black text-white">{oc.name}</span>
+                        <span className="text-rose-200 font-black">(${m.debtBalance.toFixed(2)})</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDebtReminderCustomer(oc);
+                            setDebtReminderModalOpen(true);
+                          }}
+                          className="bg-white text-rose-700 hover:bg-rose-50 text-[10px] font-black px-2 py-0.5 rounded-lg shadow-xs transition cursor-pointer"
+                        >
+                          💬 រំលឹក
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {overdueCustomers.length > 3 && (
+                    <span className="text-xs text-rose-200 font-bold">
+                      +{overdueCustomers.length - 3} នាក់ទៀត...
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ២. កាតស្ថិតិ KPIs តាមទម្រង់ Sub-view (Dynamic KPI Grid) */}
+        {effectiveSubView === 'debt' ? (
+          /* DEBT KPIs (4 Focused Cards) */
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="bg-gradient-to-br from-rose-50 to-white p-5 rounded-3xl border-2 border-rose-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-rose-900 uppercase">បំណុលមិនទាន់ទូទាត់</span>
+                <span className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-sm font-black">⚠️</span>
+              </div>
+              <p className="text-3xl font-black text-rose-600 mt-2">${totalDebtBalance.toFixed(2)}</p>
+              <p className="text-[11px] text-rose-700 font-bold mt-0.5">{debtorsCount} នាក់កំពុងជំពាក់</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-red-50 to-white p-5 rounded-3xl border-2 border-red-300 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-red-900 uppercase">បំណុលហួសកំណត់</span>
+                <span className="w-8 h-8 rounded-xl bg-red-100 text-red-600 flex items-center justify-center text-sm font-black">🚨</span>
+              </div>
+              <p className="text-3xl font-black text-red-700 mt-2">${overdueDebtAmount.toFixed(2)}</p>
+              <p className="text-[11px] text-red-700 font-bold mt-0.5">{overdueDebtorsCount} នាក់ហួសកាលកំណត់</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-emerald-50 to-white p-5 rounded-3xl border border-emerald-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-emerald-900 uppercase">បានសងត្រឡប់រួច</span>
+                <span className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-black">💵</span>
+              </div>
+              <p className="text-3xl font-black text-emerald-700 mt-2">${totalRepaidAmount.toFixed(2)}</p>
+              <p className="text-[11px] text-emerald-700 font-bold mt-0.5">ពីប្រវត្តិសងបំណុលទាំងអស់</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-50 to-white p-5 rounded-3xl border border-blue-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-blue-900 uppercase">ទំហំឥណទានផ្តល់ជូន</span>
+                <span className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-black">🛡️</span>
+              </div>
+              <p className="text-3xl font-black text-blue-950 mt-2">${totalCreditLimit.toFixed(2)}</p>
+              <p className="text-[11px] text-blue-600 font-bold mt-0.5">Credit Limit អតិបរមាអនុញ្ញាត</p>
+            </div>
+          </div>
+        ) : effectiveSubView === 'loyalty' ? (
+          /* LOYALTY KPIs (4 Focused Cards) */
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="bg-gradient-to-br from-amber-50 to-white p-5 rounded-3xl border-2 border-amber-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-amber-900 uppercase">ពិន្ទុក្នុងចរន្តសរុប</span>
+                  <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-black">🎁</span>
+                </div>
+                <p className="text-3xl font-black text-amber-700 mt-2">{totalLoyaltyPoints.toLocaleString()} <span className="text-xs font-bold text-amber-600">pts</span></p>
+                <p className="text-[11px] text-amber-800 font-bold mt-0.5">{loyaltyMembersCount} នាក់មានពិន្ទុ</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-50 to-white p-5 rounded-3xl border border-purple-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-purple-900 uppercase">សមាជិក VIP & Diamond</span>
+                  <span className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-sm font-black">🥇</span>
+                </div>
+                <p className="text-3xl font-black text-purple-950 mt-2">{vipLoyaltyCount} <span className="text-xs font-bold text-purple-600">នាក់</span></p>
+                <p className="text-[11px] text-purple-600 font-bold mt-0.5">បញ្ចុះតម្លៃ 10% - 15%</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-50 to-white p-5 rounded-3xl border border-emerald-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-emerald-900 uppercase">តម្លៃពិន្ទុជាសាច់ប្រាក់</span>
+                  <span className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-black">💰</span>
+                </div>
+                <p className="text-3xl font-black text-emerald-700 mt-2">${estimatedPointsValue.toFixed(2)}</p>
+                <p className="text-[11px] text-emerald-600 font-bold mt-0.5">100 pts = $1.00 កាត់កងវិក្កយបត្រ</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-indigo-50 to-white p-5 rounded-3xl border border-indigo-200 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-indigo-900 uppercase">បញ្ចុះតម្លៃអតិបរមា</span>
+                  <span className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-black">💎</span>
+                </div>
+                <p className="text-3xl font-black text-indigo-950 mt-2">15% <span className="text-xs font-bold text-indigo-600">Off</span></p>
+                <p className="text-[11px] text-indigo-600 font-bold mt-0.5">កម្រិត Diamond VIP</p>
+              </div>
+            </div>
+
+            {/* Loyalty Tiers Matrix Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="bg-gradient-to-br from-gray-50 to-white p-4.5 rounded-3xl border border-gray-200/80 shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-black text-gray-700 uppercase">🥉 Regular Member</span>
+                  <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full font-black">0% Off</span>
+                </div>
+                <p className="text-xs text-gray-500 font-bold">កម្រិតធម្មតា (0 - 99 ពិន្ទុ)</p>
+                <div className="mt-3 text-[11px] text-gray-600 space-y-1">
+                  <p className="flex items-center gap-1.5 font-bold">✓ រាល់ការទិញ $1 ទទួលបាន 1 ពិន្ទុ</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ ប្តូរពិន្ទុកាត់កងវិក្កយបត្រ POS បាន</p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-50/70 to-white p-4.5 rounded-3xl border border-emerald-200/80 shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-black text-emerald-800 uppercase">🥈 Loyal Member</span>
+                  <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-black">5% Off</span>
+                </div>
+                <p className="text-xs text-emerald-600 font-bold">អតិថិជនស្មោះត្រង់ (100 - 299 ពិន្ទុ)</p>
+                <div className="mt-3 text-[11px] text-emerald-800 space-y-1">
+                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃ 5% លើគ្រប់វិក្កយបត្រ</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ រាល់ការទិញ $1 ទទួលបាន 1.2 ពិន្ទុ</p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-amber-50/70 to-white p-4.5 rounded-3xl border border-amber-200/80 shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-black text-amber-800 uppercase">🥇 VIP Member</span>
+                  <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black">10% Off</span>
+                </div>
+                <p className="text-xs text-amber-700 font-bold">អតិថិជន VIP (300 - 999 ពិន្ទុ)</p>
+                <div className="mt-3 text-[11px] text-amber-900 space-y-1">
+                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃ 10% ស្វ័យប្រវត្តក្នុង POS</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ ទទួលបានកាតសមាជិក VIP ឌីជីថល</p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-indigo-50/70 to-white p-4.5 rounded-3xl border border-indigo-200/80 shadow-xs">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-black text-indigo-800 uppercase">💎 Diamond VIP</span>
+                  <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-black">15% Off</span>
+                </div>
+                <p className="text-xs text-indigo-600 font-bold">កម្រិតពេជ្រកំពូល (1,000+ ពិន្ទុ)</p>
+                <div className="mt-3 text-[11px] text-indigo-900 space-y-1">
+                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃពិសេស 15%</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ សេវាដឹកជញ្ជូនឥតគិតថ្លៃ & អាទិភាព</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ALL CUSTOMERS CRM KPIs (6 Standard Cards) */
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
+            <div className="bg-gradient-to-br from-blue-50/80 to-white p-4.5 rounded-3xl border border-blue-100 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-blue-900 uppercase">អតិថិជនសរុប</span>
+                <span className="w-7 h-7 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-black">👥</span>
+              </div>
+              <p className="text-2xl font-black text-blue-950 mt-2">{totalCustomersCount}</p>
+              <p className="text-[10px] text-gray-400 font-bold mt-0.5">បានចុះឈ្មោះក្នុងប្រព័ន្ធ</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-amber-50/80 to-white p-4.5 rounded-3xl border border-amber-100 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-amber-900 uppercase">VIP & ស្មោះត្រង់</span>
+                <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-black">🥇</span>
+              </div>
+              <p className="text-2xl font-black text-amber-950 mt-2">{vipCount}</p>
+              <p className="text-[10px] text-amber-600 font-bold mt-0.5">បញ្ចុះតម្លៃពិសេស</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-rose-50 to-white p-4.5 rounded-3xl border-2 border-rose-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-rose-900 uppercase">បំណុលមិនទាន់ទូទាត់</span>
+                <span className="w-7 h-7 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xs font-black">⚠️</span>
+              </div>
+              <p className="text-2xl font-black text-rose-600 mt-2">${totalDebtBalance.toFixed(2)}</p>
+              <p className="text-[10px] text-rose-700 font-bold mt-0.5">{debtorsCount} នាក់កំពុងជំពាក់</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-yellow-50 to-white p-4.5 rounded-3xl border border-yellow-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-amber-900 uppercase">ពិន្ទុ Loyalty សរុប</span>
+                <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-black">🎁</span>
+              </div>
+              <p className="text-2xl font-black text-amber-700 mt-2">{totalLoyaltyPoints.toLocaleString()}</p>
+              <p className="text-[10px] text-amber-800 font-bold mt-0.5">{loyaltyMembersCount} នាក់មានពិន្ទុ</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-purple-50/80 to-white p-4.5 rounded-3xl border border-purple-100 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-purple-900 uppercase">ម៉ូយបោះដុំ</span>
+                <span className="w-7 h-7 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-black">💼</span>
+              </div>
+              <p className="text-2xl font-black text-purple-950 mt-2">{wholesaleCount}</p>
+              <p className="text-[10px] text-purple-600 font-bold mt-0.5">ទិញបរិមាណច្រើន</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-emerald-50/80 to-white p-4.5 rounded-3xl border border-emerald-100 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-emerald-900 uppercase">ចំណូលសរុប</span>
+                <span className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-black">💰</span>
+              </div>
+              <p className="text-2xl font-black text-emerald-950 mt-2">${lifetimeRevenue.toFixed(2)}</p>
+              <p className="text-[10px] text-emerald-600 font-bold mt-0.5">Lifetime Value</p>
+            </div>
+          </div>
+        )}
+
+        {/* ៣. របារស្វែងរក & តម្រង (Search & Tailored Filters) */}
         <div className="bg-white p-4 rounded-3xl border border-gray-200/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
           <div className="relative w-full md:w-80">
             <input
@@ -27881,37 +28451,94 @@ export default function UnifiedAdminDashboard() {
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-            {[
-              { id: 'all', label: 'ទាំងអស់', count: storeCustomers.length },
-              { id: 'DEBT', label: '⚠️ កំពុងជំពាក់', count: debtorsCount, highlight: 'rose' },
-              { id: 'LOYALTY', label: '🎁 ពិន្ទុ Loyalty', count: loyaltyMembersCount, highlight: 'amber' },
-              { id: 'VIP', label: '🥇 VIP', count: storeCustomers.filter(c => c.tier === 'VIP').length },
-              { id: 'WHOLESALE', label: '💼 បោះដុំ', count: storeCustomers.filter(c => c.tier === 'WHOLESALE').length },
-              { id: 'LOYAL', label: '🥈 ស្មោះត្រង់', count: storeCustomers.filter(c => c.tier === 'LOYAL').length },
-              { id: 'REGULAR', label: '🥉 ទូទៅ', count: storeCustomers.filter(c => c.tier === 'REGULAR').length },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setCustomerFilterTier(tab.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-                  customerFilterTier === tab.id
-                    ? tab.highlight === 'rose'
-                      ? 'bg-rose-600 text-white shadow-md shadow-rose-500/20'
-                      : tab.highlight === 'amber'
-                        ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
-                        : 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                  customerFilterTier === tab.id ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {tab.count}
-                </span>
-              </button>
-            ))}
+            {effectiveSubView === 'debt' ? (
+              [
+                { id: 'all', label: '⚠️ ជំពាក់ទាំងអស់', count: debtorsCount, highlight: 'rose' },
+                { id: 'OVERDUE', label: '🚨 ហួសកាលកំណត់', count: overdueDebtorsCount, highlight: 'red' },
+                { id: 'CLEAR', label: '✅ គ្មានបំណុល', count: totalCustomersCount - debtorsCount, highlight: 'emerald' },
+                { id: 'ALL_DIRECTORY', label: '👥 បញ្ជីទាំងអស់', count: totalCustomersCount },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setCustomerFilterTier(tab.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                    customerFilterTier === tab.id
+                      ? tab.highlight === 'red'
+                        ? 'bg-red-700 text-white shadow-md shadow-red-700/20'
+                        : tab.highlight === 'emerald'
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                        : 'bg-rose-600 text-white shadow-md shadow-rose-500/20'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    customerFilterTier === tab.id ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))
+            ) : effectiveSubView === 'loyalty' ? (
+              [
+                { id: 'all', label: '🎁 សមាជិកទាំងអស់', count: totalCustomersCount, highlight: 'amber' },
+                { id: 'DIAMOND', label: '💎 Diamond (15%)', count: storeCustomers.filter(c => c.tier === 'DIAMOND').length },
+                { id: 'VIP', label: '🥇 VIP (10%)', count: storeCustomers.filter(c => c.tier === 'VIP').length },
+                { id: 'LOYAL', label: '🥈 Loyal (5%)', count: storeCustomers.filter(c => c.tier === 'LOYAL').length },
+                { id: 'REGULAR', label: '🥉 Regular (0%)', count: storeCustomers.filter(c => c.tier === 'REGULAR' || !c.tier).length },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setCustomerFilterTier(tab.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                    customerFilterTier === tab.id
+                      ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    customerFilterTier === tab.id ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))
+            ) : (
+              [
+                { id: 'all', label: 'ទាំងអស់', count: storeCustomers.length },
+                { id: 'DEBT', label: '⚠️ កំពុងជំពាក់', count: debtorsCount, highlight: 'rose' },
+                { id: 'LOYALTY', label: '🎁 ពិន្ទុ Loyalty', count: loyaltyMembersCount, highlight: 'amber' },
+                { id: 'VIP', label: '🥇 VIP', count: storeCustomers.filter(c => c.tier === 'VIP').length },
+                { id: 'WHOLESALE', label: '💼 បោះដុំ', count: storeCustomers.filter(c => c.tier === 'WHOLESALE').length },
+                { id: 'LOYAL', label: '🥈 ស្មោះត្រង់', count: storeCustomers.filter(c => c.tier === 'LOYAL').length },
+                { id: 'REGULAR', label: '🥉 ទូទៅ', count: storeCustomers.filter(c => c.tier === 'REGULAR').length },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setCustomerFilterTier(tab.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                    customerFilterTier === tab.id
+                      ? tab.highlight === 'rose'
+                        ? 'bg-rose-600 text-white shadow-md shadow-rose-500/20'
+                        : tab.highlight === 'amber'
+                          ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
+                          : 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    customerFilterTier === tab.id ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
@@ -28114,6 +28741,52 @@ export default function UnifiedAdminDashboard() {
                               </button>
                             )}
 
+                            {/* ប៊ូតុងវិក្កយបត្របំណុល (Statement of Account Ledger) */}
+                            {metric.debtBalance > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDebtCustomerForLedger(c);
+                                  setDebtLedgerModalOpen(true);
+                                }}
+                                title="មើលប្រវត្តិជំពាក់ & សង (Statement of Account)"
+                                className="px-2.5 py-1 text-xs font-black text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                              >
+                                <span>📜</span>
+                                <span>វិក្កយបត្រ</span>
+                              </button>
+                            )}
+
+                            {/* ប៊ូតុងផ្ញើសាររំលឹកបំណុល (Debt Reminder Message) */}
+                            {metric.debtBalance > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDebtReminderCustomer(c);
+                                  setDebtReminderModalOpen(true);
+                                }}
+                                title="ផ្ញើសាររំលឹកបំណុលតាម Telegram / Phone"
+                                className="px-2 py-1 text-xs font-black text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                              >
+                                <span>💬</span>
+                                <span>រំលឹក</span>
+                              </button>
+                            )}
+
+                            {/* ប៊ូតុងកាតសមាជិក VIP ឌីជីថល (Digital VIP Member Card) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDigitalCardCustomer(c);
+                                setDigitalCardModalOpen(true);
+                              }}
+                              title="បង្ហាញកាតសមាជិក VIP ឌីជីថល (Digital Member Card)"
+                              className="px-2 py-1 text-xs font-black text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                            >
+                              <span>🪪</span>
+                              <span>កាត VIP</span>
+                            </button>
+
                             {/* ប៊ូតុងកែពិន្ទុ Loyalty (Adjust Points Button) */}
                             <button
                               type="button"
@@ -28129,6 +28802,19 @@ export default function UnifiedAdminDashboard() {
                             >
                               <span>🎁</span>
                               <span>កែពិន្ទុ</span>
+                            </button>
+
+                            {/* ប៊ូតុងប្រវត្តិពិន្ទុ Loyalty (Points History Ledger) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPointsHistoryCustomer(c);
+                                setPointsHistoryModalOpen(true);
+                              }}
+                              title="មើលប្រវត្តិពិន្ទុ Loyalty លម្អិត (Points Ledger)"
+                              className="p-1.5 text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-xl transition cursor-pointer"
+                            >
+                              ⭐
                             </button>
 
                             {/* មើលប្រវត្តិទិញ */}
@@ -28930,6 +29616,685 @@ export default function UnifiedAdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* ⭐️ MODAL កត់ត្រាការជំពាក់ដោយដៃ (MANUAL DEBT CHARGE MODAL) ⭐️ */}
+        {manualDebtModalOpen && (
+          <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-rose-50 to-orange-50/50">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2.5 bg-rose-600 text-white rounded-2xl text-base shadow-xs">➕</span>
+                  <div>
+                    <h3 className="font-black text-gray-900 text-base">កត់ត្រាការជំពាក់ថ្មី</h3>
+                    <p className="text-[11px] text-gray-500 font-bold">Manual Debt Charge / Extension</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualDebtModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex items-center justify-center text-sm font-black transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleManualAddDebtSubmit} className="p-6 space-y-4">
+                {/* Select Customer */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                    ជ្រើសរើសអតិថិជន <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={manualDebtCustomerId}
+                    onChange={(e) => {
+                      setManualDebtCustomerId(e.target.value);
+                      const sel = storeCustomers.find(c => c.id === e.target.value);
+                      if (sel && sel.debt_due_date) {
+                        setManualDebtDueDate(sel.debt_due_date);
+                      }
+                    }}
+                    className="w-full p-3 rounded-2xl border-2 border-gray-200 focus:border-rose-500 font-bold text-xs text-gray-800 outline-none bg-white"
+                  >
+                    <option value="">-- សូមជ្រើសរើសអតិថិជន --</option>
+                    {storeCustomers.map(c => {
+                      const m = getCustomerMetrics(c);
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.phone || 'គ្មានលេខ'}) • បំណុលបច្ចុប្បន្ន: ${m.debtBalance.toFixed(2)}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Amount input */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                    ចំនួនទឹកប្រាក់ជំពាក់ ($) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    value={manualDebtAmount}
+                    onChange={(e) => setManualDebtAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full text-2xl font-black p-3.5 rounded-2xl border-2 border-gray-300 focus:border-rose-500 outline-none"
+                  />
+                  <div className="flex gap-2 mt-2">
+                    {[10, 20, 50, 100, 200].map(amt => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setManualDebtAmount(amt.toString())}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-2.5 py-1 rounded-lg transition"
+                      >
+                        ${amt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Due Date */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                    កាលបរិច្ឆេទកំណត់សង (Due Date)
+                  </label>
+                  <input
+                    type="date"
+                    value={manualDebtDueDate}
+                    onChange={(e) => setManualDebtDueDate(e.target.value)}
+                    className="w-full p-3 rounded-2xl border-2 border-gray-200 focus:border-rose-500 font-bold text-xs text-gray-800 outline-none"
+                  />
+                </div>
+
+                {/* Note */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                    កំណត់ចំណាំ / មូលហេតុ
+                  </label>
+                  <input
+                    type="text"
+                    value={manualDebtNote}
+                    onChange={(e) => setManualDebtNote(e.target.value)}
+                    placeholder="ឧ. ដកទំនិញស្បែកជើង 2 គូជំពាក់..."
+                    className="w-full p-3 rounded-2xl border-2 border-gray-200 focus:border-rose-500 font-bold text-xs text-gray-800 outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setManualDebtModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-black text-gray-600 hover:bg-gray-100 transition cursor-pointer"
+                  >
+                    បោះបង់
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-md shadow-rose-600/30 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>✓</span> រក្សាទុកការជំពាក់
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ⭐️ MODAL របាយការណ៍បំណុលអតិថិជន (STATEMENT OF ACCOUNT & DEBT LEDGER) ⭐️ */}
+        {debtLedgerModalOpen && selectedDebtCustomerForLedger && (() => {
+          const c = selectedDebtCustomerForLedger;
+          const m = getCustomerMetrics(c);
+          const history = c.debt_history || [];
+          return (
+            <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-rose-50 via-orange-50/40 to-white shrink-0">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2.5 bg-rose-600 text-white rounded-2xl text-lg shadow-md shadow-rose-500/20">
+                      📜
+                    </span>
+                    <div>
+                      <h3 className="font-black text-gray-900 text-base flex items-center gap-2">
+                        របាយការណ៍បំណុល (Statement of Account)
+                      </h3>
+                      <p className="text-[11px] text-gray-500 font-bold">
+                        {c.name} • {c.phone || 'គ្មានលេខ'} • Limit: ${m.debtLimit.toFixed(0)}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDebtLedgerModalOpen(false);
+                      setSelectedDebtCustomerForLedger(null);
+                    }}
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex items-center justify-center text-sm font-black transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                  {/* Balance Overview Card */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">បំណុលនៅសល់បច្ចុប្បន្ន</span>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-2xl font-black text-rose-400 font-mono">${m.debtBalance.toFixed(2)}</span>
+                        <span className="text-xs text-slate-400 font-bold">({Math.round(m.debtBalance * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
+                      </div>
+                    </div>
+                    {m.debtDueDate && (
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">កាលបរិច្ឆេទសងត្រឹម</span>
+                        <span className={`text-xs font-black ${m.isOverdue ? 'text-rose-400 animate-pulse' : 'text-slate-200'}`}>
+                          {m.debtDueDate} {m.isOverdue ? '🚨 ហួសកាលកំណត់!' : ''}
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handlePrintDebtLedgerSlip(c)}
+                      className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer border border-white/20"
+                    >
+                      <span>🖨️</span> បោះពុម្ពប័ណ្ណ Statement (80mm)
+                    </button>
+                  </div>
+
+                  {/* History Ledger Table */}
+                  <div>
+                    <h4 className="text-xs font-black text-gray-700 uppercase tracking-wide mb-2 flex items-center justify-between">
+                      <span>ប្រវត្តិប្រតិបត្តិការ ({history.length})</span>
+                      <span className="text-[10px] text-gray-400 lowercase font-medium">sort by newest</span>
+                    </h4>
+
+                    {history.length === 0 ? (
+                      <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                        <p className="text-xs font-bold">មិនទាន់មានប្រវត្តិជំពាក់ ឬសងបំណុលឡើយ</p>
+                      </div>
+                    ) : (
+                      <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-2xs">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-gray-50 text-gray-500 uppercase font-black text-[10px]">
+                            <tr>
+                              <th className="px-3.5 py-2.5">កាលបរិច្ឆេទ</th>
+                              <th className="px-3.5 py-2.5">ប្រភេទ</th>
+                              <th className="px-3.5 py-2.5">ទឹកប្រាក់</th>
+                              <th className="px-3.5 py-2.5">នៅសល់</th>
+                              <th className="px-3.5 py-2.5">កំណត់ចំណាំ</th>
+                              <th className="px-3.5 py-2.5 text-right">បុគ្គលិក</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 font-mono">
+                            {history.map((h, idx) => (
+                              <tr key={h.id || idx} className="hover:bg-gray-50/80 transition font-sans">
+                                <td className="px-3.5 py-2 text-[11px] text-gray-600">
+                                  {new Date(h.date).toLocaleDateString('km-KH')}
+                                </td>
+                                <td className="px-3.5 py-2">
+                                  {h.type === 'CHARGE' ? (
+                                    <span className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md font-black text-[10px] border border-rose-200">
+                                      📦 ជំពាក់
+                                    </span>
+                                  ) : (
+                                    <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-black text-[10px] border border-emerald-200">
+                                      💵 សង
+                                    </span>
+                                  )}
+                                </td>
+                                <td className={`px-3.5 py-2 font-mono font-black ${h.type === 'CHARGE' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                  {h.type === 'CHARGE' ? '+' : '-'}${parseFloat(h.amount || 0).toFixed(2)}
+                                </td>
+                                <td className="px-3.5 py-2 font-mono font-black text-slate-800">
+                                  ${parseFloat(h.remaining_balance || 0).toFixed(2)}
+                                </td>
+                                <td className="px-3.5 py-2 text-[11px] text-gray-600 max-w-[150px] truncate" title={h.note}>
+                                  {h.note || '-'}
+                                </td>
+                                <td className="px-3.5 py-2 text-right text-[10px] text-gray-400">
+                                  {h.recorded_by || 'Staff'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDebtRepayCustomer({ ...c, debt_balance: m.debtBalance });
+                      setDebtRepayAmount(m.debtBalance.toString());
+                      setDebtRepayMethod('Cash');
+                      setDebtRepayNote('');
+                      setDebtRepayModalOpen(true);
+                      setDebtLedgerModalOpen(false);
+                    }}
+                    disabled={m.debtBalance <= 0}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                  >
+                    <span>💵</span> កត់ត្រាសងបំណុលឥឡូវនេះ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDebtLedgerModalOpen(false);
+                      setSelectedDebtCustomerForLedger(null);
+                    }}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer"
+                  >
+                    បិទផ្ទាំងនេះ
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ⭐️ MODAL កាតសមាជិក VIP ឌីជីថល (DIGITAL VIP MEMBER CARD) ⭐️ */}
+        {digitalCardModalOpen && digitalCardCustomer && (() => {
+          const c = digitalCardCustomer;
+          const m = getCustomerMetrics(c);
+          const store = getActiveStore();
+          const storeName = store?.name || storeSettings.storeName || 'SABAY LUK';
+          
+          let cardTheme = 'from-amber-600 via-yellow-600 to-amber-700 border-amber-300/40 text-amber-50';
+          let tierTitle = 'VIP MEMBER';
+          let chipColor = 'bg-amber-200 text-amber-900';
+
+          if (c.tier === 'DIAMOND' || m.calculatedTier === 'DIAMOND') {
+            cardTheme = 'from-slate-900 via-indigo-950 to-slate-900 border-indigo-400/50 text-indigo-100';
+            tierTitle = 'DIAMOND MEMBER';
+            chipColor = 'bg-indigo-300 text-indigo-950';
+          } else if (c.tier === 'WHOLESALE') {
+            cardTheme = 'from-purple-900 via-indigo-900 to-purple-950 border-purple-400/40 text-purple-100';
+            tierTitle = 'WHOLESALE VIP';
+            chipColor = 'bg-purple-200 text-purple-900';
+          } else if (c.tier === 'LOYAL') {
+            cardTheme = 'from-emerald-700 via-teal-700 to-emerald-800 border-emerald-300/40 text-emerald-50';
+            tierTitle = 'LOYAL MEMBER';
+            chipColor = 'bg-emerald-200 text-emerald-900';
+          } else {
+            cardTheme = 'from-slate-800 via-slate-700 to-slate-900 border-slate-600/40 text-slate-100';
+            tierTitle = 'STANDARD MEMBER';
+            chipColor = 'bg-slate-300 text-slate-900';
+          }
+
+          return (
+            <div className="fixed inset-0 z-[120] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🪪</span>
+                    <h3 className="font-black text-gray-900 text-sm">កាតសមាជិក VIP ឌីជីថល (Digital Member Card)</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDigitalCardModalOpen(false);
+                      setDigitalCardCustomer(null);
+                    }}
+                    className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 flex items-center justify-center text-xs font-black cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-6 flex flex-col items-center gap-5">
+                  {/* Luxury Digital Card Preview */}
+                  <div className={`w-full aspect-[1.586] rounded-3xl bg-gradient-to-tr ${cardTheme} border p-5 flex flex-col justify-between shadow-2xl relative overflow-hidden select-none`}>
+                    {/* Background Sheen & Hologram Effect */}
+                    <div className="absolute -right-16 -top-16 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                    <div className="absolute -left-16 -bottom-16 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                    {/* Top Row: Store Branding & Contactless Icon */}
+                    <div className="flex items-center justify-between relative z-10">
+                      <div>
+                        <h4 className="font-black text-sm tracking-wider uppercase drop-shadow-sm">{storeName}</h4>
+                        <span className="text-[9px] font-bold tracking-widest uppercase opacity-80">{tierTitle}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base opacity-75">📶</span>
+                        <span className="text-xs font-black px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs uppercase tracking-wider text-[9px]">
+                          {c.tier}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Middle: EMV Chip & Points Balance */}
+                    <div className="flex items-center justify-between my-2 relative z-10">
+                      <div className={`w-11 h-8 rounded-lg ${chipColor} flex items-center justify-center shadow-inner font-mono text-[9px] font-black tracking-tighter opacity-90`}>
+                        |||||
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] uppercase tracking-wider opacity-75 block font-bold">ពិន្ទុរង្វាន់ LOYALTY</span>
+                        <div className="flex items-center gap-1 font-mono font-black text-lg text-amber-300 drop-shadow-sm">
+                          <span>⭐</span> {m.loyaltyPoints.toLocaleString()} <span className="text-[10px] text-white/80">pts</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom: Customer Name, Member ID & Barcode */}
+                    <div className="flex items-end justify-between relative z-10 pt-1 border-t border-white/15">
+                      <div>
+                        <span className="text-[8px] uppercase tracking-wider opacity-70 block">MEMBER NAME</span>
+                        <h5 className="font-black text-sm tracking-wide leading-tight truncate max-w-[170px]">{c.name}</h5>
+                        <p className="text-[9px] font-mono opacity-80 mt-0.5">{c.id} • {c.phone}</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="h-6 w-24 bg-white/95 rounded px-1.5 py-0.5 flex items-center justify-center shadow-xs">
+                          <span className="font-mono text-[8px] font-black text-black tracking-widest">
+                            ||| | |||| | ||
+                          </span>
+                        </div>
+                        <span className="text-[8px] font-mono opacity-70 mt-0.5 block">SINCE {c.joined || '2026'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Perks Description */}
+                  <div className="w-full bg-gray-50 rounded-2xl p-3.5 border border-gray-200 text-xs space-y-1.5">
+                    <div className="flex justify-between font-bold">
+                      <span className="text-gray-500">អត្ថប្រយោជន៍កម្រិត:</span>
+                      <span className="text-blue-700">{c.tier} (បញ្ចុះតម្លៃ {c.discount_percent || 0}%)</span>
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span className="text-gray-500">តម្លៃទឹកប្រាក់ប្តូរបាន:</span>
+                      <span className="text-emerald-700">${(m.loyaltyPoints / 50).toFixed(2)} (ស្មើនឹង {Math.round((m.loyaltyPoints / 50) * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span className="text-gray-500">លក្ខខណ្ឌប្តូរពិន្ទុ:</span>
+                      <span className="text-gray-700">50 ពិន្ទុ = បញ្ចុះតម្លៃ $1 ក្នុង POS</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>🖨️</span> បោះពុម្ពកាត (Print Card)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDigitalCardModalOpen(false);
+                      setDigitalCardCustomer(null);
+                    }}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer"
+                  >
+                    បិទផ្ទាំង
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ⭐️ MODAL ផ្ញើសារដាស់តឿនបំណុល (DEBT REMINDER TO CUSTOMER) ⭐️ */}
+        {debtReminderModalOpen && debtReminderCustomer && (() => {
+          const c = debtReminderCustomer;
+          const m = getCustomerMetrics(c);
+          const store = getActiveStore();
+          const storeName = store?.name || storeSettings.storeName || 'SABAY LUK';
+          const storePhone = store?.phone || storeSettings.phone || '096 720 5522';
+          const reminderMsg = `ជម្រាបសួរលោក/លោកស្រី ${c.name}! 🙏\nពីហាង ${storeName} (${storePhone}) សូមរំលឹកពីការទូទាត់បំណុលចំនួន $${m.debtBalance.toFixed(2)} (${Math.round(m.debtBalance * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)${m.debtDueDate ? ` ដែលបានកំណត់សងត្រឹមថ្ងៃទី ${m.debtDueDate}` : ''}។\nលោកអ្នកអាចទូទាត់តាមរយៈ KHQR ស្កេន ឬទូទាត់ផ្ទាល់នៅហាងបាន។\nសូមអរគុណច្រើន! ✨`;
+
+          return (
+            <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-sky-50 to-blue-50/40">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2.5 bg-sky-600 text-white rounded-2xl text-base shadow-xs">✈️</span>
+                    <div>
+                      <h3 className="font-black text-gray-900 text-base">ផ្ញើសារដាស់តឿនបំណុល</h3>
+                      <p className="text-[11px] text-gray-500 font-bold">{c.name} • បំណុល: ${m.debtBalance.toFixed(2)}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDebtReminderModalOpen(false);
+                      setDebtReminderCustomer(null);
+                    }}
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex items-center justify-center text-sm font-black transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {/* Status alert */}
+                  <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200 text-xs flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-rose-700 block">បំណុលជំពាក់</span>
+                      <span className="text-xl font-black text-rose-600">${m.debtBalance.toFixed(2)}</span>
+                    </div>
+                    {m.debtDueDate && (
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold text-gray-400 block">កាលបរិច្ឆេទកំណត់</span>
+                        <span className={`font-black ${m.isOverdue ? 'text-rose-600 animate-pulse' : 'text-gray-700'}`}>
+                          {m.debtDueDate} {m.isOverdue ? '🚨 ហួសកាលកំណត់!' : ''}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Ready-to-send Message */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5 flex items-center justify-between">
+                      <span>អត្ថបទសារដាស់តឿន (Polite Khmer Template):</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof navigator !== 'undefined') {
+                            navigator.clipboard.writeText(reminderMsg);
+                            alert('✅ បានចម្លងអត្ថបទសារដាស់តឿនជោគជ័យ!');
+                          }
+                        }}
+                        className="text-blue-600 hover:underline text-[11px] font-black cursor-pointer"
+                      >
+                        📋 ចម្លងសារ (Copy)
+                      </button>
+                    </label>
+                    <textarea
+                      readOnly
+                      rows="5"
+                      value={reminderMsg}
+                      className="w-full text-xs font-bold p-3 rounded-2xl border border-gray-200 bg-gray-50 text-gray-800 outline-none leading-relaxed select-all"
+                    />
+                  </div>
+
+                  {/* Quick Action Buttons */}
+                  <div className="space-y-2 pt-1">
+                    {c.telegram && (
+                      <a
+                        href={`https://t.me/${c.telegram.replace(/^@/, '')}?text=${encodeURIComponent(reminderMsg)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-black text-xs py-3 rounded-2xl transition flex items-center justify-center gap-2 shadow-md shadow-sky-500/20"
+                      >
+                        <span>✈️</span>
+                        <span>ផ្ញើសារតាម Telegram ទៅ @{c.telegram.replace(/^@/, '')}</span>
+                      </a>
+                    )}
+                    {c.phone && (
+                      <a
+                        href={`tel:${c.phone}`}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        <span>📞</span>
+                        <span>ខលទូរស័ព្ទផ្ទាល់ទៅកាន់ {c.phone}</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDebtReminderModalOpen(false);
+                      setDebtReminderCustomer(null);
+                    }}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer"
+                  >
+                    បិទផ្ទាំង
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ⭐️ MODAL ប្រវត្តិពិន្ទុ LOYALTY (POINTS TRANSACTION LEDGER) ⭐️ */}
+        {pointsHistoryModalOpen && pointsHistoryCustomer && (() => {
+          const c = pointsHistoryCustomer;
+          const m = getCustomerMetrics(c);
+          const history = c.points_history || [];
+
+          return (
+            <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+              <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-yellow-50/50 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <span className="p-2.5 bg-amber-500 text-white rounded-2xl text-lg shadow-md shadow-amber-500/20">
+                      🎁
+                    </span>
+                    <div>
+                      <h3 className="font-black text-gray-900 text-base flex items-center gap-2">
+                        ប្រវត្តិពិន្ទុ Loyalty (Points Ledger)
+                      </h3>
+                      <p className="text-[11px] text-gray-500 font-bold">
+                        {c.name} • ពិន្ទុសរុប: {m.loyaltyPoints} pts • កម្រិត: {c.tier}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPointsHistoryModalOpen(false);
+                      setPointsHistoryCustomer(null);
+                    }}
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex items-center justify-center text-sm font-black transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                  {/* Points Overview Card */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-600 text-white flex flex-wrap items-center justify-between gap-3 shadow-md">
+                    <div>
+                      <span className="text-[10px] text-amber-100 font-bold uppercase block">ពិន្ទុបច្ចុប្បន្ន</span>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className="text-3xl font-black font-mono">⭐ {m.loyaltyPoints}</span>
+                        <span className="text-xs text-amber-100 font-bold">(ស្មើនឹង ${(m.loyaltyPoints / 50).toFixed(2)})</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoyaltyAdjustCustomer({ ...c, loyalty_points: m.loyaltyPoints });
+                        setLoyaltyPointsDelta('');
+                        setLoyaltyAdjustType('ADD');
+                        setLoyaltyAdjustReason('');
+                        setLoyaltyAdjustModalOpen(true);
+                        setPointsHistoryModalOpen(false);
+                      }}
+                      className="bg-white text-amber-900 hover:bg-amber-50 px-4 py-2 rounded-xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>➕</span> បន្ថែម / ដកពិន្ទុ
+                    </button>
+                  </div>
+
+                  {/* History Table */}
+                  <div>
+                    <h4 className="text-xs font-black text-gray-700 uppercase tracking-wide mb-2">
+                      ប្រវត្តិនៃការទទួលបាន និងប្តូរពិន្ទុ ({history.length})
+                    </h4>
+
+                    {history.length === 0 ? (
+                      <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                        <p className="text-xs font-bold">មិនទាន់មានប្រវត្តិពិន្ទុនៅឡើយទេ</p>
+                      </div>
+                    ) : (
+                      <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-2xs">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-gray-50 text-gray-500 uppercase font-black text-[10px]">
+                            <tr>
+                              <th className="px-3.5 py-2.5">កាលបរិច្ឆេទ</th>
+                              <th className="px-3.5 py-2.5">ប្រភេទ</th>
+                              <th className="px-3.5 py-2.5">ពិន្ទុ (+/-)</th>
+                              <th className="px-3.5 py-2.5">មូលហេតុ / វិក្កយបត្រ</th>
+                              <th className="px-3.5 py-2.5 text-right">បុគ្គលិក</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 font-sans">
+                            {history.map((h, idx) => (
+                              <tr key={h.id || idx} className="hover:bg-gray-50/80 transition">
+                                <td className="px-3.5 py-2 text-[11px] text-gray-600 font-mono">
+                                  {new Date(h.date).toLocaleDateString('km-KH')}
+                                </td>
+                                <td className="px-3.5 py-2">
+                                  {h.type === 'EARNED' ? (
+                                    <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-black text-[10px] border border-emerald-200">
+                                      🛍️ ពីការទិញ
+                                    </span>
+                                  ) : h.type === 'REDEEMED' ? (
+                                    <span className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md font-black text-[10px] border border-rose-200">
+                                      🎟️ បានប្តូរក្នុង POS
+                                    </span>
+                                  ) : (
+                                    <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md font-black text-[10px] border border-amber-200">
+                                      🎁 ពិន្ទុរង្វាន់/កែប្រែ
+                                    </span>
+                                  )}
+                                </td>
+                                <td className={`px-3.5 py-2 font-mono font-black ${h.points > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                  {h.points > 0 ? `+${h.points}` : h.points} pts
+                                </td>
+                                <td className="px-3.5 py-2 text-[11px] text-gray-700 max-w-[180px] truncate" title={h.note || h.reason}>
+                                  {h.note || h.reason || '-'}
+                                </td>
+                                <td className="px-3.5 py-2 text-right text-[10px] text-gray-400">
+                                  {h.recorded_by || 'Staff'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPointsHistoryModalOpen(false);
+                      setPointsHistoryCustomer(null);
+                    }}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer"
+                  >
+                    បិទផ្ទាំង
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </div>
     );
@@ -32852,6 +34217,8 @@ export default function UnifiedAdminDashboard() {
                   { id: 'analytics', name: 'វិភាគទិន្នន័យ (P&L)', icon: '📊', perm: 'analytics', iconColor: 'text-emerald-400' },
                   { id: 'expenses', name: 'កត់ត្រាចំណាយ (Expenses)', icon: '💸', perm: 'expenses', iconColor: 'text-rose-400' },
                   { id: 'customers', name: 'អតិថិជន (CRM)', icon: '👥', perm: 'customers', iconColor: 'text-teal-400' },
+                  { id: 'debt_management', name: 'គ្រប់គ្រងបំណុល (Debt)', icon: '⚠️', perm: 'customers', count: debtorsCountGlobal, highlight: 'rose', tag: overdueDebtorsCountGlobal > 0 ? `${overdueDebtorsCountGlobal} ហួសកំណត់` : undefined, iconColor: 'text-rose-400' },
+                  { id: 'loyalty_system', name: 'ប្រព័ន្ធ Loyalty & Rewards', icon: '🎁', perm: 'customers', iconColor: 'text-amber-400' },
                   { id: 'feedbacks', name: 'មតិយោបល់ (Feedbacks)', icon: '💬', perm: 'feedbacks', count: unreadFeedbacksCount, iconColor: 'text-amber-400' }
                 ]
               },
@@ -33171,6 +34538,8 @@ export default function UnifiedAdminDashboard() {
                    activeTab === 'analytics' ? 'វិភាគទិន្នន័យ P&L' :
                    activeTab === 'finance' ? 'ហិរញ្ញវត្ថុ IFRS' :
                    activeTab === 'customers' ? 'អតិថិជន CRM' :
+                   activeTab === 'debt_management' ? 'គ្រប់គ្រងបំណុល (Debt)' :
+                   activeTab === 'loyalty_system' ? 'ប្រព័ន្ធ Loyalty & Rewards' :
                    activeTab === 'expenses' ? 'កត់ត្រាចំណាយ' :
                    activeTab === 'settings' ? 'ការកំណត់ហាង' :
                    activeTab === 'upgrade_plan' ? 'ដំឡើងគម្រោង' :
@@ -33412,7 +34781,9 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'cover' && CoverManagementView()}
         {activeTab === 'orders' && OrdersView()}
         {activeTab === 'expenses' && ExpensesView()}
-        {activeTab === 'customers' && CustomersView()}
+        {activeTab === 'customers' && CustomersView('all')}
+        {activeTab === 'debt_management' && CustomersView('debt')}
+        {activeTab === 'loyalty_system' && CustomersView('loyalty')}
         {activeTab === 'feedbacks' && FeedbacksView()}
             {activeTab === 'coupons' && CouponsManagementView()}
         {activeTab === 'api' && ApiView()}
