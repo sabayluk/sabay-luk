@@ -301,7 +301,7 @@ function RegisterStoreForm() {
       // 🎁 ករណីកញ្ចប់ឥតគិតថ្លៃ (FREE PLAN): ផ្ទៀងផ្ទាត់ Gmail រួចហើយ អនុញ្ញាតឱ្យចូល Dashboard បានភ្លាមៗ
       setSuccessMsg(`🎉 ផ្ទៀងផ្ទាត់ Gmail ជោគជ័យ! ហាង "${newStore.name}" ត្រូវបានបង្កើតរួចរាល់។`);
 
-      // Telegram notification
+      // Telegram notification (Alert Super Admin ភ្លាមៗ)
       try {
         await fetch('/api/telegram', {
           method: 'POST',
@@ -309,6 +309,8 @@ function RegisterStoreForm() {
           body: JSON.stringify({
             action: 'new_store_registered',
             store: newStore,
+            plan: 'FREE LIFETIME (១៥ មុខ)',
+            price: '$0 (ឥតគិតថ្លៃ)',
             payment_status: 'FREE_GMAIL_VERIFIED'
           })
         });
@@ -322,11 +324,18 @@ function RegisterStoreForm() {
           localStorage.setItem('sabay_new_store_alert', JSON.stringify({
             action: 'new_store_registered',
             store: newStore,
+            plan: 'FREE LIFETIME (១៥ មុខ)',
+            price: '$0 (ឥតគិតថ្លៃ)',
             timestamp: Date.now()
           }));
           if ('BroadcastChannel' in window) {
             const bc = new BroadcastChannel('sabay_stores_sync');
-            bc.postMessage({ type: 'NEW_STORE_REGISTERED', store: newStore });
+            bc.postMessage({ 
+              type: 'NEW_STORE_REGISTERED', 
+              store: newStore,
+              plan: 'FREE LIFETIME (១៥ មុខ)',
+              price: '$0 (ឥតគិតថ្លៃ)'
+            });
             bc.close();
           }
         } catch (_) {}

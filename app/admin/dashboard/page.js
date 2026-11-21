@@ -34083,26 +34083,30 @@ export default function UnifiedAdminDashboard() {
           className={`fixed ${newOrderAlert ? 'top-28' : 'top-5'} right-5 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-4 rounded-3xl shadow-2xl flex items-center gap-3.5 border-2 ${
             newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl
               ? 'border-amber-400 ring-4 ring-amber-500/20 shadow-amber-500/10'
-              : 'border-blue-500 ring-4 ring-blue-500/20'
+              : 'border-emerald-400 ring-4 ring-emerald-500/20 shadow-emerald-500/10'
           } animate-in slide-in-from-top-4 max-w-md cursor-pointer hover:scale-102 transition duration-200`}
           onClick={() => {
             setActiveTab('stores');
             setNewStoreAlert(null);
           }}
         >
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-2xl shrink-0 shadow-lg shadow-orange-500/30 animate-bounce">
-            🏪
+          <div className={`w-12 h-12 rounded-2xl ${
+            newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl
+              ? 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-orange-500/30'
+              : 'bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/30'
+          } text-white flex items-center justify-center text-2xl shrink-0 shadow-lg animate-bounce`}>
+            {newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl ? '🏪' : '🎁'}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
                 newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl
                   ? 'bg-amber-400 text-slate-950'
-                  : 'bg-blue-400 text-slate-950'
+                  : 'bg-emerald-400 text-slate-950'
               }`}>
                 {newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl
                   ? '⏳ ហាងថ្មីសុំ Approve Slip'
-                  : '🎉 ហាងថ្មីបានចុះឈ្មោះ!'}
+                  : '🎉 ហាងថ្មីចុះឈ្មោះ Free Plan'}
               </span>
               <span className="text-[10px] text-slate-400">ទើបចុះឈ្មោះថ្មីៗ</span>
             </div>
@@ -34111,12 +34115,16 @@ export default function UnifiedAdminDashboard() {
               {newStoreAlert.store?.owner_name ? ` • 👤 ${newStoreAlert.store.owner_name}` : ''}
             </p>
             <p className="text-[11px] font-bold text-amber-300">
-              {newStoreAlert.plan ? `កញ្ចប់: ${newStoreAlert.plan}` : ''}
+              {newStoreAlert.plan ? `កញ្ចប់: ${newStoreAlert.plan}` : 'កញ្ចប់: FREE LIFETIME'}
               {newStoreAlert.price ? ` (${newStoreAlert.price})` : ''}
               {newStoreAlert.store?.phone ? ` • 📞 ${newStoreAlert.store.phone}` : ''}
             </p>
             <p className="text-[9px] text-amber-400/90 mt-0.5 flex items-center gap-1 font-semibold">
-              <span>👉 ចុចដើម្បីចូលទៅពិនិត្យ & អនុម័ត (Approve) ក្នុង Stores Manager</span>
+              <span>
+                {newStoreAlert.action === 'new_store_registered_pending_approval' || newStoreAlert.slipUrl
+                  ? '👉 ចុចដើម្បីចូលទៅពិនិត្យ & អនុម័ត (Approve) ក្នុង Stores Manager'
+                  : '👉 ចុចដើម្បីចូលមើលក្នុង Stores Manager (សកម្មស្វ័យប្រវត្តិ)'}
+              </span>
             </p>
           </div>
           {newStoreAlert.slipUrl && (

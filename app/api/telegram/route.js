@@ -194,25 +194,29 @@ export async function POST(request) {
       if (row.length > 0) inlineKeyboard.push(row);
     } else if (action === 'new_store_registered') {
       const st = body.store || {};
-      finalMessage = `🎉 <b>មានហាងថ្មីបានចុះឈ្មោះប្រើប្រាស់ប្រព័ន្ធ (NEW STORE REGISTERED)!</b>\n` +
+      const planName = body.plan || (st.plan === 'FREE' ? 'FREE LIFETIME (១៥ មុខ)' : (st.plan || 'FREE LIFETIME'));
+      const planPrice = body.price || '$0 (ឥតគិតថ្លៃ)';
+      finalMessage = `🎁 <b>មានហាងថ្មីចុះឈ្មោះគម្រោងឥតគិតថ្លៃ (FREE LIFETIME)!</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `🏪 <b>ឈ្មោះហាង:</b> <b>${st.name || 'ហាងថ្មី'}</b>\n` +
-        `🔗 <b>Slug / Link:</b> <code>${st.slug || 'N/A'}</code>\n` +
-        `📦 <b>កញ្ចប់សេវា (Plan):</b> <b>${st.plan || 'FREE'}</b>\n` +
+        `🔗 <b>Slug / គេហទំព័រ:</b> <code>${st.slug || 'N/A'}</code>\n` +
+        `📦 <b>កញ្ចប់សេវា (Plan):</b> <b>${planName}</b> (${planPrice})\n` +
         `👤 <b>ម្ចាស់ហាង:</b> <b>${st.owner_name || 'N/A'}</b>\n` +
-        `📧 <b>Gmail:</b> <code>${st.owner_email || 'N/A'}</code>\n` +
+        `📧 <b>Gmail:</b> <code>${st.owner_email || 'N/A'}</code> (✓ ផ្ទៀងផ្ទាត់ OTP ជោគជ័យ)\n` +
         `📞 <b>លេខទូរស័ព្ទ:</b> <code>${st.phone || 'N/A'}</code>\n` +
         (st.telegram ? `✈️ <b>Telegram:</b> @${st.telegram.replace(/^@/, '')}\n` : '') +
         `📍 <b>ទីតាំង:</b> ${st.address || 'ភ្នំពេញ'}\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
+        `🟢 <b>ស្ថានភាព:</b> <b>សកម្មភ្លាមៗ (Active - Free Plan)</b>\n` +
         `⏰ <b>កាលបរិច្ឆេទ:</b> ${new Date().toLocaleString('km-KH')}\n` +
-        `⚡ <i>គណនីហាងត្រូវបានបង្កើត និងដំណើរការក្នុងប្រព័ន្ធរួចរាល់!</i>\n\n` +
-        `🔒 <i>សារនេះផ្ញើជូនផ្ដាច់មុខតែ Super Admin ម្នាក់គត់ (Platform Master Owner)!</i>`;
+        `⚡ <i>គណនីហាងត្រូវបានបង្កើត និងដំណើរការលើ Cloud POS រួចរាល់!</i>\n\n` +
+        `🔒 <i>សារនេះជូនដំណឹងដល់ Super Admin (Sabay Luk Platform Master Owner)</i>`;
 
+      const siteBase = isValidTelegramUrl(origin) ? origin : 'https://sabayluk.com';
       inlineKeyboard = [
         [
-          { text: '🌐 មើលមុខហាង (Storefront)', url: `${origin}/store/${st.slug || ''}` },
-          { text: '📊 ផ្ទាំងគ្រប់គ្រងហាង', url: `${origin}/admin/dashboard` }
+          { text: '🌐 មើលមុខហាង (Storefront)', url: `${siteBase}/store/${st.slug || ''}` },
+          { text: '📊 ផ្ទាំងគ្រប់គ្រង Admin', url: `${siteBase}/admin/dashboard` }
         ]
       ];
     } else if (action === 'store_approved_by_admin') {
@@ -328,8 +332,14 @@ export async function POST(request) {
         text: finalMessage,
         parse_mode: 'HTML'
       };
-      if (inlineKeyboard) {
-        alertPayload.reply_markup = { inline_keyboard: inlineKeyboard };
+      if (inlineKeyboard && inlineKeyboard.length > 0) {
+        // Sanitize inline_keyboard: ensure only valid public URLs are included to avoid Telegram 400 Bad Request
+        const sanitizedKb = inlineKeyboard
+          .map(row => (Array.isArray(row) ? row.filter(btn => !btn.url || isValidTelegramUrl(btn.url)) : []))
+          .filter(row => row.length > 0);
+        if (sanitizedKb.length > 0) {
+          alertPayload.reply_markup = { inline_keyboard: sanitizedKb };
+        }
       }
 
       // 1. Send to Store Owner's Telegram
