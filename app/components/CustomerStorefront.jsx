@@ -3442,8 +3442,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         </div>
       </section>
 
-      {/* ⭐️ 4.5 CATEGORIES 1688 APP NAVIGATION (ដាក់ពីក្រោម Live Orders និងនៅលើទំនិញពេញនិយម - BACKGROUND ពណ៌ស) ⭐️ */}
-      <section className="max-w-[1440px] mx-auto px-4 sm:px-6 py-2.5">
+      {/* ⭐️ 4.5 CATEGORIES 1688 APP NAVIGATION (បង្ហាញតែលើ Mobile APP / លាក់នៅលើ Website Desktop ព្រោះមាន Sidebar រួចហើយ) ⭐️ */}
+      <section className="lg:hidden max-w-[1440px] mx-auto px-4 sm:px-6 py-2.5">
         <div className="bg-white rounded-3xl p-3.5 sm:p-4 border border-slate-100 shadow-sm">
           <div className="flex items-start gap-4 sm:gap-6 overflow-x-auto no-scrollbar py-1 px-1 scroll-smooth">
             {/* All Products Channel Button */}
