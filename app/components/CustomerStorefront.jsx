@@ -1698,10 +1698,15 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         address: scopedSettings.address || active.address || prev.address,
         themeColor: scopedSettings.themeColor || active.settings?.themeColor || prev.themeColor,
         logoUrl: scopedSettings.logoUrl || dbSettings.logoUrl || active.settings?.logoUrl || prev.logoUrl || '',
-        bankAccountName: scopedSettings.bankAccountName || (active.id === 'store_default_sabayluk' ? 'SENG SOVEASNA' : (active.owner_name || active.name)),
-        bankAccountKhr: scopedSettings.bankAccountKhr || (active.id === 'store_default_sabayluk' ? '004 500 394' : '004 500 394'),
-        bankAccountUsd: scopedSettings.bankAccountUsd || (active.id === 'store_default_sabayluk' ? '010 723 080' : (active.phone || '010 723 080')),
-        khqrImageUrl: scopedSettings.khqrImageUrl || '/khqr-aba.jpg'
+        bankAccountName: scopedSettings.bankAccountName || (active.id === 'store_default_sabayluk' ? 'SENG SOVEASNA' : (active.owner_name || active.name || '')),
+        bankAccountKhr: (active.id === 'store_default_sabayluk' ? (scopedSettings.bankAccountKhr || '004 500 394') : (scopedSettings.bankAccountKhr || '')),
+        bankAccountUsd: (active.id === 'store_default_sabayluk' ? (scopedSettings.bankAccountUsd || '010 723 080') : (scopedSettings.bankAccountUsd || active.phone || '')),
+        khqrImageUrl: (() => {
+          const isTenant = active.id !== 'store_default_sabayluk' && active.slug !== 'sabay-luk';
+          const qr = scopedSettings.khqrImageUrl || '';
+          if (isTenant && (qr === '/khqr-aba.jpg' || qr.includes('khqr-aba.jpg'))) return '';
+          return qr || (isTenant ? '' : '/khqr-aba.jpg');
+        })()
       }));
 
       // Fetch products and categories strictly for this store
@@ -5337,11 +5342,19 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                           {/* Dynamic Real QR Code Image */}
                           <div className="p-4 flex flex-col items-center justify-center bg-slate-50/50">
                             <div className="bg-white p-3 rounded-2xl border-2 border-slate-200 shadow-inner">
-                              <img 
-                                src={dynamicKhqrCode ? getKhqrQrImageUrl(dynamicKhqrCode, 320) : (storeSettings.khqrImageUrl || '/khqr-aba.jpg')} 
-                                alt="KHQR Code" 
-                                className="w-48 h-auto max-h-64 object-contain rounded-lg"
-                              />
+                              {dynamicKhqrCode || storeSettings.khqrImageUrl || (currentStore?.id === 'store_default_sabayluk' ? '/khqr-aba.jpg' : null) ? (
+                                <img 
+                                  src={dynamicKhqrCode ? getKhqrQrImageUrl(dynamicKhqrCode, 320) : (storeSettings.khqrImageUrl || '/khqr-aba.jpg')} 
+                                  alt="KHQR Code" 
+                                  className="w-48 h-auto max-h-64 object-contain rounded-lg"
+                                />
+                              ) : (
+                                <div className="w-48 h-48 flex flex-col items-center justify-center text-center p-3 text-slate-400">
+                                  <span className="text-3xl mb-1">📱</span>
+                                  <p className="text-xs font-bold text-slate-600">ហាងមិនទាន់បានដាក់ QR</p>
+                                  <p className="text-[10px] text-slate-400 mt-0.5">សូមទាក់ទងមកកាន់លេខ {storeSettings.phone || currentStore?.phone || 'ហាង'} ដើម្បីទូទាត់</p>
+                                </div>
+                              )}
                             </div>
                             <p className="text-[10px] text-slate-600 font-bold mt-2.5 flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
                               <span>⚡</span> <span>ទូទាត់ផ្ទាល់ ឬបញ្ជាក់ការបញ្ជាទិញ ដើម្បីទទួលបាន QR ស្វ័យប្រវត្ត</span>

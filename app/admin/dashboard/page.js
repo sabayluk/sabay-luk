@@ -3917,9 +3917,11 @@ export default function UnifiedAdminDashboard() {
     printWin.document.close();
   };
 
-  // ⭐️ Helper ទទួលបាន Invoice Settings តាមហាងនីមួយៗ (Per-Store Scoped Invoice Settings) ⭐️
+  // ⭐️ Helper ទទួលបាន Invoice Settings តាមហាងនីមួយៗ (Per-Store Scoped Invoice Settings - 100% Strict Tenant Isolation) ⭐️
   const getStoreScopedInvoiceSettings = (store) => {
     const storeId = store?.id || 'store_default_sabayluk';
+    const isDefault = storeId === 'store_default_sabayluk' || store?.slug === 'sabay-luk';
+    const isTenant = !isDefault;
     const dbSettings = store?.settings || {};
 
     // ១. Load ពី localStorage ជាមុន (highest priority)
@@ -3931,46 +3933,55 @@ export default function UnifiedAdminDashboard() {
       }
     }
 
-    // ២. Load storeSettings localStorage (sabay_store_settings_<id>) សម្រាប់ khqrImageUrl
+    // ២. Load storeSettings localStorage (sabay_store_settings_<id>) សម្រាប់ khqrImageUrl និង logoUrl
     let storeLocalParsed = null;
     if (typeof window !== 'undefined') {
-      const sk = localStorage.getItem(`sabay_store_settings_${storeId}`) || (storeId === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
+      const sk = localStorage.getItem(`sabay_store_settings_${storeId}`) || (isDefault ? localStorage.getItem('sabay_store_settings') : null);
       if (sk) { try { storeLocalParsed = JSON.parse(sk); } catch (_) {} }
     }
 
-    // ៣. khqrImageUrl — priority: storeLocal > dbSettings > default (ហាងអតិថិជន ទុកទំនេរឱ្យ Upload ផ្ទាល់ ហាមទាញ /khqr-aba.jpg)
-    const isTenant = store && storeId !== 'store_default_sabayluk' && store?.slug !== 'sabay-luk';
-    let khqrImageUrl = storeLocalParsed?.khqrImageUrl || dbSettings?.khqrImageUrl || (isTenant ? '' : '/khqr-aba.jpg');
-    if (isTenant && khqrImageUrl === '/khqr-aba.jpg') {
+    // ៣. khqrImageUrl — ហាងអតិថិជន ទុកទំនេរឱ្យ Upload ផ្ទាល់ ហាមដាច់ខាតមិនឱ្យទាញ /khqr-aba.jpg ឬ Sabay Luk QR
+    let khqrImageUrl = storeLocalParsed?.khqrImageUrl || localParsed?.khqrImageUrl || dbSettings?.khqrImageUrl || (isTenant ? '' : '/khqr-aba.jpg');
+    if (isTenant && (khqrImageUrl === '/khqr-aba.jpg' || khqrImageUrl.includes('khqr-aba.jpg'))) {
       khqrImageUrl = ''; // ទុកឱ្យទំនេរ ១០០% ស្របតាមការចង់បានរបស់ម្ចាស់ហាង
+    }
+
+    // ៤. logoUrl — ហាងអតិថិជន ទុកទំនេរឱ្យ Upload ផ្ទាល់ ហាមទាញ Logo ពី Sabay Luk
+    let logoUrl = storeLocalParsed?.logoUrl || localParsed?.logoUrl || dbSettings?.logoUrl || '';
+    if (isTenant && (logoUrl === '/logo.png' || logoUrl.includes('/logo.png'))) {
+      logoUrl = '';
     }
 
     if (localParsed) {
       const fixedName = (isTenant && (localParsed.storeName === 'SABAY LUK' || !localParsed.storeName))
-        ? store.name || 'ហាងរបស់ខ្ញុំ'
+        ? store?.name || 'ហាងរបស់ខ្ញុំ'
         : localParsed.storeName;
       let finalQr = localParsed.khqrImageUrl || khqrImageUrl;
-      if (isTenant && finalQr === '/khqr-aba.jpg') finalQr = '';
+      if (isTenant && (finalQr === '/khqr-aba.jpg' || finalQr.includes('khqr-aba.jpg'))) finalQr = '';
+      let finalLogo = localParsed.logoUrl || logoUrl;
+      if (isTenant && (finalLogo === '/logo.png' || finalLogo.includes('/logo.png'))) finalLogo = '';
       return {
         ...localParsed,
         storeName: fixedName,
-        phone: (isTenant && (localParsed.phone === '096 720 5522' || !localParsed.phone)) ? store.phone || '' : localParsed.phone,
-        address: (isTenant && (!localParsed.address || localParsed.address.includes('Phnom Penh, Cambodia'))) ? store.address || '' : localParsed.address,
+        phone: (isTenant && (localParsed.phone === '096 720 5522' || !localParsed.phone)) ? store?.phone || '' : localParsed.phone,
+        address: (isTenant && (!localParsed.address || localParsed.address.includes('Phnom Penh, Cambodia') || localParsed.address.includes('Street 271'))) ? store?.address || '' : localParsed.address,
+        logoUrl: finalLogo,
         khqrImageUrl: finalQr
       };
     }
 
     if (isTenant) {
       return {
-        storeName: store.name || 'ហាងរបស់ខ្ញុំ',
-        address: store.address || dbSettings?.address || '',
-        phone: store.phone || dbSettings?.phone || '',
+        storeName: store?.name || 'ហាងរបស់ខ្ញុំ',
+        address: store?.address || dbSettings?.address || '',
+        phone: store?.phone || dbSettings?.phone || '',
         title: 'OFFICIAL RECEIPT',
         exchangeRate: storeLocalParsed?.exchangeRate || dbSettings?.exchangeRate || 4100,
         cashierName: 'Admin',
         showKHR: true,
         showLogo: true,
-        khqrImageUrl: '',
+        logoUrl: logoUrl,
+        khqrImageUrl: khqrImageUrl,
         thankYouMsg: 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត',
         policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ'
       };
@@ -3984,6 +3995,7 @@ export default function UnifiedAdminDashboard() {
       cashierName: 'Admin',
       showKHR: true,
       showLogo: true,
+      logoUrl: logoUrl,
       khqrImageUrl,
       thankYouMsg: 'សូមអរគុណ! សូមអញ្ជើញមកម្តងទៀត',
       policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៣ ថ្ងៃ)'
@@ -4053,17 +4065,36 @@ export default function UnifiedAdminDashboard() {
     const dbSettings = store?.settings || {};
     const isTaxActive = normalizeEnableTax(dbSettings?.enableTax) || normalizeEnableTax(savedParsed?.enableTax);
 
-    // ⭐️ STRICT TENANT ISOLATION (ហាមទាញ Logo, ឈ្មោះហាង ឬ Brand ពី Sabay Luk មកលើហាងអតិថិជនដាច់ខាត) ⭐️
+    // ⭐️ STRICT TENANT ISOLATION (ហាមទាញ Logo, QR Code, ឈ្មោះហាង ឬ Brand ពី Sabay Luk មកលើហាងអតិថិជនដាច់ខាត) ⭐️
     const baseSettings = isDefault ? DEFAULT_STORE_SETTINGS : {
-      ...DEFAULT_STORE_SETTINGS,
       storeName: store?.name || '',
       storeSlogan: '',
       storeDescription: '',
-      logoUrl: store?.settings?.logoUrl || '',
+      logoUrl: '',
       phone: store?.phone || '',
+      phone2: '',
       telegram: store?.telegram || '',
       address: store?.address || '',
-      bankAccountName: store?.owner_name || '',
+      bankAccountName: store?.owner_name || store?.name || '',
+      bankAccountNumber: '',
+      bankAccountKhr: '',
+      bankAccountUsd: store?.phone || '',
+      khqrImageUrl: '', // ⭐️ STRICT ISOLATION: ហាម default ទៅ /khqr-aba.jpg លើហាងអតិថិជន
+      showInvoiceLogo: true,
+      showReceiptQr: true,
+      enableDeliveryFee: true,
+      deliveryPhnomPenh: '1.50',
+      deliveryProvince: '2.50',
+      freeShippingThreshold: '0',
+      enableTax: false,
+      taxRate: 10,
+      taxMode: 'exclusive',
+      vatTin: '',
+      taxLabel: 'ពន្ធអាករ (VAT 10%)',
+      policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ',
+      exchangeRate: 4100,
+      themeColor: '#ff6a00',
+      themePreset: 'orange',
       announcementText: '',
       showAnnouncement: false
     };
@@ -4100,12 +4131,27 @@ export default function UnifiedAdminDashboard() {
     }
 
     let finalBankName = merged.bankAccountName;
-    if (!isDefault && finalBankName === 'SENG SOVEASNA') {
-      finalBankName = store?.owner_name || dbSettings?.bankAccountName || '';
+    if (!isDefault && (finalBankName === 'SENG SOVEASNA' || finalBankName === 'សេង សុវាសនា')) {
+      finalBankName = store?.owner_name || store?.name || dbSettings?.bankAccountName || '';
+    }
+
+    let finalBankUsd = merged.bankAccountUsd;
+    if (!isDefault && (finalBankUsd === '010 723 080' || finalBankUsd === '010 722 280')) {
+      finalBankUsd = store?.phone || dbSettings?.phone || '';
+    }
+
+    let finalBankKhr = merged.bankAccountKhr;
+    if (!isDefault && (finalBankKhr === '004 500 394' || finalBankKhr === '004500394')) {
+      finalBankKhr = '';
+    }
+
+    let finalKhqr = merged.khqrImageUrl;
+    if (!isDefault && (finalKhqr === '/khqr-aba.jpg' || finalKhqr?.includes('khqr-aba.jpg'))) {
+      finalKhqr = ''; // ⭐️ 100% Strict Store Isolation: សម្អាត QR Sabay Luk ចោលពីហាងអតិថិជន
     }
 
     let finalLogoUrl = merged.logoUrl;
-    if (!isDefault && (finalLogoUrl === DEFAULT_STORE_SETTINGS.logoUrl || finalLogoUrl === '/logo.png')) {
+    if (!isDefault && (finalLogoUrl === DEFAULT_STORE_SETTINGS.logoUrl || finalLogoUrl === '/logo.png' || finalLogoUrl?.includes('/logo.png'))) {
       finalLogoUrl = store?.settings?.logoUrl || dbSettings?.logoUrl || '';
     }
 
@@ -4122,6 +4168,9 @@ export default function UnifiedAdminDashboard() {
       storeSlogan: finalStoreSlogan,
       storeDescription: finalStoreDesc,
       logoUrl: finalLogoUrl,
+      khqrImageUrl: finalKhqr,
+      bankAccountUsd: finalBankUsd,
+      bankAccountKhr: finalBankKhr,
       phone: finalPhone,
       telegram: (() => {
         let tg = (finalTelegram || '').replace(/^@/, '').trim();
@@ -5279,24 +5328,105 @@ export default function UnifiedAdminDashboard() {
     }
   };
 
-  // មុខងារ Save ការកំណត់វិក្កយបត្រ (រួមទាំងពន្ធ VAT និងការកំណត់ហាង)
-  const handleSaveInvoiceSettings = (e) => {
+  // មុខងារ Save ការកំណត់វិក្កយបត្រ (រួមទាំងពន្ធ VAT និងការកំណត់ហាង - 100% Strict Cloud & Local Isolation)
+  const handleSaveInvoiceSettings = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (guardDemoAction("កែប្រែការកំណត់វិក្កយបត្រ")) return;
-    e.preventDefault();
+
     const storeId = activeStore?.id || 'store_default_sabayluk';
-    localStorage.setItem(`sabay_invoice_settings_${storeId}`, JSON.stringify(invoiceSettings));
-    localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(storeSettings));
-    if (storeId === 'store_default_sabayluk') {
-      localStorage.setItem('sabay_invoice_settings', JSON.stringify(invoiceSettings));
-      localStorage.setItem('sabay_store_settings', JSON.stringify(storeSettings));
+    const isDefault = storeId === 'store_default_sabayluk' || activeStore?.slug === 'sabay-luk';
+    const isTenant = !isDefault;
+
+    // Sanitize logo & QR against leakage
+    let safeLogo = storeSettings.logoUrl || invoiceSettings.logoUrl || '';
+    if (isTenant && (safeLogo === '/logo.png' || safeLogo.includes('/logo.png'))) safeLogo = '';
+
+    let safeKhqr = storeSettings.khqrImageUrl || invoiceSettings.khqrImageUrl || '';
+    if (isTenant && (safeKhqr === '/khqr-aba.jpg' || safeKhqr.includes('khqr-aba.jpg'))) safeKhqr = '';
+
+    const cleanInvoice = {
+      ...invoiceSettings,
+      storeName: invoiceSettings.storeName || (isTenant ? (activeStore?.name || 'ហាងរបស់ខ្ញុំ') : 'SABAY LUK'),
+      phone: invoiceSettings.phone || (isTenant ? (activeStore?.phone || '') : '096 720 5522'),
+      address: invoiceSettings.address || (isTenant ? (activeStore?.address || '') : 'Phnom Penh, Cambodia'),
+      logoUrl: safeLogo,
+      khqrImageUrl: safeKhqr,
+      exchangeRate: Number(invoiceSettings.exchangeRate || storeSettings.exchangeRate || 4100)
+    };
+
+    const cleanStoreSettings = {
+      ...storeSettings,
+      storeName: cleanInvoice.storeName,
+      phone: cleanInvoice.phone,
+      address: cleanInvoice.address,
+      logoUrl: safeLogo,
+      khqrImageUrl: safeKhqr,
+      showInvoiceLogo: storeSettings.showInvoiceLogo !== false && cleanInvoice.showLogo !== false,
+      showReceiptQr: storeSettings.showReceiptQr !== false,
+      exchangeRate: cleanInvoice.exchangeRate,
+      invoice: cleanInvoice
+    };
+
+    setInvoiceSettings(cleanInvoice);
+    setStoreSettings(cleanStoreSettings);
+
+    localStorage.setItem(`sabay_invoice_settings_${storeId}`, JSON.stringify(cleanInvoice));
+    localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(cleanStoreSettings));
+    if (isDefault) {
+      localStorage.setItem('sabay_invoice_settings', JSON.stringify(cleanInvoice));
+      localStorage.setItem('sabay_store_settings', JSON.stringify(cleanStoreSettings));
     }
-    setExchangeRate(invoiceSettings.exchangeRate || storeSettings.exchangeRate || 4100);
+    setExchangeRate(cleanInvoice.exchangeRate);
+
+    // Update activeStore in state and localStorage
+    const nextActive = {
+      ...activeStore,
+      name: cleanInvoice.storeName,
+      phone: cleanInvoice.phone,
+      address: cleanInvoice.address,
+      settings: { ...(activeStore?.settings || {}), ...cleanStoreSettings }
+    };
+    setActiveStore(nextActive);
+    setActiveStoreState(nextActive);
+
+    // Update registered stores
+    const updatedStores = (registeredStores || []).map(s => {
+      if (s.id === storeId) {
+        return {
+          ...s,
+          name: cleanInvoice.storeName,
+          phone: cleanInvoice.phone,
+          address: cleanInvoice.address,
+          settings: { ...(s.settings || {}), ...cleanStoreSettings }
+        };
+      }
+      return s;
+    });
+    setRegisteredStores(updatedStores);
+    saveLocalStores(updatedStores);
+
+    // Sync to Supabase Cloud
+    try {
+      await supabase
+        .from('stores')
+        .update({
+          name: cleanInvoice.storeName,
+          phone: cleanInvoice.phone,
+          address: cleanInvoice.address,
+          settings: cleanStoreSettings,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', storeId);
+    } catch (err) {
+      console.warn('Cloud sync error during invoice settings save:', err);
+    }
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('sabay_store_changed', { detail: nextActive }));
     }
-    setInvoiceSavedMsg('✅ រក្សាទុកទម្រង់វិក្កយបត្រ និងការកំណត់ពន្ធអាករ VAT ជោគជ័យ!');
-    setTimeout(() => setInvoiceSavedMsg(''), 3000);
+    setInvoiceSavedMsg('✅ រក្សាទុកទម្រង់វិក្កយបត្រ Logo និង QR Code ដាច់ដោយឡែកសម្រាប់ហាងនេះជោគជ័យ ១០០%!');
+    setTimeout(() => setInvoiceSavedMsg(''), 3500);
   };
 
   // 🖨️ មុខងារតេស្តព្រីនវិក្កយបត្រសាកល្បង (Test Print Receipt)
@@ -5322,10 +5452,10 @@ export default function UnifiedAdminDashboard() {
       <div style="font-family: 'Courier New', Courier, monospace, 'Hanuman', 'Siemreap', sans-serif; width: ${widthCss}; margin: 0 auto; padding: 2.5mm; color: #000; font-size: ${fontSize}; line-height: 1.3;">
         <div style="text-align: center; margin-bottom: 8px;">
           ${isLogoVisible ? `<img src="${storeSettings.logoUrl}" style="height: 38px; max-width: 100%; object-fit: contain; margin: 0 auto 4px auto; filter: grayscale(100%); display: block;" />` : ''}
-          <h2 style="font-size: 15px; font-weight: 900; text-transform: uppercase; margin: 0; line-height: 1.1;">${invoiceSettings.storeName || storeSettings.storeName || 'SABAY LUK'}</h2>
+          <h2 style="font-size: 15px; font-weight: 900; text-transform: uppercase; margin: 0; line-height: 1.1;">${invoiceSettings.storeName || storeSettings.storeName || activeStore?.name || (activeStore?.id !== 'store_default_sabayluk' ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK')}</h2>
           ${storeSettings.storeSlogan ? `<p style="font-size: 9px; margin: 2px 0 0 0; color: #555;">${storeSettings.storeSlogan}</p>` : ''}
-          <p style="font-size: 9px; margin: 2px 0 0 0;">អាសយដ្ឋាន: ${invoiceSettings.address || storeSettings.address || 'ភ្នំពេញ, កម្ពុជា'}</p>
-          <p style="font-size: 9px; font-weight: bold; margin: 2px 0 0 0;">ទូរស័ព្ទ: ${invoiceSettings.phone || storeSettings.phone || '096 720 5522'}</p>
+          <p style="font-size: 9px; margin: 2px 0 0 0;">អាសយដ្ឋាន: ${invoiceSettings.address || storeSettings.address || activeStore?.address || 'ភ្នំពេញ, កម្ពុជា'}</p>
+          <p style="font-size: 9px; font-weight: bold; margin: 2px 0 0 0;">ទូរស័ព្ទ: ${invoiceSettings.phone || storeSettings.phone || activeStore?.phone || ''}</p>
           ${vatTin ? `<p style="font-size: 9px; font-family: monospace; font-weight: bold; margin: 2px 0 0 0;">VATTIN: ${vatTin}</p>` : ''}
           <div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>
           <h3 style="font-size: 11px; font-weight: 900; text-transform: uppercase; margin: 0;">*** វិក្កយបត្រតេស្តព្រីន / TEST RECEIPT ***</h3>
@@ -5400,7 +5530,7 @@ export default function UnifiedAdminDashboard() {
         ${(storeSettings.showReceiptQr !== false && storeSettings.khqrImageUrl) ? `
           <div style="margin: 6px 0; padding: 2px; text-align: center;">
             <img src="${storeSettings.khqrImageUrl}" style="width: 76px; height: 76px; margin: 0 auto; object-fit: contain; display: block;" />
-            <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; margin: 3px 0 0 0;">${storeSettings.bankAccountName || (activeStore?.id !== 'store_default_sabayluk' ? activeStore?.name : storeSettings.storeName) || ''}</p>
+            <p style="font-size: 9px; font-weight: 900; text-transform: uppercase; margin: 3px 0 0 0;">${storeSettings.bankAccountName || activeStore?.owner_name || activeStore?.name || (activeStore?.id !== 'store_default_sabayluk' ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK')}</p>
           </div>
         ` : '<div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>'}
 
@@ -25269,12 +25399,17 @@ export default function UnifiedAdminDashboard() {
       grandTotal: posTotal,
       exchangeRate: exchangeRate || 4100,
       paymentMethod: paymentMethod || 'Cash',
-      qrCodeUrl: storeSettings?.abaQrUrl || storeSettings?.khqrUrl || '/khqr-aba.jpg',
+      qrCodeUrl: (() => {
+        const isTenant = activeStore && activeStore.id !== 'store_default_sabayluk' && activeStore.slug !== 'sabay-luk';
+        const qr = storeSettings?.khqrImageUrl || storeSettings?.abaQrUrl || storeSettings?.khqrUrl || '';
+        if (isTenant && (qr === '/khqr-aba.jpg' || qr.includes('khqr-aba.jpg'))) return '';
+        return qr || (isTenant ? '' : '/khqr-aba.jpg');
+      })(),
       cashReceived: Number(amountTendered) || 0,
       changeAmount: receiptData?.change || (Number(amountTendered) > posTotal ? Number(amountTendered) - posTotal : 0),
       receiptNo: receiptData?.orderId || receiptData?.receiptNo || '',
       customerName: customerName || 'អតិថិជនទូទៅ',
-      storeName: storeSettings?.storeName || 'SABAY LUK',
+      storeName: storeSettings?.storeName || activeStore?.name || ((activeStore && activeStore.id !== 'store_default_sabayluk') ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK'),
       lastUpdated: Date.now()
     };
 
@@ -27617,12 +27752,39 @@ export default function UnifiedAdminDashboard() {
     );
   };
 
-    // ⭐️ ផ្ទាំងកែប្រែទម្រង់វិក្កយបត្រ (INVOICE SETTINGS VIEW) ⭐️
+    // ⭐️ ផ្ទាំងកែប្រែទម្រង់វិក្កយបត្រ (INVOICE SETTINGS VIEW - 100% STRICT STORE ISOLATION) ⭐️
   const InvoiceSettingsView = () => (
     <div className="animate-in fade-in max-w-6xl mx-auto pb-12">
       <div className="mb-6 border-b border-gray-100 pb-4">
         <h2 className="text-3xl font-black text-gray-900">🧾 កំណត់ទម្រង់វិក្កយបត្រ (Invoice & Receipt Customizer)</h2>
         <p className="text-sm text-gray-500 mt-1">កែប្រែព័ត៌មានក្បាលវិក្កយបត្រ លេខទូរសព្ទ អត្រាប្តូរប្រាក់ និងលក្ខខណ្ឌប្តូរទំនិញ</p>
+      </div>
+
+      {/* 🔒 ផ្ទាំងបញ្ជាក់ប្រព័ន្ធសុវត្ថិភាពដាច់ដោយឡែក (Strict Store Isolation Shield Banner) ⭐️ */}
+      <div className="mb-6 p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-xl shadow-xs shrink-0 mt-0.5 sm:mt-0">
+            🔒
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-black uppercase text-emerald-900 tracking-wide">
+                ប្រព័ន្ធសុវត្ថិភាពដាច់ដោយឡែក (Strict Store Isolation)
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-800 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                កម្រិតសុវត្ថិភាពខ្ពស់បំផុត
+              </span>
+            </div>
+            <p className="text-xs font-bold text-gray-800 mt-1">
+              កំពុងកំណត់សម្រាប់ហាង៖ <span className="text-blue-700 font-black underline decoration-blue-300 underline-offset-2">{activeStore?.name || (activeStore?.id !== 'store_default_sabayluk' ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK')}</span>
+              {activeStore?.id && <span className="text-[10px] font-mono font-medium text-gray-400 ml-2">({activeStore.id})</span>}
+            </p>
+            <p className="text-[11px] text-gray-600 mt-0.5">
+              Logo, QR Code និងព័ត៌មានវិក្កយបត្រខាងក្រោមនេះ ត្រូវបានការពារ និងចាក់សោសម្រាប់តែហាងនេះប៉ុណ្ណោះ ធានាថា<b>មិនច្រលំ ឬឆ្លងទៅហាងផ្សេង</b>ឡើយ។
+            </p>
+          </div>
+        </div>
       </div>
 
       {invoiceSavedMsg && (
@@ -27671,45 +27833,52 @@ export default function UnifiedAdminDashboard() {
                     </div>
                   )}
                   <div className="space-y-1">
-                    <label className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold cursor-pointer transition shadow-2xs">
-                      <span>📁 ជ្រើសរើសរូបភាព Logo ថ្មី</span>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const dataUrl = await compressImageToDataUrl(file, 'logo');
-                              if (dataUrl) {
-                                setStoreSettings(prev => ({ ...prev, logoUrl: dataUrl }));
-                                setInvoiceSettings(prev => ({ ...prev, logoUrl: dataUrl }));
+                    <p className="text-[11px] font-black text-slate-700">
+                      {storeSettings.logoUrl 
+                        ? `✅ Logo ផ្ទាល់ខ្លួនរបស់ហាង «${activeStore?.name || 'ហាង'}»` 
+                        : `📷 ហាងនេះមិនទាន់មាន Logo នៅឡើយទេ (ប្រព័ន្ធនឹងមិនបង្ហាញ Logo ឬច្រលំ Logo ហាងផ្សេងឡើយ)`}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <label className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold cursor-pointer transition shadow-2xs">
+                        <span>📁 ជ្រើសរើសរូបភាព Logo ថ្មី</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const dataUrl = await compressImageToDataUrl(file, 'logo');
+                                if (dataUrl) {
+                                  setStoreSettings(prev => ({ ...prev, logoUrl: dataUrl }));
+                                  setInvoiceSettings(prev => ({ ...prev, logoUrl: dataUrl }));
+                                }
+                              } catch (_) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  setStoreSettings(prev => ({ ...prev, logoUrl: event.target.result }));
+                                  setInvoiceSettings(prev => ({ ...prev, logoUrl: event.target.result }));
+                                };
+                                reader.readAsDataURL(file);
                               }
-                            } catch (_) {
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
-                                setStoreSettings(prev => ({ ...prev, logoUrl: event.target.result }));
-                                setInvoiceSettings(prev => ({ ...prev, logoUrl: event.target.result }));
-                              };
-                              reader.readAsDataURL(file);
                             }
-                          }
-                        }} 
-                      />
-                    </label>
-                    {storeSettings.logoUrl && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStoreSettings(prev => ({ ...prev, logoUrl: '' }));
-                          setInvoiceSettings(prev => ({ ...prev, logoUrl: '' }));
-                        }}
-                        className="block text-[11px] font-bold text-rose-600 hover:underline"
-                      >
-                        ✕ លុប Logo ចេញ
-                      </button>
-                    )}
+                          }} 
+                        />
+                      </label>
+                      {storeSettings.logoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStoreSettings(prev => ({ ...prev, logoUrl: '' }));
+                            setInvoiceSettings(prev => ({ ...prev, logoUrl: '' }));
+                          }}
+                          className="block text-[11px] font-bold text-rose-600 hover:underline cursor-pointer"
+                        >
+                          ✕ លុប Logo ចេញ
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -27805,12 +27974,12 @@ export default function UnifiedAdminDashboard() {
                       )}
                     </div>
                     {storeSettings.khqrImageUrl ? (
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        គណនី: {storeSettings.bankAccountName || activeStore?.name || 'ម្ចាស់ហាង'} {storeSettings.bankAccountUsd ? `(${storeSettings.bankAccountUsd})` : ''}
+                      <p className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                        <span>✅</span> <span>QR Code ផ្ទាល់ខ្លួនរបស់ហាង «{activeStore?.name || 'ហាង'}» (គណនី: {storeSettings.bankAccountName || activeStore?.owner_name || activeStore?.name || 'ម្ចាស់ហាង'}{storeSettings.bankAccountUsd ? ` - ${storeSettings.bankAccountUsd}` : ''})</span>
                       </p>
                     ) : (
-                      <p className="text-[10px] text-amber-700 font-medium">
-                        ⚠️ ទុកទំនេរ៖ មិនទាន់បាន Upload QR ផ្ទាល់ខ្លួនរបស់ហាងនៅឡើយទេ
+                      <p className="text-[10px] text-amber-700 font-bold flex items-center gap-1">
+                        <span>⚠️</span> <span>មិនទាន់មាន QR Code៖ ប្រព័ន្ធទុកទំនេរដោយសុវត្ថិភាព (មិនទាញ QR ពីហាងផ្សេងឡើយ)</span>
                       </p>
                     )}
                   </div>
@@ -28147,7 +28316,7 @@ export default function UnifiedAdminDashboard() {
                   className="w-20 h-20 mx-auto object-contain" 
                 />
                 <p className="text-[9px] font-black uppercase mt-1 leading-tight">
-                  {storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK'}
+                  {storeSettings.bankAccountName || activeStore?.owner_name || activeStore?.name || (activeStore?.id === 'store_default_sabayluk' ? 'SABAY LUK' : 'ហាងរបស់ខ្ញុំ')}
                 </p>
               </div>
             ) : (
@@ -37757,13 +37926,13 @@ export default function UnifiedAdminDashboard() {
                       />
                     )}
                     <h2 className="text-xl font-black uppercase tracking-wider leading-none">
-                      {storeSettings.storeName || 'SABAY LUK'}
+                      {storeSettings.storeName || activeStore?.name || (activeStore?.id !== 'store_default_sabayluk' ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK')}
                     </h2>
                     {storeSettings.storeSlogan && (
                       <p className="text-[10px] text-gray-600 font-bold">{storeSettings.storeSlogan}</p>
                     )}
-                    <p className="text-[10px] text-gray-700">អាសយដ្ឋាន: {storeSettings.address || 'ភ្នំពេញ, កម្ពុជា'}</p>
-                    <p className="text-[10px] text-gray-700 font-bold">ទូរស័ព្ទ: {storeSettings.phone || '096 720 5522'}</p>
+                    <p className="text-[10px] text-gray-700">អាសយដ្ឋាន: {storeSettings.address || activeStore?.address || 'ភ្នំពេញ, កម្ពុជា'}</p>
+                    <p className="text-[10px] text-gray-700 font-bold">ទូរស័ព្ទ: {storeSettings.phone || activeStore?.phone || ''}</p>
                     {(storeSettings.vatTin || invoiceSettings.vatTin || receiptData.vatTin) && (
                       <p className="text-[9.5px] font-mono font-black text-gray-900">
                         VATTIN: {storeSettings.vatTin || invoiceSettings.vatTin || receiptData.vatTin}
@@ -37956,7 +38125,7 @@ export default function UnifiedAdminDashboard() {
                         className="w-20 h-20 mx-auto object-contain" 
                       />
                       <p className="text-[9.5px] font-black text-black uppercase mt-1 leading-tight">
-                        {storeSettings.bankAccountName || storeSettings.storeName}
+                        {storeSettings.bankAccountName || activeStore?.owner_name || activeStore?.name || storeSettings.storeName || (activeStore?.id !== 'store_default_sabayluk' ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK')}
                       </p>
                     </div>
                   ) : (
