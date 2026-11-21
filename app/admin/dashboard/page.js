@@ -33555,32 +33555,7 @@ export default function UnifiedAdminDashboard() {
                             </div>
                           </div>
 
-                          {/* ⭐️ OPTION 1: STORE OWNER / ADMIN BANNER ⭐️ */}
-                          {loginAccountType === 'owner' && (
-                            <div className="p-3 bg-gradient-to-r from-orange-50 to-amber-50/70 border border-orange-200/80 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-9 h-9 rounded-xl bg-orange-500 text-white flex items-center justify-center text-base font-black shrink-0 shadow-xs">
-                                  👑
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <p className="text-[10px] font-black text-orange-700 uppercase tracking-wider">គណនីម្ចាស់ហាង</p>
-                                    <span className="text-[9px] font-mono font-bold bg-white text-orange-700 px-1.5 py-0.2 rounded-md border border-orange-200">
-                                      Full Access
-                                    </span>
-                                  </div>
-                                  <p className="text-xs font-black text-slate-900 truncate">
-                                    {loginTargetStore.owner_name || loginTargetStore.name || 'ម្ចាស់ហាង'}
-                                  </p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-mono font-bold bg-white text-emerald-700 px-2 py-0.5 rounded-xl border border-emerald-200 shrink-0 flex items-center gap-1">
-                                <span>✓</span> Verified
-                              </span>
-                            </div>
-                          )}
-
-                          {/* ⭐️ OPTION 2: STORE STAFF MEMBERS SELECTOR ⭐️ */}
+                          {/* ⭐️ OPTION 2: STORE STAFF MEMBERS SELECTOR (Shown only when Staff tab selected) ⭐️ */}
                           {loginAccountType === 'staff' && (
                             <div className="space-y-2 animate-in fade-in">
                               {staffMembers.length > 0 ? (
@@ -33618,10 +33593,10 @@ export default function UnifiedAdminDashboard() {
                                               {isSelected && <span className="text-orange-600 text-xs">✓</span>}
                                             </div>
                                             <div className="flex items-center gap-1.5 mt-0.5">
-                                                <span className="text-[10px] text-slate-500 font-medium truncate block">
-                                                  {stf.roleLabel || stf.role || 'បុគ្គលិក'}
-                                                </span>
-                                              </div>
+                                              <span className="text-[10px] text-slate-500 font-medium truncate block">
+                                                {stf.roleLabel || stf.role || 'បុគ្គលិក'}
+                                              </span>
+                                            </div>
                                           </div>
                                         </button>
                                       );
@@ -33694,9 +33669,9 @@ export default function UnifiedAdminDashboard() {
                           <div>
                             <label className="text-xs font-black text-slate-700 block mb-1.5">
                               {loginAccountType === 'owner' ? (
-                                <span>លេខកូដសម្ងាត់ ឬ PIN របស់ម្ចាស់ហាង (Admin) <span className="text-orange-500">*</span></span>
+                                <span>លេខសម្ងាត់ ឬ PIN (Admin PIN) <span className="text-orange-500">*</span></span>
                               ) : (
-                                <span>លេខកូដសម្ងាត់ ឬ PIN របស់ {loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'} <span className="text-orange-500">*</span></span>
+                                <span>លេខសម្ងាត់ ឬ PIN របស់ {loginSelectedStaffMember?.name || (staffMembers[0]?.name) || 'បុគ្គលិក'} <span className="text-orange-500">*</span></span>
                               )}
                             </label>
                             <div className="relative">
@@ -33705,8 +33680,8 @@ export default function UnifiedAdminDashboard() {
                                 type={loginShowGmailPassword ? 'text' : 'password'}
                                 value={loginGmailPassword}
                                 onChange={(e) => setLoginGmailPassword(e.target.value)}
-                                placeholder="បញ្ចូល PIN ឬ Password"
-                                className="w-full bg-slate-50/80 focus:bg-white border-2 border-slate-200 focus:border-orange-500 text-slate-900 rounded-2xl pl-10 pr-10 py-3.5 text-sm font-mono font-black outline-none focus:ring-4 focus:ring-orange-500/10 transition shadow-inner placeholder-slate-400"
+                                placeholder="••••••••"
+                                className="w-full bg-slate-50/80 focus:bg-white border-2 border-slate-200 focus:border-orange-500 text-slate-900 rounded-2xl pl-10 pr-10 py-3.5 text-base font-mono font-black tracking-widest outline-none focus:ring-4 focus:ring-orange-500/10 transition shadow-inner placeholder-slate-300"
                                 required
                                 autoFocus
                               />
@@ -33714,17 +33689,10 @@ export default function UnifiedAdminDashboard() {
                                 type="button"
                                 onClick={() => setLoginShowGmailPassword(!loginShowGmailPassword)}
                                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-sm cursor-pointer p-1"
+                                title={loginShowGmailPassword ? 'លាក់លេខកូដ' : 'បង្ហាញលេខកូដ'}
                               >
                                 {loginShowGmailPassword ? '🙈' : '👁️'}
                               </button>
-                            </div>
-                            <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold px-1 pt-1.5">
-                              <span className="flex items-center gap-1">
-                                <span>🔒</span> 256-Bit SSL Encryption
-                              </span>
-                              <span className="text-emerald-600 flex items-center gap-1">
-                                <span>✓</span> សុវត្ថិភាពខ្ពស់
-                              </span>
                             </div>
                           </div>
 
