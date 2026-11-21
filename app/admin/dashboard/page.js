@@ -200,7 +200,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'STARTER',
-    name: '🌱 គំរោង 1$ (Starter)',
+    name: '🌱 គំរោង 1$ ($1/ខែ, 1ឆ្នាំ 10$)',
     priceMonthly: 1,
     priceYearly: 10,
     savingsYearly: 2,
@@ -237,7 +237,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'BASIC',
-    name: '⚡ គំរោង 2$ (Basic)',
+    name: '⚡ គំរោង 2$ ($2/ខែ, 1ឆ្នាំ 20$)',
     priceMonthly: 2,
     priceYearly: 20,
     savingsYearly: 4,
@@ -274,7 +274,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'PRO',
-    name: '🚀 គំរោង 3$ (Pro)',
+    name: '🚀 គំរោង 3$ ($3/ខែ, 1ឆ្នាំ 30$)',
     priceMonthly: 3,
     priceYearly: 30,
     savingsYearly: 6,
@@ -311,7 +311,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'BUSINESS',
-    name: '🔥 គំរោង 5$ (Business)',
+    name: '🔥 គំរោង 5$ ($5/ខែ, 1ឆ្នាំ 50$)',
     priceMonthly: 5,
     priceYearly: 50,
     savingsYearly: 10,
@@ -348,7 +348,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'PREMIUM',
-    name: '💎 គំរោង 7$ (Premium)',
+    name: '💎 គំរោង 7$ ($7/ខែ, 1ឆ្នាំ 70$)',
     priceMonthly: 7,
     priceYearly: 70,
     savingsYearly: 14,
@@ -385,7 +385,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'ENTERPRISE',
-    name: '👑 គំរោង 10$ (Enterprise)',
+    name: '👑 គំរោង 10$ ($10/ខែ, 1ឆ្នាំ 100$)',
     priceMonthly: 10,
     priceYearly: 100,
     savingsYearly: 20,
@@ -22043,8 +22043,53 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
-        {/* ⭐️ 2. PLANS PRICING GRID (7 OFFICIAL PLANS) ⭐️ */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        {/* ⭐️ 2. QUICK PLAN SELECTOR (បារកញ្ចប់គម្រោងទាំង 7 តាមស្តង់ដា) ⭐️ */}
+        <div className="bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 p-2 sm:p-2.5 rounded-2xl shadow-sm border border-amber-500/40">
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+            {plansList.map((p) => {
+              const isCurrent = currentPlanKey === p.key;
+              const shortTitles = {
+                FREE: 'គំរោង Free',
+                STARTER: 'គំរោង 1$',
+                BASIC: 'គំរោង 2$',
+                PRO: 'គំរោង 3$',
+                BUSINESS: 'គំរោង 5$',
+                PREMIUM: 'គំរោង 7$',
+                ENTERPRISE: 'គំរោង 10$'
+              };
+              const displayTitle = shortTitles[p.key] || p.name;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById(`plan-card-${p.key}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      el.classList.add('ring-8', 'ring-orange-500/50');
+                      setTimeout(() => el.classList.remove('ring-8', 'ring-orange-500/50'), 1500);
+                    }
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black transition whitespace-nowrap cursor-pointer flex items-center gap-2 shrink-0 ${
+                    isCurrent
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : 'bg-white hover:bg-slate-50 text-slate-900 border border-amber-400/50 shadow-2xs hover:scale-[1.02]'
+                  }`}
+                >
+                  <span>{displayTitle}</span>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md ${
+                    isCurrent ? 'bg-amber-400 text-slate-900 font-black' : 'bg-amber-100 text-amber-900 font-bold border border-amber-200'
+                  }`}>
+                    {p.key === 'FREE' ? '$0' : (upgradeBillingCycle === 'yearly' ? `$${p.priceYearly}/ឆ្នាំ` : `$${p.priceMonthly}/ខែ`)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ⭐️ 3. PLANS PRICING GRID (7 OFFICIAL PLANS COMPACT & TALL) ⭐️ */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
           {plansList.map((p) => {
             const isCurrent = currentPlanKey === p.key;
             const price = upgradeBillingCycle === 'yearly' ? p.priceYearly : p.priceMonthly;
@@ -22056,8 +22101,9 @@ export default function UnifiedAdminDashboard() {
 
             return (
               <div
+                id={`plan-card-${p.key}`}
                 key={p.key}
-                className={`rounded-3xl p-6 transition-all duration-200 flex flex-col justify-between relative bg-white shadow-sm hover:shadow-xl border-2 ${
+                className={`rounded-3xl p-5 sm:p-6 transition-all duration-300 flex flex-col justify-between relative bg-white shadow-sm hover:shadow-xl border-2 scroll-mt-28 ${
                   p.popular
                     ? 'border-orange-500 ring-4 ring-orange-500/10'
                     : isCurrent
@@ -22079,7 +22125,7 @@ export default function UnifiedAdminDashboard() {
                   </div>
                 )}
 
-                <div className="space-y-4">
+                <div className="space-y-3.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${p.badgeColor}`}>
                       {p.badge}
@@ -22093,7 +22139,7 @@ export default function UnifiedAdminDashboard() {
 
                   <div>
                     <h3 className="font-black text-lg text-slate-900">{p.name}</h3>
-                    <p className="text-xs text-slate-500 mt-1 min-h-[34px] leading-relaxed">{p.desc}</p>
+                    <p className="text-xs text-slate-500 mt-1 min-h-[30px] leading-relaxed">{p.desc}</p>
                   </div>
 
                   {/* Price */}
@@ -22140,24 +22186,27 @@ export default function UnifiedAdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Feature Checklist */}
-                  <div className="space-y-2 pt-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                      មុខងាររួមបញ្ចូល:
-                    </p>
-                    <ul className="space-y-1.5 text-xs text-slate-700">
-                      {p.features.map((feat, fIdx) => (
-                        <li key={fIdx} className="flex items-start gap-2">
-                          <span className="text-emerald-500 font-black text-sm shrink-0 leading-none">✓</span>
-                          <span className="leading-snug">{feat}</span>
-                        </li>
-                      ))}
-                    </ul>
+                  {/* Feature Checklist (Compact + Collapsible) */}
+                  <div className="pt-1">
+                    <details className="group">
+                      <summary className="text-[11px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer list-none flex items-center justify-between py-1 px-1 rounded-lg hover:bg-blue-50 transition">
+                        <span>✨ មើលមុខងាររួមបញ្ចូល ({p.features.length})</span>
+                        <span className="text-slate-400 group-open:rotate-180 transition-transform text-xs">▼</span>
+                      </summary>
+                      <ul className="space-y-1.5 pt-2 text-xs text-slate-700 max-h-48 overflow-y-auto pr-1">
+                        {p.features.map((feat, fIdx) => (
+                          <li key={fIdx} className="flex items-start gap-1.5">
+                            <span className="text-emerald-500 font-black text-xs shrink-0 mt-0.5">✓</span>
+                            <span className="leading-snug text-[11px]">{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   </div>
                 </div>
 
                 {/* CTA Button */}
-                <div className="pt-6 mt-6 border-t border-slate-100">
+                <div className="pt-4 mt-4 border-t border-slate-100">
                   <button
                     type="button"
                     disabled={isCurrent}
@@ -22177,7 +22226,7 @@ export default function UnifiedAdminDashboard() {
                         : 'bg-slate-950 hover:bg-black text-white'
                     }`}
                   >
-                    <span>{isCurrent ? '✓ កំពុងប្រើប្រាស់' : creditDiscount > 0 ? `⚡ ដំឡើងថែម ${proratedPrice}` : `⚡ ជ្រើសរើស ${p.name}`}</span>
+                    <span>{isCurrent ? '✓ កំពុងប្រើប្រាស់' : creditDiscount > 0 ? `⚡ ដំឡើងថែម $${proratedPrice}` : `⚡ ជ្រើសរើស ${p.name}`}</span>
                     {!isCurrent && <span>➔</span>}
                   </button>
                 </div>

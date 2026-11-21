@@ -51,7 +51,7 @@ function PlansContent() {
     },
     {
       key: 'STARTER',
-      name: '🌱 គំរោង 1$ (Starter)',
+      name: '🌱 គំរោង 1$ ($1/ខែ, 1ឆ្នាំ 10$)',
       priceMonthly: 1,
       priceYearly: 10,
       savingsYearly: 2,
@@ -69,7 +69,7 @@ function PlansContent() {
     },
     {
       key: 'BASIC',
-      name: '⚡ គំរោង 2$ (Basic)',
+      name: '⚡ គំរោង 2$ ($2/ខែ, 1ឆ្នាំ 20$)',
       priceMonthly: 2,
       priceYearly: 20,
       savingsYearly: 4,
@@ -87,7 +87,7 @@ function PlansContent() {
     },
     {
       key: 'PRO',
-      name: '🚀 គំរោង 3$ (Pro)',
+      name: '🚀 គំរោង 3$ ($3/ខែ, 1ឆ្នាំ 30$)',
       priceMonthly: 3,
       priceYearly: 30,
       savingsYearly: 6,
@@ -105,7 +105,7 @@ function PlansContent() {
     },
     {
       key: 'BUSINESS',
-      name: '🔥 គំរោង 5$ (Business)',
+      name: '🔥 គំរោង 5$ ($5/ខែ, 1ឆ្នាំ 50$)',
       priceMonthly: 5,
       priceYearly: 50,
       savingsYearly: 10,
@@ -123,7 +123,7 @@ function PlansContent() {
     },
     {
       key: 'PREMIUM',
-      name: '💎 គំរោង 7$ (Premium)',
+      name: '💎 គំរោង 7$ ($7/ខែ, 1ឆ្នាំ 70$)',
       priceMonthly: 7,
       priceYearly: 70,
       savingsYearly: 14,
@@ -141,7 +141,7 @@ function PlansContent() {
     },
     {
       key: 'ENTERPRISE',
-      name: '👑 គំរោង 10$ (Enterprise)',
+      name: '👑 គំរោង 10$ ($10/ខែ, 1ឆ្នាំ 100$)',
       priceMonthly: 10,
       priceYearly: 100,
       savingsYearly: 20,
