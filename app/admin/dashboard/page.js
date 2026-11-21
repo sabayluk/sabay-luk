@@ -2901,6 +2901,10 @@ export default function UnifiedAdminDashboard() {
   const [refundCustomAmount, setRefundCustomAmount] = useState('');
   const [refundProcessing, setRefundProcessing] = useState(false);
   const [creditNoteData, setCreditNoteData] = useState(null);
+  const [refundDeliveryFee, setRefundDeliveryFee] = useState(false);
+  const [refundDeliveryAmount, setRefundDeliveryAmount] = useState('0');
+  const [refundTax, setRefundTax] = useState(false);
+  const [refundTaxAmount, setRefundTaxAmount] = useState('0');
 
   // State សម្រាប់ Modal បោះពុម្ពបាកូដ (Barcode Sticker Modal)
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
@@ -3307,10 +3311,47 @@ export default function UnifiedAdminDashboard() {
 
   const realTotalOrdersCount = realOrders.length;
 
+  // ⭐️ Helper Function គណនាសេវាដឹកជញ្ជូនលើ Order (Delivery Fee calculation) ⭐️
+  const getOrderDeliveryFee = (order) => {
+    if (!order) return 0;
+    if (order.delivery_fee != null) return parseFloat(order.delivery_fee) || 0;
+    if (order.deliveryFee != null) return parseFloat(order.deliveryFee) || 0;
+    if (order.shipping_fee != null) return parseFloat(order.shipping_fee) || 0;
+    if (order.shippingFee != null) return parseFloat(order.shippingFee) || 0;
+    const items = Array.isArray(order.items) ? order.items : [];
+    const delItem = items.find(it => it && (it.is_delivery_meta || it.is_delivery || it.name?.includes('ដឹក') || it.name?.toLowerCase().includes('delivery') || it.name?.toLowerCase().includes('shipping')));
+    if (delItem) return parseFloat(delItem.price || delItem.delivery_fee || 0) || 0;
+    return 0;
+  };
+
+  // ⭐️ Helper Function គណនាពន្ធអាករលើ Order មួយៗ (Tax VAT calculation for any order) ⭐️
+  const getOrderTax = (order) => {
+    if (!order) return 0;
+    if (order.tax_amount != null) return parseFloat(order.tax_amount) || 0;
+    if (order.tax != null) return parseFloat(order.tax) || 0;
+    if (order.taxAmount != null) return parseFloat(order.taxAmount) || 0;
+    const items = Array.isArray(order.items) ? order.items : [];
+    const taxMeta = items.find(it => it && (it.is_tax_meta || it.tax_amount != null || it.name?.toLowerCase().includes('vat') || it.name?.includes('ពន្ធ')));
+    if (taxMeta && taxMeta.tax_amount != null) return parseFloat(taxMeta.tax_amount) || 0;
+    if (taxMeta && taxMeta.price != null) return parseFloat(taxMeta.price) || 0;
+    return 0;
+  };
+
+  // Helper គណនាទឹកប្រាក់ Refund សរុបស្វ័យប្រវត្ត រួមទាំងថ្លៃដឹក & ពន្ធ
+  const recalcRefundTotal = (items, withDel, delAmt, withTx, txAmt) => {
+    const itemsSum = (items || refundItemsState)
+      .filter(it => it.selected && it.returnQty > 0)
+      .reduce((s, it) => s + (it.price * it.returnQty), 0);
+    const delPart = withDel ? (parseFloat(delAmt) || 0) : 0;
+    const taxPart = withTx ? (parseFloat(txAmt) || 0) : 0;
+    const total = itemsSum + delPart + taxPart;
+    setRefundCustomAmount(total.toFixed(2));
+  };
+
   // ⭐️ មុខងារបើកផ្ទាំងស្នើសុំបង្វិលទំនិញ & សងប្រាក់វិញ (OPEN PRODUCT REFUND MODAL) ⭐️
   const handleOpenRefundModal = (order) => {
     if (!order) return;
-    const items = (Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+    const items = (Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta && !it.is_delivery_meta);
     const initialItems = items.map((it, idx) => {
       const q = parseInt(it.qty || it.quantity || 1) || 1;
       const p = parseFloat(it.price || 0) || 0;
@@ -3335,6 +3376,16 @@ export default function UnifiedAdminDashboard() {
     setRefundCustomReason('');
     const payMeth = order.payment === 'KHQR' ? 'BANK' : (order.payment === 'COD' ? 'CASH' : (order.payment || 'CASH'));
     setRefundMethod(payMeth === 'BANK' ? 'BANK' : (payMeth === 'Store Credit' ? 'STORE_CREDIT' : 'CASH'));
+
+    // ពិនិត្យថ្លៃដឹកជញ្ជូន និងពន្ធលើវិក្កយបត្រ (Delivery Fee & Tax)
+    const existingDelFee = getOrderDeliveryFee(order);
+    const existingTaxAmt = getOrderTax(order);
+
+    setRefundDeliveryFee(false);
+    setRefundDeliveryAmount(existingDelFee > 0 ? existingDelFee.toFixed(2) : (storeSettings.deliveryPhnomPenh || '1.50'));
+    setRefundTax(false);
+    setRefundTaxAmount(existingTaxAmt > 0 ? existingTaxAmt.toFixed(2) : '0.00');
+
     const initialTotal = initialItems.reduce((s, it) => s + (it.price * it.returnQty), 0);
     setRefundCustomAmount(initialTotal.toFixed(2));
     setRefundModalOpen(true);
@@ -3349,7 +3400,10 @@ export default function UnifiedAdminDashboard() {
       return;
     }
 
-    const finalAmount = parseFloat(refundCustomAmount) >= 0 ? parseFloat(refundCustomAmount) : selectedItems.reduce((s, it) => s + (it.price * it.returnQty), 0);
+    const delFeeRefunded = refundDeliveryFee ? (parseFloat(refundDeliveryAmount) || 0) : 0;
+    const taxRefunded = refundTax ? (parseFloat(refundTaxAmount) || 0) : 0;
+    const itemsTotal = selectedItems.reduce((s, it) => s + (it.price * it.returnQty), 0);
+    const finalAmount = parseFloat(refundCustomAmount) >= 0 ? parseFloat(refundCustomAmount) : (itemsTotal + delFeeRefunded + taxRefunded);
     const storeId = activeStore?.id || 'store_default_sabayluk';
     const orderDisplayId = refundOrder.order_id || refundOrder.id;
 
@@ -3436,6 +3490,8 @@ export default function UnifiedAdminDashboard() {
         refunded_at: new Date().toISOString(),
         refunded_amount: finalAmount,
         refunded_amount_khr: Math.round(finalAmount * (storeSettings.exchangeRate || 4100)),
+        refund_delivery_fee: delFeeRefunded,
+        refund_tax_amount: taxRefunded,
         reason: finalReason,
         reason_notes: refundCustomReason,
         payment_method: refundMethod === 'BANK' ? 'ABA / Bank Transfer' : (refundMethod === 'STORE_CREDIT' ? 'Store Credit' : 'Cash (សាច់ប្រាក់)'),
@@ -3501,7 +3557,11 @@ export default function UnifiedAdminDashboard() {
       // ៩. បង្ហាញ Toast Notification & បើក Credit Note Slip
       setRefundModalOpen(false);
       setCreditNoteData(refundRecord);
-      setToastNotification(`✅ បានដំណើរការ Refund ទឹកប្រាក់ ${finalAmount.toFixed(2)} និងបញ្ចូលស្តុក ${restockItems.reduce((s, i) => s + i.returnQty, 0)} ឯកតាជោគជ័យ!`);
+      const addonNotes = [
+        delFeeRefunded > 0 ? `ថ្លៃដឹក $${delFeeRefunded.toFixed(2)}` : null,
+        taxRefunded > 0 ? `ពន្ធ $${taxRefunded.toFixed(2)}` : null
+      ].filter(Boolean).join(' + ');
+      setToastNotification(`✅ បានដំណើរការ Refund ទឹកប្រាក់ $${finalAmount.toFixed(2)} ${addonNotes ? `(រួមបញ្ចូល ${addonNotes}) ` : ''}និងបញ្ចូលស្តុក ${restockItems.reduce((s, i) => s + i.returnQty, 0)} ឯកតាជោគជ័យ!`);
       setTimeout(() => setToastNotification(null), 4000);
 
     } catch (err) {
@@ -3595,9 +3655,21 @@ export default function UnifiedAdminDashboard() {
               <span>វិធីសងប្រាក់ (Method):</span>
               <span class="bold">${record.payment_method}</span>
             </div>
+            ${parseFloat(record.refund_delivery_fee || 0) > 0 ? `
+              <div style="display: flex; justify-content: space-between; margin: 2px 0; color: #b45309;">
+                <span>🚚 បង្វិលថ្លៃដឹក (Delivery):</span>
+                <span class="bold">+$${parseFloat(record.refund_delivery_fee).toFixed(2)}</span>
+              </div>
+            ` : ''}
+            ${parseFloat(record.refund_tax_amount || 0) > 0 ? `
+              <div style="display: flex; justify-content: space-between; margin: 2px 0; color: #4338ca;">
+                <span>🏛️ បង្វិលពន្ធអាករ (Tax/VAT):</span>
+                <span class="bold">+$${parseFloat(record.refund_tax_amount).toFixed(2)}</span>
+              </div>
+            ` : ''}
             <div style="display: flex; justify-content: space-between; margin: 4px 0; padding-top: 4px; border-top: 1px solid #000; font-size: 13px;" class="bold">
               <span>ទឹកប្រាក់សងសរុប (REFUND):</span>
-              <span>${parseFloat(record.refunded_amount).toFixed(2)}</span>
+              <span>$${parseFloat(record.refunded_amount).toFixed(2)}</span>
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 11px; color: #444;">
               <span>ជាប្រាក់រៀល:</span>
@@ -3962,17 +4034,6 @@ export default function UnifiedAdminDashboard() {
   const [telegramTesting, setTelegramTesting] = useState(false);
   const [telegramStatusMsg, setTelegramStatusMsg] = useState('');
   const [paywayStatusMsg, setPaywayStatusMsg] = useState('');
-
-  // ⭐️ Helper Function គណនាពន្ធអាករលើ Order មួយៗ (Tax VAT calculation for any order) ⭐️
-  const getOrderTax = (order) => {
-    if (!order) return 0;
-    if (order.tax_amount != null) return parseFloat(order.tax_amount) || 0;
-    if (order.tax != null) return parseFloat(order.tax) || 0;
-    const items = Array.isArray(order.items) ? order.items : [];
-    const taxMeta = items.find(it => it && it.is_tax_meta);
-    if (taxMeta && taxMeta.tax_amount != null) return parseFloat(taxMeta.tax_amount) || 0;
-    return 0;
-  };
 
   // រក្សាទុកការកំណត់ហាងទាំងអស់ (Save Store Settings)
   const handleSaveStoreSettings = async (e, sectionType = 'general') => {
@@ -15427,6 +15488,12 @@ export default function UnifiedAdminDashboard() {
                         )}
                         {ord.refund_details?.payment_method && (
                           <span><b>វិធីសងប្រាក់:</b> {ord.refund_details.payment_method}</span>
+                        )}
+                        {parseFloat(ord.refund_details?.refund_delivery_fee || 0) > 0 && (
+                          <span className="text-amber-700 font-bold"><b>ថ្លៃដឹក:</b> +${parseFloat(ord.refund_details.refund_delivery_fee).toFixed(2)}</span>
+                        )}
+                        {parseFloat(ord.refund_details?.refund_tax_amount || 0) > 0 && (
+                          <span className="text-indigo-700 font-bold"><b>ពន្ធ:</b> +${parseFloat(ord.refund_details.refund_tax_amount).toFixed(2)}</span>
                         )}
                         {ord.refund_details?.processed_by && (
                           <span><b>បុគ្គលិក:</b> {ord.refund_details.processed_by}</span>
@@ -35474,7 +35541,9 @@ export default function UnifiedAdminDashboard() {
                     type="button"
                     onClick={() => {
                       const allSelected = refundItemsState.every(it => it.selected);
-                      setRefundItemsState(prev => prev.map(it => ({ ...it, selected: !allSelected })));
+                      const next = refundItemsState.map(it => ({ ...it, selected: !allSelected }));
+                      setRefundItemsState(next);
+                      recalcRefundTotal(next, refundDeliveryFee, refundDeliveryAmount, refundTax, refundTaxAmount);
                     }}
                     className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
                   >
@@ -35491,7 +35560,9 @@ export default function UnifiedAdminDashboard() {
                           checked={item.selected}
                           onChange={(e) => {
                             const val = e.target.checked;
-                            setRefundItemsState(prev => prev.map((it, i) => i === idx ? { ...it, selected: val } : it));
+                            const next = refundItemsState.map((it, i) => i === idx ? { ...it, selected: val } : it);
+                            setRefundItemsState(next);
+                            recalcRefundTotal(next, refundDeliveryFee, refundDeliveryAmount, refundTax, refundTaxAmount);
                           }}
                           className="w-4 h-4 rounded text-rose-600 accent-rose-600 cursor-pointer shrink-0"
                         />
@@ -35524,7 +35595,9 @@ export default function UnifiedAdminDashboard() {
                             type="button"
                             disabled={!item.selected || item.returnQty <= 1}
                             onClick={() => {
-                              setRefundItemsState(prev => prev.map((it, i) => i === idx ? { ...it, returnQty: Math.max(1, it.returnQty - 1) } : it));
+                              const next = refundItemsState.map((it, i) => i === idx ? { ...it, returnQty: Math.max(1, it.returnQty - 1) } : it);
+                              setRefundItemsState(next);
+                              recalcRefundTotal(next, refundDeliveryFee, refundDeliveryAmount, refundTax, refundTaxAmount);
                             }}
                             className="w-7 h-7 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs disabled:opacity-30 cursor-pointer"
                           >
@@ -35537,7 +35610,9 @@ export default function UnifiedAdminDashboard() {
                             type="button"
                             disabled={!item.selected || item.returnQty >= item.originalQty}
                             onClick={() => {
-                              setRefundItemsState(prev => prev.map((it, i) => i === idx ? { ...it, returnQty: Math.min(it.originalQty, it.returnQty + 1) } : it));
+                              const next = refundItemsState.map((it, i) => i === idx ? { ...it, returnQty: Math.min(it.originalQty, it.returnQty + 1) } : it);
+                              setRefundItemsState(next);
+                              recalcRefundTotal(next, refundDeliveryFee, refundDeliveryAmount, refundTax, refundTaxAmount);
                             }}
                             className="w-7 h-7 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs disabled:opacity-30 cursor-pointer"
                           >
@@ -35569,6 +35644,113 @@ export default function UnifiedAdminDashboard() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* ⭐️ PART: បង្វិលថ្លៃដឹកជញ្ជូន និងពន្ធអាករ (RETURN DELIVERY FEE & TAX / VAT) ⭐️ */}
+              <div className="p-3 sm:p-3.5 bg-gradient-to-r from-amber-50/80 via-orange-50/60 to-indigo-50/70 rounded-2xl border border-amber-200/90 space-y-2.5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[11px] flex items-center justify-center font-black shadow-xs">✓</span>
+                    បង្វិលសេវាដឹកជញ្ជូន & ពន្ធអាករ (Refund Delivery & Tax):
+                  </label>
+                  <span className="text-[10px] font-black text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-full uppercase tracking-wider border border-amber-300/60">
+                    ជម្រើសបន្ថែម (Add-ons)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Return Delivery Fee Card */}
+                  <div className={"p-3 rounded-2xl border transition " + (refundDeliveryFee ? 'bg-white border-amber-400 ring-2 ring-amber-300/40 shadow-xs' : 'bg-white/70 border-slate-200 hover:bg-white')}>
+                    <div className="flex items-start justify-between gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={refundDeliveryFee}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setRefundDeliveryFee(checked);
+                            recalcRefundTotal(refundItemsState, checked, refundDeliveryAmount, refundTax, refundTaxAmount);
+                          }}
+                          className="w-4 h-4 rounded text-amber-600 accent-amber-600 cursor-pointer shrink-0"
+                        />
+                        <div>
+                          <div className="text-xs font-black text-slate-900 flex items-center gap-1">
+                            🚚 សេវាដឹកជញ្ជូន (Delivery Fee)
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-bold">
+                            {getOrderDeliveryFee(refundOrder) > 0 ? `វិក្កយបត្រដើមមាន: $${getOrderDeliveryFee(refundOrder).toFixed(2)}` : 'បង្វិលថ្លៃដឹកជូនភ្ញៀវ'}
+                          </div>
+                        </div>
+                      </label>
+                      
+                      {/* Delivery Amount Input */}
+                      <div className={"flex items-center gap-1 px-2 py-1 rounded-xl border transition " + (refundDeliveryFee ? 'bg-amber-50/80 border-amber-300 ring-1 ring-amber-300/50' : 'bg-slate-50 border-slate-200 opacity-50')}>
+                        <span className="text-slate-500 text-xs font-black">\$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={refundDeliveryAmount}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setRefundDeliveryAmount(val);
+                            if (refundDeliveryFee) {
+                              recalcRefundTotal(refundItemsState, true, val, refundTax, refundTaxAmount);
+                            }
+                          }}
+                          disabled={!refundDeliveryFee}
+                          className="w-14 text-xs font-mono font-black text-slate-900 bg-transparent outline-none disabled:opacity-40"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Return Tax (VAT) Card */}
+                  <div className={"p-3 rounded-2xl border transition " + (refundTax ? 'bg-white border-indigo-400 ring-2 ring-indigo-300/40 shadow-xs' : 'bg-white/70 border-slate-200 hover:bg-white')}>
+                    <div className="flex items-start justify-between gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={refundTax}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setRefundTax(checked);
+                            recalcRefundTotal(refundItemsState, refundDeliveryFee, refundDeliveryAmount, checked, refundTaxAmount);
+                          }}
+                          className="w-4 h-4 rounded text-indigo-600 accent-indigo-600 cursor-pointer shrink-0"
+                        />
+                        <div>
+                          <div className="text-xs font-black text-slate-900 flex items-center gap-1">
+                            🏛️ ពន្ធអាករ (Tax / VAT)
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-bold">
+                            {getOrderTax(refundOrder) > 0 ? `វិក្កយបត្រដើមមានពន្ធ: $${getOrderTax(refundOrder).toFixed(2)}` : 'បង្វិលពន្ធអាករជូនភ្ញៀវ'}
+                          </div>
+                        </div>
+                      </label>
+
+                      {/* Tax Amount Input */}
+                      <div className={"flex items-center gap-1 px-2 py-1 rounded-xl border transition " + (refundTax ? 'bg-indigo-50/80 border-indigo-300 ring-1 ring-indigo-300/50' : 'bg-slate-50 border-slate-200 opacity-50')}>
+                        <span className="text-slate-500 text-xs font-black">\$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={refundTaxAmount}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setRefundTaxAmount(val);
+                            if (refundTax) {
+                              recalcRefundTotal(refundItemsState, refundDeliveryFee, refundDeliveryAmount, true, val);
+                            }
+                          }}
+                          disabled={!refundTax}
+                          className="w-14 text-xs font-mono font-black text-slate-900 bg-transparent outline-none disabled:opacity-40"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -35643,10 +35825,13 @@ export default function UnifiedAdminDashboard() {
               {/* Step 4: Refund Amount Calculation & Adjustments */}
               {(() => {
                 const selectedItems = refundItemsState.filter(it => it.selected && it.returnQty > 0);
-                const autoCalcAmount = selectedItems.reduce((s, it) => s + (it.price * it.returnQty), 0);
+                const itemsSubtotal = selectedItems.reduce((s, it) => s + (it.price * it.returnQty), 0);
+                const delVal = refundDeliveryFee ? (parseFloat(refundDeliveryAmount) || 0) : 0;
+                const taxVal = refundTax ? (parseFloat(refundTaxAmount) || 0) : 0;
+                const autoCalcAmount = itemsSubtotal + delVal + taxVal;
                 const restockUnits = selectedItems.filter(it => it.restock).reduce((s, it) => s + it.returnQty, 0);
                 const totalOrigQty = (Array.isArray(refundOrder.items) ? refundOrder.items : [])
-                  .filter(it => !it.is_tax_meta)
+                  .filter(it => !it.is_tax_meta && !it.is_delivery_meta)
                   .reduce((s, it) => s + (parseInt(it.qty || it.quantity || 1) || 1), 0);
                 const isFull = selectedItems.reduce((s, it) => s + it.returnQty, 0) >= totalOrigQty;
 
@@ -35675,16 +35860,36 @@ export default function UnifiedAdminDashboard() {
                             onClick={() => setRefundCustomAmount(autoCalcAmount.toFixed(2))}
                             className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer"
                           >
-                            100% ពេញ
+                            100% ពេញ (\${autoCalcAmount.toFixed(2)})
                           </button>
                           <button
                             type="button"
-                            onClick={() => setRefundCustomAmount(Math.max(0, autoCalcAmount - 1.5).toFixed(2))}
+                            onClick={() => setRefundCustomAmount(itemsSubtotal.toFixed(2))}
                             className="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded-lg transition cursor-pointer"
                           >
-                            -$1.50 ដឹក
+                            ទំនិញសុទ្ធ (\${itemsSubtotal.toFixed(2)})
                           </button>
                         </div>
+                      </div>
+
+                      {/* Breakdown of items + delivery + tax */}
+                      <div className="text-[11px] text-slate-300 space-y-1 pt-2 border-t border-slate-800">
+                        <div className="flex justify-between">
+                          <span>• មុខទំនិញសរុប ({selectedItems.length} មុខ):</span>
+                          <span className="font-mono font-bold">\${itemsSubtotal.toFixed(2)}</span>
+                        </div>
+                        {refundDeliveryFee && (
+                          <div className="flex justify-between text-amber-300 font-bold">
+                            <span>• 🚚 សេវាដឹកជញ្ជូន (Delivery Fee):</span>
+                            <span className="font-mono">+\${delVal.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {refundTax && (
+                          <div className="flex justify-between text-indigo-300 font-bold">
+                            <span>• 🏛️ ពន្ធអាករ (Tax / VAT):</span>
+                            <span className="font-mono">+\${taxVal.toFixed(2)}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Custom Amount input */}
@@ -35874,6 +36079,18 @@ export default function UnifiedAdminDashboard() {
                   <span className="text-slate-500">វិធីសងប្រាក់ (Method):</span>
                   <span className="font-bold font-sans">{creditNoteData.payment_method}</span>
                 </div>
+                {parseFloat(creditNoteData.refund_delivery_fee || 0) > 0 && (
+                  <div className="flex justify-between text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                    <span className="font-bold font-sans">🚚 បង្វិលសេវាដឹកជញ្ជូន:</span>
+                    <span className="font-mono font-black">+\${parseFloat(creditNoteData.refund_delivery_fee).toFixed(2)}</span>
+                  </div>
+                )}
+                {parseFloat(creditNoteData.refund_tax_amount || 0) > 0 && (
+                  <div className="flex justify-between text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200">
+                    <span className="font-bold font-sans">🏛️ បង្វិលពន្ធអាករ (Tax/VAT):</span>
+                    <span className="font-mono font-black">+\${parseFloat(creditNoteData.refund_tax_amount).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-baseline pt-2 border-t border-slate-900 font-black text-sm text-black">
                   <span>ទឹកប្រាក់សងសរុប (REFUND):</span>
                   <span className="text-rose-600 font-mono text-base">\${parseFloat(creditNoteData.refunded_amount).toFixed(2)}</span>
