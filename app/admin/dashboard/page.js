@@ -26571,41 +26571,68 @@ export default function UnifiedAdminDashboard() {
           </div>
         )}
 
-        {/* ⭐️ MODAL ទូទាត់ប្រាក់ (PAYMENT MODAL) ⭐️ */}
+        {/* ⭐️ MODAL ទូទាត់ប្រាក់ (PAYMENT MODAL) - WORLD-CLASS RESPONSIVE BOTTOM SHEET ⭐️ */}
         {paymentModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-8 animate-in zoom-in-95">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black text-gray-900">ការទូទាត់ប្រាក់ (Checkout)</h2>
-                <button onClick={() => setPaymentModalOpen(false)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 font-bold">✕</button>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col justify-end sm:justify-center sm:items-center sm:p-4 animate-in fade-in duration-200">
+            {/* Backdrop click dismiss */}
+            <div 
+              className="fixed inset-0 -z-10" 
+              onClick={() => setPaymentModalOpen(false)} 
+            />
+
+            <div className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] sm:max-h-[88vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200">
+              
+              {/* Mobile Drag Indicator Bar */}
+              <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mt-2.5 mb-1 sm:hidden shrink-0" />
+
+              {/* Fixed Header */}
+              <div className="flex justify-between items-center px-4 sm:px-6 py-3.5 border-b border-gray-100 shrink-0 bg-white">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg font-black shrink-0">
+                    💳
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black text-gray-900 leading-tight">ការទូទាត់ប្រាក់ (Checkout)</h2>
+                    <p className="text-[11px] text-gray-500 font-bold">ទំនិញ {posCart.length} មុខ • បញ្ចប់ការលក់រហ័ស</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setPaymentModalOpen(false)} 
+                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 active:scale-95 flex items-center justify-center text-gray-500 font-black text-sm transition cursor-pointer"
+                  title="បិទ"
+                >
+                  ✕
+                </button>
               </div>
 
-              {/* Total Display with Tax Breakdown */}
-              <div className="mb-4 p-4 bg-blue-50/90 rounded-2xl border border-blue-200 space-y-2">
-                <div className="flex justify-between text-xs text-gray-600 font-bold">
-                  <span>តម្លៃទំនិញសរុប (Subtotal):</span>
-                  <span>${posSubtotal.toFixed(2)}</span>
+              {/* Scrollable Body */}
+              <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 overscroll-contain">
+                {/* Total Display with Tax Breakdown */}
+                <div className="p-3.5 sm:p-4 bg-gradient-to-br from-blue-50/90 to-indigo-50/70 rounded-2xl border border-blue-200 space-y-1.5 shadow-2xs">
+                  <div className="flex justify-between text-xs text-gray-600 font-bold">
+                    <span>តម្លៃទំនិញសរុប (Subtotal):</span>
+                    <span>${posSubtotal.toFixed(2)}</span>
+                  </div>
+                  {posDiscountValue > 0 && (
+                    <div className="flex justify-between text-xs text-red-600 font-bold">
+                      <span>បញ្ចុះតម្លៃ (Discount):</span>
+                      <span>-${posDiscountValue.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {posTaxActive && posTaxAmount > 0 && (
+                    <div className="flex justify-between text-xs text-blue-800 font-bold">
+                      <span>ពន្ធអាករ VAT ({posTaxRate}% {posTaxMode === 'exclusive' ? 'Exclusive' : 'Inclusive'}):</span>
+                      <span>{posTaxMode === 'exclusive' ? `+${posTaxAmount.toFixed(2)}` : `(${posTaxAmount.toFixed(2)})`}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-blue-200/80 pt-2 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-black text-blue-600 uppercase">ទឹកប្រាក់ត្រូវទូទាត់សរុប</p>
+                      <p className="text-xs font-bold text-orange-600">= {posTotalKHR.toLocaleString()} រៀល</p>
+                    </div>
+                    <p className="text-2xl sm:text-3xl font-black text-blue-700 font-mono">${posTotal.toFixed(2)}</p>
+                  </div>
                 </div>
-                {posDiscountValue > 0 && (
-                  <div className="flex justify-between text-xs text-red-600 font-bold">
-                    <span>បញ្ចុះតម្លៃ (Discount):</span>
-                    <span>-${posDiscountValue.toFixed(2)}</span>
-                  </div>
-                )}
-                {posTaxActive && posTaxAmount > 0 && (
-                  <div className="flex justify-between text-xs text-blue-800 font-bold">
-                    <span>ពន្ធអាករ VAT ({posTaxRate}% {posTaxMode === 'exclusive' ? 'Exclusive' : 'Inclusive'}):</span>
-                    <span>{posTaxMode === 'exclusive' ? `+${posTaxAmount.toFixed(2)}` : `(${posTaxAmount.toFixed(2)})`}</span>
-                  </div>
-                )}
-                <div className="border-t border-blue-200/80 pt-2 flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-black text-blue-600 uppercase">ទឹកប្រាក់ត្រូវទូទាត់សរុប</p>
-                    <p className="text-xs font-bold text-orange-600">= {posTotalKHR.toLocaleString()} រៀល</p>
-                  </div>
-                  <p className="text-3xl font-black text-blue-700">${posTotal.toFixed(2)}</p>
-                </div>
-              </div>
 
               {/* ⭐️ កន្លែង ADD / កែសម្រួល & ជ្រើសរើសអតិថិជនទំនើប (MODERN CUSTOMER SELECTOR PICKER - BIG & TALL) ⭐️ */}
               <div className="mb-5 p-4 bg-gradient-to-br from-slate-50 to-blue-50/50 rounded-2xl border border-blue-200 shadow-sm relative">
@@ -26939,7 +26966,7 @@ export default function UnifiedAdminDashboard() {
               </div>
 
               {/* Payment Methods */}
-              <div className="grid grid-cols-3 gap-2.5 mb-6">
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { id: 'Cash', label: '💵 សាច់ប្រាក់', sub: 'Cash' },
                   { id: 'ABA Pay / KHQR', label: '📱 ស្កេន KHQR', sub: 'ABA / Bakong' },
@@ -26949,7 +26976,7 @@ export default function UnifiedAdminDashboard() {
                     key={item.id}
                     type="button"
                     onClick={() => setPaymentMethod(item.id)}
-                    className={`py-3 px-2 rounded-2xl font-black text-xs border-2 transition flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                    className={`py-2.5 px-1.5 sm:px-2 rounded-2xl font-black text-xs border-2 transition flex flex-col items-center justify-center gap-0.5 cursor-pointer active:scale-95 ${
                       paymentMethod === item.id 
                         ? item.id === 'Credit / ជំពាក់'
                           ? 'border-rose-600 bg-rose-600 text-white shadow-md'
@@ -26963,21 +26990,41 @@ export default function UnifiedAdminDashboard() {
                 ))}
               </div>
 
+              {/* KHQR Info Banner */}
+              {paymentMethod === 'ABA Pay / KHQR' && (
+                <div className="p-4 bg-gradient-to-br from-red-50 to-rose-50/60 rounded-2xl border border-red-200 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">📱</span>
+                    <h4 className="font-black text-sm text-red-900">ទូទាត់តាម KHQR (Bakong / ABA / All Banks)</h4>
+                  </div>
+                  <p className="text-xs text-red-700 leading-relaxed font-medium">
+                    ប្រព័ន្ធនឹងបង្កើត Dynamic KHQR Code ស្វ័យប្រវត្តិតាមតម្លៃសរុប <strong className="text-red-900 font-mono">${posTotal.toFixed(2)}</strong>។ សូមចុច <strong>«បញ្ជាក់ការលក់»</strong> ខាងក្រោម ដើម្បីបើកផ្ទាំង QR Code ស្កេនទូទាត់។
+                  </p>
+                </div>
+              )}
+
               {/* Payment Method Details */}
               {paymentMethod === 'Cash' && (
-                <div className="mb-6 space-y-4">
+                <div className="space-y-3.5">
                   {/* Quick Tender Buttons */}
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-2">ទឹកប្រាក់រហ័ស (Quick Cash)</label>
-                    <div className="grid grid-cols-5 gap-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-gray-500 uppercase">ទឹកប្រាក់រហ័ស (Quick Cash)</label>
+                      <span className="text-[11px] text-gray-400 font-medium">ចុចជ្រើសរើស</span>
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                       {[posTotal, 5, 10, 20, 50, 100].map((val, idx) => (
                         <button
                           key={idx}
                           type="button"
                           onClick={() => setAmountTendered(val.toString())}
-                          className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-black py-2 rounded-xl transition"
+                          className={`py-2 px-1 rounded-xl text-xs font-black transition cursor-pointer border active:scale-95 text-center ${
+                            amountTendered === val.toString()
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                              : 'bg-gray-100 hover:bg-gray-200 border-gray-200 text-gray-800'
+                          }`}
                         >
-                          {idx === 0 ? 'Exact' : `$${val}`}
+                          {idx === 0 ? `Exact ($${val.toFixed(2)})` : `$${val}`}
                         </button>
                       ))}
                     </div>
@@ -26985,23 +27032,35 @@ export default function UnifiedAdminDashboard() {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">ទឹកប្រាក់ទទួលបាន ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={amountTendered}
-                      onChange={(e) => setAmountTendered(e.target.value)}
-                      className="w-full text-2xl font-black p-3.5 rounded-xl border-2 border-gray-300 focus:border-blue-500 outline-none"
-                      placeholder="0.00"
-                    />
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-black text-lg font-mono">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={amountTendered}
+                        onChange={(e) => setAmountTendered(e.target.value)}
+                        className="w-full text-2xl font-black pl-8 pr-12 py-3 rounded-xl border-2 border-gray-300 focus:border-blue-500 outline-none font-mono"
+                        placeholder="0.00"
+                      />
+                      {amountTendered && (
+                        <button
+                          type="button"
+                          onClick={() => setAmountTendered('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 font-bold text-sm w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {amountTendered && (
-                    <div className={`flex justify-between items-center p-4 rounded-xl border ${changeAmount >= 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                    <div className={`flex justify-between items-center p-3.5 rounded-xl border ${changeAmount >= 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
                       <div>
                         <span className="font-bold text-xs uppercase block">ប្រាក់អាប់ (Change):</span>
-                        <span className="text-xs font-bold opacity-70">≈ {Math.round(Math.max(0, changeAmount) * exchangeRate).toLocaleString()} ៛</span>
+                        <span className="text-xs font-bold opacity-75">≈ {Math.round(Math.max(0, changeAmount) * exchangeRate).toLocaleString()} ៛</span>
                       </div>
-                      <span className="text-2xl font-black">${changeAmount > 0 ? changeAmount.toFixed(2) : '0.00'}</span>
+                      <span className="text-xl sm:text-2xl font-black font-mono">${changeAmount > 0 ? changeAmount.toFixed(2) : '0.00'}</span>
                     </div>
                   )}
                 </div>
@@ -27117,13 +27176,32 @@ export default function UnifiedAdminDashboard() {
                 );
               })()}
 
-              <button
-                onClick={processPayment}
-                disabled={isProcessingPayment}
-                className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-slate-800 transition shadow-xl disabled:bg-gray-400 flex justify-center items-center gap-2"
-              >
-                {isProcessingPayment ? 'កំពុងកាត់ស្តុក & បញ្ជាក់...' : '✓ បញ្ជាក់ការលក់ (COMPLETE SALE)'}
-              </button>
+              </div>
+
+              {/* ⭐️ STICKY ACTION FOOTER (ជាប់បាតងាយស្រួលចុចលើទូរស័ព្ទដៃ) ⭐️ */}
+              <div className="p-3.5 sm:p-5 border-t border-gray-100 bg-white/95 backdrop-blur-md shrink-0 shadow-lg pb-6 sm:pb-5">
+                <button
+                  onClick={processPayment}
+                  disabled={isProcessingPayment}
+                  className="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg transition shadow-xl disabled:bg-gray-400 flex justify-center items-center gap-2 cursor-pointer"
+                >
+                  {isProcessingPayment ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>កំពុងកាត់ស្តុក & បញ្ជាក់...</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <span>✓</span>
+                      <span>បញ្ជាក់ការលក់ (COMPLETE SALE)</span>
+                      <span className="bg-white/20 px-2.5 py-0.5 rounded-lg text-sm font-mono ml-1">
+                        ${posTotal.toFixed(2)}
+                      </span>
+                    </span>
+                  )}
+                </button>
+              </div>
+
             </div>
           </div>
         )}
