@@ -3295,31 +3295,37 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             : 'bg-gradient-to-r from-orange-50/80 via-amber-50/40 to-white border-orange-200/70 text-slate-900 shadow-orange-500/5'
         }`}>
           
-          {/* Header Bar: Status & Title */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 mb-2.5 px-1">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-3 w-3 shrink-0">
+          {/* Header Bar: Status & Title (Always 1 Single Clean Row) */}
+          <div className="flex items-center justify-between gap-1.5 sm:gap-3 mb-2 px-1 flex-nowrap min-w-0">
+            {/* Left: Indicator + Title + Badge */}
+            <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0 shrink">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 shadow-xs shadow-emerald-500/50"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 shadow-xs shadow-emerald-500/50"></span>
               </span>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-xs sm:text-sm font-black tracking-tight text-slate-900 dark:text-white uppercase flex items-center gap-1.5">
-                  <span className="text-sm">🛍️</span>
-                  <span>ទំនិញដែលអតិថិជនទិញថ្ងៃនេះ</span>
-                  <span className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black normal-case shadow-xs">
-                    Live Orders
-                  </span>
-                </h3>
-                <span className="hidden sm:inline text-[11px] text-slate-400 font-medium">
-                  • ថ្ងៃនេះ & ម្សិលមិញ (ចុចលើរូបដើម្បីមើល ឬបញ្ជាទិញ)
+
+              <h3 className="text-[11px] sm:text-sm font-black tracking-tight text-slate-900 dark:text-white uppercase flex items-center gap-1 sm:gap-1.5 min-w-0 truncate">
+                <span className="text-xs sm:text-sm shrink-0">🛍️</span>
+                <span className="truncate">
+                  <span className="sm:hidden">ទំនិញទើបទិញថ្ងៃនេះ</span>
+                  <span className="hidden sm:inline">ទំនិញដែលអតិថិជនទិញថ្ងៃនេះ</span>
                 </span>
-              </div>
+                <span className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-[8px] sm:text-[9px] px-1.5 sm:px-2 py-0.5 rounded-full font-black normal-case shadow-xs shrink-0 whitespace-nowrap">
+                  Live Orders
+                </span>
+              </h3>
+
+              <span className="hidden md:inline text-[11px] text-slate-400 font-medium truncate">
+                • ថ្ងៃនេះ & ម្សិលមិញ (ចុចលើរូបដើម្បីមើល ឬបញ្ជាទិញ)
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black text-orange-600 bg-orange-100/90 dark:bg-orange-950/70 dark:text-orange-300 px-2.5 py-1 rounded-xl border border-orange-200/70 dark:border-orange-900/60 flex items-center gap-1 shadow-2xs">
-                <span className="animate-pulse text-[10px]">🔥</span>
-                <span>រំកិលបន្តផ្ទាល់ (Live Stream)</span>
+            {/* Right: Live Stream Pill */}
+            <div className="flex items-center shrink-0">
+              <span className="text-[9px] sm:text-[10px] font-black text-orange-600 bg-orange-100/90 dark:bg-orange-950/70 dark:text-orange-300 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl border border-orange-200/70 dark:border-orange-900/60 flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                <span className="animate-pulse text-[9px] sm:text-[10px]">🔥</span>
+                <span className="hidden sm:inline">រំកិលបន្តផ្ទាល់</span>
+                <span>Live Stream</span>
               </span>
             </div>
           </div>
