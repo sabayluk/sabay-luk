@@ -7,7 +7,7 @@ import { fetchAllStores, getLocalStores, DEFAULT_FLAGSHIP_STORE, fetchPartnerSto
 
 export default function SaaSPlatformLandingPage() {
   const [lang, setLang] = useState('km');
-  const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
+  const [billingCycle, setBillingCycle] = useState('monthly'); // 'monthly' | 'yearly'
   const [openFaq, setOpenFaq] = useState(null);
   const [partnerStores, setPartnerStores] = useState([DEFAULT_FLAGSHIP_STORE]);
   const [loadingStores, setLoadingStores] = useState(false);
@@ -991,21 +991,31 @@ export default function SaaSPlatformLandingPage() {
             </p>
 
             {/* Monthly / Yearly Toggle */}
-            <div className="mt-8 inline-flex items-center p-1.5 rounded-2xl bg-slate-100 border border-slate-200">
+            <div className="mt-8 inline-flex items-center p-1.5 rounded-2xl bg-slate-100 border border-slate-200/90 shadow-xs">
               <button
                 type="button"
                 onClick={() => setBillingCycle('monthly')}
-                className={`px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer ${billingCycle === 'monthly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                className={`px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+                  billingCycle === 'monthly'
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
                 {t.billing_monthly}
               </button>
               <button
                 type="button"
                 onClick={() => setBillingCycle('yearly')}
-                className={`px-5 py-2 rounded-xl text-xs sm:text-sm font-black transition flex items-center gap-1.5 cursor-pointer ${billingCycle === 'yearly' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'}`}
+                className={`px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 cursor-pointer ${
+                  billingCycle === 'yearly'
+                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
                 <span>{t.billing_yearly}</span>
-                <span className="bg-amber-300 text-slate-900 text-[10px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                  billingCycle === 'yearly' ? 'bg-amber-300 text-slate-950' : 'bg-emerald-100 text-emerald-700 animate-pulse'
+                }`}>
                   {t.billing_save_badge}
                 </span>
               </button>
@@ -1013,7 +1023,7 @@ export default function SaaSPlatformLandingPage() {
           </div>
 
           {/* Pricing Grid */}
-          <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+          <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {plans.map((p) => {
               const price = billingCycle === 'yearly' ? p.priceYearly : p.priceMonthly;
               const period = billingCycle === 'yearly' ? t.per_year : t.per_month;

@@ -34,7 +34,7 @@ function RegisterStoreForm() {
   const [confirmPin, setConfirmPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('FREE');
-  const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' or 'monthly'
+  const [billingCycle, setBillingCycle] = useState('monthly'); // 'monthly' or 'yearly'
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');

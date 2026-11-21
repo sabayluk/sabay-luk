@@ -7,7 +7,7 @@ import Link from 'next/link';
 function PlansContent() {
   const searchParams = useSearchParams();
   const storeParam = searchParams?.get('store') || '';
-  const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
+  const [billingCycle, setBillingCycle] = useState('monthly'); // 'monthly' | 'yearly'
 
   const commonFeatures = [
     'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
