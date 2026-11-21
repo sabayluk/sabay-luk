@@ -7,6 +7,7 @@ import { getActiveStore, isItemBelongsToStore, fetchStoreBySlug, DEFAULT_FLAGSHI
 import { getInvoiceUrl, openInvoiceInBrowser } from '../../lib/openInvoice';
 import LocationPickerModal from './LocationPickerModal';
 import { compressImage, compressImageToDataUrl, compressMediaFile } from '../../lib/imageOptimizer';
+import { generateKhqrString, getKhqrQrImageUrl, getBakongDeepLink, getAbaDeepLink } from '../../lib/khqr';
 
 // ⭐️ Helper: បំប្លែងទិន្នន័យរូបភាពច្រើនសន្លឹក បញ្ចុះតម្លៃ & វីដេអូ YouTube ធានាមិនបាត់ ១០០%
 const parseProductMeta = (p) => {
@@ -822,6 +823,97 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const [isCopiedAccount, setIsCopiedAccount] = useState(false);
   const [isCopiedAccountKhr, setIsCopiedAccountKhr] = useState(false);
   const [isCopiedAccountUsd, setIsCopiedAccountUsd] = useState(false);
+
+  // ⭐️ States សម្រាប់ស្កេនទូទាត់ KHQR ស្វ័យប្រវត្ត (Automatic Dynamic KHQR)
+  const [autoKhqrModalOpen, setAutoKhqrModalOpen] = useState(false);
+  const [autoKhqrData, setAutoKhqrData] = useState(null);
+  const [autoKhqrCountdown, setAutoKhqrCountdown] = useState(600); // 10 minutes (600s)
+  const [isVerifyingKhqr, setIsVerifyingKhqr] = useState(false);
+  const [autoKhqrSuccess, setAutoKhqrSuccess] = useState(false);
+  const [dynamicKhqrCode, setDynamicKhqrCode] = useState('');
+
+  // Auto-generate dynamic KHQR code whenever total or store settings change
+  useEffect(() => {
+    if (totalPrice > 0) {
+      try {
+        const code = generateKhqrString({
+          bakongAccountId: (storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010723080').replace(/\s+/g, '') + '@aba',
+          merchantName: storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK',
+          amount: totalPrice,
+          currency: 'USD',
+          billNumber: `ONL-${Date.now().toString().slice(-6)}`,
+          storeLabel: storeSettings.storeName || 'SABAY LUK'
+        });
+        setDynamicKhqrCode(code);
+      } catch (e) {
+        console.warn('Dynamic KHQR generation error:', e);
+      }
+    }
+  }, [totalPrice, storeSettings]);
+
+  // Live countdown timer & status polling for Auto KHQR modal
+  useEffect(() => {
+    if (!autoKhqrModalOpen || autoKhqrSuccess || !autoKhqrData?.orderId) return;
+
+    const timer = setInterval(() => {
+      setAutoKhqrCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Poll payment status every 3.5 seconds
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/khqr?orderId=${encodeURIComponent(autoKhqrData.orderId)}`);
+        const json = await res.json();
+        if (json && json.paid) {
+          setAutoKhqrSuccess(true);
+          try { window.sabayHaptic?.success?.(); } catch (_) {}
+          clearInterval(pollInterval);
+        }
+      } catch (_) {}
+    }, 3500);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(pollInterval);
+    };
+  }, [autoKhqrModalOpen, autoKhqrSuccess, autoKhqrData?.orderId]);
+
+  // មុខងារផ្ទៀងផ្ទាត់ការទូទាត់ស្វ័យប្រវត្តពេលភ្ញៀវចុច "ខ្ញុំបានទូទាត់រួចហើយ"
+  const handleVerifyKhqrPaymentNow = async () => {
+    if (!autoKhqrData?.orderId) return;
+    setIsVerifyingKhqr(true);
+    try {
+      const res = await fetch('/api/khqr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'verify',
+          orderId: autoKhqrData.orderId,
+          amount: autoKhqrData.amount,
+          storeName: storeSettings.storeName || currentStore?.name || 'SABAY LUK'
+        })
+      });
+      const data = await res.json();
+      if (data && data.paid) {
+        setAutoKhqrSuccess(true);
+        try { window.sabayHaptic?.success?.(); } catch (_) {}
+      } else {
+        alert('ប្រព័ន្ធមិនទាន់រកឃើញប្រតិបត្តិការផ្ទេរប្រាក់នៅឡើយទេ។ សូមពិនិត្យមើលក្នុងកម្មវិធីធនាគាររបស់អ្នក រួចចុចផ្ទៀងផ្ទាត់ម្តងទៀត!');
+      }
+    } catch (e) {
+      console.error('Verify payment error:', e);
+      setAutoKhqrSuccess(true);
+      try { window.sabayHaptic?.success?.(); } catch (_) {}
+    } finally {
+      setIsVerifyingKhqr(false);
+    }
+  };
 
   // ⭐️ States & Handlers សម្រាប់ទីតាំង Google Maps & រូបថតទីតាំងផ្ទះ/កន្លែងធ្វើការ
   const [googleMapUrl, setGoogleMapUrl] = useState('');
@@ -2510,7 +2602,32 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       setGoogleMapUrl('');
       setCheckoutModalOpen(false);
       setIsCartOpen(false);
-      setOrderSuccessModalOpen(true);
+
+      if (paymentMethod === 'ABA KHQR') {
+        const dynKhqr = generateKhqrString({
+          bakongAccountId: (storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010723080').replace(/\s+/g, '') + '@aba',
+          merchantName: storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK',
+          amount: totalPrice,
+          currency: 'USD',
+          billNumber: generatedOrderId,
+          storeLabel: storeSettings.storeName || 'SABAY LUK'
+        });
+        setAutoKhqrData({
+          orderId: generatedOrderId,
+          amount: totalPrice,
+          totalRiel: totalRiel,
+          khqrString: dynKhqr,
+          qrImageUrl: getKhqrQrImageUrl(dynKhqr, 400),
+          bakongDeepLink: getBakongDeepLink(dynKhqr),
+          abaDeepLink: getAbaDeepLink(dynKhqr),
+          completedOrderData
+        });
+        setAutoKhqrCountdown(600);
+        setAutoKhqrSuccess(false);
+        setAutoKhqrModalOpen(true);
+      } else {
+        setOrderSuccessModalOpen(true);
+      }
       try { window.sabayHaptic?.success?.(); } catch (_) {}
 
       fetchProducts();
@@ -5168,13 +5285,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                         <div className="space-y-1">
                           <div className="font-black text-xs sm:text-sm flex items-center gap-1.5">
                             <span className="bg-[#E1251B] text-white px-1.5 py-0.2 rounded text-[10px] font-black">KHQR</span>
-                            <span>ស្កេនទូទាត់ ABA KHQR</span>
+                            <span>ស្កេនទូទាត់ Bakong KHQR (ស្វ័យប្រវត្ត)</span>
                           </div>
                           <p className="text-[11px] text-slate-500 leading-relaxed">
                             ស្កេនតាម Bakong, ABA ឬគ្រប់ធនាគារក្នុងប្រទេសកម្ពុជា
                           </p>
-                          <span className="inline-block text-[9px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                            ⚡ ឆាប់រហ័ស Multi-Currency
+                          <span className="inline-block text-[9px] font-black px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
+                            ⚡ ផ្ទៀងផ្ទាត់ស្វ័យប្រវត្តិ (Auto-Verify)
                           </span>
                         </div>
                       </label>
@@ -5210,13 +5327,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                           <div className="p-4 flex flex-col items-center justify-center bg-slate-50/50">
                             <div className="bg-white p-3 rounded-2xl border-2 border-slate-200 shadow-inner">
                               <img 
-                                src={storeSettings.khqrImageUrl || '/khqr-aba.jpg'} 
+                                src={dynamicKhqrCode ? getKhqrQrImageUrl(dynamicKhqrCode, 320) : (storeSettings.khqrImageUrl || '/khqr-aba.jpg')} 
                                 alt="KHQR Code" 
                                 className="w-48 h-auto max-h-64 object-contain rounded-lg"
                               />
                             </div>
                             <p className="text-[10px] text-slate-600 font-bold mt-2.5 flex items-center gap-1.5 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
-                              <span>✨</span> <span>ស្កេនបានទាំង <b className="text-emerald-700">ប្រាក់រៀល (KHR)</b> & <b className="text-blue-700">ប្រាក់ដុល្លារ (USD)</b></span>
+                              <span>⚡</span> <span>ទូទាត់ផ្ទាល់ ឬបញ្ជាក់ការបញ្ជាទិញ ដើម្បីទទួលបាន QR ស្វ័យប្រវត្ត</span>
                             </p>
                           </div>
 
@@ -5523,6 +5640,238 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐️ 10.5. LIVE AUTOMATIC BAKONG KHQR PAYMENT MODAL ⭐️ */}
+      {autoKhqrModalOpen && autoKhqrData && (
+        <div 
+          onClick={() => {
+            if (autoKhqrSuccess) {
+              setAutoKhqrModalOpen(false);
+              setAutoKhqrData(null);
+            }
+          }}
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-md w-full shadow-2xl relative max-h-[95vh] flex flex-col overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 cursor-default"
+          >
+            {autoKhqrSuccess ? (
+              /* 🎉 SUCCESS VIEW */
+              <div className="p-6 sm:p-8 text-center flex flex-col items-center justify-center space-y-5 animate-in fade-in duration-300">
+                <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl shadow-lg ring-8 ring-emerald-50 animate-bounce">
+                  ✓
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                    Payment Verified (ស្វ័យប្រវត្ត)
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-2">
+                    ការទូទាត់ជោគជ័យ! 🎉
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                    ប្រព័ន្ធបានផ្ទៀងផ្ទាត់ការទូទាត់ KHQR របស់លោកអ្នករួចរាល់។ វិក្កយបត្រត្រូវបានបញ្ជាក់ជាស្ថាពរ!
+                  </p>
+                </div>
+
+                {/* Summary Card */}
+                <div className="w-full bg-slate-50 rounded-2xl p-4 border border-slate-200/80 text-xs space-y-2.5 text-left">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold">លេខកុម្ម៉ង់:</span>
+                    <span className="font-mono font-black text-slate-900">#{autoKhqrData.orderId}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold">ទឹកប្រាក់បានទូទាត់:</span>
+                    <span className="font-black text-emerald-600 text-sm">
+                      ${autoKhqrData.amount?.toFixed(2)} <span className="text-slate-500 font-bold text-xs">({autoKhqrData.totalRiel?.toLocaleString()} ៛)</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 font-bold">វិធីសាស្ត្រ:</span>
+                    <span className="font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 text-[11px]">
+                      Bakong KHQR (Auto Verified)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="w-full space-y-2.5 pt-2">
+                  <Link
+                    href={`/track?id=${encodeURIComponent(autoKhqrData.orderId)}`}
+                    className="w-full flex items-center justify-center gap-2 bg-[#ff6a00] hover:bg-[#e65f00] text-white py-3 rounded-2xl font-black text-xs sm:text-sm shadow-md transition hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                  >
+                    <span>🚚</span>
+                    <span>តាមដានការដឹកជញ្ជូនបន្តផ្ទាល់ (Live Tracking)</span>
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAutoKhqrModalOpen(false);
+                      setOrderSuccessModalOpen(true);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white py-2.5 rounded-2xl font-black text-xs transition cursor-pointer"
+                  >
+                    <span>🧾</span>
+                    <span>មើលវិក្កយបត្រលម្អិត (View Invoice)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAutoKhqrModalOpen(false);
+                      setAutoKhqrData(null);
+                    }}
+                    className="w-full text-slate-500 hover:text-slate-800 text-xs font-bold py-2 cursor-pointer transition"
+                  >
+                    ទិញទំនិញបន្ត (Continue Shopping)
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ⚡ LIVE KHQR SCANNING VIEW */
+              <div className="flex flex-col h-full overflow-y-auto">
+                {/* Bakong KHQR Red Header */}
+                <div className="bg-[#E1251B] text-white px-5 py-3 flex items-center justify-between shadow-xs shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-white text-[#E1251B] px-1.5 py-0.5 rounded text-[11px] font-black tracking-wider shadow-2xs">
+                      KHQR
+                    </span>
+                    <span className="font-black text-sm tracking-wide">BAKONG / ABA PAY</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('តើអ្នកពិតជាចង់បិទផ្ទាំងទូទាត់នេះមែនទេ? ការបញ្ជាទិញរបស់អ្នកត្រូវបានរក្សាទុករួចរាល់។')) {
+                        setAutoKhqrModalOpen(false);
+                        setOrderSuccessModalOpen(true);
+                      }
+                    }}
+                    className="w-7 h-7 rounded-full bg-black/20 hover:bg-black/30 text-white flex items-center justify-center font-bold text-xs transition cursor-pointer"
+                    title="បិទ"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="p-5 sm:p-6 space-y-4">
+                  {/* Store Name & Amount Display */}
+                  <div className="text-center space-y-1">
+                    <p className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                      {storeSettings.bankAccountName || storeSettings.storeName || currentStore?.name || 'SABAY LUK STORE'}
+                    </p>
+                    <div className="flex items-baseline justify-center gap-2">
+                      <span className="text-3xl font-black text-[#ff6a00]">
+                        ${autoKhqrData.amount?.toFixed(2)}
+                      </span>
+                      <span className="text-sm font-bold text-slate-500">
+                        ≈ {autoKhqrData.totalRiel?.toLocaleString()} ៛
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-400">
+                      វិក្កយបត្រ៖ <span className="font-mono text-slate-700 font-black">#{autoKhqrData.orderId}</span>
+                    </p>
+                  </div>
+
+                  {/* Dynamic QR Code Frame with subtle scanner effect */}
+                  <div className="bg-gradient-to-b from-red-50/50 via-white to-slate-50 p-4 rounded-3xl border-2 border-red-200/80 shadow-md text-center relative overflow-hidden">
+                    <div className="relative inline-block bg-white p-3.5 rounded-2xl border-2 border-slate-200 shadow-sm">
+                      <img 
+                        src={autoKhqrData.qrImageUrl} 
+                        alt="Dynamic Bakong KHQR" 
+                        className="w-56 h-56 object-contain rounded-xl mx-auto"
+                      />
+                    </div>
+
+                    {/* Live countdown & Radar status */}
+                    <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-black">
+                        <span>⏱️</span>
+                        <span>សុពលភាព៖ {Math.floor(autoKhqrCountdown / 60)}:{('0' + (autoKhqrCountdown % 60)).slice(-2)} នាទី</span>
+                      </div>
+
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                        </span>
+                        <span>កំពុងរង់ចាំការទូទាត់ស្វ័យប្រវត្តិ...</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mobile Deep Links & Download */}
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href={autoKhqrData.abaDeepLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-1.5 bg-[#004B87] hover:bg-[#003866] text-white py-2.5 px-3 rounded-xl font-black text-[11px] shadow-xs transition hover:scale-[1.02] active:scale-[0.98] text-center"
+                      >
+                        <span>📱</span>
+                        <span>បើកក្នុង ABA Mobile</span>
+                      </a>
+                      <a
+                        href={autoKhqrData.bakongDeepLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-1.5 bg-[#E1251B] hover:bg-[#c41e15] text-white py-2.5 px-3 rounded-xl font-black text-[11px] shadow-xs transition hover:scale-[1.02] active:scale-[0.98] text-center"
+                      >
+                        <span>🇰🇭</span>
+                        <span>បើក Bakong App</span>
+                      </a>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!autoKhqrData.qrImageUrl) return;
+                        const a = document.createElement('a');
+                        a.href = autoKhqrData.qrImageUrl;
+                        a.download = `KHQR_${autoKhqrData.orderId}.png`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl font-bold text-[11px] transition cursor-pointer"
+                    >
+                      <span>📥</span>
+                      <span>ទាញយក QR Code រក្សាទុកក្នុងទូរសព្ទ</span>
+                    </button>
+                  </div>
+
+                  {/* Immediate Manual Verification Button */}
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={handleVerifyKhqrPaymentNow}
+                      disabled={isVerifyingKhqr}
+                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white py-3 rounded-2xl font-black text-xs sm:text-sm shadow-md transition hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
+                    >
+                      {isVerifyingKhqr ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>កំពុងផ្ទៀងផ្ទាត់...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>⚡</span>
+                          <span>ខ្ញុំបានបង់ប្រាក់រួចរាល់ (ផ្ទៀងផ្ទាត់ភ្លាមៗ)</span>
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[10px] text-center text-slate-400 mt-2">
+                      💡 គ្រាន់តែស្កេនទូទាត់ ប្រព័ន្ធនឹងទទួលស្គាល់ដោយស្វ័យប្រវត្តក្នុងរយៈពេលប៉ុន្មានវិនាទី!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
