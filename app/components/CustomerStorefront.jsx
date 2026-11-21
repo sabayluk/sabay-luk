@@ -832,25 +832,6 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const [autoKhqrSuccess, setAutoKhqrSuccess] = useState(false);
   const [dynamicKhqrCode, setDynamicKhqrCode] = useState('');
 
-  // Auto-generate dynamic KHQR code whenever total or store settings change
-  useEffect(() => {
-    if (totalPrice > 0) {
-      try {
-        const code = generateKhqrString({
-          bakongAccountId: (storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010723080').replace(/\s+/g, '') + '@aba',
-          merchantName: storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK',
-          amount: totalPrice,
-          currency: 'USD',
-          billNumber: `ONL-${Date.now().toString().slice(-6)}`,
-          storeLabel: storeSettings.storeName || 'SABAY LUK'
-        });
-        setDynamicKhqrCode(code);
-      } catch (e) {
-        console.warn('Dynamic KHQR generation error:', e);
-      }
-    }
-  }, [totalPrice, storeSettings]);
-
   // Live countdown timer & status polling for Auto KHQR modal
   useEffect(() => {
     if (!autoKhqrModalOpen || autoKhqrSuccess || !autoKhqrData?.orderId) return;
@@ -2332,6 +2313,25 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
   totalPrice = Math.round((totalPrice + deliveryFee) * 100) / 100;
   const totalRiel = Math.round(totalPrice * (storeSettings.exchangeRate || 4100));
+
+  // ⭐️ Auto-generate dynamic KHQR code whenever total or store settings change (Safely placed after totalPrice is calculated) ⭐️
+  useEffect(() => {
+    if (totalPrice > 0) {
+      try {
+        const code = generateKhqrString({
+          bakongAccountId: (storeSettings.bankAccountUsd || storeSettings.bankAccountNumber || '010723080').replace(/\s+/g, '') + '@aba',
+          merchantName: storeSettings.bankAccountName || storeSettings.storeName || 'SABAY LUK',
+          amount: totalPrice,
+          currency: 'USD',
+          billNumber: `ONL-${Date.now().toString().slice(-6)}`,
+          storeLabel: storeSettings.storeName || 'SABAY LUK'
+        });
+        setDynamicKhqrCode(code);
+      } catch (e) {
+        console.warn('Dynamic KHQR generation error:', e);
+      }
+    }
+  }, [totalPrice, storeSettings]);
 
   // ⭐️ បញ្ជាក់ការបញ្ជាទិញ (Submit Online Checkout to Supabase) ⭐️
   const handleProcessOrder = async (e) => {
