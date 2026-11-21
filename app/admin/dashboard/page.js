@@ -26713,39 +26713,38 @@ export default function UnifiedAdminDashboard() {
                   </div>
                 </div>
 
-                {/* ⭐️ DROPDOWN POPUP LIST ធំ និងវែង (BIG & TALL OVERLAY) ⭐️ */}
+                {/* ⭐️ DROPDOWN POPUP LIST ធំ និងវែង (BIG & TALL OVERLAY - COMPACT ON MOBILE, ROOMY ON DESKTOP) ⭐️ */}
                 {modalCustomerDropdownOpen && (
                   <>
                     <div 
                       className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" 
                       onClick={() => setModalCustomerDropdownOpen(false)}
                     />
-                    <div className="absolute left-2 right-2 top-[72px] z-50 bg-white rounded-3xl shadow-2xl border-2 border-blue-400 overflow-hidden animate-in fade-in zoom-in-95 max-h-[420px] flex flex-col">
+                    <div className="absolute left-1 right-1 sm:left-2 sm:right-2 top-[66px] sm:top-[72px] z-50 bg-white rounded-2xl sm:rounded-3xl shadow-2xl border-2 border-blue-400 overflow-hidden animate-in fade-in zoom-in-95 max-h-[300px] sm:max-h-[420px] flex flex-col">
                       
                       {/* Search & Header inside Dropdown */}
-                      <div className="p-3 bg-gradient-to-r from-slate-900 to-slate-950 text-white border-b border-slate-800 space-y-2.5">
+                      <div className="p-2.5 sm:p-3 bg-gradient-to-r from-slate-900 to-slate-950 text-white border-b border-slate-800 space-y-2 sm:space-y-2.5 shrink-0">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                            <span>👥</span> បញ្ជីអតិថិជនទាំងអស់ ({customers.length})
+                          <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                            <span>👥</span> បញ្ជីអតិថិជន ({customers.length})
                           </span>
                           <button
                             type="button"
                             onClick={() => selectCustomerForSale(null)}
-                            className="bg-blue-600 hover:bg-blue-500 text-white font-black text-[11px] px-2.5 py-1 rounded-xl transition cursor-pointer flex items-center gap-1"
+                            className="bg-blue-600 hover:bg-blue-500 text-white font-black text-[10px] sm:text-[11px] px-2 sm:px-2.5 py-1 rounded-lg sm:rounded-xl transition cursor-pointer flex items-center gap-1 active:scale-95"
                           >
                             <span>⚡</span> រើសទូទៅ (Walk-in)
                           </button>
                         </div>
 
-                        {/* Search Input */}
+                        {/* Search Input - Removed autoFocus on mobile to prevent virtual keyboard from covering list */}
                         <div className="relative">
                           <input
                             type="text"
                             value={customerPickerSearch}
                             onChange={(e) => setCustomerPickerSearch(e.target.value)}
-                            placeholder="🔍 ស្វែងរកតាមឈ្មោះ, លេខទូរស័ព្ទ ឬកម្រិត VIP..."
-                            className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-400 rounded-xl pl-3 pr-8 py-2 text-xs font-bold outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 shadow-inner"
-                            autoFocus
+                            placeholder="🔍 ស្វែងរកតាមឈ្មោះ, លេខទូរស័ព្ទ ឬ VIP..."
+                            className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-400 rounded-lg sm:rounded-xl pl-3 pr-8 py-1.5 sm:py-2 text-xs font-bold outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 shadow-inner"
                           />
                           {customerPickerSearch && (
                             <button
@@ -26759,28 +26758,28 @@ export default function UnifiedAdminDashboard() {
                         </div>
                       </div>
 
-                      {/* List of Customers (Tall & Roomy) */}
-                      <div className="overflow-y-auto p-2 space-y-1.5 divide-y divide-gray-100 flex-1 max-h-[300px]">
+                      {/* List of Customers (Compact on mobile, Roomy on Desktop) */}
+                      <div className="overflow-y-auto p-1.5 sm:p-2 space-y-1 sm:space-y-1.5 divide-y divide-gray-100 flex-1 max-h-[190px] sm:max-h-[300px] overscroll-contain">
                         {/* 1. Walk-in Customer card */}
                         <button
                           type="button"
                           onClick={() => selectCustomerForSale(null)}
-                          className={`w-full text-left p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition cursor-pointer border ${
+                          className={`w-full text-left p-2 sm:p-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-between transition cursor-pointer border ${
                             customerName === 'អតិថិជនទូទៅ' || !customerName
                               ? 'bg-blue-50/80 border-blue-300 text-blue-900 shadow-xs'
                               : 'bg-white hover:bg-gray-50 border-gray-100 text-gray-800'
                           }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-gray-200 to-gray-300 text-gray-700 flex items-center justify-center text-lg shadow-xs shrink-0">
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-tr from-gray-200 to-gray-300 text-gray-700 flex items-center justify-center text-sm sm:text-lg shadow-xs shrink-0">
                               🚶
                             </div>
                             <div>
-                              <p className="font-black text-sm text-gray-900">អតិថិជនទូទៅ (General Walk-in)</p>
-                              <p className="text-[11px] text-gray-500 font-medium">ទិញផ្ទាល់មុខហាង • មិនចុះឈ្មោះ • គ្មានបញ្ចុះតម្លៃ</p>
+                              <p className="font-black text-xs sm:text-sm text-gray-900">អតិថិជនទូទៅ (General Walk-in)</p>
+                              <p className="text-[10px] sm:text-[11px] text-gray-500 font-medium">ទិញផ្ទាល់មុខហាង • មិនចុះឈ្មោះ • គ្មានបញ្ចុះតម្លៃ</p>
                             </div>
                           </div>
-                          <span className="text-[11px] bg-gray-100 text-gray-600 px-3 py-1 rounded-xl font-bold">
+                          <span className="text-[10px] sm:text-[11px] bg-gray-100 text-gray-600 px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl font-bold">
                             Default
                           </span>
                         </button>
@@ -26802,14 +26801,14 @@ export default function UnifiedAdminDashboard() {
                                 key={cust.id}
                                 type="button"
                                 onClick={() => selectCustomerForSale(cust)}
-                                className={`w-full text-left p-3 rounded-2xl text-xs font-bold flex items-center justify-between transition cursor-pointer border ${
+                                className={`w-full text-left p-2 sm:p-3 rounded-xl sm:rounded-2xl text-xs font-bold flex items-center justify-between transition cursor-pointer border ${
                                   isSelected
                                     ? 'bg-blue-50/90 border-blue-400 text-blue-900 shadow-md ring-2 ring-blue-400/30'
                                     : 'bg-white hover:bg-blue-50/60 border-gray-100 text-gray-800'
                                 }`}
                               >
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0 shadow-xs ${
+                                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                                  <div className={`w-8 h-8 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl flex items-center justify-center text-base sm:text-xl shrink-0 shadow-xs ${
                                     cust.tier === 'VIP' 
                                       ? 'bg-gradient-to-tr from-amber-400 to-orange-500 text-white' 
                                       : cust.tier === 'WHOLESALE' 
@@ -26818,10 +26817,10 @@ export default function UnifiedAdminDashboard() {
                                   }`}>
                                     {cust.tier === 'VIP' ? '🥇' : cust.tier === 'WHOLESALE' ? '💼' : cust.tier === 'LOYAL' ? '🥈' : '👤'}
                                   </div>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-black text-sm text-gray-900">{cust.name}</span>
-                                      <span className={`text-[10px] px-2 py-0.5 rounded-lg font-black uppercase ${
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 sm:gap-2">
+                                      <span className="font-black text-xs sm:text-sm text-gray-900 truncate">{cust.name}</span>
+                                      <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded font-black uppercase shrink-0 ${
                                         cust.tier === 'VIP' 
                                           ? 'bg-amber-100 text-amber-900 border border-amber-300' 
                                           : cust.tier === 'WHOLESALE' 
@@ -26831,22 +26830,22 @@ export default function UnifiedAdminDashboard() {
                                         {cust.tier}
                                       </span>
                                     </div>
-                                    <p className="text-[11px] text-gray-600 mt-0.5 font-medium flex items-center gap-2.5">
+                                    <p className="text-[10px] sm:text-[11px] text-gray-600 mt-0.5 font-medium flex items-center gap-2 truncate">
                                       <span className="font-bold text-gray-700">📞 {cust.phone || 'គ្មានលេខ'}</span>
-                                      {cust.address && <span className="truncate max-w-[200px]">📍 {cust.address}</span>}
+                                      {cust.address && <span className="truncate max-w-[140px] sm:max-w-[200px]">📍 {cust.address}</span>}
                                     </p>
                                   </div>
                                 </div>
 
-                                <div className="text-right shrink-0">
+                                <div className="text-right shrink-0 ml-1">
                                   {cust.discount_percent > 0 && (
-                                    <span className="text-[11px] bg-red-100 text-red-700 font-black px-2.5 py-1 rounded-xl border border-red-200 block">
-                                      បញ្ចុះ {cust.discount_percent}%
+                                    <span className="text-[10px] sm:text-[11px] bg-red-100 text-red-700 font-black px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl border border-red-200 block">
+                                      -{cust.discount_percent}%
                                     </span>
                                   )}
                                   {cust.tier === 'WHOLESALE' && (
-                                    <span className="text-[10px] text-purple-700 font-bold block mt-0.5">
-                                      តម្លៃបោះដុំ
+                                    <span className="text-[9px] sm:text-[10px] text-purple-700 font-bold block mt-0.5">
+                                      បោះដុំ
                                     </span>
                                   )}
                                 </div>
@@ -26856,8 +26855,8 @@ export default function UnifiedAdminDashboard() {
                       </div>
 
                       {/* Quick Create shortcut at bottom */}
-                      <div className="p-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs">
-                        <span className="text-gray-500 font-medium text-[11px]">រកមិនឃើញអតិថិជន?</span>
+                      <div className="p-2 sm:p-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs shrink-0">
+                        <span className="text-gray-500 font-medium text-[10px] sm:text-[11px]">រកមិនឃើញអតិថិជន?</span>
                         <button
                           type="button"
                           onClick={() => {
@@ -26865,10 +26864,10 @@ export default function UnifiedAdminDashboard() {
                             setEditingCustomer(null);
                             setCustomerModalOpen(true);
                           }}
-                          className="bg-slate-900 hover:bg-slate-800 text-white font-black text-xs px-3.5 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                          className="bg-slate-900 hover:bg-slate-800 text-white font-black text-[11px] sm:text-xs px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-sm active:scale-95"
                         >
                           <span>➕</span>
-                          <span>បង្កើតអតិថិជនថ្មី</span>
+                          <span>បង្កើតថ្មី</span>
                         </button>
                       </div>
 
