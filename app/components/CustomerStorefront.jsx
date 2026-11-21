@@ -1674,7 +1674,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         phone2: dbSettings.phone2 || localParsed.phone2 || DEFAULT_STORE_SETTINGS.phone2,
         address: dbSettings.address || active.address || localParsed.address || DEFAULT_STORE_SETTINGS.address,
         storeSlogan: dbSettings.storeSlogan || localParsed.storeSlogan || DEFAULT_STORE_SETTINGS.storeSlogan,
-        announcementText: dbSettings.announcementText || localParsed.announcementText || DEFAULT_STORE_SETTINGS.announcementText
+        announcementText: dbSettings.announcementText || localParsed.announcementText || DEFAULT_STORE_SETTINGS.announcementText,
+        logoUrl: dbSettings.logoUrl || localParsed.logoUrl || active.settings?.logoUrl || DEFAULT_STORE_SETTINGS.logoUrl || ''
       };
 
       // Tax Resolution
@@ -1715,7 +1716,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         tiktok: scopedSettings.tiktok || active.tiktok || prev.tiktok,
         address: scopedSettings.address || active.address || prev.address,
         themeColor: scopedSettings.themeColor || active.settings?.themeColor || prev.themeColor,
-        logoUrl: scopedSettings.logoUrl || active.settings?.logoUrl || prev.logoUrl,
+        logoUrl: scopedSettings.logoUrl || dbSettings.logoUrl || active.settings?.logoUrl || prev.logoUrl || '',
         bankAccountName: scopedSettings.bankAccountName || (active.id === 'store_default_sabayluk' ? 'SENG SOVEASNA' : (active.owner_name || active.name)),
         bankAccountKhr: scopedSettings.bankAccountKhr || (active.id === 'store_default_sabayluk' ? '004 500 394' : '004 500 394'),
         bankAccountUsd: scopedSettings.bankAccountUsd || (active.id === 'store_default_sabayluk' ? '010 723 080' : (active.phone || '010 723 080')),
@@ -2868,9 +2869,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             onClick={() => { setSelectedCategory('all'); setSearchQuery(''); }}
             className="flex items-center gap-2.5 cursor-pointer group select-none min-w-0 flex-1 sm:flex-initial"
           >
-            {isMounted && storeSettings.logoUrl ? (
+            {(storeSettings.logoUrl || currentStore?.settings?.logoUrl) ? (
               <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl bg-white dark:bg-slate-800 p-1 flex items-center justify-center shadow-xs border border-gray-100 dark:border-slate-700/60 shrink-0 group-hover:scale-105 transition">
-                <img src={storeSettings.logoUrl} alt={storeSettings.storeName} className="h-full w-full object-contain rounded-xl" />
+                <img 
+                  src={storeSettings.logoUrl || currentStore?.settings?.logoUrl} 
+                  alt={storeSettings.storeName || 'Store Logo'} 
+                  className="h-full w-full object-contain rounded-xl" 
+                />
               </div>
             ) : (
               <div suppressHydrationWarning style={{ backgroundColor: brandColor }} className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl text-white flex items-center justify-center font-black text-lg sm:text-xl shadow-md shrink-0 group-hover:scale-105 transition ring-2 ring-orange-500/20">
@@ -3549,20 +3554,20 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       </section>
 
       {/* ⭐️ 5. PRODUCT CATALOG WITH SMART FILTER & SORT BAR ⭐️ */}
-      <section id="products-section" className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6">
+      <section id="products-section" className="max-w-[1440px] mx-auto px-4 sm:px-6 pt-1 pb-6 sm:pt-2 sm:pb-8">
         
         {/* ⭐️ Standard Luxury E-Commerce Catalog Control Bar (Sleek Single-Row Toolbar) ⭐️ */}
-        <div className={`${themeMode === 'dark' ? 'bg-slate-900/95 border-slate-800/90 text-white' : 'bg-white/95 border-slate-200/80 text-slate-900'} backdrop-blur-sm px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl border shadow-[0_2px_10px_rgba(0,0,0,0.03)] mb-4 sm:mb-6 flex items-center justify-between gap-2 transition-all`}>
+        <div className={`${themeMode === 'dark' ? 'bg-slate-900/95 border-slate-800/90 text-white' : 'bg-white/95 border-slate-200/80 text-slate-900'} backdrop-blur-sm px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl border shadow-[0_2px_10px_rgba(0,0,0,0.03)] mb-3 sm:mb-5 flex items-center justify-between gap-1.5 sm:gap-2 transition-all`}>
           
-          {/* Left: Section Title + Item Count Badge */}
-          <div className="flex items-center gap-2 min-w-0">
+          {/* Left: Section Title + Item Count Badge (Fully Visible - No Truncation) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-br from-orange-500/15 to-amber-500/10 text-[#ff6a00] flex items-center justify-center text-xs sm:text-sm font-black shrink-0 shadow-2xs">
               🏷️
             </div>
-            <div className="flex items-center gap-1.5 min-w-0">
-              <h2 className="text-xs sm:text-sm md:text-base font-black text-slate-900 dark:text-white truncate tracking-tight">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <h2 className="text-xs sm:text-sm md:text-base font-black text-slate-900 dark:text-white whitespace-nowrap tracking-tight">
                 {selectedCategory === 'all' 
-                  ? (language === 'km' ? 'ទំនិញពេញនិយម' : 'Popular Items') 
+                  ? 'ទំនិញពេញនិយម' 
                   : selectedCategory}
               </h2>
               <span className="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full bg-orange-500/10 text-[#ff6a00] dark:text-orange-400 border border-orange-500/20 shrink-0">
@@ -3572,36 +3577,36 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
           </div>
 
           {/* Right: Modern Luxury Pill Filter & Sort Chips */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {/* Luxury In-Stock Toggle Pill Chip */}
             <button
               type="button"
               onClick={() => setInStockOnly(!inStockOnly)}
-              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-black transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs border ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-black transition-all flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs border whitespace-nowrap ${
                 inStockOnly 
                   ? 'bg-gradient-to-r from-orange-500 to-[#ff6a00] text-white border-orange-500 shadow-orange-500/20' 
                   : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200/90 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/80'
               }`}
               title={language === 'km' ? 'បង្ហាញតែទំនិញមានស្តុក' : 'Filter In-Stock Only'}
             >
-              <span className="text-[11px] sm:text-xs">{inStockOnly ? '✓' : '📦'}</span>
-              <span className="hidden xs:inline">{language === 'km' ? 'មានស្តុក' : 'In Stock'}</span>
-              <span className="xs:hidden">{language === 'km' ? 'ស្តុក' : 'Stock'}</span>
+              <span className="text-[10px] sm:text-xs">{inStockOnly ? '✓' : '📦'}</span>
+              <span className="hidden xs:inline">មានស្តុក</span>
+              <span className="xs:hidden">ស្តុក</span>
             </button>
 
             {/* Luxury Sort Select Pill Chip */}
-            <div className="relative inline-flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-black text-slate-700 dark:text-slate-200 shadow-2xs hover:border-slate-300 transition-colors">
+            <div className="relative inline-flex items-center bg-slate-50 dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 rounded-full px-2 sm:px-2.5 py-1 sm:py-1.5 text-[10px] sm:text-xs font-black text-slate-700 dark:text-slate-200 shadow-2xs hover:border-slate-300 transition-colors whitespace-nowrap">
               <select 
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="bg-transparent focus:outline-none cursor-pointer appearance-none pr-3.5 text-[11px] sm:text-xs font-black text-slate-800 dark:text-white"
+                className="bg-transparent focus:outline-none cursor-pointer appearance-none pr-3 text-[10px] sm:text-xs font-black text-slate-800 dark:text-white"
               >
                 <option value="newest" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">✨ ថ្មីៗ</option>
                 <option value="popular" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">🔥 លក់ដាច់</option>
                 <option value="price_low" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">📉 តម្លៃទាប</option>
                 <option value="price_high" className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white">📈 តម្លៃខ្ពស់</option>
               </select>
-              <span className="pointer-events-none absolute right-2 text-[10px] text-slate-400">▾</span>
+              <span className="pointer-events-none absolute right-1.5 text-[9px] text-slate-400">▾</span>
             </div>
           </div>
 
@@ -6586,8 +6591,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-12 grid grid-cols-1 md:grid-cols-4 gap-8">
           <div>
             <div className="flex items-center gap-2 mb-3">
-              {storeSettings.logoUrl ? (
-                <img src={storeSettings.logoUrl} alt="" className="h-9 w-auto max-w-[140px] object-contain" />
+              {(storeSettings.logoUrl || currentStore?.settings?.logoUrl) ? (
+                <img src={storeSettings.logoUrl || currentStore?.settings?.logoUrl} alt={storeSettings.storeName || ''} className="h-9 w-auto max-w-[140px] object-contain" />
               ) : (
                 <div className="w-8 h-8 rounded-xl bg-[#ff6a00] text-white flex items-center justify-center font-black text-sm">
                   {(storeSettings.storeName || 'S').trim().charAt(0).toUpperCase()}
