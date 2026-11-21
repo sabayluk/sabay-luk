@@ -6187,6 +6187,7 @@ export default function UnifiedAdminDashboard() {
       const generatedOrderId = `ORD-${Date.now().toString().slice(-6)}`;
       const affectedLowStockItems = [];
       const stockAdjustments = [];
+      const isCurrentlyOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
       // ១. កាត់ស្តុកចេញពី product_variants និង products
       for (const item of posCart) {
