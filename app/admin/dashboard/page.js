@@ -6186,6 +6186,7 @@ export default function UnifiedAdminDashboard() {
     try {
       const generatedOrderId = `ORD-${Date.now().toString().slice(-6)}`;
       const affectedLowStockItems = [];
+      const stockAdjustments = [];
 
       // ១. កាត់ស្តុកចេញពី product_variants និង products
       for (const item of posCart) {
@@ -27190,26 +27191,34 @@ export default function UnifiedAdminDashboard() {
 
               </div>
 
-              {/* ⭐️ STICKY ACTION FOOTER (ជាប់បាតងាយស្រួលចុចលើទូរស័ព្ទដៃ) ⭐️ */}
+              {/* ⭐️ STICKY ACTION FOOTER (ជាប់បាតងាយស្រួលចុចលើទូរស័ព្ទដៃ - VIBRANT & MODERN) ⭐️ */}
               <div className="p-3.5 sm:p-5 border-t border-gray-100 bg-white/95 backdrop-blur-md shrink-0 shadow-lg pb-6 sm:pb-5">
                 <button
                   onClick={processPayment}
                   disabled={isProcessingPayment}
-                  className="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg transition shadow-xl disabled:bg-gray-400 flex justify-center items-center gap-2 cursor-pointer"
+                  className="w-full relative group overflow-hidden bg-gradient-to-r from-orange-600 via-amber-500 to-orange-500 hover:from-orange-500 hover:to-amber-500 active:scale-[0.98] text-white py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg transition-all duration-300 shadow-xl shadow-orange-500/30 hover:shadow-orange-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex justify-between items-center px-4 sm:px-6 cursor-pointer border border-white/20"
                 >
+                  {/* Ambient Glass Shine Effect */}
+                  <div className="absolute inset-0 w-1/2 h-full bg-white/20 skew-x-12 -translate-x-full group-hover:translate-x-[300%] transition-transform duration-1000 ease-out pointer-events-none" />
+
                   {isProcessingPayment ? (
-                    <span className="flex items-center gap-2">
-                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>កំពុងកាត់ស្តុក & បញ្ជាក់...</span>
-                    </span>
+                    <div className="w-full flex items-center justify-center gap-2.5 py-0.5">
+                      <span className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="tracking-wide">កំពុងកាត់ស្តុក & បញ្ជាក់ការលក់...</span>
+                    </div>
                   ) : (
-                    <span className="flex items-center gap-2">
-                      <span>✓</span>
-                      <span>បញ្ជាក់ការលក់ (COMPLETE SALE)</span>
-                      <span className="bg-white/20 px-2.5 py-0.5 rounded-lg text-sm font-mono ml-1">
-                        ${posTotal.toFixed(2)}
-                      </span>
-                    </span>
+                    <>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/25 backdrop-blur-sm flex items-center justify-center text-xs sm:text-sm font-black shadow-xs shrink-0">
+                          ✓
+                        </span>
+                        <span className="tracking-wide text-sm sm:text-base truncate">បញ្ជាក់ការលក់ (COMPLETE SALE)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 bg-black/20 backdrop-blur-sm px-3 sm:px-3.5 py-1 sm:py-1.5 rounded-xl border border-white/20 font-mono font-black text-sm sm:text-lg shadow-inner shrink-0 ml-2">
+                        <span>${posTotal.toFixed(2)}</span>
+                        <span className="text-xs opacity-80">➔</span>
+                      </div>
+                    </>
                   )}
                 </button>
               </div>
