@@ -9,151 +9,151 @@ function PlansContent() {
   const storeParam = searchParams?.get('store') || '';
   const [billingCycle, setBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
 
+  const commonFeatures = [
+    'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+    'ការបញ្ជាទិញ(Orders)',
+    'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ',
+    'គ្រប់គ្រងអតិថិជន',
+    'កំណត់ហាង & Logo',
+    'ចេញវិក្កយបត្រស្កេន',
+    'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ',
+    'អាចតំឡើងជាAPP ក្នុង telegram',
+    'កំណត់និងកែប្រែ វិក្កយបត្រ',
+    'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+    'វិភាគទិន្នន័យ(P&L)',
+    'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
+    'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+    'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ',
+    'អេក្រង់ភ្ញៀវ (Display)',
+    'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ',
+    'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ',
+    'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot'
+  ];
+
   const plans = [
     {
       key: 'FREE',
-      name: '🎁 FREE (សាកល្បង)',
+      name: '🎁 គំរោង Free',
       priceMonthly: 0,
       priceYearly: 0,
       savingsYearly: 0,
-      productsText: 'រហូតដល់ 15 មុខ',
-      accountsText: '1 Admin',
+      productsText: 'ទំនិញរហូតដល់ ១៥ មុខ',
+      accountsText: 'គណនីគ្រប់គ្រង (1 Admin)',
       badge: '🎁 ឥតគិតថ្លៃជារៀងរហូត',
       badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
       desc: 'អ្នកលក់ថ្មីថ្មោង ឬអ្នកចង់តេស្តសាកល្បង (គ្មានហានិភ័យ)',
       features: [
         'ទំនិញរហូតដល់ ១៥ មុខ',
         'គណនីគ្រប់គ្រង (1 Admin)',
-        'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
-        'ចេញវិក្កយបត្រស្កេន ABA KHQR',
-        'មានវេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
-        'គាំទ្រការប្រើលើទូរស័ព្ទដៃ & កុំព្យូទ័រ'
+        ...commonFeatures
       ],
       popular: false
     },
     {
       key: 'STARTER',
-      name: '🌱 STARTER',
+      name: '🌱 គំរោង 1$ (Starter)',
       priceMonthly: 1,
       priceYearly: 10,
       savingsYearly: 2,
-      productsText: 'រហូតដល់ 25 មុខ',
-      accountsText: '1 Admin + 1 បុគ្គលិក',
+      productsText: 'ទំនិញរហូតដល់ ២៥ មុខ',
+      accountsText: 'គណនីគ្រប់គ្រង (1 Admin)',
       badge: '🌱 ធូរថ្លៃបំផុតត្រឹម $1/ខែ',
       badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-      desc: 'តូបតូចៗ អ្នកលក់ Live តាមផ្ទះ',
+      desc: 'តូបតូចៗ ឬអ្នកលក់ Live តាមផ្ទះ',
       features: [
         'ទំនិញរហូតដល់ ២៥ មុខ',
-        '1 Admin + 1 គណនីបុគ្គលិក',
-        'កាត់ស្តុក Size & Color លម្អិត',
-        'ចេញវិក្កយបត្រស្កេន KHQR & បោះពុម្ព Thermal',
-        'របាយការណ៍លក់ និងប្រាក់ចំណេញសង្ខេប',
-        'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន'
+        'គណនីគ្រប់គ្រង (1 Admin)',
+        ...commonFeatures
       ],
       popular: false
     },
     {
       key: 'BASIC',
-      name: '⚡ BASIC',
+      name: '⚡ គំរោង 2$ (Basic)',
       priceMonthly: 2,
       priceYearly: 20,
       savingsYearly: 4,
-      productsText: 'រហូតដល់ 50 មុខ',
-      accountsText: '1 Admin + 1 បុគ្គលិក',
+      productsText: 'ទំនិញរហូតដល់ ៥០ មុខ',
+      accountsText: 'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
       badge: '⚡ សន្សំសំចៃខ្ពស់',
       badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
       desc: 'ហាងខោអាវ ស្បែកជើងខ្នាតតូច',
       features: [
         'ទំនិញរហូតដល់ ៥០ មុខ',
-        '1 Admin + 1 គណនីបុគ្គលិក',
-        'តារាងស្តុកទំនិញ Variant Matrix (Size/Color)',
-        'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
-        'កត់ត្រាចំណាយ និងរបាយការណ៍ P&L',
-        'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ'
+        'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
+        ...commonFeatures
       ],
       popular: false
     },
     {
       key: 'PRO',
-      name: '🚀 PRO',
+      name: '🚀 គំរោង 3$ (Pro)',
       priceMonthly: 3,
       priceYearly: 30,
       savingsYearly: 6,
-      productsText: 'រហូតដល់ 100 មុខ',
-      accountsText: '1 Admin + 1 បុគ្គលិក',
+      productsText: 'ទំនិញរហូតដល់ ១០០ មុខ',
+      accountsText: 'គណនីបុគ្គលិក 2 នាក់ (Admin + 1 Staff)',
       badge: '🔥 ពេញនិយមបំផុត (Best Value)',
       badgeColor: 'bg-orange-50 text-orange-700 border-orange-200',
       desc: 'ហាងពេញនិយម មានបុគ្គលិកឆ្លាស់វេន',
       features: [
         'ទំនិញរហូតដល់ ១០០ មុខ',
-        '1 Admin + 1 គណនីបុគ្គលិក',
-        'គ្រប់គ្រងបំណុលអតិថិជន & ប្រព័ន្ធ Loyalty Points',
-        'របាយការណ៍វិភាគការលក់ និងប្រាក់ចំណេញកម្រិតខ្ពស់',
-        'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot',
-        'វេបសាយ Storefront ជាមួយការទូទាត់ KHQR ស្វ័យប្រវត្ត'
+        'គណនីបុគ្គលិក 2 នាក់ (Admin + 1 Staff)',
+        ...commonFeatures
       ],
       popular: true
     },
     {
       key: 'BUSINESS',
-      name: '🔥 BUSINESS',
+      name: '🔥 គំរោង 5$ (Business)',
       priceMonthly: 5,
       priceYearly: 50,
       savingsYearly: 10,
-      productsText: 'រហូតដល់ 200 មុខ',
-      accountsText: '1 Admin + 2 បុគ្គលិក',
+      productsText: 'ទំនិញរហូតដល់ ២០០ មុខ',
+      accountsText: 'គណនីបុគ្គលិក 3 នាក់ (Admin + 2 Staff)',
       badge: '🚀 សម្រាប់ហាងធំ',
       badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
       desc: 'ហាងធំគួរសម មានស្តុកច្រើន Size/Color',
       features: [
         'ទំនិញរហូតដល់ ២០០ មុខ',
-        '1 Admin + 2 គណនីបុគ្គលិក',
-        'មុខងារ POS ពេញលេញ គ្មានដែនកំណត់',
-        'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
-        'គ្រប់គ្រងសិទ្ធិបុគ្គលិកដាច់ដោយឡែកលម្អិត',
-        'ការគាំទ្របច្ចេកទេសជាអាទិភាព ២៤/៧'
+        'គណនីបុគ្គលិក 3 នាក់ (Admin + 2 Staff)',
+        ...commonFeatures
       ],
       popular: false
     },
     {
       key: 'PREMIUM',
-      name: '💎 PREMIUM',
+      name: '💎 គំរោង 7$ (Premium)',
       priceMonthly: 7,
       priceYearly: 70,
       savingsYearly: 14,
-      productsText: 'រហូតដល់ 500 មុខ',
-      accountsText: '1 Admin + 3 បុគ្គលិក',
+      productsText: 'ទំនិញរហូតដល់ ៥០០ មុខ',
+      accountsText: 'គណនីបុគ្គលិក 4 នាក់ (Admin + 3 Staff)',
       badge: '💎 សម្រាប់ហាងលក់ដុំ & រាយ',
       badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
       desc: 'ហាងមានមុខទំនិញច្រើន និងបុគ្គលិកច្រើន',
       features: [
         'ទំនិញរហូតដល់ ៥០០ មុខ',
-        '1 Admin + 3 គណនីបុគ្គលិក',
-        'មុខងារគ្រប់គ្រងស្តុក និងលក់ដុំ/រាយកម្រិតខ្ពស់',
-        'រៀបចំរបាយការណ៍លក់ប្រចាំខែ & ប្រចាំឆ្នាំ',
-        'ជូនដំណឹងស្វ័យប្រវត្តិតាម Telegram',
-        'ការគាំទ្របច្ចេកទេសពិសេស ២៤/៧'
+        'គណនីបុគ្គលិក 4 នាក់ (Admin + 3 Staff)',
+        ...commonFeatures
       ],
       popular: false
     },
     {
       key: 'ENTERPRISE',
-      name: '👑 ENTERPRISE',
+      name: '👑 គំរោង 10$ (Enterprise)',
       priceMonthly: 10,
       priceYearly: 100,
       savingsYearly: 20,
-      productsText: 'រហូតដល់ 1,000 មុខ',
-      accountsText: '1 Admin + 5 បុគ្គលិក',
+      productsText: 'ទំនិញរហូតដល់ ១,០០០ មុខ',
+      accountsText: 'គណនីបុគ្គលិក 5 នាក់ (Admin + 4 Staff)',
       badge: '👑 កម្រិតកំពូល Full Option',
       badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
       desc: 'ហាងធំៗ សាខា ឬឃ្លាំងស្តុកធំ',
       features: [
         'ទំនិញរហូតដល់ ១,០០០ មុខ',
-        '1 Admin + 5 គណនីបុគ្គលិក',
-        'មុខងារទាំងអស់លើប្រព័ន្ធ SABAY LUK POS',
-        'បម្រុងទុកទិន្នន័យស្វ័យប្រវត្តិ (Cloud Backup)',
-        'ជំនួយការរៀបចំប្រព័ន្ធពីក្រុមការងារផ្ទាល់',
-        'Custom Domain សម្រាប់មុខហាងរបស់អ្នក'
+        'គណនីបុគ្គលិក 5 នាក់ (Admin + 4 Staff)',
+        ...commonFeatures
       ],
       popular: false
     }

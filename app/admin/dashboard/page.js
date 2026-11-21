@@ -163,161 +163,260 @@ const getPlanProrationInfo = (store, targetPlanPrice = 0) => {
 export const UPGRADE_PLANS_LIST = [
   {
     key: 'FREE',
-    name: '🎁 FREE (សាកល្បង)',
+    name: '🎁 គំរោង Free',
     priceMonthly: 0,
     priceYearly: 0,
     savingsYearly: 0,
     maxProducts: 15,
     maxStaff: 1,
-    productsText: '15 មុខទំនិញ',
-    accountsText: '1 Admin',
+    productsText: '១៥ មុខ',
+    accountsText: 'គណនីគ្រប់គ្រង (1 Admin)',
     badge: '🎁 ឥតគិតថ្លៃជារៀងរហូត',
     badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    desc: 'អ្នកលក់ថ្មីថ្មោង ឬអ្នកចង់តេស្តសាកល្បងប្រព័ន្ធ',
+    desc: 'អ្នកលក់ថ្មីថ្មោង ឬអ្នកចង់តេស្តសាកល្បងប្រព័ន្ធ (គ្មានហានិភ័យ)',
     features: [
       'ទំនិញរហូតដល់ ១៥ មុខ',
-      'គណនីគ្រប់គ្រង (1 Admin)',
       'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
-      'ចេញវិក្កយបត្រស្កេន ABA KHQR',
+      'ការបញ្ជាទិញ(Orders)',
+      'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ',
+      'គ្រប់គ្រងអតិថិជន',
+      'កំណត់ហាង & Logo',
+      'គណនីគ្រប់គ្រង (1 Admin)',
+      'ចេញវិក្កយបត្រស្កេន',
+      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ',
+      'អាចតំឡើងជាAPP ក្នុង telegram',
+      'កំណត់និងកែប្រែ វិក្កយបត្រ',
+      'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+      'វិភាគទិន្នន័យ(P&L)',
+      'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
       'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
-      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ & កុំព្យូទ័រ'
+      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ',
+      'អេក្រង់ភ្ញៀវ (Display)',
+      'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ',
+      'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ',
+      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot'
     ],
     popular: false
   },
   {
     key: 'STARTER',
-    name: '🌱 STARTER',
+    name: '🌱 គំរោង 1$ (Starter)',
     priceMonthly: 1,
     priceYearly: 10,
     savingsYearly: 2,
     maxProducts: 25,
-    maxStaff: 2,
-    productsText: '25 មុខទំនិញ',
-    accountsText: '1 Admin + 1 បុគ្គលិក',
+    maxStaff: 1,
+    productsText: '២៥ មុខ',
+    accountsText: 'គណនីគ្រប់គ្រង (1 Admin)',
     badge: '🌱 ធូរថ្លៃបំផុតត្រឹម $1/ខែ',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
     desc: 'តូបតូចៗ ឬអ្នកលក់ Live តាមផ្ទះ',
     features: [
       'ទំនិញរហូតដល់ ២៥ មុខ',
-      'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
-      'កាត់ស្តុក Size & Color លម្អិត',
-      'ចេញវិក្កយបត្រស្កេន KHQR & Thermal',
-      'របាយការណ៍លក់ និងប្រាក់ចំណេញសង្ខេប',
-      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន'
+      'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+      'ការបញ្ជាទិញ(Orders)',
+      'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ',
+      'គ្រប់គ្រងអតិថិជន',
+      'កំណត់ហាង & Logo',
+      'គណនីគ្រប់គ្រង (1 Admin)',
+      'ចេញវិក្កយបត្រស្កេន',
+      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ',
+      'អាចតំឡើងជាAPP ក្នុង telegram',
+      'កំណត់និងកែប្រែ វិក្កយបត្រ',
+      'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+      'វិភាគទិន្នន័យ(P&L)',
+      'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
+      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ',
+      'អេក្រង់ភ្ញៀវ (Display)',
+      'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ',
+      'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ',
+      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot'
     ],
     popular: false
   },
   {
     key: 'BASIC',
-    name: '⚡ BASIC',
+    name: '⚡ គំរោង 2$ (Basic)',
     priceMonthly: 2,
     priceYearly: 20,
     savingsYearly: 4,
     maxProducts: 50,
     maxStaff: 2,
-    productsText: '50 មុខទំនិញ',
-    accountsText: '1 Admin + 1 បុគ្គលិក',
+    productsText: '៥០ មុខ',
+    accountsText: 'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
     badge: '⚡ សន្សំសំចៃខ្ពស់',
     badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     desc: 'ហាងខោអាវ ស្បែកជើងខ្នាតតូច',
     features: [
       'ទំនិញរហូតដល់ ៥០ មុខ',
+      'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+      'ការបញ្ជាទិញ(Orders)',
+      'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ',
+      'គ្រប់គ្រងអតិថិជន',
+      'កំណត់ហាង & Logo',
       'គណនីបុគ្គលិក ២ នាក់ (Admin + Staff)',
-      'តារាងស្តុកទំនិញ Variant Matrix (Size/Color)',
+      'ចេញវិក្កយបត្រស្កេន',
+      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ',
+      'អាចតំឡើងជាAPP ក្នុង telegram',
+      'កំណត់និងកែប្រែ វិក្កយបត្រ',
+      'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+      'វិភាគទិន្នន័យ(P&L)',
       'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
-      'កត់ត្រាចំណាយ និងរបាយការណ៍ P&L',
-      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ'
+      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ',
+      'អេក្រង់ភ្ញៀវ (Display)',
+      'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ',
+      'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ',
+      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot'
     ],
     popular: false
   },
   {
     key: 'PRO',
-    name: '🚀 PRO',
+    name: '🚀 គំរោង 3$ (Pro)',
     priceMonthly: 3,
     priceYearly: 30,
     savingsYearly: 6,
     maxProducts: 100,
-    maxStaff: 3,
-    productsText: '100 មុខទំនិញ',
-    accountsText: '1 Admin + 2 បុគ្គលិក',
+    maxStaff: 2,
+    productsText: '១០០ មុខ',
+    accountsText: 'គណនីបុគ្គលិក 2 នាក់ (Admin + 1 Staff)',
     badge: '🔥 ពេញនិយមបំផុត (Best Value)',
     badgeColor: 'bg-orange-50 text-orange-700 border-orange-200',
     desc: 'ហាងពេញនិយម មានបុគ្គលិកឆ្លាស់វេន',
     features: [
       'ទំនិញរហូតដល់ ១០០ មុខ',
-      'គណនីបុគ្គលិក ៣ នាក់ (Admin + 2 Staff)',
-      'គ្រប់គ្រងបំណុលអតិថិជន & ប្រព័ន្ធ Loyalty Points',
-      'របាយការណ៍វិភាគការលក់ និងប្រាក់ចំណេញកម្រិតខ្ពស់',
-      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot',
-      'វេបសាយ Storefront ជាមួយការទូទាត់ KHQR ស្វ័យប្រវត្ត'
+      'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+      'ការបញ្ជាទិញ(Orders)',
+      'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ',
+      'គ្រប់គ្រងអតិថិជន',
+      'កំណត់ហាង & Logo',
+      'គណនីបុគ្គលិក 2 នាក់ (Admin + 1 Staff)',
+      'ចេញវិក្កយបត្រស្កេន',
+      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ',
+      'អាចតំឡើងជាAPP ក្នុង telegram',
+      'កំណត់និងកែប្រែ វិក្កយបត្រ',
+      'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+      'វិភាគទិន្នន័យ(P&L)',
+      'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
+      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ',
+      'អេក្រង់ភ្ញៀវ (Display)',
+      'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ',
+      'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ',
+      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot'
     ],
     popular: true
   },
   {
     key: 'BUSINESS',
-    name: '🔥 BUSINESS',
+    name: '🔥 គំរោង 5$ (Business)',
     priceMonthly: 5,
     priceYearly: 50,
     savingsYearly: 10,
     maxProducts: 200,
-    maxStaff: 4,
-    productsText: '200 មុខទំនិញ',
-    accountsText: '1 Admin + 3 បុគ្គលិក',
+    maxStaff: 3,
+    productsText: '២០០ មុខ',
+    accountsText: 'គណនីបុគ្គលិក 3 នាក់ (Admin + 2 Staff)',
     badge: '🚀 សម្រាប់ហាងធំ',
     badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
     desc: 'ហាងធំគួរសម មានស្តុកច្រើន Size/Color',
     features: [
       'ទំនិញរហូតដល់ ២០០ មុខ',
-      'គណនីបុគ្គលិក ៤ នាក់',
-      'មុខងារ POS ពេញលេញ គ្មានដែនកំណត់',
+      'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+      'ការបញ្ជាទិញ(Orders)',
+      'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ',
+      'គ្រប់គ្រងអតិថិជន',
+      'កំណត់ហាង & Logo',
+      'គណនីបុគ្គលិក 3 នាក់ (Admin + 2 Staff)',
+      'ចេញវិក្កយបត្រស្កេន',
+      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ',
+      'អាចតំឡើងជាAPP ក្នុង telegram',
+      'កំណត់និងកែប្រែ វិក្កយបត្រ',
       'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
-      'គ្រប់គ្រងសិទ្ធិបុគ្គលិកដាច់ដោយឡែកលម្អិត',
-      'ការគាំទ្របច្ចេកទេសជាអាទិភាព ២៤/៧'
+      'វិភាគទិន្នន័យ(P&L)',
+      'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
+      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ',
+      'អេក្រង់ភ្ញៀវ (Display)',
+      'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ',
+      'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ',
+      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot'
     ],
     popular: false
   },
   {
     key: 'PREMIUM',
-    name: '💎 PREMIUM',
+    name: '💎 គំរោង 7$ (Premium)',
     priceMonthly: 7,
     priceYearly: 70,
     savingsYearly: 14,
     maxProducts: 500,
-    maxStaff: 6,
-    productsText: '500 មុខទំនិញ',
-    accountsText: '1 Admin + 5 បុគ្គលិក',
+    maxStaff: 4,
+    productsText: '៥០០ មុខ',
+    accountsText: 'គណនីបុគ្គលិក 4 នាក់ (Admin + 3 Staff)',
     badge: '💎 សម្រាប់ហាងលក់ដុំ & រាយ',
     badgeColor: 'bg-teal-50 text-teal-700 border-teal-200',
     desc: 'ហាងមានមុខទំនិញច្រើន និងបុគ្គលិកច្រើន',
     features: [
       'ទំនិញរហូតដល់ ៥០០ មុខ',
-      'គណនីបុគ្គលិក ៦ នាក់',
-      'មុខងារគ្រប់គ្រងស្តុក និងលក់ដុំ/រាយកម្រិតខ្ពស់',
-      'រៀបចំរបាយការណ៍លក់ប្រចាំខែ & ប្រចាំឆ្នាំ',
-      'ជូនដំណឹងស្វ័យប្រវត្តិតាម Telegram',
-      'ការគាំទ្របច្ចេកទេសពិសេស ២៤/៧'
+      'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+      'ការបញ្ជាទិញ(Orders)',
+      'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ',
+      'គ្រប់គ្រងអតិថិជន',
+      'កំណត់ហាង & Logo',
+      'គណនីបុគ្គលិក 4 នាក់ (Admin + 3 Staff)',
+      'ចេញវិក្កយបត្រស្កេន',
+      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ',
+      'អាចតំឡើងជាAPP ក្នុង telegram',
+      'កំណត់និងកែប្រែ វិក្កយបត្រ',
+      'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+      'វិភាគទិន្នន័យ(P&L)',
+      'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
+      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ',
+      'អេក្រង់ភ្ញៀវ (Display)',
+      'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ',
+      'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ',
+      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot'
     ],
     popular: false
   },
   {
     key: 'ENTERPRISE',
-    name: '👑 ENTERPRISE',
+    name: '👑 គំរោង 10$ (Enterprise)',
     priceMonthly: 10,
     priceYearly: 100,
     savingsYearly: 20,
     maxProducts: 1000,
-    maxStaff: 11,
-    productsText: '1,000 មុខទំនិញ',
-    accountsText: '1 Admin + 10 បុគ្គលិក',
+    maxStaff: 5,
+    productsText: '១,០០០ មុខ',
+    accountsText: 'គណនីបុគ្គលិក 5 នាក់ (Admin + 4 Staff)',
     badge: '👑 កម្រិតកំពូល Full Option',
     badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
     desc: 'ហាងធំៗ សាខា ឬឃ្លាំងស្តុកធំ',
     features: [
       'ទំនិញរហូតដល់ ១,០០០ មុខ',
-      'គណនីបុគ្គលិក ១១ នាក់',
-      'មុខងារទាំងអស់លើប្រព័ន្ធ SABAY LUK POS',
-      'តភ្ជាប់ប្រព័ន្ធ API & Telegram Bot ផ្ទាល់ខ្លួន',
-      'Dedicated Server & VIP Support ផ្ទាល់'
+      'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ',
+      'ការបញ្ជាទិញ(Orders)',
+      'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ',
+      'គ្រប់គ្រងអតិថិជន',
+      'កំណត់ហាង & Logo',
+      'គណនីបុគ្គលិក 5 នាក់ (Admin + 4 Staff)',
+      'ចេញវិក្កយបត្រស្កេន',
+      'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ',
+      'អាចតំឡើងជាAPP ក្នុង telegram',
+      'កំណត់និងកែប្រែ វិក្កយបត្រ',
+      'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ',
+      'វិភាគទិន្នន័យ(P&L)',
+      'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)',
+      'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន',
+      'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ',
+      'អេក្រង់ភ្ញៀវ (Display)',
+      'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ',
+      'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ',
+      'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot'
     ],
     popular: false
   }
@@ -17189,11 +17288,12 @@ export default function UnifiedAdminDashboard() {
             >
               <option value="ALL">គ្រប់កញ្ចប់ (All Plans)</option>
               <option value="FREE">🎁 ឥតគិតថ្លៃ (Free)</option>
-              <option value="STARTER">🌱 Starter ($1)</option>
-              <option value="BASIC">⚡ Basic ($2)</option>
-              <option value="PRO">🚀 Pro ($3)</option>
-              <option value="BUSINESS">🔥 Business ($5)</option>
-              <option value="ENTERPRISE">👑 Enterprise ($10)</option>
+              <option value="STARTER">🌱 គំរោង 1$ (Starter)</option>
+              <option value="BASIC">⚡ គំរោង 2$ (Basic)</option>
+              <option value="PRO">🚀 គំរោង 3$ (Pro)</option>
+              <option value="BUSINESS">🔥 គំរោង 5$ (Business)</option>
+              <option value="PREMIUM">💎 គំរោង 7$ (Premium)</option>
+              <option value="ENTERPRISE">👑 គំរោង 10$ (Enterprise)</option>
             </select>
 
             <select
@@ -17353,11 +17453,12 @@ export default function UnifiedAdminDashboard() {
                           }`}
                         >
                           <option value="FREE">🎁 ឥតគិតថ្លៃ (Free 15 មុខ)</option>
-                          <option value="STARTER">🌱 Starter ($1/ខែ, 50 មុខ)</option>
-                          <option value="BASIC">⚡ Basic ($2/ខែ, 100 មុខ)</option>
-                          <option value="PRO">🚀 Pro ($3/ខែ, 250 មុខ)</option>
-                          <option value="BUSINESS">🔥 Business ($5/ខែ, 600 មុខ)</option>
-                          <option value="ENTERPRISE">👑 Enterprise ($10/ខែ, 2500 មុខ)</option>
+                          <option value="STARTER">🌱 គំរោង 1$ (25 មុខ)</option>
+                          <option value="BASIC">⚡ គំរោង 2$ (50 មុខ)</option>
+                          <option value="PRO">🚀 គំរោង 3$ (100 មុខ)</option>
+                          <option value="BUSINESS">🔥 គំរោង 5$ (200 មុខ)</option>
+                          <option value="PREMIUM">💎 គំរោង 7$ (500 មុខ)</option>
+                          <option value="ENTERPRISE">👑 គំរោង 10$ (1,000 មុខ)</option>
                         </select>
                         </div>
                       </td>
@@ -18570,11 +18671,12 @@ export default function UnifiedAdminDashboard() {
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 font-bold outline-none cursor-pointer"
                     >
                       <option value="FREE">🎁 ឥតគិតថ្លៃ (Free 15 មុខ)</option>
-                      <option value="STARTER">🌱 Starter ($1/ខែ, 50 មុខ)</option>
-                      <option value="BASIC">⚡ Basic ($2/ខែ, 100 មុខ)</option>
-                      <option value="PRO">🚀 Pro ($3/ខែ, 250 មុខ)</option>
-                      <option value="BUSINESS">🔥 Business ($5/ខែ, 600 មុខ)</option>
-                      <option value="ENTERPRISE">👑 Enterprise ($10/ខែ, 2500 មុខ)</option>
+                      <option value="STARTER">🌱 គំរោង 1$ (25 មុខ)</option>
+                      <option value="BASIC">⚡ គំរោង 2$ (50 មុខ)</option>
+                      <option value="PRO">🚀 គំរោង 3$ (100 មុខ)</option>
+                      <option value="BUSINESS">🔥 គំរោង 5$ (200 មុខ)</option>
+                      <option value="PREMIUM">💎 គំរោង 7$ (500 មុខ)</option>
+                      <option value="ENTERPRISE">👑 គំរោង 10$ (1,000 មុខ)</option>
                     </select>
                   </div>
                   <div>
@@ -20269,11 +20371,12 @@ export default function UnifiedAdminDashboard() {
                       }}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold outline-none cursor-pointer"
                     >
-                      <option value="STARTER">🌱 Starter ($1/ខែ, $10/ឆ្នាំ)</option>
-                      <option value="BASIC">⚡ Basic ($2/ខែ, $20/ឆ្នាំ)</option>
-                      <option value="PRO">🚀 Pro ($3/ខែ, $30/ឆ្នាំ)</option>
-                      <option value="BUSINESS">🔥 Business ($5/ខែ, $50/ឆ្នាំ)</option>
-                      <option value="ENTERPRISE">👑 Enterprise ($10/ខែ, $100/ឆ្នាំ)</option>
+                      <option value="STARTER">🌱 គំរោង 1$ ($1/ខែ, $10/ឆ្នាំ)</option>
+                      <option value="BASIC">⚡ គំរោង 2$ ($2/ខែ, $20/ឆ្នាំ)</option>
+                      <option value="PRO">🚀 គំរោង 3$ ($3/ខែ, $30/ឆ្នាំ)</option>
+                      <option value="BUSINESS">🔥 គំរោង 5$ ($5/ខែ, $50/ឆ្នាំ)</option>
+                      <option value="PREMIUM">💎 គំរោង 7$ ($7/ខែ, $70/ឆ្នាំ)</option>
+                      <option value="ENTERPRISE">👑 គំរោង 10$ ($10/ខែ, $100/ឆ្នាំ)</option>
                     </select>
                   </div>
 

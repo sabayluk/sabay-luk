@@ -924,59 +924,59 @@ function RegisterStoreForm() {
                 {[
                   {
                     key: 'FREE',
-                    title: '🎁 ឥតគិតថ្លៃ (Free)',
+                    title: '🎁 គំរោង Free',
                     price: '$0',
                     sub: 'រហូត (Lifetime)',
-                    features: ['ទំនិញ ១៥ មុខ (Free)', '១ គណនី Admin', 'លក់លើ POS គ្មានដែនកំណត់', 'ព្រីនវិក្កយបត្រ & KHQR'],
+                    features: ['ទំនិញ ១៥ មុខ (Free)', 'គណនីគ្រប់គ្រង (1 Admin)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
                     badge: 'គ្មានហានិភ័យ'
                   },
                   {
                     key: 'STARTER',
-                    title: '🌱 STARTER',
+                    title: '🌱 គំរោង 1$ (Starter)',
                     price: billingCycle === 'yearly' ? '$10' : '$1',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $2)' : '/ខែ',
-                    features: ['ទំនិញ ២៥ មុខ', '១ Admin + ១ បុគ្គលិក', 'គ្រប់គ្រងស្តុក & របាយការណ៍', 'ផ្ញើវិក្កយបត្រតាម Telegram'],
+                    features: ['ទំនិញ ២៥ មុខ', 'គណនីគ្រប់គ្រង (1 Admin)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
                     badge: 'ធូរថ្លៃបំផុត'
                   },
                   {
                     key: 'BASIC',
-                    title: '⚡ BASIC',
+                    title: '⚡ គំរោង 2$ (Basic)',
                     price: billingCycle === 'yearly' ? '$20' : '$2',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $4)' : '/ខែ',
-                    features: ['ទំនិញ ៥០ មុខ', '១ Admin + ១ បុគ្គលិក', 'គ្រប់គ្រងអតិថិជន & ប្រាក់ចំណូល', 'លក់ Live & ហាងខ្នាតតូច'],
-                    badge: 'ពេញនិយម'
+                    features: ['ទំនិញ ៥០ មុខ', 'បុគ្គលិក ២ នាក់ (Admin + Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
+                    badge: 'សន្សំសំចៃ'
                   },
                   {
                     key: 'PRO',
-                    title: '🚀 PRO',
+                    title: '🚀 គំរោង 3$ (Pro)',
                     price: billingCycle === 'yearly' ? '$30' : '$3',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $6)' : '/ខែ',
-                    features: ['ទំនិញ ១០០ មុខ', '១ Admin + ១ បុគ្គលិក', 'ព្រីនតែម Barcode កម្តៅ', 'បុគ្គលិកឆ្លាស់វេន (Shifts)'],
+                    features: ['ទំនិញ ១០០ មុខ', 'បុគ្គលិក 2 នាក់ (Admin + 1 Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
                     badge: 'ពេញនិយមបំផុត',
                     highlight: true
                   },
                   {
                     key: 'BUSINESS',
-                    title: '🔥 BUSINESS',
+                    title: '🔥 គំរោង 5$ (Business)',
                     price: billingCycle === 'yearly' ? '$50' : '$5',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $10)' : '/ខែ',
-                    features: ['ទំនិញ ២០០ មុខ', '១ Admin + ២ បុគ្គលិក', 'ស្តុកច្រើន Size/Color', 'របាយការណ៍ហិរញ្ញវត្ថុស៊ីជម្រៅ'],
-                    badge: 'សម្រាប់ហាងមធ្យម'
+                    features: ['ទំនិញ ២០០ មុខ', 'បុគ្គលិក 3 នាក់ (Admin + 2 Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
+                    badge: 'សម្រាប់ហាងធំ'
                   },
                   {
                     key: 'PREMIUM',
-                    title: '💎 PREMIUM',
+                    title: '💎 គំរោង 7$ (Premium)',
                     price: billingCycle === 'yearly' ? '$70' : '$7',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $14)' : '/ខែ',
-                    features: ['ទំនិញ ៥០០ មុខ', '១ Admin + ៣ បុគ្គលិក', 'មុខងារ CRM & កាតសមាជិក', 'បម្រុងទុកទិន្នន័យលើ Cloud'],
+                    features: ['ទំនិញ ៥០០ មុខ', 'បុគ្គលិក 4 នាក់ (Admin + 3 Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
                     badge: 'កម្រិតខ្ពស់'
                   },
                   {
                     key: 'ENTERPRISE',
-                    title: '👑 ENTERPRISE',
+                    title: '👑 គំរោង 10$ (Enterprise)',
                     price: billingCycle === 'yearly' ? '$100' : '$10',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $20)' : '/ខែ',
-                    features: ['ទំនិញ ១,០០០ មុខ', '១ Admin + ៥ បុគ្គលិក', 'ពហុសាខា & ឃ្លាំងធំ', 'Master Control & VIP Support'],
+                    features: ['ទំនិញ ១,០០០ មុខ', 'បុគ្គលិក 5 នាក់ (Admin + 4 Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
                     badge: 'កម្រិតធំបំផុត'
                   }
                 ].map((item) => {
