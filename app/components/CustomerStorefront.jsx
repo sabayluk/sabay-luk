@@ -2355,10 +2355,10 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     : (parseFloat(storeSettings.deliveryProvince) >= 0 ? parseFloat(storeSettings.deliveryProvince) : 2.50);
 
   const isFreeDeliveryEligible = isDeliveryFeeEnabled && freeThreshold > 0 && subtotalPrice >= freeThreshold;
-  const deliveryFee = (!isDeliveryFeeEnabled || isFreeDeliveryEligible) ? 0 : baseDeliveryFee;
+  const deliveryFee = (cart.length === 0 || !isDeliveryFeeEnabled || isFreeDeliveryEligible) ? 0 : baseDeliveryFee;
 
-  totalPrice = Math.round((totalPrice + deliveryFee) * 100) / 100;
-  const totalRiel = Math.round(totalPrice * (storeSettings.exchangeRate || 4100));
+  totalPrice = cart.length === 0 ? 0 : Math.round((totalPrice + deliveryFee) * 100) / 100;
+  const totalRiel = cart.length === 0 ? 0 : Math.round(totalPrice * (storeSettings.exchangeRate || 4100));
 
   // ⭐️ Auto-generate dynamic KHQR code whenever total or store settings change (Safely placed after totalPrice is calculated) ⭐️
   useEffect(() => {
@@ -3062,7 +3062,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               className="cursor-pointer hidden md:flex bg-gradient-to-r from-[#312c5b] to-[#c85f2d] hover:from-[#252248] hover:to-[#b65426] text-white items-center gap-2 px-3.5 sm:px-4 py-2 rounded-2xl transition shadow-md group active:scale-95 text-xs font-black"
             >
               <span>🛒</span>
-              <span className="hidden sm:inline">${totalPrice.toFixed(2)}</span>
+              <span className="hidden sm:inline">${(cart.length === 0 ? 0 : totalPrice).toFixed(2)}</span>
               <span style={{ backgroundColor: brandColor }} className="text-white text-[11px] w-5 h-5 rounded-full flex items-center justify-center font-black shadow-xs">
                 {cart.reduce((sum, item) => sum + item.qty, 0)}
               </span>
