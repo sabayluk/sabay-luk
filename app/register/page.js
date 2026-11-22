@@ -941,7 +941,7 @@ function RegisterStoreForm() {
                   },
                   {
                     key: 'STARTER',
-                    title: '🌱 គំរោង 1$ (Starter)',
+                    title: '🌱 គំរោង 1$/1ខែ - 10$/1ឆ្នាំ',
                     price: billingCycle === 'yearly' ? '$10' : '$1',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $2)' : '/ខែ',
                     features: ['ទំនិញ ២៥ មុខ', 'គណនីគ្រប់គ្រង (1 Admin)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
@@ -949,7 +949,7 @@ function RegisterStoreForm() {
                   },
                   {
                     key: 'BASIC',
-                    title: '⚡ គំរោង 2$ (Basic)',
+                    title: '⚡ គំរោង 2$/1ខែ - 20$/1ឆ្នាំ',
                     price: billingCycle === 'yearly' ? '$20' : '$2',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $4)' : '/ខែ',
                     features: ['ទំនិញ ៥០ មុខ', 'បុគ្គលិក ២ នាក់ (Admin + Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
@@ -957,7 +957,7 @@ function RegisterStoreForm() {
                   },
                   {
                     key: 'PRO',
-                    title: '🚀 គំរោង 3$ (Pro)',
+                    title: '🚀 គំរោង 3$/1ខែ - 30$/1ឆ្នាំ',
                     price: billingCycle === 'yearly' ? '$30' : '$3',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $6)' : '/ខែ',
                     features: ['ទំនិញ ១០០ មុខ', 'បុគ្គលិក 2 នាក់ (Admin + 1 Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
@@ -966,7 +966,7 @@ function RegisterStoreForm() {
                   },
                   {
                     key: 'BUSINESS',
-                    title: '🔥 គំរោង 5$ (Business)',
+                    title: '🔥 គំរោង 5$/1ខែ - 50$/1ឆ្នាំ',
                     price: billingCycle === 'yearly' ? '$50' : '$5',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $10)' : '/ខែ',
                     features: ['ទំនិញ ២០០ មុខ', 'បុគ្គលិក 3 នាក់ (Admin + 2 Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
@@ -974,7 +974,7 @@ function RegisterStoreForm() {
                   },
                   {
                     key: 'PREMIUM',
-                    title: '💎 គំរោង 7$ (Premium)',
+                    title: '💎 គំរោង 7$/1ខែ - 70$/1ឆ្នាំ',
                     price: billingCycle === 'yearly' ? '$70' : '$7',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $14)' : '/ខែ',
                     features: ['ទំនិញ ៥០០ មុខ', 'បុគ្គលិក 4 នាក់ (Admin + 3 Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],
@@ -982,7 +982,7 @@ function RegisterStoreForm() {
                   },
                   {
                     key: 'ENTERPRISE',
-                    title: '👑 គំរោង 10$ (Enterprise)',
+                    title: '👑 គំរោង 10$/1ខែ - 100$/1ឆ្នាំ',
                     price: billingCycle === 'yearly' ? '$100' : '$10',
                     sub: billingCycle === 'yearly' ? '/ឆ្នាំ (សន្សំ $20)' : '/ខែ',
                     features: ['ទំនិញ ១,០០០ មុខ', 'បុគ្គលិក 5 នាក់ (Admin + 4 Staff)', 'POS, ស្តុក, គណនេយ្យ & Storefront', 'វិក្កយបត្រស្កេន & Telegram Bot'],

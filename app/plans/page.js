@@ -51,7 +51,7 @@ function PlansContent() {
     },
     {
       key: 'STARTER',
-      name: '🌱 គំរោង 1$ ($1/ខែ, 1ឆ្នាំ 10$)',
+      name: '🌱 គំរោង 1$/1ខែ - 10$/1ឆ្នាំ',
       priceMonthly: 1,
       priceYearly: 10,
       savingsYearly: 2,
@@ -69,7 +69,7 @@ function PlansContent() {
     },
     {
       key: 'BASIC',
-      name: '⚡ គំរោង 2$ ($2/ខែ, 1ឆ្នាំ 20$)',
+      name: '⚡ គំរោង 2$/1ខែ - 20$/1ឆ្នាំ',
       priceMonthly: 2,
       priceYearly: 20,
       savingsYearly: 4,
@@ -87,7 +87,7 @@ function PlansContent() {
     },
     {
       key: 'PRO',
-      name: '🚀 គំរោង 3$ ($3/ខែ, 1ឆ្នាំ 30$)',
+      name: '🚀 គំរោង 3$/1ខែ - 30$/1ឆ្នាំ',
       priceMonthly: 3,
       priceYearly: 30,
       savingsYearly: 6,
@@ -105,7 +105,7 @@ function PlansContent() {
     },
     {
       key: 'BUSINESS',
-      name: '🔥 គំរោង 5$ ($5/ខែ, 1ឆ្នាំ 50$)',
+      name: '🔥 គំរោង 5$/1ខែ - 50$/1ឆ្នាំ',
       priceMonthly: 5,
       priceYearly: 50,
       savingsYearly: 10,
@@ -123,7 +123,7 @@ function PlansContent() {
     },
     {
       key: 'PREMIUM',
-      name: '💎 គំរោង 7$ ($7/ខែ, 1ឆ្នាំ 70$)',
+      name: '💎 គំរោង 7$/1ខែ - 70$/1ឆ្នាំ',
       priceMonthly: 7,
       priceYearly: 70,
       savingsYearly: 14,
@@ -141,7 +141,7 @@ function PlansContent() {
     },
     {
       key: 'ENTERPRISE',
-      name: '👑 គំរោង 10$ ($10/ខែ, 1ឆ្នាំ 100$)',
+      name: '👑 គំរោង 10$/1ខែ - 100$/1ឆ្នាំ',
       priceMonthly: 10,
       priceYearly: 100,
       savingsYearly: 20,
@@ -368,14 +368,43 @@ function PlansContent() {
                     <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider pt-1">
                       មុខងាររួមបញ្ចូល (Included Features):
                     </p>
-                    <ul className="space-y-2 text-xs font-bold text-slate-700">
-                      {p.features.map((feat, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="text-emerald-500 text-sm font-black shrink-0">✓</span>
-                          <span>{feat}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-200/80 space-y-2 max-h-72 overflow-y-auto scrollbar-thin">
+                      {p.features.map((feat, idx) => {
+                        let icon = '✓';
+                        if (feat.includes('ទំនិញ')) icon = '📦';
+                        else if (feat.includes('POS')) icon = '🛒';
+                        else if (feat.includes('Orders') || feat.includes('បញ្ជាទិញ')) icon = '📋';
+                        else if (feat.includes('ស្តុក')) icon = '🏬';
+                        else if (feat.includes('អតិថិជន')) icon = '👥';
+                        else if (feat.includes('Logo') || feat.includes('ហាង')) icon = '🏷️';
+                        else if (feat.includes('Admin') || feat.includes('Staff')) icon = '🔑';
+                        else if (feat.includes('វិក្កយបត្រស្កេន')) icon = '📱';
+                        else if (feat.includes('ទូរស័ព្ទ') || feat.includes('កុំព្យូទ័រ')) icon = '💻';
+                        else if (feat.includes('APP ក្នុង telegram')) icon = '✈️';
+                        else if (feat.includes('កែប្រែ វិក្កយបត្រ')) icon = '⚙️';
+                        else if (feat.includes('Excel') || feat.includes('PDF')) icon = '📊';
+                        else if (feat.includes('P&L')) icon = '📈';
+                        else if (feat.includes('Low Stock') || feat.includes('ដាស់តឿន')) icon = '⚠️';
+                        else if (feat.includes('Storefront ផ្ទាល់ខ្លួន')) icon = '🌐';
+                        else if (feat.includes('Storefront ទទួល')) icon = '🛍️';
+                        else if (feat.includes('Display') || feat.includes('អេក្រង់')) icon = '🖥️';
+                        else if (feat.includes('ស្កេនកូដ')) icon = '🔍';
+                        else if (feat.includes('ហិរញ្ញវត្ថុ') || feat.includes('គណនេយ្យ')) icon = '💰';
+                        else if (feat.includes('Telegram Bot')) icon = '🤖';
+
+                        return (
+                          <div key={idx} className="flex items-start gap-2">
+                            <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">
+                              ✓
+                            </span>
+                            <span className="text-xs shrink-0 select-none">{icon}</span>
+                            <span className="text-[11.5px] text-slate-700 leading-snug font-medium">
+                              {feat}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 

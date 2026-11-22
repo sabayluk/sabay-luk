@@ -200,7 +200,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'STARTER',
-    name: '🌱 គំរោង 1$ ($1/ខែ, 1ឆ្នាំ 10$)',
+    name: '🌱 គំរោង 1$/1ខែ - 10$/1ឆ្នាំ',
     priceMonthly: 1,
     priceYearly: 10,
     savingsYearly: 2,
@@ -237,7 +237,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'BASIC',
-    name: '⚡ គំរោង 2$ ($2/ខែ, 1ឆ្នាំ 20$)',
+    name: '⚡ គំរោង 2$/1ខែ - 20$/1ឆ្នាំ',
     priceMonthly: 2,
     priceYearly: 20,
     savingsYearly: 4,
@@ -274,7 +274,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'PRO',
-    name: '🚀 គំរោង 3$ ($3/ខែ, 1ឆ្នាំ 30$)',
+    name: '🚀 គំរោង 3$/1ខែ - 30$/1ឆ្នាំ',
     priceMonthly: 3,
     priceYearly: 30,
     savingsYearly: 6,
@@ -311,7 +311,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'BUSINESS',
-    name: '🔥 គំរោង 5$ ($5/ខែ, 1ឆ្នាំ 50$)',
+    name: '🔥 គំរោង 5$/1ខែ - 50$/1ឆ្នាំ',
     priceMonthly: 5,
     priceYearly: 50,
     savingsYearly: 10,
@@ -348,7 +348,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'PREMIUM',
-    name: '💎 គំរោង 7$ ($7/ខែ, 1ឆ្នាំ 70$)',
+    name: '💎 គំរោង 7$/1ខែ - 70$/1ឆ្នាំ',
     priceMonthly: 7,
     priceYearly: 70,
     savingsYearly: 14,
@@ -385,7 +385,7 @@ export const UPGRADE_PLANS_LIST = [
   },
   {
     key: 'ENTERPRISE',
-    name: '👑 គំរោង 10$ ($10/ខែ, 1ឆ្នាំ 100$)',
+    name: '👑 គំរោង 10$/1ខែ - 100$/1ឆ្នាំ',
     priceMonthly: 10,
     priceYearly: 100,
     savingsYearly: 20,
@@ -22186,22 +22186,54 @@ export default function UnifiedAdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Feature Checklist (Compact + Collapsible) */}
-                  <div className="pt-1">
-                    <details className="group">
-                      <summary className="text-[11px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer list-none flex items-center justify-between py-1 px-1 rounded-lg hover:bg-blue-50 transition">
-                        <span>✨ មើលមុខងាររួមបញ្ចូល ({p.features.length})</span>
-                        <span className="text-slate-400 group-open:rotate-180 transition-transform text-xs">▼</span>
-                      </summary>
-                      <ul className="space-y-1.5 pt-2 text-xs text-slate-700 max-h-48 overflow-y-auto pr-1">
-                        {p.features.map((feat, fIdx) => (
-                          <li key={fIdx} className="flex items-start gap-1.5">
-                            <span className="text-emerald-500 font-black text-xs shrink-0 mt-0.5">✓</span>
-                            <span className="leading-snug text-[11px]">{feat}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
+                  {/* Feature Checklist (Modern & Standard Full 20 Features) */}
+                  <div className="pt-1 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-black uppercase text-slate-500 tracking-wider">
+                      <span className="flex items-center gap-1.5 text-slate-700">
+                        <span>✨</span> មុខងាររួមបញ្ចូល ({p.features.length})
+                      </span>
+                      <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-bold">
+                        ស្តង់ដារ ២០ មុខ
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-200/80 space-y-2 max-h-72 overflow-y-auto scrollbar-thin">
+                      {p.features.map((feat, fIdx) => {
+                        let icon = '✓';
+                        if (feat.includes('ទំនិញ')) icon = '📦';
+                        else if (feat.includes('POS')) icon = '🛒';
+                        else if (feat.includes('Orders') || feat.includes('បញ្ជាទិញ')) icon = '📋';
+                        else if (feat.includes('ស្តុក')) icon = '🏬';
+                        else if (feat.includes('អតិថិជន')) icon = '👥';
+                        else if (feat.includes('Logo') || feat.includes('ហាង')) icon = '🏷️';
+                        else if (feat.includes('Admin') || feat.includes('Staff')) icon = '🔑';
+                        else if (feat.includes('វិក្កយបត្រស្កេន')) icon = '📱';
+                        else if (feat.includes('ទូរស័ព្ទ') || feat.includes('កុំព្យូទ័រ')) icon = '💻';
+                        else if (feat.includes('APP ក្នុង telegram')) icon = '✈️';
+                        else if (feat.includes('កែប្រែ វិក្កយបត្រ')) icon = '⚙️';
+                        else if (feat.includes('Excel') || feat.includes('PDF')) icon = '📊';
+                        else if (feat.includes('P&L')) icon = '📈';
+                        else if (feat.includes('Low Stock') || feat.includes('ដាស់តឿន')) icon = '⚠️';
+                        else if (feat.includes('Storefront ផ្ទាល់ខ្លួន')) icon = '🌐';
+                        else if (feat.includes('Storefront ទទួល')) icon = '🛍️';
+                        else if (feat.includes('Display') || feat.includes('អេក្រង់')) icon = '🖥️';
+                        else if (feat.includes('ស្កេនកូដ')) icon = '🔍';
+                        else if (feat.includes('ហិរញ្ញវត្ថុ') || feat.includes('គណនេយ្យ')) icon = '💰';
+                        else if (feat.includes('Telegram Bot')) icon = '🤖';
+
+                        return (
+                          <div key={fIdx} className="flex items-start gap-2">
+                            <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">
+                              ✓
+                            </span>
+                            <span className="text-xs shrink-0 select-none">{icon}</span>
+                            <span className="text-[11.5px] text-slate-700 leading-snug font-medium">
+                              {feat}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -22235,7 +22267,125 @@ export default function UnifiedAdminDashboard() {
           })}
         </div>
 
-        {/* ⭐️ 3. RECENT PAYMENT SLIPS & APPROVAL STATUS HISTORY ⭐️ */}
+        {/* ⭐️ 4. WORLD-CLASS 20-FEATURE PLAN COMPARISON MATRIX ⭐️ */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-black uppercase tracking-wider border border-blue-200 mb-2">
+                <span>📊</span>
+                <span>Standard Feature Matrix</span>
+              </div>
+              <h3 className="font-black text-xl text-slate-900 flex items-center gap-2">
+                <span>📋</span>
+                <span>តារាងប្រៀបធៀបលក្ខណៈពិសេសកញ្ចប់គម្រោងទាំង ៧ (Full Feature Matrix)</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                ពិនិត្យមើល និងប្រៀបធៀបមុខងារស្តង់ដារទាំង ២០ យ៉ាងពេញលេញរវាងគម្រោងនីមួយៗ
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold self-start sm:self-auto">
+              <span>💡</span>
+              <span>រាល់មុខងារប្រព័ន្ធ POS សំខាន់ៗទាំងអស់ មានរួមបញ្ចូលគ្រប់គម្រោង!</span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white divide-x divide-slate-800">
+                  <th className="px-4 py-4 min-w-[240px] font-black text-xs uppercase tracking-wider sticky left-0 bg-slate-900 z-10">
+                    មុខងារ & សេវាកម្ម (20 Features)
+                  </th>
+                  {plansList.map((p) => {
+                    const isCur = currentPlanKey === p.key;
+                    const price = upgradeBillingCycle === 'yearly' ? p.priceYearly : p.priceMonthly;
+                    const cycleStr = upgradeBillingCycle === 'yearly' ? '/ឆ្នាំ' : '/ខែ';
+                    return (
+                      <th key={p.key} className={`px-4 py-4 min-w-[145px] text-center ${isCur ? 'bg-blue-900/90 ring-2 ring-blue-400 inset-0' : ''}`}>
+                        <div className="space-y-1">
+                          <span className="font-black text-xs block text-slate-200">{p.name.split(' ')[1] || p.name}</span>
+                          <span className="text-base font-black block font-mono text-amber-400">
+                            {p.key === 'FREE' ? '$0' : `$${price}${cycleStr}`}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={isCur}
+                            onClick={() => {
+                              if (isCur) return;
+                              setSelectedUpgradePlan(p);
+                              setUpgradeSlipFile(null);
+                              setUpgradeSlipPreview(null);
+                              setUpgradeTxRef('');
+                              setUpgradePlanModalOpen(true);
+                            }}
+                            className={`mt-1 px-2.5 py-1 rounded-lg text-[10px] font-black w-full transition ${
+                              isCur
+                                ? 'bg-blue-600 text-white cursor-default'
+                                : 'bg-white hover:bg-slate-100 text-slate-900 cursor-pointer shadow-xs'
+                            }`}
+                          >
+                            {isCur ? 'កំពុងប្រើ' : 'ជ្រើសរើស'}
+                          </button>
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[
+                  { label: 'ទំនិញរហូតដល់ (Max Products)', icon: '📦', isLimitProducts: true },
+                  { label: 'គណនីគ្រប់គ្រង (Admin & Staff)', icon: '🔑', isLimitAccounts: true },
+                  { label: 'ប្រព័ន្ធលក់ POS & ចេញវិក្កយបត្រ', icon: '🛒' },
+                  { label: 'ការបញ្ជាទិញ(Orders)', icon: '📋' },
+                  { label: 'គ្រប់គ្រងស្តុកទំនិញ និងលក់ដុំ/រាយ', icon: '🏬' },
+                  { label: 'គ្រប់គ្រងអតិថិជន', icon: '👥' },
+                  { label: 'កំណត់ហាង & Logo', icon: '🏷️' },
+                  { label: 'ចេញវិក្កយបត្រស្កេន (KHQR)', icon: '📱' },
+                  { label: 'គាំទ្រការប្រើលើទូរស័ព្ទដៃ និង កុំព្យូទ័រ', icon: '💻' },
+                  { label: 'អាចតំឡើងជាAPP ក្នុង telegram', icon: '✈️' },
+                  { label: 'កំណត់និងកែប្រែ វិក្កយបត្រ', icon: '⚙️' },
+                  { label: 'នាំចេញទិន្នន័យ Excel & PDF វិក្កយបត្រពន្ធ', icon: '📊' },
+                  { label: 'វិភាគទិន្នន័យ(P&L)', icon: '📈' },
+                  { label: 'ដាស់តឿនទំនិញជិតអស់ពីស្តុក (Low Stock)', icon: '⚠️' },
+                  { label: 'វេបសាយមុខហាង Storefront ផ្ទាល់ខ្លួន', icon: '🌐' },
+                  { label: 'វេបសាយ Storefront ទទួលកុម្ម៉ង់ទិញអនឡាញ', icon: '🛍️' },
+                  { label: 'អេក្រង់ភ្ញៀវ (Display)', icon: '🖥️' },
+                  { label: 'ភ្ជាប់ជាមួយ ឧបករណ៍ស្កេនកូដ', icon: '🔍' },
+                  { label: 'ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុ & គណនេយ្យស្តង់ដារ', icon: '💰' },
+                  { label: 'ជូនដំណឹងការបញ្ជាទិញតាម Telegram Bot', icon: '🤖' }
+                ].map((row, rIdx) => (
+                  <tr key={rIdx} className={`hover:bg-slate-50 transition divide-x divide-slate-100 ${rIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'}`}>
+                    <td className="px-4 py-3 font-bold text-slate-800 flex items-center gap-2 sticky left-0 bg-inherit z-10 border-r border-slate-200">
+                      <span className="text-base select-none">{row.icon}</span>
+                      <span className="text-xs">{row.label}</span>
+                    </td>
+                    {plansList.map((p) => {
+                      const isCur = currentPlanKey === p.key;
+                      return (
+                        <td key={p.key} className={`px-4 py-3 text-center ${isCur ? 'bg-blue-50/50 font-black' : ''}`}>
+                          {row.isLimitProducts ? (
+                            <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-black bg-amber-100 text-amber-900 border border-amber-200">
+                              {p.productsText}
+                            </span>
+                          ) : row.isLimitAccounts ? (
+                            <span className="inline-block px-2.5 py-1 rounded-lg text-[11px] font-black bg-blue-100 text-blue-900 border border-blue-200">
+                              {p.accountsText}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-black text-xs shadow-2xs">
+                              ✓
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
         <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
             <div>
