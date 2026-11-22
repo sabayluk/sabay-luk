@@ -1041,6 +1041,9 @@ export default function UnifiedAdminDashboard() {
       return next;
     });
   }; // សម្រាប់បើក/បិទ Dropdown គ្រប់គ្រងមុខហាង
+  // ⭐️ MULTI-TENANT STORE STATES (ហាងមួយៗដាច់ដោយឡែកពីគ្នា ១០០%) ⭐️
+  const [activeStore, setActiveStoreState] = useState(() => getActiveStore());
+  const [registeredStores, setRegisteredStores] = useState(() => getLocalStores());
   const [activeTab, setActiveTab] = useState('pos'); // កំណត់លំនាំដើមជា pos កុំឱ្យគាំង
   const [isMounted, setIsMounted] = useState(false); // State ត្រួតពិនិត្យដំណើរការ Load
   const searchInputRef = useRef(null);
@@ -1330,18 +1333,22 @@ export default function UnifiedAdminDashboard() {
   // Try loading from Supabase expenses table if present
   useEffect(() => {
     const fetchExpensesDB = async () => {
+      const stId = activeStore?.id || 'store_default_sabayluk';
       try {
-        const { data, error } = await supabase
-          .from('expenses')
-          .select('*')
-          .order('date', { ascending: false });
-        if (!error && Array.isArray(data) && data.length > 0) {
+        let query = supabase.from('expenses').select('*');
+        if (stId === 'store_default_sabayluk') {
+          query = query.or(`store_id.eq.${stId},store_id.is.null`);
+        } else {
+          query = query.eq('store_id', stId);
+        }
+        const { data, error } = await query.order('date', { ascending: false });
+        if (!error && Array.isArray(data)) {
           setExpenses(data);
         }
       } catch (e) {}
     };
     fetchExpensesDB();
-  }, []);
+  }, [activeStore?.id]);
 
   const [expenseSearch, setExpenseSearch] = useState('');
   const [expenseFilterCategory, setExpenseFilterCategory] = useState('all');
@@ -1412,9 +1419,6 @@ export default function UnifiedAdminDashboard() {
     }
   };
 
-  // ⭐️ MULTI-TENANT STORE STATES (ហាងមួយៗដាច់ដោយឡែកពីគ្នា ១០០%) ⭐️
-  const [activeStore, setActiveStoreState] = useState(() => getActiveStore());
-  const [registeredStores, setRegisteredStores] = useState(() => getLocalStores());
   const [storeSwitchModalOpen, setStoreSwitchModalOpen] = useState(false);
   const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
   const [upgradeBillingCycle, setUpgradeBillingCycle] = useState('yearly'); // 'yearly' | 'monthly'
@@ -4621,7 +4625,7 @@ export default function UnifiedAdminDashboard() {
     { id: 'dark', name: 'Dark Luxury (ខ្មៅ)', hex: '#0f172a', desc: 'Minimalist, ថ្លៃថ្នូរ, Luxury' }
   ];
 
-  // ⭐️ មុខងារប្តូរពណ៌ Brand Theme ផ្ទាល់ភ្លាមៗ (Instant Auto-Save & Broadcast) ⭐️
+  // ⭐️ មុខងារប្តូរពណ៌ Brand Theme ផ្ទាល់ភ្លាមៗ (Instant Auto-Save & Broadcast Scoped per Store) ⭐️
   const handleApplyThemeColor = (colorHex, presetId = 'custom') => {
     const updated = {
       ...storeSettings,
@@ -4630,7 +4634,11 @@ export default function UnifiedAdminDashboard() {
     };
     setStoreSettings(updated);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('sabay_store_settings', JSON.stringify(updated));
+      const storeId = activeStore?.id || 'store_default_sabayluk';
+      localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(updated));
+      if (storeId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_store_settings', JSON.stringify(updated));
+      }
       document.documentElement.style.setProperty('--brand-primary', colorHex);
       window.dispatchEvent(new Event('storage'));
     }
@@ -4642,7 +4650,8 @@ export default function UnifiedAdminDashboard() {
   // Sync brand theme on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sabay_store_settings');
+      const storeId = activeStore?.id || 'store_default_sabayluk';
+      const saved = localStorage.getItem(`sabay_store_settings_${storeId}`) || (storeId === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -4652,7 +4661,7 @@ export default function UnifiedAdminDashboard() {
         } catch (e) {}
       }
     }
-  }, []);
+  }, [activeStore?.id]);
 
   // ⭐️ មុខងារទាញយកទិន្នន័យស្តុកជា Excel/CSV (Inventory Export) ⭐️
   const exportInventoryToCSV = () => {
@@ -25439,33 +25448,48 @@ export default function UnifiedAdminDashboard() {
   // ⭐️ PERSISTENT BROADCASTCHANNEL LISTENER (DUAL MONITOR DISPLAY HANDSHAKE) ⭐️
   useEffect(() => {
     if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    const storeKey = activeStore?.slug || activeStore?.id || 'default';
     let bc = null;
+    let bcStore = null;
     try {
       bc = new BroadcastChannel('sabay_pos_customer_display');
-      displayBcRef.current = bc;
-      bc.onmessage = (event) => {
+      bcStore = new BroadcastChannel(`sabay_pos_customer_display_${storeKey}`);
+      displayBcRef.current = bcStore;
+
+      const handleRequest = (event) => {
         if (event.data?.type === 'REQUEST_LATEST_STATE') {
-          if (latestDisplayPayloadRef.current && bc) {
+          if (latestDisplayPayloadRef.current) {
             try {
-              bc.postMessage(latestDisplayPayloadRef.current);
+              if (bcStore) bcStore.postMessage(latestDisplayPayloadRef.current);
+              if (bc) bc.postMessage(latestDisplayPayloadRef.current);
             } catch (e) {}
           } else {
             try {
-              const raw = localStorage.getItem('sabay_pos_customer_display_state');
-              if (raw && bc) bc.postMessage(JSON.parse(raw));
+              const raw = localStorage.getItem(`sabay_pos_customer_display_state_${storeKey}`) || localStorage.getItem('sabay_pos_customer_display_state');
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (bcStore) bcStore.postMessage(parsed);
+                if (bc) bc.postMessage(parsed);
+              }
             } catch (e) {}
           }
         }
       };
+
+      bc.onmessage = handleRequest;
+      bcStore.onmessage = handleRequest;
     } catch (e) {}
 
     return () => {
       if (bc) {
         try { bc.close(); } catch(e) {}
-        displayBcRef.current = null;
       }
+      if (bcStore) {
+        try { bcStore.close(); } catch(e) {}
+      }
+      displayBcRef.current = null;
     };
-  }, []);
+  }, [activeStore?.id, activeStore?.slug]);
 
   // ⭐️ REALTIME BROADCAST ទៅកាន់អេក្រង់ភ្ញៀវ (DUAL CUSTOMER DISPLAY SYNC) ⭐️
   useEffect(() => {
@@ -25482,8 +25506,13 @@ export default function UnifiedAdminDashboard() {
       displayStatus = 'idle';
     }
 
+    const storeKey = activeStore?.slug || activeStore?.id || 'default';
+    const isTenant = activeStore && activeStore.id !== 'store_default_sabayluk' && activeStore.slug !== 'sabay-luk';
+
     const payload = {
       status: displayStatus,
+      storeId: activeStore?.id || 'store_default_sabayluk',
+      storeSlug: activeStore?.slug || 'sabay-luk',
       items: posCart.map(it => ({
         cartItemId: it.cartItemId,
         name: it.name,
@@ -25502,7 +25531,6 @@ export default function UnifiedAdminDashboard() {
       exchangeRate: exchangeRate || 4100,
       paymentMethod: paymentMethod || 'Cash',
       qrCodeUrl: (() => {
-        const isTenant = activeStore && activeStore.id !== 'store_default_sabayluk' && activeStore.slug !== 'sabay-luk';
         const qr = storeSettings?.khqrImageUrl || storeSettings?.abaQrUrl || storeSettings?.khqrUrl || '';
         if (isTenant && (qr === '/khqr-aba.jpg' || qr.includes('khqr-aba.jpg'))) return '';
         return qr || (isTenant ? '' : '/khqr-aba.jpg');
@@ -25511,7 +25539,7 @@ export default function UnifiedAdminDashboard() {
       changeAmount: receiptData?.change || (Number(amountTendered) > posTotal ? Number(amountTendered) - posTotal : 0),
       receiptNo: receiptData?.orderId || receiptData?.receiptNo || '',
       customerName: customerName || 'អតិថិជនទូទៅ',
-      storeName: storeSettings?.storeName || activeStore?.name || ((activeStore && activeStore.id !== 'store_default_sabayluk') ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK'),
+      storeName: storeSettings?.storeName || activeStore?.name || (isTenant ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK'),
       lastUpdated: Date.now()
     };
 
@@ -25519,11 +25547,10 @@ export default function UnifiedAdminDashboard() {
 
     // 1. BroadcastChannel (keep channel open, NEVER close immediately!)
     try {
-      if (displayBcRef.current) {
-        displayBcRef.current.postMessage(payload);
-      } else {
+      const bcStore = new BroadcastChannel(`sabay_pos_customer_display_${storeKey}`);
+      bcStore.postMessage(payload);
+      if (!isTenant) {
         const bc = new BroadcastChannel('sabay_pos_customer_display');
-        displayBcRef.current = bc;
         bc.postMessage(payload);
       }
     } catch (e) {}
@@ -25537,19 +25564,29 @@ export default function UnifiedAdminDashboard() {
 
     // 3. LocalStorage (Cross-tab/Cross-window sync)
     try {
-      localStorage.setItem('sabay_pos_customer_display_state', JSON.stringify(payload));
+      localStorage.setItem(`sabay_pos_customer_display_state_${storeKey}`, JSON.stringify(payload));
+      if (!isTenant) {
+        localStorage.setItem('sabay_pos_customer_display_state', JSON.stringify(payload));
+      }
       window.dispatchEvent(new Event('storage'));
     } catch (e) {}
 
     // 4. Supabase Realtime broadcast (For wireless iPad on counter)
     try {
-      supabase.channel('pos_customer_display_realtime').send({
+      supabase.channel(`pos_customer_display_realtime_${storeKey}`).send({
         type: 'broadcast',
         event: 'display_update',
         payload
       });
+      if (!isTenant) {
+        supabase.channel('pos_customer_display_realtime').send({
+          type: 'broadcast',
+          event: 'display_update',
+          payload
+        });
+      }
     } catch (e) {}
-  }, [posCart, posSubtotal, posDiscountValue, posTaxAmount, posTotal, paymentModalOpen, receiptData, amountTendered, exchangeRate, effectiveTaxRate, paymentMethod, customerName, storeSettings]);
+  }, [posCart, posSubtotal, posDiscountValue, posTaxAmount, posTotal, paymentModalOpen, receiptData, amountTendered, exchangeRate, effectiveTaxRate, paymentMethod, customerName, storeSettings, activeStore?.id, activeStore?.slug]);
 
   // ⭐️ ផ្ទាំង POS ⭐️
     const PosView = () => {
@@ -25681,11 +25718,12 @@ export default function UnifiedAdminDashboard() {
               <button
                 type="button"
                 onClick={() => {
-                  const win = window.open('/pos-display', 'SabayCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
+                  const currentStoreKey = activeStore?.slug || activeStore?.id || 'default';
+                  const win = window.open(`/pos-display?store=${encodeURIComponent(currentStoreKey)}`, 'SabayCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
                   displayWindowRef.current = win;
                   setTimeout(() => {
                     try {
-                      const raw = localStorage.getItem('sabay_pos_customer_display_state');
+                      const raw = localStorage.getItem(`sabay_pos_customer_display_state_${currentStoreKey}`) || localStorage.getItem('sabay_pos_customer_display_state');
                       if (raw && win && !win.closed) {
                         win.postMessage({ type: 'POS_STATE_UPDATE', payload: JSON.parse(raw) }, '*');
                       }
@@ -25725,11 +25763,12 @@ export default function UnifiedAdminDashboard() {
             <button
               type="button"
               onClick={() => {
-                const win = window.open('/pos-display', 'SabayCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
+                const currentStoreKey = activeStore?.slug || activeStore?.id || 'default';
+                const win = window.open(`/pos-display?store=${encodeURIComponent(currentStoreKey)}`, 'SabayCustomerDisplay', 'width=1280,height=800,menubar=no,toolbar=no,location=no');
                 displayWindowRef.current = win;
                 setTimeout(() => {
                   try {
-                    const raw = localStorage.getItem('sabay_pos_customer_display_state');
+                    const raw = localStorage.getItem(`sabay_pos_customer_display_state_${currentStoreKey}`) || localStorage.getItem('sabay_pos_customer_display_state');
                     if (raw && win && !win.closed) {
                       win.postMessage({ type: 'POS_STATE_UPDATE', payload: JSON.parse(raw) }, '*');
                     }
@@ -37980,7 +38019,11 @@ export default function UnifiedAdminDashboard() {
                     const nextVal = storeSettings.showReceiptQr === false;
                     setStoreSettings(prev => ({ ...prev, showReceiptQr: nextVal }));
                     if (typeof window !== 'undefined') {
-                      localStorage.setItem('sabay_store_settings', JSON.stringify({ ...storeSettings, showReceiptQr: nextVal }));
+                      const stId = activeStore?.id || 'store_default_sabayluk';
+                      localStorage.setItem(`sabay_store_settings_${stId}`, JSON.stringify({ ...storeSettings, showReceiptQr: nextVal }));
+                      if (stId === 'store_default_sabayluk') {
+                        localStorage.setItem('sabay_store_settings', JSON.stringify({ ...storeSettings, showReceiptQr: nextVal }));
+                      }
                     }
                   }}
                   className={`px-2.5 py-1 rounded-xl text-xs font-black transition flex items-center gap-1 cursor-pointer border ${

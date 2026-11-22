@@ -32,19 +32,28 @@ export async function GET(request) {
       console.warn('Supabase fetch order error in invoice download:', e);
     }
 
-    // 2. Fetch Store Settings (from order's store_id or default)
+    // 2. Fetch Store Settings (from order's store_id, query param, or default)
+    const targetStoreParam = searchParams.get('store') || searchParams.get('storeId') || searchParams.get('slug');
+    const storeLookupId = order?.store_id || targetStoreParam;
+
     let storeSettings = {
-      storeName: 'SABAY LUK SHOES STORE',
-      address: 'Street 271, Sangkat Boeng Tumpun, Phnom Penh',
-      phone: '096 720 5522',
-      telegram: 'sabay_luk',
-      vatTin: 'K001-902345678',
+      storeName: 'COMMERCIAL STORE',
+      address: 'Phnom Penh, Cambodia',
+      phone: '',
+      telegram: '',
+      vatTin: '',
       exchangeRate: 4100
     };
 
-    if (order?.store_id) {
+    if (storeLookupId && storeLookupId !== 'store_default_sabayluk' && storeLookupId !== 'sabay-luk') {
       try {
-        const { data: stData } = await supabase.from('stores').select('settings, name, phone, telegram, address').eq('id', order.store_id).maybeSingle();
+        let q = supabase.from('stores').select('settings, name, phone, telegram, address');
+        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storeLookupId) || storeLookupId.startsWith('store_')) {
+          q = q.eq('id', storeLookupId);
+        } else {
+          q = q.eq('slug', storeLookupId);
+        }
+        const { data: stData } = await q.maybeSingle();
         if (stData) {
           const sSettings = stData.settings || {};
           storeSettings = {
@@ -52,10 +61,7 @@ export async function GET(request) {
             ...sSettings,
             storeName: sSettings.storeName || stData.name || storeSettings.storeName,
             phone: sSettings.phone || stData.phone || storeSettings.phone,
-            telegram: (() => {
-              const tg = (sSettings.telegram || stData.telegram || storeSettings.telegram || 'sabay_luk').replace(/^@/, '').trim();
-              return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
-            })(),
+            telegram: (sSettings.telegram || stData.telegram || storeSettings.telegram || '').replace(/^@/, ''),
             address: sSettings.address || stData.address || storeSettings.address
           };
         }
@@ -66,12 +72,12 @@ export async function GET(request) {
         if (defaultStore) {
           const sSettings = defaultStore.settings || {};
           storeSettings = {
-            ...storeSettings,
-            ...sSettings,
-            storeName: sSettings.storeName || defaultStore.name || storeSettings.storeName,
-            phone: sSettings.phone || defaultStore.phone || storeSettings.phone,
-            telegram: (sSettings.telegram || defaultStore.telegram || storeSettings.telegram || '').replace(/^@/, ''),
-            address: sSettings.address || defaultStore.address || storeSettings.address
+            storeName: sSettings.storeName || defaultStore.name || 'SABAY LUK SHOES STORE',
+            address: sSettings.address || defaultStore.address || 'Street 271, Phnom Penh, Cambodia',
+            phone: sSettings.phone || defaultStore.phone || '096 720 5522',
+            telegram: (sSettings.telegram || defaultStore.telegram || 'sabay_luk').replace(/^@/, ''),
+            vatTin: sSettings.vatTin || 'K001-902345678',
+            exchangeRate: sSettings.exchangeRate || 4100
           };
         }
       } catch (e) {}
@@ -116,11 +122,11 @@ export async function POST(request) {
     }
 
     const effectiveSettings = storeSettings || {
-      storeName: 'SABAY LUK SHOES STORE',
-      address: 'Street 271, Phnom Penh, Cambodia',
-      phone: '096 720 5522',
-      telegram: 'sabay_luk',
-      vatTin: 'K001-902345678',
+      storeName: 'COMMERCIAL STORE',
+      address: 'Phnom Penh, Cambodia',
+      phone: '',
+      telegram: '',
+      vatTin: '',
       exchangeRate: 4100
     };
 

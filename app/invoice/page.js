@@ -9,20 +9,24 @@ function InvoiceContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const orderId = searchParams.get('id') || searchParams.get('orderId') || '';
+  const urlStoreParam = searchParams.get('store') || searchParams.get('storeId') || '';
 
   const [order, setOrder] = useState(null);
   const [storeSettings, setStoreSettings] = useState({
-    storeName: 'SABAY LUK SHOES STORE',
-    storeNameKh: 'សប្បាយលក់ ស្បែកជើងម៉ាកល្បីៗ',
-    address: 'ផ្លូវ ២៧១ សង្កាត់បឹងទំពុន ខណ្ឌមានជ័យ រាជធានីភ្នំពេញ',
-    phone: '096 720 5522',
-    telegram: 'sabay_luk',
-    vatTin: 'K001-902345678',
+    storeName: 'ហាងលក់ទំនិញ',
+    storeNameKh: 'វិក្កយបត្រលក់ទំនិញផ្លូវការ (Official Sales Invoice)',
+    address: 'រាជធានីភ្នំពេញ, ប្រទេសកម្ពុជា',
+    phone: '',
+    telegram: '',
+    vatTin: '',
     exchangeRate: 4100,
     enableTax: false,
     taxRate: 10,
     taxMode: 'exclusive',
-    taxLabel: 'ពន្ធអាករ (VAT 10%)'
+    taxLabel: 'ពន្ធអាករ (VAT 10%)',
+    showInvoiceLogo: true,
+    logoUrl: '',
+    khqrImageUrl: ''
   });
 
   const [loading, setLoading] = useState(true);
@@ -47,55 +51,88 @@ function InvoiceContent() {
     }
   }, []);
 
-  useEffect(() => {
-    // Load store settings
-    if (typeof window !== 'undefined') {
-      try {
-        const savedSettings = localStorage.getItem('sabay_store_settings');
-        if (savedSettings) {
-          const parsed = JSON.parse(savedSettings);
-          setStoreSettings(prev => ({ 
-            ...prev, 
-            ...parsed,
-            telegramBotToken: parsed.telegramBotToken || prev.telegramBotToken || '',
-            telegramChatId: parsed.telegramChatId || prev.telegramChatId || ''
-          }));
-        }
-      } catch (e) {}
-    }
-
-    // Auto-sync settings from Supabase if available
+  // ⭐️ Strict Multi-Tenant Store Isolation: Sync store settings specifically for this order ⭐️
+  const syncStoreSettingsForOrder = async (targetStoreId, targetStoreSlug) => {
+    if (typeof window === 'undefined') return;
     try {
-      supabase.from('stores').select('settings, name, phone, telegram, address').eq('id', 'store_default_sabayluk').maybeSingle().then(({ data }) => {
-        if (data?.settings) {
-          setStoreSettings(prev => ({
-            ...prev,
-            ...data.settings,
-            // Prioritize cloud tax settings or fallback to local
-            enableTax: normalizeEnableTax(data.settings.enableTax) || normalizeEnableTax(prev.enableTax),
-            taxRate: data.settings.taxRate || prev.taxRate || 10,
-            taxMode: data.settings.taxMode || prev.taxMode || 'exclusive',
-            taxLabel: data.settings.taxLabel || prev.taxLabel || 'ពន្ធអាករ (VAT 10%)',
-            vatTin: data.settings.vatTin || prev.vatTin || 'K001-90218821',
-            storeName: data.name || data.settings.storeName || prev.storeName,
-            phone: data.phone || data.settings.phone || prev.phone,
-            telegram: (() => {
-              const tg = (data.telegram || data.settings.telegram || prev.telegram || 'sabay_luk').replace(/^@/, '').trim();
-              return tg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : tg;
-            })(),
-            address: data.address || data.settings.address || prev.address
-          }));
+      let resolvedStore = null;
+      try {
+        const rawStores = localStorage.getItem('sabay_registered_stores');
+        if (rawStores) {
+          const stores = JSON.parse(rawStores);
+          resolvedStore = stores.find(s => 
+            (targetStoreId && s.id === targetStoreId) || 
+            (targetStoreSlug && s.slug === targetStoreSlug)
+          );
         }
-      });
-    } catch (e) {}
+      } catch (_) {}
 
+      const stId = targetStoreId || resolvedStore?.id || (urlStoreParam || 'store_default_sabayluk');
+      const isTenant = stId !== 'store_default_sabayluk';
+
+      let localInvoice = null;
+      let localStore = null;
+      try {
+        const invRaw = localStorage.getItem(`sabay_invoice_settings_${stId}`);
+        if (invRaw) localInvoice = JSON.parse(invRaw);
+      } catch (_) {}
+      try {
+        const stRaw = localStorage.getItem(`sabay_store_settings_${stId}`) || (stId === 'store_default_sabayluk' ? localStorage.getItem('sabay_store_settings') : null);
+        if (stRaw) localStore = JSON.parse(stRaw);
+      } catch (_) {}
+
+      let dbData = null;
+      if (stId) {
+        try {
+          const { data } = await supabase.from('stores').select('settings, name, phone, telegram, address').eq('id', stId).maybeSingle();
+          if (data) dbData = data;
+        } catch (_) {}
+      }
+
+      const mergedDb = dbData?.settings || {};
+      const finalName = localInvoice?.storeName || localStore?.storeName || resolvedStore?.name || dbData?.name || (isTenant ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK SHOES STORE');
+      const finalPhone = localInvoice?.phone || localStore?.phone || resolvedStore?.phone || dbData?.phone || (isTenant ? '' : '096 720 5522');
+      const finalAddress = localInvoice?.address || localStore?.address || resolvedStore?.address || dbData?.address || (isTenant ? 'រាជធានីភ្នំពេញ, ប្រទេសកម្ពុជា' : 'ផ្លូវ ២៧១ សង្កាត់បឹងទំពុន ខណ្ឌមានជ័យ រាជធានីភ្នំពេញ');
+      const finalTelegram = (localInvoice?.telegram || localStore?.telegram || resolvedStore?.telegram || dbData?.telegram || (isTenant ? '' : 'sabay_luk')).replace(/^@/, '');
+      const finalVat = localInvoice?.vatTin || localStore?.vatTin || mergedDb?.vatTin || (isTenant ? '' : 'K001-902345678');
+      
+      let finalLogo = localInvoice?.logoUrl || localStore?.logoUrl || resolvedStore?.settings?.logoUrl || mergedDb?.logoUrl || '';
+      if (isTenant && (finalLogo === '/logo.png' || finalLogo.includes('/logo.png'))) finalLogo = '';
+
+      let finalQr = localInvoice?.khqrImageUrl || localStore?.khqrImageUrl || resolvedStore?.settings?.khqrImageUrl || mergedDb?.khqrImageUrl || '';
+      if (isTenant && (finalQr === '/khqr-aba.jpg' || finalQr.includes('khqr-aba.jpg'))) finalQr = '';
+
+      setStoreSettings({
+        storeName: finalName,
+        storeNameKh: isTenant ? finalName : 'សប្បាយលក់ ស្បែកជើងម៉ាកល្បីៗ',
+        address: finalAddress,
+        phone: finalPhone,
+        telegram: finalTelegram,
+        vatTin: finalVat,
+        exchangeRate: localInvoice?.exchangeRate || localStore?.exchangeRate || 4100,
+        enableTax: Boolean(localInvoice?.enableTax || localStore?.enableTax || mergedDb?.enableTax),
+        taxRate: parseFloat(localInvoice?.taxRate || localStore?.taxRate || mergedDb?.taxRate || 10),
+        taxMode: localInvoice?.taxMode || localStore?.taxMode || mergedDb?.taxMode || 'exclusive',
+        taxLabel: localInvoice?.taxLabel || localStore?.taxLabel || 'ពន្ធអាករ (VAT)',
+        showInvoiceLogo: localInvoice?.showInvoiceLogo !== false && localStore?.showInvoiceLogo !== false,
+        logoUrl: finalLogo,
+        khqrImageUrl: finalQr,
+        telegramBotToken: localStore?.telegramBotToken || mergedDb?.telegramBotToken || '',
+        telegramChatId: localStore?.telegramChatId || mergedDb?.telegramChatId || ''
+      });
+    } catch (e) {
+      console.warn('Error syncing store settings for invoice:', e);
+    }
+  };
+
+  useEffect(() => {
     const fetchOrder = async () => {
       setLoading(true);
       const cleanId = (orderId || '').replace(/^#/, '').trim();
 
       if (!cleanId) {
         // Fallback sample order for demo
-        setOrder({
+        const demoOrder = {
           order_id: 'ORD-DEMO-2026',
           created_at: new Date().toISOString(),
           customer_name: 'សុខ វិសាល (Sok Visal)',
@@ -112,7 +149,9 @@ function InvoiceContent() {
           items: [
             { id: '1', name: 'ស្បែកជើងប៉ាតា Sneaker Pro Edition', size: '41', color: 'ខ្មៅ Black', price: 28.00, qty: 2 }
           ]
-        });
+        };
+        setOrder(demoOrder);
+        await syncStoreSettingsForOrder(urlStoreParam || 'store_default_sabayluk');
         setLoading(false);
         return;
       }
@@ -125,6 +164,7 @@ function InvoiceContent() {
             const parsed = JSON.parse(directKeyMatch);
             if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
               setOrder(parsed);
+              await syncStoreSettingsForOrder(parsed.store_id || urlStoreParam, parsed.store_slug);
               setLoading(false);
               return;
             }
@@ -136,6 +176,7 @@ function InvoiceContent() {
             if (parsed && (parsed.order_id === cleanId || parsed.order_id === `#${cleanId}` || parsed.id === cleanId)) {
               if (Array.isArray(parsed.items) && parsed.items.length > 0) {
                 setOrder(parsed);
+                await syncStoreSettingsForOrder(parsed.store_id || urlStoreParam, parsed.store_slug);
                 setLoading(false);
                 return;
               }
@@ -157,23 +198,7 @@ function InvoiceContent() {
 
         if (!error && data) {
           setOrder(data);
-          // ⭐️ Sync store settings from order's store_id ⭐️
-          if (data.store_id) {
-            try {
-              const { data: sData } = await supabase.from('stores').select('settings, name, phone, telegram, address').eq('id', data.store_id).maybeSingle();
-              if (sData) {
-                const sSettings = sData.settings || {};
-                setStoreSettings(prev => ({
-                  ...prev,
-                  ...sSettings,
-                  storeName: sSettings.storeName || sData.name || prev.storeName,
-                  phone: sSettings.phone || sData.phone || prev.phone,
-                  telegram: (sSettings.telegram || sData.telegram || prev.telegram || '').replace(/^@/, ''),
-                  address: sSettings.address || sData.address || prev.address
-                }));
-              }
-            } catch (sErr) {}
-          }
+          await syncStoreSettingsForOrder(data.store_id || urlStoreParam, data.store_slug);
           setLoading(false);
           return;
         }
@@ -195,6 +220,7 @@ function InvoiceContent() {
               );
               if (found) {
                 setOrder(found);
+                await syncStoreSettingsForOrder(found.store_id || urlStoreParam, found.store_slug);
                 setLoading(false);
                 return;
               }
@@ -219,11 +245,12 @@ function InvoiceContent() {
         tax_amount: 0,
         items: []
       });
+      await syncStoreSettingsForOrder(urlStoreParam || 'store_default_sabayluk');
       setLoading(false);
     };
 
     fetchOrder();
-  }, [orderId]);
+  }, [orderId, urlStoreParam]);
 
   // Action: Print
   const handlePrint = () => {
@@ -476,17 +503,19 @@ function InvoiceContent() {
               {storeSettings.showInvoiceLogo !== false && storeSettings.logoUrl ? (
                 <img src={storeSettings.logoUrl} alt="Store Logo" className="h-10 max-w-[120px] object-contain rounded-lg bg-white/10 p-1" />
               ) : (
-                <span className="text-2xl">👟</span>
+                <div className="w-10 h-10 rounded-xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-lg font-black text-amber-300">
+                  {storeSettings.storeName ? storeSettings.storeName.charAt(0).toUpperCase() : '🏪'}
+                </div>
               )}
               <h1 className="text-xl sm:text-2xl font-black tracking-wide uppercase">
-                {storeSettings.storeName || 'SABAY LUK SHOES STORE'}
+                {storeSettings.storeName || 'ហាងលក់ទំនិញ'}
               </h1>
             </div>
             <p className="text-xs text-purple-300 font-bold">
               {storeSettings.storeNameKh || 'វិក្កយបត្រលក់ទំនិញផ្លូវការ (Official Sales Invoice)'}
             </p>
             <p className="text-[11px] text-gray-400">
-              ទំនិញសុទ្ធ ១០០% • ធានាគុណភាពខ្ពស់ • ដឹកជញ្ជូនរហ័សទូទាំងប្រទេស
+              {storeSettings.slogan || 'ទំនិញសុទ្ធ ១០០% • ធានាគុណភាពខ្ពស់ • ដឹកជញ្ជូនរហ័សទូទាំងប្រទេស'}
             </p>
           </div>
 
@@ -738,13 +767,14 @@ function InvoiceContent() {
           {/* Footer Terms */}
           <div className="mt-8 pt-6 border-t border-gray-100 text-center text-gray-500 text-[11px] space-y-1">
             <p className="font-black text-gray-800">
-              🙏 សូមអរគុណចំពោះការគាំទ្រ និងជាវទំនិញពីហាង SABAY LUK!
+              🙏 សូមអរគុណចំពោះការគាំទ្រ និងជាវទំនិញពីហាង {storeSettings.storeName || 'យើងខ្ញុំ'}!
             </p>
             <p className="text-gray-400">
-              លក្ខខណ្ឌ៖ ទំនិញដែលបានជាវអាចប្តូរម៉ូត ឬ Size វិញបានក្នុងកំឡុងពេល ៣ ថ្ងៃ ដោយរក្សាសភាពដើម និងភ្ជាប់មកជាមួយវិក្កយបត្រនេះ។
+              {storeSettings.invoiceFooterNotes || 'លក្ខខណ្ឌ៖ ទំនិញដែលបានជាវអាចប្តូរម៉ូត ឬ Size វិញបានក្នុងកំឡុងពេល ៣ ថ្ងៃ ដោយរក្សាសភាពដើម និងភ្ជាប់មកជាមួយវិក្កយបត្រនេះ។'}
             </p>
             <p className="text-gray-400 font-medium">
-              📞 ទំនាក់ទំនងបម្រើអតិថិជន: {storeSettings.phone} • Telegram: @{storeSettings.telegram?.replace(/^@/, '')}
+              {storeSettings.phone && <>📞 ទំនាក់ទំនងបម្រើអតិថិជន: {storeSettings.phone} </>}
+              {storeSettings.telegram && <>• Telegram: @{storeSettings.telegram?.replace(/^@/, '')}</>}
             </p>
           </div>
 

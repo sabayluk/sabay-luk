@@ -974,18 +974,24 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
   const [feedbacks, setFeedbacks] = useState(DEFAULT_SEED_FEEDBACKS);
 
-  // Load feedbacks from localStorage after mount to prevent hydration mismatch
+  // Load feedbacks from localStorage after mount to prevent hydration mismatch (Strict Store Scoping)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('sabay_luk_product_feedbacks');
+        const stId = currentStore?.id || 'store_default_sabayluk';
+        const isTenant = stId !== 'store_default_sabayluk';
+        const saved = localStorage.getItem(`sabay_luk_product_feedbacks_${stId}`) || (stId === 'store_default_sabayluk' ? localStorage.getItem('sabay_luk_product_feedbacks') : null);
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) setFeedbacks(parsed);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setFeedbacks(parsed);
+            return;
+          }
         }
+        if (isTenant) setFeedbacks([]);
       } catch (e) {}
     }
-  }, []);
+  }, [currentStore?.id]);
 
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [feedbackProduct, setFeedbackProduct] = useState(null);
@@ -1028,12 +1034,15 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     }
   };
 
-  // Helper retrieve all active coupons (Default + Admin Custom)
+  // Helper retrieve all active coupons (Default + Admin Custom, Isolated by Store)
   const getDisplayCoupons = () => {
     try {
-      const saved = typeof window !== 'undefined' ? localStorage.getItem('sabay_coupons') : null;
+      const stId = currentStore?.id || 'store_default_sabayluk';
+      const isTenant = stId !== 'store_default_sabayluk';
+      const saved = typeof window !== 'undefined' ? (localStorage.getItem(`sabay_coupons_${stId}`) || (stId === 'store_default_sabayluk' ? localStorage.getItem('sabay_coupons') : null)) : null;
       const custom = saved ? JSON.parse(saved) : [];
       const activeCustom = Array.isArray(custom) ? custom.filter(c => c.active !== false) : [];
+      if (isTenant) return activeCustom;
       const map = new Map();
       activeCustom.forEach(c => map.set(c.code.toUpperCase(), c));
       AVAILABLE_COUPONS.forEach(c => {
@@ -1041,7 +1050,7 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       });
       return Array.from(map.values());
     } catch (e) {
-      return AVAILABLE_COUPONS;
+      return (currentStore?.id === 'store_default_sabayluk' || !currentStore) ? AVAILABLE_COUPONS : [];
     }
   };
 
@@ -1271,14 +1280,16 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
     const currentSubtotal = cart.reduce((sum, item) => sum + Number(item.price) * item.qty, 0);
 
+    const stId = currentStore?.id || 'store_default_sabayluk';
+    const isTenant = stId !== 'store_default_sabayluk';
     const customCoupons = (() => {
       try {
-        const saved = localStorage.getItem('sabay_coupons');
+        const saved = localStorage.getItem(`sabay_coupons_${stId}`) || (stId === 'store_default_sabayluk' ? localStorage.getItem('sabay_coupons') : null);
         return saved ? JSON.parse(saved) : [];
       } catch (e) { return []; }
     })();
 
-    const allCoupons = [...AVAILABLE_COUPONS, ...customCoupons];
+    const allCoupons = isTenant ? customCoupons : [...AVAILABLE_COUPONS, ...customCoupons];
     const matched = allCoupons.find(c => c.code.toUpperCase() === code);
 
     if (!matched) {
@@ -1519,13 +1530,18 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
       tags: feedbackSelectedTags,
       photo_url: feedbackPhoto || null,
       created_at: new Date().toISOString(),
-      is_verified: true
+      is_verified: true,
+      store_id: currentStore?.id || 'store_default_sabayluk'
     };
 
+    const stId = currentStore?.id || 'store_default_sabayluk';
     const updated = [newFeedback, ...feedbacks];
     setFeedbacks(updated);
-    localStorage.setItem('sabay_luk_product_feedbacks', JSON.stringify(updated));
     if (typeof window !== 'undefined') {
+      localStorage.setItem(`sabay_luk_product_feedbacks_${stId}`, JSON.stringify(updated));
+      if (stId === 'store_default_sabayluk') {
+        localStorage.setItem('sabay_luk_product_feedbacks', JSON.stringify(updated));
+      }
       window.dispatchEvent(new Event('storage'));
     }
 
@@ -1552,11 +1568,17 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     }
   }, [brandColor]);
 
-  // Scoped product & category fetchers
+  // Scoped product & category fetchers (Strict SQL-Level Multi-Tenancy Isolation)
   const fetchProductsForStore = async (storeId) => {
     const targetStoreId = storeId || currentStore?.id || 'store_default_sabayluk';
     try {
-      const { data: prodData } = await supabase.from('products').select('*').order('id', { ascending: false });
+      let query = supabase.from('products').select('*');
+      if (targetStoreId === 'store_default_sabayluk') {
+        query = query.or(`store_id.eq.${targetStoreId},store_id.is.null`);
+      } else {
+        query = query.eq('store_id', targetStoreId);
+      }
+      const { data: prodData } = await query.order('id', { ascending: false });
       if (prodData) {
         const scoped = prodData.filter(p => isItemBelongsToStore(p, targetStoreId));
         setProducts(scoped.map(parseProductMeta));
@@ -1571,7 +1593,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
   const fetchCategoriesForStore = async (storeId) => {
     const targetStoreId = storeId || currentStore?.id || 'store_default_sabayluk';
     try {
-      const { data: catData, error: catError } = await supabase.from('categories').select('*');
+      let query = supabase.from('categories').select('*');
+      if (targetStoreId === 'store_default_sabayluk') {
+        query = query.or(`store_id.eq.${targetStoreId},store_id.is.null`);
+      } else {
+        query = query.eq('store_id', targetStoreId);
+      }
+      const { data: catData, error: catError } = await query;
       if (!catError && catData && catData.length > 0) {
         const scoped = catData.filter(c => isItemBelongsToStore(c, targetStoreId));
         if (scoped.length > 0) {
@@ -1645,18 +1673,31 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
         } catch (e) {}
       }
 
-      // Merge: Local cache as baseline, but fresh Cloud Database takes precedence
+      // Merge: Local cache as baseline, but fresh Cloud Database takes precedence (Strict Multi-Tenant Isolation)
+      const isTenant = active.id !== 'store_default_sabayluk' && active.slug !== 'sabay-luk';
       let scopedSettings = {
-        ...DEFAULT_STORE_SETTINGS,
+        ...(isTenant ? {} : DEFAULT_STORE_SETTINGS),
         ...localParsed,
         ...dbSettings,
-        storeName: dbSettings.storeName || active.name || localParsed.storeName || DEFAULT_STORE_SETTINGS.storeName,
-        phone: dbSettings.phone || active.phone || localParsed.phone || DEFAULT_STORE_SETTINGS.phone,
-        phone2: dbSettings.phone2 || localParsed.phone2 || DEFAULT_STORE_SETTINGS.phone2,
-        address: dbSettings.address || active.address || localParsed.address || DEFAULT_STORE_SETTINGS.address,
-        storeSlogan: dbSettings.storeSlogan || localParsed.storeSlogan || DEFAULT_STORE_SETTINGS.storeSlogan,
-        announcementText: dbSettings.announcementText || localParsed.announcementText || DEFAULT_STORE_SETTINGS.announcementText,
-        logoUrl: dbSettings.logoUrl || localParsed.logoUrl || active.settings?.logoUrl || DEFAULT_STORE_SETTINGS.logoUrl || ''
+        storeName: dbSettings.storeName || active.name || localParsed.storeName || (isTenant ? 'ហាងរបស់ខ្ញុំ' : DEFAULT_STORE_SETTINGS.storeName),
+        phone: dbSettings.phone || active.phone || localParsed.phone || (isTenant ? '' : DEFAULT_STORE_SETTINGS.phone),
+        phone2: dbSettings.phone2 || localParsed.phone2 || '',
+        address: dbSettings.address || active.address || localParsed.address || (isTenant ? 'រាជធានីភ្នំពេញ' : DEFAULT_STORE_SETTINGS.address),
+        storeSlogan: dbSettings.storeSlogan || localParsed.storeSlogan || (isTenant ? '' : DEFAULT_STORE_SETTINGS.storeSlogan),
+        announcementText: dbSettings.announcementText || localParsed.announcementText || (isTenant ? '' : DEFAULT_STORE_SETTINGS.announcementText),
+        logoUrl: (() => {
+          let l = dbSettings.logoUrl || localParsed.logoUrl || active.settings?.logoUrl || '';
+          if (isTenant && (l === '/logo.png' || l.includes('logo.png'))) return '';
+          return l;
+        })(),
+        khqrImageUrl: (() => {
+          let q = dbSettings.khqrImageUrl || localParsed.khqrImageUrl || active.settings?.khqrImageUrl || '';
+          if (isTenant && (q === '/khqr-aba.jpg' || q.includes('khqr-aba.jpg'))) return '';
+          return q;
+        })(),
+        bankAccountName: dbSettings.bankAccountName || localParsed.bankAccountName || active.settings?.bankAccountName || (isTenant ? (active.owner_name || active.name || '') : 'SENG SOVEASNA'),
+        bankAccountUsd: dbSettings.bankAccountUsd || localParsed.bankAccountUsd || active.settings?.bankAccountUsd || (isTenant ? (active.phone || '') : '010 723 080'),
+        bankAccountKhr: dbSettings.bankAccountKhr || localParsed.bankAccountKhr || active.settings?.bankAccountKhr || (isTenant ? '' : '004 500 394'),
       };
 
       // Tax Resolution
@@ -2854,10 +2895,14 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             </div>
             <div className="hidden md:flex items-center gap-4 text-gray-300 font-semibold text-[11px]">
               <span>⏰ {storeSettings.businessHours || '8:00 AM - 9:00 PM'}</span>
-              <span>•</span>
-              <a href={`tel:${(storeSettings.phone || '0967205522').replace(/\s+/g, '')}`} className="hover:text-orange-400 transition flex items-center gap-1 font-bold text-white">
-                📞 {storeSettings.phone || '096 720 5522'}
-              </a>
+              {(storeSettings.phone || currentStore?.phone) && (
+                <>
+                  <span>•</span>
+                  <a href={`tel:${(storeSettings.phone || currentStore?.phone || '').replace(/\s+/g, '')}`} className="hover:text-orange-400 transition flex items-center gap-1 font-bold text-white">
+                    📞 {storeSettings.phone || currentStore?.phone}
+                  </a>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -6327,12 +6372,14 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                   <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
                     សូមពិនិត្យមើលលេខទូរស័ព្ទ ឬលេខកូដ Order ID ឡើងវិញ ឬទំនាក់ទំនងមកកាន់ផ្នែកបម្រើអតិថិជន។
                   </p>
-                  <a 
-                    href="tel:0967205522" 
-                    className="inline-flex items-center gap-1.5 mt-4 text-xs font-bold text-[#ff6a00] bg-orange-50 px-4 py-2 rounded-xl hover:bg-orange-100 transition"
-                  >
-                    📞 ហៅទូរស័ព្ទមកហាង: 096 720 5522
-                  </a>
+                  {(storeSettings?.phone || currentStore?.phone) ? (
+                    <a 
+                      href={`tel:${(storeSettings?.phone || currentStore?.phone).replace(/\s+/g, '')}`} 
+                      className="inline-flex items-center gap-1.5 mt-4 text-xs font-bold text-[#ff6a00] bg-orange-50 px-4 py-2 rounded-xl hover:bg-orange-100 transition"
+                    >
+                      📞 ហៅទូរស័ព្ទមកហាង: {storeSettings?.phone || currentStore?.phone}
+                    </a>
+                  ) : null}
                 </div>
               )}
 
@@ -6516,13 +6563,15 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                             return raw.toLowerCase() === 'sabayluk' ? 'sabay_luk' : raw;
                           })()})</span>
                         </a>
-                        <a 
-                          href={`tel:${(storeSettings?.phone || currentStore?.phone || '0967205522').replace(/\s+/g, '')}`} 
-                          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl transition"
-                        >
-                          <span>📞</span>
-                          <span>ទូរស័ព្ទហាង: {storeSettings?.phone || currentStore?.phone || '096 720 5522'}</span>
-                        </a>
+                        {(storeSettings?.phone || currentStore?.phone) && (
+                          <a 
+                            href={`tel:${(storeSettings?.phone || currentStore?.phone).replace(/\s+/g, '')}`} 
+                            className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-xl transition"
+                          >
+                            <span>📞</span>
+                            <span>ទូរស័ព្ទហាង: {storeSettings?.phone || currentStore?.phone}</span>
+                          </a>
+                        )}
                       </div>
 
                       {Array.isArray(order.items) && order.items.length > 0 && (
@@ -6563,9 +6612,13 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
             <div className="pt-4 border-t border-gray-100 mt-4 flex items-center justify-between text-xs text-gray-500">
               <span>សេវាកម្មដឹកជញ្ជូនរហ័ស ២៥ ខេត្ត/ក្រុង</span>
-              <a href="tel:0967205522" className="text-[#ff6a00] font-bold hover:underline">
-                📞 Hotline: 096 720 5522
-              </a>
+              {(storeSettings?.phone || currentStore?.phone) ? (
+                <a href={`tel:${(storeSettings?.phone || currentStore?.phone).replace(/\s+/g, '')}`} className="text-[#ff6a00] font-bold hover:underline">
+                  📞 Hotline: {storeSettings?.phone || currentStore?.phone}
+                </a>
+              ) : (
+                <span className="text-gray-400 font-bold">🚚 ដឹកជូនដល់ទីកន្លែង</span>
+              )}
             </div>
 
           </div>
@@ -6617,7 +6670,9 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               {storeSettings.storeDescription || 'ហាងលក់ស្បែកជើង និងម៉ូដទាន់សម័យគុណភាពខ្ពស់ ផ្ដល់ទំនុកចិត្ត និងភាពស៊ីវិល័យសម្រាប់អ្នក។'}
             </p>
             <p className="text-xs font-bold text-gray-900">📍 {storeSettings.address || 'ភ្នំពេញ, ព្រះរាជាណាចក្រកម្ពុជា'}</p>
-            <p className="text-xs font-bold text-gray-900 mt-1">📞 {storeSettings.phone || '096 720 5522'}</p>
+            {(storeSettings.phone || currentStore?.phone) && (
+              <p className="text-xs font-bold text-gray-900 mt-1">📞 {storeSettings.phone || currentStore?.phone}</p>
+            )}
           </div>
 
           <div>

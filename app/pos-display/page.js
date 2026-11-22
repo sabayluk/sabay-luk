@@ -1,9 +1,35 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../supabase';
 
-export default function CustomerDisplayPage() {
+function CustomerDisplayContent() {
+  const searchParams = useSearchParams();
+  const urlStoreParam = searchParams.get('store') || searchParams.get('storeId') || '';
+
+  const getTargetStoreKey = () => {
+    if (urlStoreParam) return urlStoreParam;
+    if (typeof window !== 'undefined') {
+      try {
+        const adminStore = localStorage.getItem('sabay_admin_active_store');
+        if (adminStore) {
+          const parsed = JSON.parse(adminStore);
+          if (parsed?.slug || parsed?.id) return parsed.slug || parsed.id;
+        }
+        const activeStore = localStorage.getItem('sabay_active_store');
+        if (activeStore) {
+          const parsed = JSON.parse(activeStore);
+          if (parsed?.slug || parsed?.id) return parsed.slug || parsed.id;
+        }
+      } catch (_) {}
+    }
+    return 'default';
+  };
+
+  const targetStoreKey = getTargetStoreKey();
+  const isTenant = targetStoreKey !== 'default' && targetStoreKey !== 'sabay-luk' && targetStoreKey !== 'store_default_sabayluk';
+
   const [displayState, setDisplayState] = useState({
     status: 'idle', // 'idle' | 'scanning' | 'checkout' | 'completed'
     items: [],
@@ -14,12 +40,12 @@ export default function CustomerDisplayPage() {
     grandTotal: 0,
     exchangeRate: 4100,
     paymentMethod: 'KHQR',
-    qrCodeUrl: '/khqr-aba.jpg',
+    qrCodeUrl: isTenant ? '' : '/khqr-aba.jpg',
     cashReceived: 0,
     changeAmount: 0,
     receiptNo: '',
     customerName: '',
-    storeName: 'SABAY LUK',
+    storeName: isTenant ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK',
     lastUpdated: 0
   });
 
@@ -58,9 +84,15 @@ export default function CustomerDisplayPage() {
     }
   ];
 
-  // Helper to safely apply new state
+  // Helper to safely apply new state (with strict multi-tenant validation)
   const applyState = (data) => {
     if (!data || typeof data !== 'object') return;
+    // Strict isolation: if payload has store identity and this display has targetStoreKey, reject if mismatched
+    if (isTenant && data.storeSlug && data.storeId) {
+      if (data.storeSlug !== targetStoreKey && data.storeId !== targetStoreKey) {
+        return; // Reject other store's payload!
+      }
+    }
     setDisplayState(prev => ({
       ...prev,
       ...data,
@@ -103,13 +135,21 @@ export default function CustomerDisplayPage() {
     return () => clearInterval(slideTimer);
   }, [displayState.status, displayState.items]);
 
-  // 3. Multi-tier Realtime Synchronization (BroadcastChannel + LocalStorage + Window Msg + Polling + Supabase)
+  // 3. Multi-tier Realtime Synchronization Scoped per Store (BroadcastChannel + LocalStorage + Window Msg + Polling + Supabase)
+  useEffect(() => {
+    if (typeof window !== 'undefined') return;
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // A. Initial load from LocalStorage immediately
+    const bcChannelName = targetStoreKey !== 'default' ? `sabay_pos_customer_display_${targetStoreKey}` : 'sabay_pos_customer_display';
+    const storageKey = targetStoreKey !== 'default' ? `sabay_pos_customer_display_state_${targetStoreKey}` : 'sabay_pos_customer_display_state';
+    const supabaseChannelName = targetStoreKey !== 'default' ? `pos_customer_display_realtime_${targetStoreKey}` : 'pos_customer_display_realtime';
+
+    // A. Initial load from store-scoped LocalStorage immediately
     try {
-      const saved = localStorage.getItem('sabay_pos_customer_display_state');
+      const saved = localStorage.getItem(storageKey) || (targetStoreKey === 'default' ? localStorage.getItem('sabay_pos_customer_display_state') : null);
       if (saved) {
         applyState(JSON.parse(saved));
       }
@@ -118,7 +158,7 @@ export default function CustomerDisplayPage() {
     // B. Persistent BroadcastChannel (0ms sync)
     let bc = null;
     try {
-      bc = new BroadcastChannel('sabay_pos_customer_display');
+      bc = new BroadcastChannel(bcChannelName);
       bcRef.current = bc;
       bc.onmessage = (event) => {
         if (event.data && typeof event.data === 'object' && event.data.type !== 'REQUEST_LATEST_STATE') {
@@ -126,7 +166,7 @@ export default function CustomerDisplayPage() {
         }
       };
       // Immediately request latest state from POS
-      bc.postMessage({ type: 'REQUEST_LATEST_STATE' });
+      bc.postMessage({ type: 'REQUEST_LATEST_STATE', storeKey: targetStoreKey });
     } catch (e) {}
 
     // C. Window postMessage listener (for direct popup communication)
@@ -140,9 +180,9 @@ export default function CustomerDisplayPage() {
 
     // D. Storage Event (backup across tabs/windows)
     const handleStorage = (e) => {
-      if (!e || !e.key || e.key === 'sabay_pos_customer_display_state') {
+      if (!e || !e.key || e.key === storageKey || (targetStoreKey === 'default' && e.key === 'sabay_pos_customer_display_state')) {
         try {
-          const raw = localStorage.getItem('sabay_pos_customer_display_state');
+          const raw = localStorage.getItem(storageKey) || (targetStoreKey === 'default' ? localStorage.getItem('sabay_pos_customer_display_state') : null);
           if (raw) applyState(JSON.parse(raw));
         } catch (err) {}
       }
@@ -152,7 +192,7 @@ export default function CustomerDisplayPage() {
     // E. ⭐️ Active 300ms Heartbeat Polling Loop (100% Guaranteed Fail-Safe Sync) ⭐️
     const pollTimer = setInterval(() => {
       try {
-        const raw = localStorage.getItem('sabay_pos_customer_display_state');
+        const raw = localStorage.getItem(storageKey) || (targetStoreKey === 'default' ? localStorage.getItem('sabay_pos_customer_display_state') : null);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && parsed.lastUpdated && parsed.lastUpdated !== lastUpdatedRef.current) {
@@ -164,7 +204,7 @@ export default function CustomerDisplayPage() {
 
     // F. Supabase Realtime broadcast (For wireless iPad on counter)
     const subChannel = supabase
-      .channel('pos_customer_display_realtime')
+      .channel(supabaseChannelName)
       .on('broadcast', { event: 'display_update' }, (payload) => {
         if (payload && payload.payload) {
           applyState(payload.payload);
@@ -182,7 +222,7 @@ export default function CustomerDisplayPage() {
       clearInterval(pollTimer);
       supabase.removeChannel(subChannel);
     };
-  }, []);
+  }, [targetStoreKey]);
 
   // Fullscreen toggle helper
   const toggleFullscreen = () => {
@@ -822,5 +862,17 @@ export default function CustomerDisplayPage() {
 
       </div>
     </>
+  );
+}
+
+export default function CustomerDisplayPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white text-sm font-bold">
+        កំពុងដំណើរការអេក្រង់អតិថិជន...
+      </div>
+    }>
+      <CustomerDisplayContent />
+    </Suspense>
   );
 }
