@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '../../../supabase'; // Path ទៅកាន់ supabase client របស់អ្នក
 
+// 🛡️ HTML Sanitizer to prevent Telegram HTML injection
+function escapeHtml(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // មុខងារផ្ញើសារទៅកាន់ Telegram (Admin Notification)
 async function sendTelegramAlert(orderDetails) {
   const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; // ដាក់ក្នុង .env.local
@@ -8,10 +17,10 @@ async function sendTelegramAlert(orderDetails) {
 
   const message = `
 🚨 <b>មានការបញ្ជាទិញថ្មី (New Order)!</b>
-👤 អតិថិជន: ${orderDetails.customerName}
-📞 លេខទូរសព្ទ: ${orderDetails.phone}
-📍 ទីតាំង: ${orderDetails.province}
-💳 វិធីទូទាត់: ${orderDetails.paymentMethod}
+👤 អតិថិជន: ${escapeHtml(orderDetails.customerName)}
+📞 លេខទូរសព្ទ: ${escapeHtml(orderDetails.phone)}
+📍 ទីតាំង: ${escapeHtml(orderDetails.province)}
+💳 វិធីទូទាត់: ${escapeHtml(orderDetails.paymentMethod)}
 📦 ថ្លៃដឹកជញ្ជូន: $${orderDetails.shippingFee}
 💰 <b>សរុបត្រូវទូទាត់: $${orderDetails.grandTotal}</b>
   `;

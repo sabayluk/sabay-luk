@@ -5,8 +5,19 @@ import { filterLowAndOutOfStock, getPhnomPenhNow } from '../../../../lib/stockAl
 // Can be triggered by external cron, Vercel cron, or server automation
 export async function GET(request) {
   try {
-    const { hour, dateStr } = getPhnomPenhNow();
     const url = new URL(request.url);
+
+    // 🛡️ SECURITY GUARD: Protect Cron Trigger against unauthorized external spam & info leakage 🛡️
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = request.headers.get('authorization');
+    const secretQuery = url.searchParams.get('secret');
+    const isLocalDev = process.env.NODE_ENV === 'development' || url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+
+    if (!isLocalDev && cronSecret && authHeader !== `Bearer ${cronSecret}` && secretQuery !== cronSecret) {
+      return Response.json({ success: false, error: 'Unauthorized cron invocation' }, { status: 401 });
+    }
+
+    const { hour, dateStr } = getPhnomPenhNow();
     const force = url.searchParams.get('force') === 'true';
 
     // Must be 8:00 AM or later in Cambodia (unless forced)

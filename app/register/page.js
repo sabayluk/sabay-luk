@@ -8,7 +8,7 @@ import {
   generateSlug, 
   STORE_PLANS, 
   isStoreNameOrSlugTaken, 
-  fetchAllStores, 
+  fetchPublicStoreUniquenessList, 
   submitSubscriptionPayment 
 } from '../../lib/stores';
 import { supabase } from '../../supabase';
@@ -67,9 +67,9 @@ function RegisterStoreForm() {
   const [isSyncingStores, setIsSyncingStores] = useState(false);
   const [storesSyncedAt, setStoresSyncedAt] = useState(0);
 
-  // Sync latest store records from Supabase on mount (Prunes any deleted ghost stores)
+  // Sync public store identifiers for name & slug uniqueness without leaking store credentials
   useEffect(() => {
-    fetchAllStores().then(() => {
+    fetchPublicStoreUniquenessList().then(() => {
       setStoresSyncedAt(Date.now());
     }).catch(() => {});
   }, []);
@@ -693,7 +693,7 @@ function RegisterStoreForm() {
                         onClick={async () => {
                           setIsSyncingStores(true);
                           try {
-                            await fetchAllStores();
+                            await fetchPublicStoreUniquenessList();
                             setStoresSyncedAt(Date.now());
                             const check = isStoreNameOrSlugTaken(storeName.trim(), effectiveSlug);
                             setDuplicateStatus(check);

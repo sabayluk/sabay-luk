@@ -6,6 +6,17 @@ import { getStorePlanExpiryInfo } from '../../../../lib/stores';
 export async function GET(request) {
   try {
     const url = new URL(request.url);
+
+    // 🛡️ SECURITY GUARD: Protect Cron Trigger against unauthorized external spam & info leakage 🛡️
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = request.headers.get('authorization');
+    const secretQuery = url.searchParams.get('secret');
+    const isLocalDev = process.env.NODE_ENV === 'development' || url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+
+    if (!isLocalDev && cronSecret && authHeader !== `Bearer ${cronSecret}` && secretQuery !== cronSecret) {
+      return Response.json({ success: false, error: 'Unauthorized cron invocation' }, { status: 401 });
+    }
+
     const force = url.searchParams.get('force') === 'true';
     const origin = url.origin || process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
     const todayStr = getPhnomPenhDateStr();

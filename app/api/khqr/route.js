@@ -71,12 +71,20 @@ export async function POST(request) {
     }
 
     if (action === 'verify') {
-      // Mark order as paid / completed
+      const { adminSecret, webhookKey } = body;
+      const isAuthorizedAdmin = (adminSecret && adminSecret === process.env.ADMIN_SECRET) || 
+                                (webhookKey && webhookKey === process.env.BAKONG_WEBHOOK_SECRET);
+
+      // 🛡️ SECURITY HARDENING: Prevent Unauthenticated Payment Bypass 🛡️
+      // If not confirmed by a verified banking webhook or admin secret, mark as Pending Confirmation
+      const targetStatus = isAuthorizedAdmin ? 'Completed' : 'Pending Confirmation';
+      const targetPaymentMethod = isAuthorizedAdmin ? 'Bakong KHQR (Verified)' : 'Bakong KHQR (Awaiting Confirmation)';
+
       const { data: updated, error: updateError } = await supabase
         .from('orders')
         .update({
-          status: 'Completed',
-          payment_method: 'Bakong KHQR (Auto)'
+          status: targetStatus,
+          payment_method: targetPaymentMethod
         })
         .or(`order_id.eq.${orderId},id.eq.${orderId}`)
         .select()
@@ -86,16 +94,22 @@ export async function POST(request) {
         console.warn('Could not update order in Supabase:', updateError.message);
       }
 
-      // Send Telegram alert confirming automatic payment
+      // Send Telegram alert confirming or notifying payment status
       try {
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
         const chatId = process.env.TELEGRAM_CHAT_ID;
         if (botToken && chatId) {
-          const msg = `⚡ <b>[KHQR AUTO-PAID] ការទូទាត់ស្វ័យប្រវត្តជោគជ័យ!</b>\n` +
-            `🧾 <b>វិក្កយបត្រ:</b> <code>${orderId}</code>\n` +
-            `💰 <b>ទឹកប្រាក់:</b> <b>$${Number(amount || 0).toFixed(2)}</b>\n` +
-            `💳 <b>វិធីទូទាត់:</b> Bakong KHQR (Auto Confirmed)\n` +
-            `⏱️ <b>ពេលវេលា:</b> ${new Date().toLocaleString('km-KH')}`;
+          const msg = isAuthorizedAdmin
+            ? `⚡ <b>[KHQR AUTO-PAID] ការទូទាត់ស្វ័យប្រវត្តជោគជ័យ!</b>\n` +
+              `🧾 <b>វិក្កយបត្រ:</b> <code>${orderId}</code>\n` +
+              `💰 <b>ទឹកប្រាក់:</b> <b>$${Number(amount || 0).toFixed(2)}</b>\n` +
+              `💳 <b>វិធីទូទាត់:</b> Bakong KHQR (Verified)\n` +
+              `⏱️ <b>ពេលវេលា:</b> ${new Date().toLocaleString('km-KH')}`
+            : `🔔 <b>[KHQR PAYMENT NOTIFICATION] អតិថិជនបានជូនដំណឹងថាបានបង់ប្រាក់!</b>\n` +
+              `🧾 <b>វិក្កយបត្រ:</b> <code>${orderId}</code>\n` +
+              `💰 <b>ទឹកប្រាក់:</b> <b>$${Number(amount || 0).toFixed(2)}</b>\n` +
+              `⏳ <b>ស្ថានភាព:</b> 🟡 រង់ចាំ Admin ពិនិត្យមើលគណនីធនាគារ រួចចុច Approve\n` +
+              `⏱️ <b>ពេលវេលា:</b> ${new Date().toLocaleString('km-KH')}`;
 
           await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
@@ -109,10 +123,10 @@ export async function POST(request) {
 
       return NextResponse.json({
         success: true,
-        paid: true,
-        status: 'Completed',
+        paid: isAuthorizedAdmin,
+        status: targetStatus,
         orderId,
-        message: 'Payment confirmed automatically'
+        message: isAuthorizedAdmin ? 'Payment confirmed automatically' : 'Payment reported, awaiting merchant verification'
       });
     }
 

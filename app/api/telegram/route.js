@@ -4,8 +4,17 @@ import { supabase } from '../../../supabase';
 
 // Telegram Bot API strictly rejects inline keyboard button URLs pointing to localhost or private IPs.
 // This validator ensures only valid public URLs are sent in inline_keyboard buttons to prevent 400 Bad Request.
-const DEFAULT_PLATFORM_BOT_TOKEN = '9040211511:AAGOkRi0gG8Qddid9y1WMVwueP4LSsMPsrE';
-const DEFAULT_PLATFORM_CHAT_ID = '-1001612401000';
+const DEFAULT_PLATFORM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || '').trim();
+const DEFAULT_PLATFORM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID || '').trim();
+
+// 🛡️ Security Sanitizer: Prevent HTML injection and message disruption in Telegram HTML parse mode 🛡️
+function escapeHtml(str) {
+  if (!str || typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 function isValidTelegramUrl(url) {
   if (!url || typeof url !== 'string') return false;
