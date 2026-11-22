@@ -21911,134 +21911,56 @@ export default function UnifiedAdminDashboard() {
         </div>
 
         
-        {/* ⭐️ PRORATION & USAGE DASHBOARD CARD (ស្ថានភាពគម្រោង & សមតុល្យទឹកប្រាក់នៅសល់) ⭐️ */}
-        <div className="bg-slate-900/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 border border-slate-800 shadow-2xl space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+        {/* ⭐️ STORE PLAN & SUBSCRIPTION STATUS CARD ⭐️ */}
+        <div className="bg-slate-900/95 backdrop-blur-md rounded-3xl p-6 sm:p-7 border border-slate-800 shadow-2xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center justify-center text-2xl shrink-0 shadow-xs">
-                📊
+                🏪
               </div>
               <div>
                 <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                  <span>ស្ថានភាពគម្រោង & សមតុល្យទឹកប្រាក់នៅសល់</span>
+                  <span>ព័ត៌មានគម្រោង & សុពលភាពហាង</span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                    {proration.currentPlanKey}
+                    {currentPlanKey}
                   </span>
                 </h4>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  តាមដានថ្ងៃដែលបានប្រើប្រាស់ ទឹកប្រាក់ដែលចាយនៅហាងអស់ និងទឹកប្រាក់នៅសល់សម្រាប់កាត់កងស្វ័យប្រវត្តិ
+                  ពិនិត្យមើលស្ថានភាពនៃការជាវ និងជ្រើសរើសដំឡើងកញ្ចប់សេវាបន្ថែមខាងក្រោម
                 </p>
               </div>
             </div>
-            <span className="self-start sm:self-auto text-[11px] font-black px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-              <span>⚡</span> យុទ្ធសាស្ត្រកាត់កងសមាមាត្រ (Prorated Upgrade)
+            <span className="self-start sm:self-auto text-[11px] font-black px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1.5">
+              <span>⚡</span> Active Subscription
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Metric 1: ថ្ងៃនៅសល់ */}
-            <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
-                <span className="flex items-center gap-1.5">
-                  <span>📅</span> រយៈពេល & ថ្ងៃនៅសល់
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  {proration.isFree ? 'Free Forever' : `${proration.totalCycleDays} ថ្ងៃសរុប`}
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-amber-400 font-mono">
-                  {proration.isFree ? 'ឥតកំណត់' : `${proration.remainingDays} ថ្ងៃ`}
-                </span>
-                {!proration.isFree && (
-                  <span className="text-xs text-slate-400">
-                    (បានដំណើរការ {proration.usedDays} ថ្ងៃ)
-                  </span>
-                )}
-              </div>
-              {/* Progress bar */}
-              {!proration.isFree && (
-                <div className="space-y-1.5 pt-1">
-                  <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden flex">
-                    <div 
-                      style={{ width: `${proration.usedPercent}%` }} 
-                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500"
-                      title={`បានប្រើ ${proration.usedDays} ថ្ងៃ (${proration.usedPercent}%)`}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                    <span>ចាយពេលអស់ {proration.usedPercent}%</span>
-                    <span className="text-amber-400 font-bold">នៅសល់ {proration.remainingPercent}%</span>
-                  </div>
-                </div>
-              )}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                <span>⚡</span> កញ្ចប់បច្ចុប្បន្ន
+              </span>
+              <p className="text-lg font-black text-white font-mono">{currentPlanKey}</p>
             </div>
-
-            {/* Metric 2: ទឹកប្រាក់បានចាយនៅហាងអស់ */}
-            <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2.5">
-              <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
-                <span className="flex items-center gap-1.5">
-                  <span>💸</span> ទឹកប្រាក់បានចាយអស់
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  ${proration.planCyclePrice}/{proration.isYearly ? 'ឆ្នាំ' : 'ខែ'}
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-slate-200 font-mono">
-                  ${proration.usedAmount.toFixed(2)}
-                </span>
-                <span className="text-xs text-slate-400 font-mono">
-                  (≈ {Math.round(proration.usedAmount * 4100).toLocaleString()} ៛)
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
-                {proration.isFree
-                  ? 'គម្រោង Free មិនគិតថ្លៃសេវាឡើយ'
-                  : `គណនាតាម ${proration.usedDays} ថ្ងៃដែលបានដំណើរការរួច ($${proration.dailyRate}/ថ្ងៃ)`}
+            <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                <span>📅</span> សុពលភាពនៅសល់
+              </span>
+              <p className="text-lg font-black text-amber-400 font-mono">
+                {expiryInfo.isExpired ? '⚠️ ផុតកំណត់' : (expiryInfo.isNever ? 'Free អចិន្ត្រៃយ៍' : `${expiryInfo.daysLeft} ថ្ងៃ`)}
               </p>
             </div>
-
-            {/* Metric 3: ទឹកប្រាក់នៅសល់សម្រាប់កាត់កង */}
-            <div className="bg-gradient-to-br from-emerald-950/50 via-slate-950/80 to-slate-950 p-4 rounded-2xl border border-emerald-500/40 space-y-2.5 shadow-lg">
-              <div className="flex items-center justify-between text-xs text-emerald-400 font-bold">
-                <span className="flex items-center gap-1.5">
-                  <span>🎁</span> ទឹកប្រាក់នៅសល់សម្រាប់កាត់កង
-                </span>
-                <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
-                  Upgrade Credit
-                </span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-black text-emerald-400 font-mono">
-                  ${proration.remainingCredit.toFixed(2)}
-                </span>
-                <span className="text-xs text-emerald-300/80 font-mono">
-                  (≈ {Math.round(proration.remainingCredit * 4100).toLocaleString()} ៛)
-                </span>
-              </div>
-              <p className="text-[11px] text-emerald-300/90 leading-relaxed pt-1">
-                {proration.remainingCredit > 0
-                  ? `✓ ទឹកប្រាក់នេះនឹងត្រូវកាត់កងស្វ័យប្រវត្តិកាលណាដំឡើងគម្រោង!`
-                  : `គ្មានទឹកប្រាក់នៅសល់សម្រាប់កាត់កងឡើយ`}
-              </p>
+            <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                <span>📦</span> ស្តុកទំនិញ
+              </span>
+              <p className="text-lg font-black text-emerald-400 font-mono">{products.length} / {activeStore?.max_products || 15} មុខ</p>
             </div>
-          </div>
-
-          {/* Strategy explanation banner */}
-          <div className="p-3.5 bg-amber-500/10 border border-amber-500/25 rounded-2xl text-xs text-amber-200 flex items-start gap-3">
-            <span className="text-lg shrink-0 mt-0.5">💡</span>
-            <div className="leading-relaxed space-y-0.5">
-              <p className="font-black text-amber-300">យុទ្ធសាស្ត្រគិតថ្លៃតាមសមាមាត្រ (Prorated Pricing Strategy)៖</p>
-              <p className="text-amber-100/90">
-                {proration.isFree ? (
-                  'បច្ចុប្បន្នហាងរបស់លោកអ្នកកំពុងប្រើគម្រោង 🎁 FREE។ នៅពេលលោកអ្នកជ្រើសរើសដំឡើងទៅគម្រោងណាមួយ លោកអ្នកនឹងបង់តាមតម្លៃគម្រោងនោះ ហើយទទួលបានការកាត់កងសមាមាត្រស្វ័យប្រវត្តិនៅរាល់ពេលដំឡើងបន្ទាប់!'
-                ) : (
-                  <>
-                    ហាងដំណើរការគម្រោង <b>${proration.planCyclePrice}/{proration.isYearly ? 'ឆ្នាំ' : 'ខែ'}</b> បាន <b>{proration.usedDays} ថ្ងៃ</b> (ចាយអស់ <b>${proration.usedAmount.toFixed(2)}</b> នៅសល់ <b>${proration.remainingCredit.toFixed(2)}</b>)។ ប្រសិនបើតម្រូវការដំឡើងទៅគម្រោងថ្មី ប្រព័ន្ធនឹងយកទឹកប្រាក់នៅសល់មកកាត់កងភ្លាមៗ មិនអោយបាត់បង់ផលប្រយោជន៍របស់ហាងឡើយ!
-                  </>
-                )}
-              </p>
+            <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 flex items-center gap-1">
+                <span>👥</span> បុគ្គលិកហាង
+              </span>
+              <p className="text-lg font-black text-blue-400 font-mono">{staffList.length} / {activeStore?.max_staff || 1} នាក់</p>
             </div>
           </div>
         </div>
@@ -22094,10 +22016,6 @@ export default function UnifiedAdminDashboard() {
             const isCurrent = currentPlanKey === p.key;
             const price = upgradeBillingCycle === 'yearly' ? p.priceYearly : p.priceMonthly;
             const cycleText = upgradeBillingCycle === 'yearly' ? (p.priceYearly === 0 ? 'ឥតគិតថ្លៃ' : '/ ឆ្នាំ') : (p.priceMonthly === 0 ? 'ឥតគិតថ្លៃ' : '/ ខែ');
-            const creditDiscount = (!isCurrent && p.key !== 'FREE' && proration.remainingCredit > 0 && price > 0)
-              ? Math.min(price, proration.remainingCredit)
-              : 0;
-            const proratedPrice = Math.max(0, Number((price - creditDiscount).toFixed(2)));
 
             return (
               <div
@@ -22145,33 +22063,14 @@ export default function UnifiedAdminDashboard() {
                   {/* Price */}
                   <div className="py-2 border-y border-slate-100 space-y-1">
                     <div className="flex items-baseline gap-1.5 flex-wrap">
-                      {creditDiscount > 0 ? (
-                        <>
-                          <span className="text-sm font-bold text-slate-400 line-through font-mono">${price}</span>
-                          <span className="text-3xl font-black text-[#ff6a00] font-mono">${proratedPrice}</span>
-                          <span className="text-xs font-bold text-slate-500">{cycleText}</span>
-                          <span className="text-[10px] font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 ml-auto">
-                            ថែមតែ ${proratedPrice}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-3xl font-black text-slate-900 font-mono">${price}</span>
-                          <span className="text-xs font-bold text-slate-500">{cycleText}</span>
-                          {upgradeBillingCycle === 'yearly' && p.priceMonthly > 0 && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 ml-auto font-mono">
-                              ~${(p.priceYearly / 12).toFixed(1)}/ខែ
-                            </span>
-                          )}
-                        </>
+                      <span className="text-3xl font-black text-slate-900 font-mono">${price}</span>
+                      <span className="text-xs font-bold text-slate-500">{cycleText}</span>
+                      {upgradeBillingCycle === 'yearly' && p.priceMonthly > 0 && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 ml-auto font-mono">
+                          ~${(p.priceYearly / 12).toFixed(1)}/ខែ
+                        </span>
                       )}
                     </div>
-                    {creditDiscount > 0 && (
-                      <div className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-xl flex items-center justify-between">
-                        <span>🎁 កាត់កងសល់: -${creditDiscount.toFixed(2)}</span>
-                        <span>(សល់ {proration.remainingDays} ថ្ងៃ)</span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Specs Box */}
@@ -22258,7 +22157,11 @@ export default function UnifiedAdminDashboard() {
                         : 'bg-slate-950 hover:bg-black text-white'
                     }`}
                   >
-                    <span>{isCurrent ? '✓ កំពុងប្រើប្រាស់' : creditDiscount > 0 ? `⚡ ដំឡើងថែម $${proratedPrice}` : `⚡ ជ្រើសរើស ${p.name}`}</span>
+                    <span>
+                      {isCurrent 
+                        ? '✓ កំពុងប្រើប្រាស់' 
+                        : (p.key === 'FREE' ? '🎁 ជ្រើសរើស គំរោង Free' : `⚡ ជ្រើសរើស ${p.name.split(' ')[1] || p.name} ($${price}${cycleText})`)}
+                    </span>
                     {!isCurrent && <span>➔</span>}
                   </button>
                 </div>
@@ -36764,10 +36667,7 @@ export default function UnifiedAdminDashboard() {
         const targetPlan = UPGRADE_PLANS_LIST.find(p => p.key === limitModalTierKey) || UPGRADE_PLANS_LIST[1]; // default STARTER
         const isYearly = limitModalCycle === 'yearly';
         const rawPrice = isYearly ? targetPlan.priceYearly : targetPlan.priceMonthly;
-        const creditDiscount = (targetPlan.key !== 'FREE' && proration.remainingCredit > 0 && rawPrice > 0)
-          ? Math.min(rawPrice, proration.remainingCredit)
-          : 0;
-        const finalPrice = Math.max(0, Number((rawPrice - creditDiscount).toFixed(2)));
+        const finalPrice = rawPrice;
         const finalPriceKHR = Math.round(finalPrice * 4100).toLocaleString();
         
         // Meter calculation
@@ -37055,10 +36955,8 @@ export default function UnifiedAdminDashboard() {
         const plan = selectedUpgradePlan || UPGRADE_PLANS_LIST.find(p => p.key === 'STARTER') || UPGRADE_PLANS_LIST[1];
         const proration = getPlanProrationInfo(activeStore);
         const rawAmount = upgradeBillingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly;
-        const creditDiscount = (plan.key !== 'FREE' && proration.remainingCredit > 0 && rawAmount > 0)
-          ? Math.min(rawAmount, proration.remainingCredit)
-          : 0;
-        const totalAmount = Math.max(0, Number((rawAmount - creditDiscount).toFixed(2)));
+        const totalAmount = rawAmount;
+        const creditDiscount = 0;
         const khrAmount = Math.round(totalAmount * 4100).toLocaleString();
 
         return (
