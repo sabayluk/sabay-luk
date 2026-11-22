@@ -137,10 +137,6 @@ function CustomerDisplayContent() {
 
   // 3. Multi-tier Realtime Synchronization Scoped per Store (BroadcastChannel + LocalStorage + Window Msg + Polling + Supabase)
   useEffect(() => {
-    if (typeof window !== 'undefined') return;
-  }, []);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const bcChannelName = targetStoreKey !== 'default' ? `sabay_pos_customer_display_${targetStoreKey}` : 'sabay_pos_customer_display';

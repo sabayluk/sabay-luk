@@ -3439,6 +3439,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                         <img
                           src={item.image_url || '/placeholder.png'}
                           alt={item.product_name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover rounded-full bg-white dark:bg-slate-900"
                           onError={(e) => {
                             e.target.onerror = null;
@@ -4021,6 +4023,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                             <img 
                               src={prod.image_url} 
                               alt={prod.name} 
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                             />
                           ) : (

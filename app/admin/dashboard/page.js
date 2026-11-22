@@ -4,7 +4,14 @@ import Link from 'next/link';
 import { supabase, normalizeEnableTax } from '../../../supabase';
 import { getActiveStore, setActiveStore, getLocalStores, saveLocalStores, fetchAllStores, deleteStoreRecord, STORE_PLANS, checkStorePlanLimit, getStorePlanExpiryInfo, renewStoreSubscription, updateStorePlanExpiryDate, getSubscriptionPayments, saveSubscriptionPayments, submitSubscriptionPayment, approveSubscriptionPayment, rejectSubscriptionPayment, approveStoreDirectly, isStoreNameOrSlugTaken, getStoreInactivityDays, isStoreInactive, updateStoreActivity, suspendStore, reactivateStore } from '../../../lib/stores';
 import { sendStorePlanExpiryTelegramAlert, sendAllExpiringStoresTelegramAlerts, filterExpiringStores } from '../../../lib/planExpiryAlertEngine';
-import * as XLSX from 'xlsx';
+// ⭐️ Lazy-loaded XLSX for fast initial bundle & zero page freeze ⭐️
+let _cachedXlsx = null;
+const getXlsx = async () => {
+  if (!_cachedXlsx) {
+    _cachedXlsx = await import('xlsx');
+  }
+  return _cachedXlsx;
+};
 import { CATEGORY_DEPARTMENTS, CATEGORY_ICONS_LIST, renderCategorySvg } from '../../../lib/categoryIcons';
 import WorldStandardFinanceView from '../../components/WorldStandardFinanceView';
 import BarcodeCameraModal from '../../components/BarcodeCameraModal';
@@ -4749,7 +4756,7 @@ export default function UnifiedAdminDashboard() {
   };
 
   // ⭐️ មុខងារទាញយកទិន្នន័យស្តុកជា Excel (.xlsx) ⭐️
-  const exportInventoryToExcel = () => {
+  const exportInventoryToExcel = async () => {
     if (products.length === 0) {
       alert('មិនមានទិន្នន័យទំនិញសម្រាប់នាំចេញទេ!');
       return;
@@ -4777,7 +4784,9 @@ export default function UnifiedAdminDashboard() {
       ])
     ];
 
-    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wsData = [headers, ...rows];
+    const XLSX = await getXlsx();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
     ws['!cols'] = [
       { wch: 10 }, { wch: 32 }, { wch: 16 }, { wch: 18 }, { wch: 16 },
       { wch: 16 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 14 },
@@ -4790,7 +4799,7 @@ export default function UnifiedAdminDashboard() {
   };
 
   // ⭐️ មុខងារទាញយកគំរូ Excel សម្រាប់បំពេញទិន្នន័យ (Sample Excel Template) ⭐️
-  const downloadInventoryTemplate = () => {
+  const downloadInventoryTemplate = async () => {
     const headers = [
       'ឈ្មោះទំនិញ (Name)*',
       'បាកូដ_SKU (Barcode)',
@@ -4812,6 +4821,7 @@ export default function UnifiedAdminDashboard() {
       ['កាបូបស្ពាយស្បែកបុរស Luxury', 'BG-3003', 'កាបូប', 14.00, 28.00, 3.00, 20.00, 0, 15, 3, 'Free Size', 'Brown', '']
     ];
 
+    const XLSX = await getXlsx();
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleRows]);
     ws['!cols'] = [
       { wch: 32 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 18 },
@@ -4829,8 +4839,9 @@ export default function UnifiedAdminDashboard() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
+        const XLSX = await getXlsx();
         const data = new Uint8Array(evt.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
@@ -16273,11 +16284,12 @@ export default function UnifiedAdminDashboard() {
     };
 
     // Export to Excel
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
       if (finalFilteredExpenses.length === 0) {
         alert('មិនមានទិន្នន័យចំណាយសម្រាប់ទាញចេញទេ!');
         return;
       }
+      const XLSX = await getXlsx();
       const dataToExport = finalFilteredExpenses.map((exp, idx) => {
         const catObj = EXPENSE_CATEGORIES.find(c => c.id === exp.category);
         return {
@@ -17130,8 +17142,9 @@ export default function UnifiedAdminDashboard() {
     };
 
     // 📥 Export Payment Slips History to Excel (.xlsx)
-    const handleExportPaymentSlipsToExcel = (paymentsToExport) => {
+    const handleExportPaymentSlipsToExcel = async (paymentsToExport) => {
       try {
+        const XLSX = await getXlsx();
         const rows = (paymentsToExport || []).map((p, idx) => ({
           'ល.រ (No.)': idx + 1,
           'កាលបរិច្ឆេទ (Date)': p.created_at ? new Date(p.created_at).toLocaleDateString('km-KH') + ' ' + new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—',
@@ -32027,8 +32040,9 @@ export default function UnifiedAdminDashboard() {
                   {/* Export Multi-Sheet Excel */}
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       try {
+                        const XLSX = await getXlsx();
                         const wb = XLSX.utils.book_new();
 
                         // Sheet 1: Products
