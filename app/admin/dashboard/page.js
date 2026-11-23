@@ -484,16 +484,35 @@ const parseProductMeta = (p) => {
 
 // (compressMediaFile, compressImage, compressImageToDataUrl are imported from lib/imageOptimizer)
 
-// ⭐️ Helper: ស្វែងរកលេខកូដ SKU ចុងក្រោយបង្អស់ និងបង្កើត SKU បន្ទាប់ដោយស្វ័យប្រវត្តិ (+1)
-const computeNextSku = (productList) => {
+// ⭐️ Helper: បង្កើត SKU Prefix ដាច់ដោយឡែកតាមហាងនីមួយៗ (Zero SKU Collision Across Stores) ⭐️
+export const getStoreSkuPrefix = (store) => {
+  if (!store) return 'SL-';
+  const slug = (store.slug || store.name || '').trim().toLowerCase();
+  if (slug === 'sabay-luk' || store.id === 'store_default_sabayluk') return 'SL-';
+  if (slug === 'mario') return 'MR-';
+  if (slug === 'urbangrabs') return 'UG-';
+  // យកអក្សរកាត់ ២-៣ តួពី Slug ឬឈ្មោះហាង
+  const clean = slug.replace(/[^a-z0-9]/g, '');
+  if (clean.length >= 2) {
+    return clean.slice(0, 3).toUpperCase() + '-';
+  }
+  return 'ST-';
+};
+
+// ⭐️ Helper: ស្វែងរកលេខកូដ SKU ចុងក្រោយបង្អស់ និងបង្កើត SKU បន្ទាប់ដោយស្វ័យប្រវត្តិ (+1) បែងចែកតាមហាង
+const computeNextSku = (productList, store) => {
+  const storeId = store?.id || 'store_default_sabayluk';
+  const defaultPrefix = getStoreSkuPrefix(store);
+  const startingSku = `${defaultPrefix}1001`;
+
   if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('sabay_last_saved_sku');
-    if (saved && saved.trim()) {
+    const saved = localStorage.getItem(`sabay_last_saved_sku_${storeId}`) || localStorage.getItem(`sabay_current_sku_${storeId}`);
+    if (saved && saved.trim() && saved.startsWith(defaultPrefix)) {
       return saved.trim();
     }
   }
 
-  if (!productList || productList.length === 0) return 'SL-1001';
+  if (!productList || productList.length === 0) return startingSku;
   
   // ១. តម្រៀបបញ្ជីទំនិញតាមកាលបរិច្ឆេទបង្កើតចុងក្រោយគេបង្អស់ (Newest created_at first)
   const sorted = [...productList].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
@@ -513,7 +532,7 @@ const computeNextSku = (productList) => {
 
   // ៣. បើមិនឃើញទម្រង់ច្បាស់ ស្វែងរកលេខអតិបរមាខ្ពស់បំផុតក្នុងបញ្ជី
   let maxNum = 0;
-  let bestPrefix = 'SL-';
+  let bestPrefix = defaultPrefix;
   let bestDigitsLen = 4;
 
   sorted.forEach(p => {
@@ -534,7 +553,7 @@ const computeNextSku = (productList) => {
     return `${bestPrefix}${nextVal.toString().padStart(bestDigitsLen, '0')}`;
   }
 
-  return 'SL-1001';
+  return startingSku;
 };
 
 export default function UnifiedAdminDashboard() {
@@ -3005,17 +3024,19 @@ export default function UnifiedAdminDashboard() {
       setProducts(mapped);
       // រក្សាទុក Cache ទំនិញក្នុង LocalStorage ដើម្បីលក់បានពេលគ្មាន Internet (Offline Mode)
       cacheProductsOffline(activeStore?.id, mapped);
-      // កំណត់ SKU ជាប់លេខចុងក្រោយបង្អស់ដោយស្វ័យប្រវត្តិ
+      // កំណត់ SKU ជាប់លេខចុងក្រោយបង្អស់ដោយស្វ័យប្រវត្តិតាមហាងនីមួយៗ
       if (!editingProductId) {
-        const currentSavedSku = typeof window !== 'undefined' ? (localStorage.getItem('sabay_current_sku') || localStorage.getItem('sabay_last_saved_sku')) : null;
-        if (currentSavedSku) {
+        const sid = activeStore?.id || 'store_default_sabayluk';
+        const storePrefix = getStoreSkuPrefix(activeStore);
+        const currentSavedSku = typeof window !== 'undefined' ? (localStorage.getItem(`sabay_current_sku_${sid}`) || localStorage.getItem(`sabay_last_saved_sku_${sid}`)) : null;
+        if (currentSavedSku && currentSavedSku.startsWith(storePrefix)) {
           setSku(currentSavedSku);
         } else {
-          const nextSku = computeNextSku(mapped);
+          const nextSku = computeNextSku(mapped, activeStore);
           setSku(nextSku);
           if (typeof window !== 'undefined') {
-            localStorage.setItem('sabay_current_sku', nextSku);
-            localStorage.setItem('sabay_last_saved_sku', nextSku);
+            localStorage.setItem(`sabay_current_sku_${sid}`, nextSku);
+            localStorage.setItem(`sabay_last_saved_sku_${sid}`, nextSku);
           }
         }
       }
@@ -6619,7 +6640,13 @@ export default function UnifiedAdminDashboard() {
   const [name, setName] = useState('');
   const [sku, setSku] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('sabay_current_sku') || localStorage.getItem('sabay_last_saved_sku') || 'SL-1001';
+      const sid = activeStore?.id || 'store_default_sabayluk';
+      const storePrefix = getStoreSkuPrefix(activeStore);
+      const savedSku = localStorage.getItem(`sabay_current_sku_${sid}`) || localStorage.getItem(`sabay_last_saved_sku_${sid}`);
+      if (savedSku && savedSku.startsWith(storePrefix)) {
+        return savedSku;
+      }
+      return `${storePrefix}1001`;
     }
     return 'SL-1001';
   });
@@ -7005,7 +7032,7 @@ export default function UnifiedAdminDashboard() {
         const parsed = JSON.parse(draft);
         if (parsed.name || parsed.sellingPrice) {
           setName(parsed.name || '');
-          setSku(parsed.sku || computeNextSku(products));
+          setSku(parsed.sku || computeNextSku(products, activeStore));
           setCategory(parsed.category || '');
           setSelectedSizes(parsed.selectedSizes || []);
           setCustomTextSize(parsed.customTextSize || '');
@@ -7367,6 +7394,10 @@ export default function UnifiedAdminDashboard() {
           .update(updatePayload)
           .eq('id', editingProductId);
 
+        if (updateError && (updateError.message?.includes('products_sku_key') || updateError.message?.includes('duplicate key value') || updateError.code === '23505')) {
+          throw new Error(`កូដទំនិញ (SKU: "${sku}") នេះត្រូវបានប្រើប្រាស់ដោយទំនិញផ្សេងរួចហើយ! សូមប្ដូរដាក់លេខកូដ SKU ផ្សេង ឬចុចប៊ូតុង "⚡ បង្កើតកូដអូតូ"`);
+        }
+
         if (updateError && (updateError.message?.includes('wholesale_price') || updateError.message?.includes('description') || updateError.message?.includes('images') || updateError.message?.includes('detail_images') || updateError.message?.includes('discount') || updateError.code === 'PGRST204')) {
           if (updateError.message?.includes('wholesale_price')) delete updatePayload.wholesale_price;
           if (updateError.message?.includes('retail_discount')) delete updatePayload.retail_discount;
@@ -7420,6 +7451,25 @@ export default function UnifiedAdminDashboard() {
           .insert([insertPayload])
           .select()
           .single();
+
+        // ដោះស្រាយបញ្ហាជាន់គ្នានៃ SKU (Auto-recovery if duplicate key violates unique constraint products_sku_key)
+        if (insertError && (insertError.message?.includes('products_sku_key') || insertError.message?.includes('duplicate key value') || insertError.code === '23505')) {
+          const storePrefix = getStoreSkuPrefix(activeStore);
+          const autoUniqueSku = `${storePrefix}${Date.now().toString().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
+          insertPayload.sku = autoUniqueSku;
+          const retrySku = await supabase
+            .from('products')
+            .insert([insertPayload])
+            .select()
+            .single();
+          if (!retrySku.error) {
+            newProduct = retrySku.data;
+            insertError = null;
+            setSku(autoUniqueSku);
+          } else {
+            insertError = retrySku.error;
+          }
+        }
 
         if (insertError && (insertError.message?.includes('wholesale_price') || insertError.message?.includes('description') || insertError.message?.includes('images') || insertError.message?.includes('detail_images') || insertError.code === 'PGRST204')) {
           if (insertError.message?.includes('wholesale_price')) delete insertPayload.wholesale_price;
@@ -7481,8 +7531,9 @@ export default function UnifiedAdminDashboard() {
           }]);
         }
 
-        // ⭐️ គណនា SKU បន្ទាប់ដោយស្វ័យប្រវត្តិ (ឧ. B-220 -> B-221 ឬ SL-1001 -> SL-1002) ⭐️
-        let nextSkuVal = 'SL-1001';
+        // ⭐️ គណនា SKU បន្ទាប់ដោយស្វ័យប្រវត្តិ (ឧ. SL-1001 -> SL-1002 ឬ MR-1001 -> MR-1002) ⭐️
+        const sid = activeStore?.id || 'store_default_sabayluk';
+        let nextSkuVal = `${getStoreSkuPrefix(activeStore)}1001`;
         const match = (sku || '').match(/^([A-Za-z0-9]+-?)(\d+)$/);
         if (match) {
           const prefix = match[1];
@@ -7490,12 +7541,12 @@ export default function UnifiedAdminDashboard() {
           const nextVal = parseInt(match[2], 10) + 1;
           nextSkuVal = `${prefix}${nextVal.toString().padStart(digitsLen, '0')}`;
         } else {
-          nextSkuVal = computeNextSku(products);
+          nextSkuVal = computeNextSku(products, activeStore);
         }
         setSku(nextSkuVal);
         if (typeof window !== 'undefined') {
-          localStorage.setItem('sabay_last_saved_sku', nextSkuVal);
-          localStorage.setItem('sabay_current_sku', nextSkuVal);
+          localStorage.setItem(`sabay_last_saved_sku_${sid}`, nextSkuVal);
+          localStorage.setItem(`sabay_current_sku_${sid}`, nextSkuVal);
         }
         setDisabledVariants([]);
 
@@ -7550,7 +7601,7 @@ export default function UnifiedAdminDashboard() {
   const handleOpenNewProductForm = () => {
     setEditingProductId(null);
     setName('');
-    const nextSkuVal = computeNextSku(products);
+    const nextSkuVal = computeNextSku(products, activeStore);
     setSku(nextSkuVal);
     setSelectedSizes([]);
     setSelectedColors([]);
@@ -7927,11 +7978,12 @@ export default function UnifiedAdminDashboard() {
 
     // ⚡ មុខងារ Auto-Generate SKU
     const handleAutoGenerateSku = () => {
-      const nextSku = computeNextSku(products);
+      const nextSku = computeNextSku(products, activeStore);
       setSku(nextSku);
       if (typeof window !== 'undefined') {
-        localStorage.setItem('sabay_current_sku', nextSku);
-        localStorage.setItem('sabay_last_saved_sku', nextSku);
+        const sid = activeStore?.id || 'store_default_sabayluk';
+        localStorage.setItem(`sabay_current_sku_${sid}`, nextSku);
+        localStorage.setItem(`sabay_last_saved_sku_${sid}`, nextSku);
       }
     };
 
@@ -7948,12 +8000,12 @@ export default function UnifiedAdminDashboard() {
       if (ok) {
         setEditingProductId(null);
         setName('');
-        const nextSkuVal = computeNextSku(products);
+        const nextSkuVal = computeNextSku(products, activeStore);
         setSku(nextSkuVal);
         if (typeof window !== 'undefined') {
           const sid = activeStore?.id || 'store_default_sabayluk';
-          localStorage.setItem('sabay_current_sku', nextSkuVal);
-          localStorage.setItem('sabay_last_saved_sku', nextSkuVal);
+          localStorage.setItem(`sabay_current_sku_${sid}`, nextSkuVal);
+          localStorage.setItem(`sabay_last_saved_sku_${sid}`, nextSkuVal);
           localStorage.removeItem(`sabay_product_draft_${sid}`);
           localStorage.removeItem('sabay_product_draft');
         }
@@ -8203,11 +8255,12 @@ export default function UnifiedAdminDashboard() {
                         onChange={(e) => {
                           setSku(e.target.value);
                           if (typeof window !== 'undefined') {
-                            localStorage.setItem('sabay_current_sku', e.target.value);
-                            localStorage.setItem('sabay_last_saved_sku', e.target.value);
+                            const sid = activeStore?.id || 'store_default_sabayluk';
+                            localStorage.setItem(`sabay_current_sku_${sid}`, e.target.value);
+                            localStorage.setItem(`sabay_last_saved_sku_${sid}`, e.target.value);
                           }
                         }} 
-                        placeholder="SL-XXXX" 
+                        placeholder={`${getStoreSkuPrefix(activeStore)}XXXX`} 
                         className="w-full border-2 border-slate-200 focus:border-blue-500 p-3.5 rounded-2xl text-sm font-mono font-black text-slate-800 bg-slate-50/50 focus:bg-white outline-none transition" 
                       />
                       <span className="absolute right-3.5 top-3.5 text-xs text-slate-400 font-mono">
