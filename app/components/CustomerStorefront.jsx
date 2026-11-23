@@ -2039,14 +2039,16 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
     if (sharedProdId === 'preview' || sharedProdId === 'draft') {
       try {
-        const rawDraft = localStorage.getItem('sabay_draft_preview_product');
+        const rawDraft = localStorage.getItem('sabay_draft_preview_product') || sessionStorage.getItem('sabay_draft_preview_product');
         if (rawDraft) {
           const draftObj = JSON.parse(rawDraft);
           hasAutoOpenedProductRef.current = true;
           handleAddToCartClick(draftObj);
           return;
         }
-      } catch(e) {}
+      } catch(e) {
+        console.warn('Error reading draft preview product:', e);
+      }
     }
     if (products.length > 0) {
       const found = products.find(p => String(p.id) === String(sharedProdId));
@@ -2059,10 +2061,11 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
   // ⭐️ បើកផ្ទាំងលម្អិតទំនិញស្តង់ដារ (Open Standard Product Details & Gallery Modal)
   const handleAddToCartClick = async (product) => {
+    if (!product) return;
     setSelectedProductForVariant(product);
     recordRecentlyViewedProduct(product);
     const parsedProd = parseProductMeta(product);
-    const allImgs = parsedProd.images && parsedProd.images.length > 0
+    const allImgs = (parsedProd.images && parsedProd.images.length > 0)
       ? parsedProd.images 
       : (product.image_url ? [product.image_url] : []);
     setModalAllImages(allImgs);
@@ -2071,6 +2074,41 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
     setModalSelectedColor(product.color || '');
     setLoadingVariants(true);
     setVariantModalOpen(true);
+
+    // ⭐️ ប្រសិនបើជាទំនិញ Draft Preview មិនបាច់ Query ទៅ Supabase ទេ (Zero UUID Syntax Errors) ⭐️
+    if (product.id === 'preview' || product.id === 'draft') {
+      let previewSizes = [];
+      if (Array.isArray(product.sizes) && product.sizes.length > 0) {
+        previewSizes = product.sizes;
+      } else if (product.size && product.size !== 'N/A') {
+        previewSizes = product.size.split(',').map(s => s.trim()).filter(Boolean);
+      }
+
+      let parsedVariants = [];
+      if (previewSizes.length > 0) {
+        parsedVariants = previewSizes.map((sz, idx) => ({
+          id: `preview_sz_${idx}`,
+          size: typeof sz === 'object' ? (sz.size || sz) : sz,
+          color: product.color || '',
+          stock_qty: product.stock_qty || 10,
+          isLegacy: true
+        }));
+      } else {
+        parsedVariants = [{
+          id: 'preview_sz_0',
+          size: 'Free Size',
+          color: product.color || '',
+          stock_qty: product.stock_qty || 10,
+          isLegacy: true
+        }];
+      }
+      setCurrentProductVariants(parsedVariants);
+      const firstAvailable = parsedVariants.find(v => v.stock_qty > 0) || parsedVariants[0];
+      setModalSelectedSize(firstAvailable ? firstAvailable.size : 'Free Size');
+      if (firstAvailable && firstAvailable.color) setModalSelectedColor(firstAvailable.color);
+      setLoadingVariants(false);
+      return;
+    }
 
     try {
       const { data: variants } = await supabase

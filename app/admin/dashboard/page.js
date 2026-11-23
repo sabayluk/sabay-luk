@@ -7558,35 +7558,28 @@ export default function UnifiedAdminDashboard() {
           }]);
         }
 
-        // ⭐️ គណនា SKU បន្ទាប់ដោយស្វ័យប្រវត្តិតាមហាង ⭐️
+        // ⭐️ ២. គណនា SKU បន្ទាប់ដោយកើនឡើង ១ លេខ (ឧ. G-01 -> G-02 ឬ MR-1001 -> MR-1002) ⭐️
         const sid = activeStore?.id || 'store_default_sabayluk';
-        const nextSkuVal = computeNextSku([...products, newProduct], activeStore);
+        const currentSkuToIncrement = sku || insertPayload.sku || '';
+        let nextSkuVal = `${getStoreSkuPrefix(activeStore)}1001`;
+        const match = currentSkuToIncrement.match(/^([A-Za-z0-9]+-?)(\d+)$/);
+        if (match) {
+          const prefix = match[1];
+          const digitsLen = match[2].length;
+          const nextVal = parseInt(match[2], 10) + 1;
+          nextSkuVal = `${prefix}${nextVal.toString().padStart(digitsLen, '0')}`;
+        } else {
+          nextSkuVal = computeNextSku([...products, newProduct], activeStore);
+        }
+
         setSku(nextSkuVal);
         if (typeof window !== 'undefined') {
           localStorage.setItem(`sabay_last_saved_sku_${sid}`, nextSkuVal);
           localStorage.setItem(`sabay_current_sku_${sid}`, nextSkuVal);
-          // ⭐️ លុប Draft ចេញកុំឱ្យទំនិញដែលទើប Save រួចនៅជាប់ក្នុង Form ⭐️
-          localStorage.removeItem(`sabay_product_draft_${sid}`);
-          localStorage.removeItem('sabay_product_draft');
         }
 
-        // ⭐️ សម្អាត Form ឱ្យទទេស្អាត ១០០% ដើម្បីងាយស្រួលបញ្ចូលទំនិញថ្មីបន្ទាប់ ដោយមិនច្រឡំទំនិញចាស់ ⭐️
+        // ⭐️ សម្អាតតែរូបថតចេញប៉ុណ្ណោះ ឯព័ត៌មានផ្សេងៗទៀត (ឈ្មោះ, ប្រភេទ, តម្លៃ, Size, Color, Stock) រក្សាទុកនៅដដែល ⭐️
         setEditingProductId(null);
-        setName('');
-        setSellingPrice('');
-        setCostPrice('');
-        setWholesalePrice('');
-        setWholesaleDiscount('');
-        setRetailDiscount('');
-        setStockQty('10');
-        setLowStockAlert('5');
-        setSelectedSizes([]);
-        setSelectedColors([]);
-        setColor('');
-        setCustomTextSize('');
-        setVariantStock({});
-        setDisabledVariants([]);
-        setDescription('');
         setFile(null);
         setPreviewUrl(null);
         setProductImages([]);
@@ -7594,11 +7587,35 @@ export default function UnifiedAdminDashboard() {
         setDetailImages([]);
         setDetailImageUrlInput('');
 
+        // ⭐️ រក្សាទុក Draft ថ្មីដែលមាន SKU បន្ទាប់ និងព័ត៌មានដដែលក្នុង LocalStorage ⭐️
+        if (typeof window !== 'undefined') {
+          const retainedDraft = {
+            name,
+            sku: nextSkuVal,
+            category,
+            selectedSizes,
+            selectedColors,
+            customTextSize,
+            color,
+            stockQty,
+            costPrice,
+            wholesalePrice,
+            wholesaleDiscount,
+            sellingPrice,
+            retailDiscount,
+            lowStockAlert,
+            description: description || ''
+          };
+          try {
+            localStorage.setItem(`sabay_product_draft_${sid}`, JSON.stringify(retainedDraft));
+          } catch (_) {}
+        }
+
         setMessage('🎉 បញ្ចូលទំនិញថ្មី និងកត់ត្រាស្តុកជោគជ័យ!');
-        setToastNotification(`🎉 បានរក្សាទុកទំនិញ "${name}" ដោយជោគជ័យ!`);
+        setToastNotification(`🎉 បានរក្សាទុកទំនិញជោគជ័យ! រូបថតត្រូវបានសម្អាត និងកូដ SKU ឡើង ${nextSkuVal} ដោយស្វ័យប្រវត្តិ។`);
         setTimeout(() => setToastNotification(null), 4000);
         fetchProducts();
-        setActiveTab('inventory'); // បញ្ជូនទៅកាន់ទំព័រតារាងស្តុកភ្លាម ដើម្បីពិនិត្យមើលទំនិញថ្មី
+        // ⭐️ អេក្រង់នៅកន្លែងដដែល (upload) មិនលោតទៅ inventory ទេ ដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់ ⭐️
       }
 
     } catch (error) {
@@ -9464,33 +9481,44 @@ export default function UnifiedAdminDashboard() {
             {(() => {
               const storeSlug = activeStore?.slug || 'sabay-luk';
               const targetParam = editingProductId ? `?product=${editingProductId}` : '?product=preview';
-              let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
-              if (origin.includes('localhost:')) origin = origin.replace('localhost:', '127.0.0.1:');
+              const origin = typeof window !== 'undefined' ? window.location.origin : '';
               const previewFullUrl = `${origin}/store/${storeSlug}${targetParam}`;
 
               const handleOpenStorefrontProduct = () => {
                 if (typeof window !== 'undefined') {
                   const draftObj = {
                     id: editingProductId || 'preview',
-                    name: name || 'ឈ្មោះទំនិញគំរូ (Product Title)',
+                    name: name.trim() || 'ឈ្មោះទំនិញគំរូ (Product Title)',
+                    sku: sku || 'MR-1001',
+                    barcode: sku || 'MR-1001',
+                    category: category || 'ទូទៅ',
                     category_name: category || 'ទូទៅ',
-                    price: parseFloat(finalRetail) || 0,
+                    price: parseFloat(finalRetail) || parseFloat(sellingPrice) || 0,
+                    selling_price: parseFloat(finalRetail) || parseFloat(sellingPrice) || 0,
                     cost_price: parseFloat(costPrice) || 0,
+                    wholesale_price: parseFloat(wholesalePrice) || 0,
+                    retail_discount: parseFloat(retailDiscount) || 0,
+                    wholesale_discount: parseFloat(wholesaleDiscount) || 0,
+                    stock_qty: parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0,
+                    status: (parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0) > 0 ? 'In Stock' : 'Out of Stock',
                     image_url: productImages[selectedCoverIndex]?.url || previewUrl || '',
-                    images: productImages.map(img => img.url),
+                    images: productImages.map(img => img.url).filter(Boolean),
+                    detail_images: detailImages.map(img => img.url).filter(Boolean),
+                    size: selectedSizes.join(', '),
                     sizes: selectedSizes,
+                    color: selectedColors.join(', ') || color || '',
                     colors: selectedColors,
                     video_url: videoUrl || '',
                     description: description || '',
-                    detail_images: detailImages.map(img => img.url),
-                    retail_discount: parseFloat(retailDiscount) || 0,
-                    stock_qty: parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0,
                     store_id: activeStore?.id || 'store_default_sabayluk'
                   };
-                  localStorage.setItem('sabay_draft_preview_product', JSON.stringify(draftObj));
+                  try {
+                    localStorage.setItem('sabay_draft_preview_product', JSON.stringify(draftObj));
+                    sessionStorage.setItem('sabay_draft_preview_product', JSON.stringify(draftObj));
+                  } catch (_) {}
                 }
 
-                // 1. Direct browser open immediately
+                // Direct browser open immediately
                 try {
                   const win = window.open(previewFullUrl, '_blank', 'noopener,noreferrer');
                   if (win) win.focus();
@@ -9498,7 +9526,7 @@ export default function UnifiedAdminDashboard() {
                   window.location.href = previewFullUrl;
                 }
 
-                setToastNotification('🌐 បានបើកទំនិញលើ Google Chrome!');
+                setToastNotification('🌐 បានបើកទំនិញលើ Storefront!');
                 setTimeout(() => setToastNotification(null), 3000);
               };
 
@@ -9559,108 +9587,183 @@ export default function UnifiedAdminDashboard() {
               );
             })()}
 
-            {/* ៣. ទិដ្ឋភាពផ្ទាល់លើ Storefront (Live Customer Preview) */}
-            <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-lg space-y-3">
+            {/* ៣. ទិដ្ឋភាពផ្ទាល់លើ Storefront (100% Real Live Storefront Card) */}
+            <div className="bg-slate-900 rounded-3xl p-4 sm:p-5 text-white shadow-xl space-y-3 border border-slate-800">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
                   <span>📱</span> ទិដ្ឋភាពផ្ទាល់លើ Storefront
                 </span>
-                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-800">
-                  Live View
+                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-700/60 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  Live 100%
                 </span>
               </div>
 
-              {/* Mock Product Card */}
-              <div className="bg-white rounded-2xl p-3 text-slate-900 shadow-md">
-                <div className="relative aspect-square rounded-xl bg-slate-100 overflow-hidden mb-2.5">
+              {/* ⭐️ EXACT STOREFRONT PRODUCT CARD (ដូចទំព័រមុខហាង ១០០%) ⭐️ */}
+              <div className="bg-white rounded-3xl p-3 sm:p-3.5 text-slate-900 shadow-md border border-slate-100 flex flex-col justify-between group/liveCard transition-all">
+                {/* Product Image Box */}
+                <div className="relative aspect-square rounded-2xl bg-slate-100 overflow-hidden mb-3">
                   {productImages[selectedCoverIndex]?.url || previewUrl ? (
                     <img 
                       src={productImages[selectedCoverIndex]?.url || previewUrl} 
-                      alt="Preview" 
-                      className="w-full h-full object-cover" 
+                      alt={name || 'Preview'} 
+                      className="w-full h-full object-cover group-hover/liveCard:scale-105 transition-transform duration-300" 
                     />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
-                      <span className="text-3xl">👟</span>
-                      <span className="text-[10px] font-bold mt-1">មិនទាន់មានរូបភាព</span>
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 bg-slate-50">
+                      <span className="text-4xl mb-1">👟</span>
+                      <span className="text-[10px] font-bold text-slate-400">មិនទាន់មានរូបភាព</span>
                     </div>
                   )}
 
-                  {numDiscount > 0 && (
-                    <span className="absolute top-2 left-2 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-xs">
-                      SALE -${numDiscount.toFixed(2)}
+                  {/* Top Badges */}
+                  <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                    <span className="bg-slate-900 text-white text-[9px] font-black px-2 py-0.5 rounded-lg shadow-sm uppercase tracking-wider">
+                      NEW
                     </span>
-                  )}
-
-                  <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md backdrop-blur-xs">
-                    {category}
-                  </span>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="text-xs font-black text-slate-900 line-clamp-1">
-                    {name || 'ឈ្មោះទំនិញគំរូ (Product Title)'}
-                  </p>
-                  
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-black text-[#ff6a00]">
-                      ${finalRetail.toFixed(2)}
-                    </span>
-                    {numDiscount > 0 && (
-                      <span className="text-[11px] text-slate-400 line-through">
-                        ${numRetail.toFixed(2)}
+                    {productImages.length > 1 && (
+                      <span className="bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
+                        <span>📷</span> {productImages.length}
                       </span>
                     )}
                   </div>
 
-                  {selectedSizes.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {selectedSizes.slice(0, 5).map(sz => (
-                        <span key={sz} className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-bold">
-                          {sz}
+                  {/* Stock Tag Bottom Left */}
+                  <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-xs text-white text-[9px] px-2 py-0.5 rounded-md font-bold pointer-events-none">
+                    {(parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0) <= 0 
+                      ? 'អស់ស្តុក' 
+                      : `ស្តុក: ${parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0}`}
+                  </span>
+                </div>
+
+                {/* Product Details Section */}
+                <div className="space-y-1.5">
+                  {/* Category / Name */}
+                  <span className="text-[11px] font-extrabold text-[#ff6a00] uppercase tracking-wider block leading-tight">
+                    {name ? name.trim() : (category ? category.trim() : 'ស្បែកជើងនារី')}
+                  </span>
+
+                  {/* SKU / Code Line */}
+                  <div className="flex items-center gap-1 font-mono text-xs">
+                    <span className="text-[#ff6a00] font-sans font-bold">Code:</span>
+                    <span className="text-slate-900 font-black tracking-tight">{sku || 'SL-XXXX'}</span>
+                  </div>
+
+                  {/* Rating & Sold Row */}
+                  <div className="flex items-center justify-between text-[11px] pt-0.5">
+                    <div className="flex items-center gap-1">
+                      <div className="flex items-center text-amber-400 text-xs">
+                        {'★★★★★'}
+                      </div>
+                      <span className="font-black text-slate-800 text-xs">5.0</span>
+                      <span className="text-[10px] text-slate-400 font-bold">(0 មតិ)</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-bold">
+                      លក់បាន <span className="font-black text-slate-800">0</span>
+                    </span>
+                  </div>
+
+                  {/* Retail Price Row */}
+                  <div className="flex items-baseline justify-between gap-1 pt-1">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-slate-400 text-[10px] font-bold">រាយ:</span>
+                      <span className="text-[#ff6a00] font-black text-base sm:text-lg">
+                        ${finalRetail.toFixed(2)}
+                      </span>
+                      {numDiscount > 0 && (
+                        <span className="text-slate-400 text-[11px] line-through font-bold">
+                          ${numRetail.toFixed(2)}
                         </span>
-                      ))}
-                      {selectedSizes.length > 5 && (
-                        <span className="text-[9px] text-slate-400">+{selectedSizes.length - 5}</span>
                       )}
                     </div>
-                  )}
+                    {numDiscount > 0 && (
+                      <span className="bg-red-50 text-red-600 text-[9px] font-black px-1.5 py-0.5 rounded-md border border-red-200">
+                        ចុះ -${numDiscount.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
 
-                  {/* 🔗 ប៊ូតុងចូលទៅកាន់ទំព័រទំនិញជាក់ស្តែងលើ Storefront */}
-                  <button
+                  {/* Wholesale Price Row (If provided) */}
+                  {parseFloat(wholesalePrice) > 0 && (() => {
+                    const wsDisc = parseFloat(wholesaleDiscount) || 0;
+                    const finalWs = Math.max(0, (parseFloat(wholesalePrice) || 0) - wsDisc);
+                    return (
+                      <div className="flex items-center justify-between bg-blue-50/80 border border-blue-200/60 px-2 py-1 rounded-xl text-blue-900">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[10px] font-black flex items-center gap-1 text-blue-800">
+                            <span>📦</span> បោះដុំ:
+                          </span>
+                          <span className="text-xs font-black text-blue-700">
+                            ${finalWs.toFixed(2)}
+                          </span>
+                          {wsDisc > 0 && (
+                            <span className="text-[9px] text-slate-400 line-through font-bold">
+                              ${parseFloat(wholesalePrice).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                        {wsDisc > 0 && (
+                          <span className="text-[9px] font-black text-blue-600 bg-white px-1.5 py-0.5 rounded border border-blue-200">
+                            -${wsDisc.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Add to Cart Button (Identical to CustomerStorefront) */}
+                  <button 
                     type="button"
                     onClick={() => {
                       const storeSlug = activeStore?.slug || 'sabay-luk';
                       const targetParam = editingProductId ? `?product=${editingProductId}` : '?product=preview';
-                      let origin = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000';
-                      if (origin.includes('localhost:')) origin = origin.replace('localhost:', '127.0.0.1:');
-                      const fullUrl = `${origin}/store/${storeSlug}${targetParam}`;
+                      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                      const previewFullUrl = `${origin}/store/${storeSlug}${targetParam}`;
+
                       if (typeof window !== 'undefined') {
                         const draftObj = {
                           id: editingProductId || 'preview',
-                          name: name || 'ឈ្មោះទំនិញគំរូ',
+                          name: name.trim() || 'ឈ្មោះទំនិញគំរូ (Product Title)',
+                          sku: sku || 'MR-1001',
+                          barcode: sku || 'MR-1001',
+                          category: category || 'ទូទៅ',
                           category_name: category || 'ទូទៅ',
-                          price: parseFloat(finalRetail) || 0,
+                          price: parseFloat(finalRetail) || parseFloat(sellingPrice) || 0,
+                          selling_price: parseFloat(finalRetail) || parseFloat(sellingPrice) || 0,
                           cost_price: parseFloat(costPrice) || 0,
+                          wholesale_price: parseFloat(wholesalePrice) || 0,
+                          retail_discount: parseFloat(retailDiscount) || 0,
+                          wholesale_discount: parseFloat(wholesaleDiscount) || 0,
+                          stock_qty: parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0,
+                          status: (parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0) > 0 ? 'In Stock' : 'Out of Stock',
                           image_url: productImages[selectedCoverIndex]?.url || previewUrl || '',
-                          images: productImages.map(img => img.url),
+                          images: productImages.map(img => img.url).filter(Boolean),
+                          detail_images: detailImages.map(img => img.url).filter(Boolean),
+                          size: selectedSizes.join(', '),
                           sizes: selectedSizes,
+                          color: selectedColors.join(', ') || color || '',
                           colors: selectedColors,
                           video_url: videoUrl || '',
-                          detail_images: detailImages.map(img => img.url),
-                          retail_discount: parseFloat(retailDiscount) || 0,
-                          stock_qty: parseInt(hasMatrixActive ? matrixTotal : stockQty) || 0,
+                          description: description || '',
                           store_id: activeStore?.id || 'store_default_sabayluk'
                         };
-                        localStorage.setItem('sabay_draft_preview_product', JSON.stringify(draftObj));
+                        try {
+                          localStorage.setItem('sabay_draft_preview_product', JSON.stringify(draftObj));
+                          sessionStorage.setItem('sabay_draft_preview_product', JSON.stringify(draftObj));
+                        } catch (_) {}
                       }
-                      window.open(fullUrl, '_blank');
+
+                      try {
+                        const win = window.open(previewFullUrl, '_blank', 'noopener,noreferrer');
+                        if (win) win.focus();
+                      } catch(e) {
+                        window.location.href = previewFullUrl;
+                      }
                     }}
-                    className="w-full mt-3 py-2 px-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl font-black text-[11px] flex items-center justify-center gap-1.5 shadow-sm transition active:scale-95 text-center cursor-pointer"
+                    className="w-full mt-2.5 py-2.5 rounded-2xl text-xs sm:text-sm font-black bg-gradient-to-r from-[#312c5b] to-[#c85f2d] hover:from-[#252248] hover:to-[#b65426] text-white shadow-md shadow-purple-950/20 hover:shadow-lg hover:shadow-orange-500/25 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+                    title="ចុចដើម្បីមើលផ្ទាំងបញ្ជាទិញលម្អិតលើ Storefront"
                   >
-                    <span>🌐</span>
-                    <span>មើលទំនិញនេះលើ Storefront</span>
-                    <span>↗</span>
+                    <span>បញ្ចូលក្នុងកន្ត្រក</span>
                   </button>
                 </div>
               </div>
