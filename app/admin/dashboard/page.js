@@ -9669,6 +9669,12 @@ export default function UnifiedAdminDashboard() {
   const quickIcons = CATEGORY_ICONS_LIST;
   const [activeDeptTab, setActiveDeptTab] = useState('ALL');
   const [catIconSearch, setCatIconSearch] = useState('');
+  const deptScrollRef = useRef(null);
+  const scrollDeptTabs = (offset) => {
+    if (deptScrollRef.current) {
+      deptScrollRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+  };
 
     // មុខងាររំកិលលំដាប់ Category ឡើងលើ / ចុះក្រោម
   const moveCategoryOrder = (index, direction) => {
@@ -9868,41 +9874,89 @@ export default function UnifiedAdminDashboard() {
                         <span className="text-[10px] text-gray-500 font-bold">បានជ្រើសរើស៖</span>
                         <span className="font-black text-blue-900">{selectedItem?.label}</span>
                       </div>
-                      <span className="text-[9px] font-black text-blue-600 block">{deptInfo?.label || 'ទូទៅ'}</span>
+                      <span className="text-[9px] font-black text-blue-600 block">{deptInfo ? `${deptInfo.icon} ${deptInfo.label}` : 'ទូទៅ'}</span>
                     </div>
                   </div>
                 );
               })()}
             </div>
 
-            {/* ⭐️ Filter តាមផ្នែកទំនិញ (Department Pills Switcher) ⭐️ */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-gray-100 scrollbar-thin">
-              {CATEGORY_DEPARTMENTS.map(dept => {
-                const count = dept.id === 'ALL' 
-                  ? quickIcons.length 
-                  : quickIcons.filter(i => i.department === dept.id).length;
-                const isActive = activeDeptTab === dept.id;
-                return (
-                  <button
-                    key={dept.id}
-                    type="button"
-                    onClick={() => setActiveDeptTab(dept.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                      isActive
-                        ? 'bg-slate-900 text-white shadow-sm scale-102'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    <span>{dept.icon}</span>
-                    <span>{dept.label}</span>
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
+            {/* ⭐️ Filter តាមផ្នែកទំនិញ (Department Pills Switcher — ធំ ស្អាត រស់រវើក) ⭐️ */}
+            <div className="relative group/dept py-1">
+              {/* Left Arrow Button for Smooth Navigation */}
+              <button
+                type="button"
+                onClick={() => scrollDeptTabs(-280)}
+                aria-label="Scroll left"
+                title="រំកិលទៅឆ្វេង"
+                className="hidden md:flex absolute -left-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-2xl bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700 shadow-md text-slate-700 dark:text-slate-200 hover:text-orange-600 hover:border-orange-300 hover:scale-110 active:scale-95 transition-all items-center justify-center cursor-pointer shadow-slate-200/50"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Scrollable Department Pills Container */}
+              <div 
+                ref={deptScrollRef}
+                className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto p-2 sm:p-2.5 bg-gradient-to-r from-slate-100/90 via-slate-50 to-slate-100/90 dark:from-slate-900/90 dark:via-slate-800/80 dark:to-slate-900/90 rounded-3xl border border-slate-200/90 dark:border-slate-700/80 shadow-inner scroll-smooth no-scrollbar"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                {CATEGORY_DEPARTMENTS.map(dept => {
+                  const count = dept.id === 'ALL' 
+                    ? quickIcons.length 
+                    : quickIcons.filter(i => i.department === dept.id).length;
+                  const isActive = activeDeptTab === dept.id;
+                  return (
+                    <button
+                      key={dept.id}
+                      type="button"
+                      onClick={() => setActiveDeptTab(dept.id)}
+                      className={`group/btn relative px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl text-xs sm:text-sm font-black whitespace-nowrap transition-all duration-200 cursor-pointer flex items-center gap-2.5 shrink-0 select-none ${
+                        isActive
+                          ? `bg-gradient-to-r ${dept.color || 'from-[#ff6a00] to-[#ee5d00]'} text-white shadow-lg ${dept.shadow || 'shadow-orange-500/30'} scale-[1.03] ring-2 ring-white/60 dark:ring-white/20`
+                          : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/70 text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-slate-700 shadow-2xs hover:shadow-md hover:-translate-y-0.5 active:scale-95'
+                      }`}
+                    >
+                      {/* Icon Squircle Badge */}
+                      <span className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center text-sm sm:text-base shrink-0 transition-transform duration-200 ${
+                        isActive
+                          ? 'bg-white/25 backdrop-blur-xs text-white ring-1 ring-white/40 shadow-inner'
+                          : 'bg-slate-100 dark:bg-slate-700/80 text-slate-800 dark:text-slate-100 shadow-2xs group-hover/btn:scale-110 group-hover/btn:rotate-6'
+                      }`}>
+                        {dept.icon}
+                      </span>
+
+                      {/* Label Text */}
+                      <span className="font-black tracking-wide">
+                        {dept.label}
+                      </span>
+
+                      {/* Count Badge */}
+                      <span className={`text-[11px] sm:text-xs font-mono font-black px-2 sm:px-2.5 py-0.5 rounded-full transition-colors shrink-0 ${
+                        isActive
+                          ? 'bg-white/30 text-white ring-1 ring-white/40 shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 group-hover/btn:bg-slate-200 dark:group-hover/btn:bg-slate-600'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Arrow Button for Smooth Navigation */}
+              <button
+                type="button"
+                onClick={() => scrollDeptTabs(280)}
+                aria-label="Scroll right"
+                title="រំកិលទៅស្តាំ"
+                className="hidden md:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-2xl bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700 shadow-md text-slate-700 dark:text-slate-200 hover:text-orange-600 hover:border-orange-300 hover:scale-110 active:scale-95 transition-all items-center justify-center cursor-pointer shadow-slate-200/50"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
 
             {/* 🔍 Search Icon Bar */}
@@ -10071,7 +10125,7 @@ export default function UnifiedAdminDashboard() {
                               className="border-2 border-blue-500 rounded-xl p-1.5 text-xs font-bold outline-none bg-white shadow-xs max-w-[150px]"
                             >
                               {CATEGORY_DEPARTMENTS.filter(d => d.id !== 'ALL').map(dept => (
-                                <optgroup key={dept.id} label={dept.label}>
+                                <optgroup key={dept.id} label={`${dept.icon} ${dept.label}`}>
                                   {quickIcons.filter(i => i.department === dept.id).map(qi => (
                                     <option key={qi.id} value={qi.id}>{qi.label}</option>
                                   ))}
