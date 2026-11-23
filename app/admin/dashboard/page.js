@@ -512,45 +512,32 @@ const computeNextSku = (productList, store) => {
     }
   }
 
-  if (!productList || productList.length === 0) return startingSku;
-  
-  // ១. តម្រៀបបញ្ជីទំនិញតាមកាលបរិច្ឆេទបង្កើតចុងក្រោយគេបង្អស់ (Newest created_at first)
-  const sorted = [...productList].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  const storeProducts = (productList || []).filter(p => {
+    const pStore = p.store_id || 'store_default_sabayluk';
+    return pStore === storeId;
+  });
 
-  // ២. ពិនិត្យមើល SKU នៃទំនិញដែលបានបញ្ចូលចុងក្រោយគេបង្អស់ (Recent Item)
-  for (const item of sorted) {
-    if (item && item.sku) {
-      const match = item.sku.match(/^([A-Za-z0-9]+-?)(\d+)$/);
-      if (match) {
-        const prefix = match[1];
-        const digitsLen = match[2].length;
-        const nextNum = parseInt(match[2], 10) + 1;
-        return `${prefix}${nextNum.toString().padStart(digitsLen, '0')}`;
-      }
-    }
-  }
+  if (storeProducts.length === 0) return startingSku;
 
-  // ៣. បើមិនឃើញទម្រង់ច្បាស់ ស្វែងរកលេខអតិបរមាខ្ពស់បំផុតក្នុងបញ្ជី
+  // ស្វែងរកលេខអតិបរមាខ្ពស់បំផុតក្នុងបញ្ជីទំនិញរបស់ហាងនេះដែលមាន Prefix ត្រូវគ្នា
   let maxNum = 0;
-  let bestPrefix = defaultPrefix;
   let bestDigitsLen = 4;
 
-  sorted.forEach(p => {
-    if (!p.sku) return;
+  storeProducts.forEach(p => {
+    if (!p.sku || !p.sku.startsWith(defaultPrefix)) return;
     const match = p.sku.match(/^([A-Za-z0-9]+-?)(\d+)$/);
     if (match) {
       const num = parseInt(match[2], 10);
       if (num > maxNum) {
         maxNum = num;
-        bestPrefix = match[1];
-        bestDigitsLen = match[2].length;
+        bestDigitsLen = Math.max(bestDigitsLen, match[2].length);
       }
     }
   });
 
   if (maxNum > 0) {
     const nextVal = maxNum + 1;
-    return `${bestPrefix}${nextVal.toString().padStart(bestDigitsLen, '0')}`;
+    return `${defaultPrefix}${nextVal.toString().padStart(bestDigitsLen, '0')}`;
   }
 
   return startingSku;
@@ -7571,27 +7558,35 @@ export default function UnifiedAdminDashboard() {
           }]);
         }
 
-        // ⭐️ គណនា SKU បន្ទាប់ដោយស្វ័យប្រវត្តិ (ឧ. SL-1001 -> SL-1002 ឬ MR-1001 -> MR-1002) ⭐️
+        // ⭐️ គណនា SKU បន្ទាប់ដោយស្វ័យប្រវត្តិតាមហាង ⭐️
         const sid = activeStore?.id || 'store_default_sabayluk';
-        let nextSkuVal = `${getStoreSkuPrefix(activeStore)}1001`;
-        const match = (sku || '').match(/^([A-Za-z0-9]+-?)(\d+)$/);
-        if (match) {
-          const prefix = match[1];
-          const digitsLen = match[2].length;
-          const nextVal = parseInt(match[2], 10) + 1;
-          nextSkuVal = `${prefix}${nextVal.toString().padStart(digitsLen, '0')}`;
-        } else {
-          nextSkuVal = computeNextSku(products, activeStore);
-        }
+        const nextSkuVal = computeNextSku([...products, newProduct], activeStore);
         setSku(nextSkuVal);
         if (typeof window !== 'undefined') {
           localStorage.setItem(`sabay_last_saved_sku_${sid}`, nextSkuVal);
           localStorage.setItem(`sabay_current_sku_${sid}`, nextSkuVal);
+          // ⭐️ លុប Draft ចេញកុំឱ្យទំនិញដែលទើប Save រួចនៅជាប់ក្នុង Form ⭐️
+          localStorage.removeItem(`sabay_product_draft_${sid}`);
+          localStorage.removeItem('sabay_product_draft');
         }
-        setDisabledVariants([]);
 
-        // ⭐️ លុបតែរូបថតចេញបានហើយ ឯព័ត៌មានផ្សេងទៀត (ឈ្មោះ, ប្រភេទ, តម្លៃ, Size, Color, Stock) រក្សាទុកនៅដដែល ដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់ ⭐️
+        // ⭐️ សម្អាត Form ឱ្យទទេស្អាត ១០០% ដើម្បីងាយស្រួលបញ្ចូលទំនិញថ្មីបន្ទាប់ ដោយមិនច្រឡំទំនិញចាស់ ⭐️
         setEditingProductId(null);
+        setName('');
+        setSellingPrice('');
+        setCostPrice('');
+        setWholesalePrice('');
+        setWholesaleDiscount('');
+        setRetailDiscount('');
+        setStockQty('10');
+        setLowStockAlert('5');
+        setSelectedSizes([]);
+        setSelectedColors([]);
+        setColor('');
+        setCustomTextSize('');
+        setVariantStock({});
+        setDisabledVariants([]);
+        setDescription('');
         setFile(null);
         setPreviewUrl(null);
         setProductImages([]);
@@ -7599,35 +7594,11 @@ export default function UnifiedAdminDashboard() {
         setDetailImages([]);
         setDetailImageUrlInput('');
 
-        // រក្សាទុក Draft ថ្មីដែលមាន SKU បន្ទាប់ និងព័ត៌មានដដែលក្នុង LocalStorage
-        if (typeof window !== 'undefined') {
-          const sid = activeStore?.id || 'store_default_sabayluk';
-          const retainedDraft = {
-            name,
-            sku: nextSkuVal || sku,
-            category,
-            selectedSizes,
-            selectedColors,
-            customTextSize,
-            color,
-            stockQty,
-            costPrice,
-            wholesalePrice,
-            wholesaleDiscount,
-            sellingPrice,
-            retailDiscount,
-            lowStockAlert,
-            description: description || ''
-          };
-          try {
-            localStorage.setItem(`sabay_product_draft_${sid}`, JSON.stringify(retainedDraft));
-          } catch (_) {}
-        }
-
         setMessage('🎉 បញ្ចូលទំនិញថ្មី និងកត់ត្រាស្តុកជោគជ័យ!');
-        setToastNotification('🎉 បានរក្សាទុកទំនិញជោគជ័យ! រូបថតត្រូវបានសម្អាតរួចរាល់ ឯព័ត៌មានផ្សេងទៀតត្រូវបានរក្សាទុកដើម្បីងាយស្រួលបញ្ចូលទំនិញបន្តបន្ទាប់។');
-        setTimeout(() => setToastNotification(null), 5000);
+        setToastNotification(`🎉 បានរក្សាទុកទំនិញ "${name}" ដោយជោគជ័យ!`);
+        setTimeout(() => setToastNotification(null), 4000);
         fetchProducts();
+        setActiveTab('inventory'); // បញ្ជូនទៅកាន់ទំព័រតារាងស្តុកភ្លាម ដើម្បីពិនិត្យមើលទំនិញថ្មី
       }
 
     } catch (error) {
@@ -34951,7 +34922,11 @@ export default function UnifiedAdminDashboard() {
                             key={tab.id}
                             type="button"
                             onClick={() => {
-                              setActiveTab(tab.id);
+                              if (tab.id === 'upload') {
+                                handleOpenNewProductForm();
+                              } else {
+                                setActiveTab(tab.id);
+                              }
                               if (typeof window !== 'undefined' && window.innerWidth < 768) {
                                 setIsSidebarOpen(false);
                               }
