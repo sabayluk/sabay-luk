@@ -969,6 +969,12 @@ export default function UnifiedAdminDashboard() {
   const confirmDeleteProduct = async () => {
     if (!productToDelete) return;
     try {
+      // 1. Delete associated variants and movements to avoid foreign key violations
+      try {
+        await supabase.from('product_variants').delete().eq('product_id', productToDelete.id);
+        await supabase.from('stock_movements').delete().eq('product_id', productToDelete.id);
+      } catch (_) {}
+
       const { error } = await supabase
         .from('products')
         .delete()
@@ -978,6 +984,8 @@ export default function UnifiedAdminDashboard() {
 
       setDeleteModalOpen(false);
       setProductToDelete(null);
+      setToastNotification(`🗑️ បានលុបទំនិញ "${productToDelete.name}" ចេញដោយជោគជ័យ!`);
+      setTimeout(() => setToastNotification(null), 3000);
       fetchProducts(); // ទាញយកស្តុកថ្មីមកបង្ហាញ
     } catch (err) {
       alert('❌ មិនអាចលុបទំនិញនេះបានទេ: ' + err.message);
@@ -2147,10 +2155,14 @@ export default function UnifiedAdminDashboard() {
   useEffect(() => {
     if (!activeStore) return;
     const storeId = activeStore.id || 'store_default_sabayluk';
+    // ភ្លាមៗ សម្អាត State ចាស់ចោលទាំងអស់ ដើម្បីកុំឱ្យឆ្លងទិន្នន័យពីហាងមុន (Zero Leakage)
+    setProducts([]);
+    setCategories([]);
+    setRealOrders([]);
+    setStockMovements([]);
     fetchProducts(storeId);
     fetchCategories(storeId);
     fetchRealOrders(storeId);
-    setStockMovements([]); // Clear previous movements immediately
     fetchStockMovements(storeId);
     setInvoiceSettings(getStoreScopedInvoiceSettings(activeStore));
     setSlides(getStoreScopedCoverSlides(activeStore));
@@ -7046,8 +7058,36 @@ export default function UnifiedAdminDashboard() {
           setRetailDiscount(parsed.retailDiscount || '');
           setLowStockAlert(parsed.lowStockAlert || '5');
           if (parsed.description !== undefined) setDescription(parsed.description || '');
+          return;
         }
       } catch (_) {}
+    }
+
+    // ⭐️ ប្រសិនបើហាងនេះគ្មាន Draft ទេ ត្រូវ Reset Form ឱ្យទទេស្អាត ១០០% (Zero Cross-Store Form Bleed) ⭐️
+    if (!editingProductId) {
+      setName('');
+      setSku(computeNextSku(products, activeStore));
+      setCategory(currentStoreCategories?.[0]?.name || '');
+      setSelectedSizes([]);
+      setCustomTextSize('');
+      setColor('');
+      setSelectedColors([]);
+      setStockQty('10');
+      setCostPrice('');
+      setWholesalePrice('');
+      setWholesaleDiscount('');
+      setSellingPrice('');
+      setRetailDiscount('');
+      setLowStockAlert('5');
+      setDescription('');
+      setFile(null);
+      setPreviewUrl(null);
+      setProductImages([]);
+      setSelectedCoverIndex(0);
+      setDetailImages([]);
+      setDetailImageUrlInput('');
+      setVariantStock({});
+      setDisabledVariants([]);
     }
   }, [activeStore?.id]);
 
