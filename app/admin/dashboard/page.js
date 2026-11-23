@@ -22924,12 +22924,12 @@ export default function UnifiedAdminDashboard() {
                   ${totalCostValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-gray-500 font-bold mt-0.5 truncate">
-                ~ ៛{Math.round(totalCostValue * 4100).toLocaleString()}
+              <p className="text-[10px] sm:text-[11px] text-amber-800/90 font-bold mt-0.5 truncate" title={`គណនាពី៖ ចំនួនទំនិញ (${totalUnits} ឯកតា) × ថ្លៃដើមទិញចូល`}>
+                🧮 {totalUnits} ឯកតា × ថ្លៃដើម (~ ៛{Math.round(totalCostValue * 4100).toLocaleString()})
               </p>
               <div className="text-[9px] sm:text-[10px] font-bold text-amber-700/80 mt-2 pt-1.5 border-t border-amber-100 flex items-center justify-between">
-                <span>⚡ ទុនស្តុក</span>
-                <span className="font-mono text-[9px] bg-amber-100 px-1 rounded text-amber-900 font-black">Cost</span>
+                <span>⚡ ទុនស្តុកសរុប</span>
+                <span className="font-mono text-[9px] bg-amber-100 px-1 rounded text-amber-900 font-black">Cost Total</span>
               </div>
             </div>
           </div>
@@ -22948,12 +22948,12 @@ export default function UnifiedAdminDashboard() {
                   ${totalWholesaleValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-gray-500 font-bold mt-0.5 truncate">
-                ~ ៛{Math.round(totalWholesaleValue * 4100).toLocaleString()}
+              <p className="text-[10px] sm:text-[11px] text-purple-800/90 font-bold mt-0.5 truncate" title={`គណនាពី៖ ចំនួនទំនិញ (${totalUnits} ឯកតា) × តម្លៃបោះដុំ`}>
+                🧮 {totalUnits} ឯកតា × តម្លៃដុំ (~ ៛{Math.round(totalWholesaleValue * 4100).toLocaleString()})
               </p>
               <div className="text-[9px] sm:text-[10px] font-bold text-purple-700/80 mt-2 pt-1.5 border-t border-purple-100 flex items-center justify-between">
-                <span>🏷️ តម្លៃ B2B</span>
-                <span className="font-mono text-[9px] bg-purple-100 px-1 rounded text-purple-900 font-black">Wholesale</span>
+                <span>🏷️ តម្លៃបោះដុំសរុប</span>
+                <span className="font-mono text-[9px] bg-purple-100 px-1 rounded text-purple-900 font-black">Wholesale Total</span>
               </div>
             </div>
           </div>
@@ -22972,12 +22972,12 @@ export default function UnifiedAdminDashboard() {
                   ${totalRetailValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-gray-500 font-bold mt-0.5 truncate">
-                ចំណេញ: <span className="text-emerald-700 font-black">+${(totalRetailValue - totalCostValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <p className="text-[10px] sm:text-[11px] text-emerald-800/90 font-bold mt-0.5 truncate" title={`គណនាពី៖ ចំនួនទំនិញ (${totalUnits} ឯកតា) × តម្លៃលក់រាយ`}>
+                🧮 {totalUnits} ឯកតា × តម្លៃរាយ (ចំណេញ: +${(totalRetailValue - totalCostValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
               </p>
               <div className="text-[9px] sm:text-[10px] font-bold text-emerald-700/80 mt-2 pt-1.5 border-t border-emerald-100 flex items-center justify-between">
-                <span>📈 តម្លៃលក់រាយ</span>
-                <span className="font-mono text-[9px] bg-emerald-100 px-1 rounded text-emerald-900 font-black">Retail</span>
+                <span>📈 តម្លៃលក់រាយសរុប</span>
+                <span className="font-mono text-[9px] bg-emerald-100 px-1 rounded text-emerald-900 font-black">Retail Total</span>
               </div>
             </div>
           </div>
