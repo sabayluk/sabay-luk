@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 export default function PWAInstaller() {
   const [isOnline, setIsOnline] = useState(true);
   const [showStatusToast, setShowStatusToast] = useState(false);
+  const [isInstallable, setIsInstallable] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -24,18 +25,55 @@ export default function PWAInstaller() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // ⭐️ Unregister any PWA service worker so browser treats everything as normal web tabs ⭐️
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        for (const reg of registrations) {
-          reg.unregister().catch(() => {});
-        }
-      }).catch(() => {});
+    // ⭐️ Register Service Worker for Offline PWA Support ⭐️
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('✅ Sabay Luk ServiceWorker registered:', registration.scope);
+          })
+          .catch((error) => {
+            console.warn('⚠️ ServiceWorker registration note:', error);
+          });
+      });
     }
+
+    // ⭐️ Capture beforeinstallprompt so any Download/Install button can trigger native install ⭐️
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      window.__sabay_deferred_prompt = e;
+      setIsInstallable(true);
+      window.dispatchEvent(new CustomEvent('sabay_pwa_installable', { detail: { installable: true } }));
+    };
+
+    const handleAppInstalled = () => {
+      window.__sabay_deferred_prompt = null;
+      setIsInstallable(false);
+      window.dispatchEvent(new CustomEvent('sabay_pwa_installed'));
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    // Expose global installer function
+    window.installSabayApp = async () => {
+      if (window.__sabay_deferred_prompt) {
+        window.__sabay_deferred_prompt.prompt();
+        const { outcome } = await window.__sabay_deferred_prompt.userChoice;
+        if (outcome === 'accepted') {
+          window.__sabay_deferred_prompt = null;
+          setIsInstallable(false);
+        }
+        return outcome;
+      }
+      return null;
+    };
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 

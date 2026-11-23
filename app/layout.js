@@ -5,6 +5,7 @@ import TelegramWebAppIntegration from './components/TelegramWebAppIntegration';
 export const metadata = {
   title: 'Sabay Luk POS • ប្រព័ន្ធគ្រប់គ្រងការលក់ និងស្តុកទំនិញទំនើប',
   description: 'ប្រព័ន្ធគ្រប់គ្រងការលក់ POS ស្តុកទំនិញ Size/Color ចេញវិក្កយបត្រ Bakong KHQR និងហាងលក់ទំនិញអនឡាញ E-Commerce នៅកម្ពុជា',
+  manifest: '/manifest.json',
   icons: {
     icon: '/icon-192x192.png',
     apple: '/apple-touch-icon.png',
@@ -26,6 +27,11 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#ff6a00" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/png" href="/favicon.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Sabay Luk" />
         <meta name="format-detection" content="telephone=no" />
 
                 {/* 🛡️ ការពារកុំឱ្យ Browser Extension & QuotaExceededError បង្កជា Runtime Error រំខានដល់ App 🛡️ */}

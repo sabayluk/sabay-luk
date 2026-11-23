@@ -1,5 +1,5 @@
 // ⭐️ Service Worker for SABAY LUK - Offline POS & Cache First ⭐️
-const CACHE_NAME = 'sabay-luk-offline-v1';
+const CACHE_NAME = 'sabay-luk-offline-v3';
 
 const STATIC_ASSETS = [
   '/',
@@ -9,7 +9,6 @@ const STATIC_ASSETS = [
   '/apple-touch-icon.png',
   '/icon-192x192.png',
   '/icon-512x512.png',
-  '/khqr-aba.jpg',
   '/manifest.json'
 ];
 
@@ -18,7 +17,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn('SW Pre-cache failed for some assets:', err);
+        console.warn('SW Pre-cache notice:', err);
       });
     }).then(() => self.skipWaiting())
   );
@@ -40,11 +39,11 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Do not intercept non-GET requests or Supabase/external API calls (they are handled via IndexedDB/localStorage offline queue)
+  // Do not intercept non-GET requests or Supabase/external API calls (they are handled via lib/offlinePos)
   if (request.method !== 'GET') return;
   if (url.origin.includes('supabase.co')) return;
 
-  // For HTML navigations: Network first, fall back to cache
+  // For HTML navigations: Network first, fall back to cache when offline
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -62,9 +61,10 @@ self.addEventListener('fetch', (event) => {
           if (dashboardFallback) return dashboardFallback;
           const rootFallback = await caches.match('/');
           if (rootFallback) return rootFallback;
-          return new Response('<html><body><h1>Offline</h1><p>សូមពិនិត្យមើលការតភ្ជាប់ Internet ឡើងវិញ</p></body></html>', {
-            headers: { 'Content-Type': 'text/html; charset=utf-8' }
-          });
+          return new Response(
+            '<!DOCTYPE html><html lang="km"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sabay Luk Offline</title><style>body{font-family:system-ui,sans-serif;background:#0f172a;color:#f8fafc;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;text-align:center}.box{background:#1e293b;padding:30px;border-radius:24px;max-width:400px;border:1px solid #334155}h1{color:#ff6a00;font-size:22px;margin-bottom:10px}p{color:#94a3b8;font-size:14px;line-height:1.6}button{background:#ff6a00;color:#fff;border:none;padding:12px 24px;border-radius:12px;font-weight:bold;cursor:pointer;margin-top:15px}</style></head><body><div class="box"><div style="font-size:40px;margin-bottom:10px">📡</div><h1>កំពុងប្រើប្រាស់ Offline</h1><p>គ្មានការតភ្ជាប់អ៊ីនធឺណិតទេ ប៉ុន្តែលោកអ្នកអាចបើកប្រព័ន្ធ POS លក់ទំនិញបានធម្មតា។</p><button onclick="window.location.reload()">🔄 ព្យាយាមភ្ជាប់ឡើងវិញ</button></div></body></html>',
+            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+          );
         })
     );
     return;
@@ -78,7 +78,9 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.jpeg') ||
     url.pathname.endsWith('.svg') ||
     url.pathname.endsWith('.css') ||
-    url.pathname.endsWith('.js')
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.json') ||
+    url.pathname.endsWith('.woff2')
   ) {
     event.respondWith(
       caches.match(request).then((cached) => {

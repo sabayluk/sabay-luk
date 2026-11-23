@@ -16,6 +16,7 @@ import { CATEGORY_DEPARTMENTS, CATEGORY_ICONS_LIST, renderCategorySvg } from '..
 import WorldStandardFinanceView from '../../components/WorldStandardFinanceView';
 import BarcodeCameraModal from '../../components/BarcodeCameraModal';
 import BarcodeScannerSettingsModal from '../../components/BarcodeScannerSettingsModal';
+import AppInstallModal from '../../components/AppInstallModal';
 import { cacheProductsOffline, getCachedProductsOffline, queueOfflineOrder, syncOfflineOrdersToCloud, getOfflineOrdersQueue } from '../../../lib/offlinePos';
 import { getInvoiceUrl, openInvoiceInBrowser } from '../../../lib/openInvoice';
 import { 
@@ -3135,6 +3136,9 @@ export default function UnifiedAdminDashboard() {
   const [refundDeliveryAmount, setRefundDeliveryAmount] = useState('0');
   const [refundTax, setRefundTax] = useState(false);
   const [refundTaxAmount, setRefundTaxAmount] = useState('0');
+
+  // ⭐️ State សម្រាប់ Modal ដោនឡូត & ដំឡើងកម្មវិធីប្រើ Offline (PWA App Install Modal) ⭐️
+  const [openAppInstallModal, setOpenAppInstallModal] = useState(false);
 
   // State សម្រាប់ Modal បោះពុម្ពបាកូដ (Barcode Sticker Modal)
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
@@ -25861,6 +25865,15 @@ export default function UnifiedAdminDashboard() {
                 <span className="text-[10px] font-bold text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-xs">
                   $1 = {exchangeRate.toLocaleString()}៛
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setOpenAppInstallModal(true)}
+                  className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1 shrink-0 active:scale-95 cursor-pointer"
+                  title="ដោនឡូត APP ប្រើពេលអត់មាន Internet"
+                >
+                  <span>📲</span>
+                  <span>App Offline</span>
+                </button>
               </div>
 
               {/* Retail / Wholesale Segmented Toggle */}
@@ -26037,6 +26050,18 @@ export default function UnifiedAdminDashboard() {
               <span className="text-sm">⚡</span>
               <span>ម៉ាស៊ីនស្កេន</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="ម៉ាស៊ីនស្កេនសកម្ម" />
+            </button>
+
+            {/* ⭐️ ដោនឡូត APP ប្រើពេលគ្មាន INTERNET (OFFLINE POS PWA) ⭐️ */}
+            <button
+              type="button"
+              onClick={() => setOpenAppInstallModal(true)}
+              className="bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-600 hover:from-indigo-700 hover:to-blue-700 text-white px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-indigo-600/25 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95 shrink-0"
+              title="ដោនឡូត APP យកមកប្រើលើ PC ឬទូរស័ព្ទ សម្រាប់លក់ពេលអត់មាន Internet (Offline POS)"
+            >
+              <span className="text-sm">📲</span>
+              <span>ដោនឡូត APP (Offline)</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
             </button>
 
 
@@ -31113,6 +31138,14 @@ export default function UnifiedAdminDashboard() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setOpenAppInstallModal(true)}
+            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-4 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-1.5 border border-indigo-200 cursor-pointer shadow-xs active:scale-95"
+            title="ដោនឡូត APP យកមកប្រើលើ PC ឬទូរស័ព្ទពេលគ្មាន Internet"
+          >
+            <span>📲</span> ដោនឡូត APP (Offline)
+          </button>
           <a
             href="/"
             target="_blank"
@@ -35130,33 +35163,32 @@ export default function UnifiedAdminDashboard() {
             </div>
           </div>
 
-          {/* QUICK STOREFRONT LINK AT BOTTOM */}
-          <div className="pt-1 pb-1">
-            {isAppWindow && (
-              <div className="mb-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left space-y-1.5 animate-in fade-in">
-                <div className="flex items-center gap-1.5 text-amber-400 font-black text-[11px]">
-                  <span>💡</span>
-                  <span>កំពុងបើកក្នុងផ្ទាំង App</span>
-                </div>
-                <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
-                  ដើម្បីឱ្យបើកជាប់ជា Tab ក្នុង Google Chrome សូមចុចសញ្ញាចុចបី <b>(⋮)</b> នៅលើជ្រុងស្តាំដៃ រួចជ្រើស <b>«Open in Chrome»</b> ឬ <b>«Uninstall»</b>។
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    let origin = window.location.origin;
-                    if (origin.includes('localhost:')) origin = origin.replace('localhost:', '127.0.0.1:');
-                    const storeUrl = origin + (activeStore?.slug ? `/store/${activeStore.slug}` : '/');
-                    navigator.clipboard.writeText(storeUrl);
-                    setToastNotification('📋 បានចម្លង Link មុខហាង! សូមយកទៅ Paste លើ Google Chrome');
-                    setTimeout(() => setToastNotification(null), 4000);
-                  }}
-                  className="w-full py-1.5 px-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black rounded-xl text-[10px] transition cursor-pointer shadow-xs active:scale-95 text-center"
-                >
-                  📋 ចម្លង Link បើកលើ Chrome Browser
-                </button>
+          {/* QUICK STOREFRONT LINK & OFFLINE APP DOWNLOAD */}
+          <div className="pt-1 pb-1 space-y-2">
+            {/* ⭐️ CARD: ដោនឡូត APP ប្រើ Offline (Download App for Offline POS) ⭐️ */}
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-indigo-950/90 via-slate-900 to-slate-950 border border-indigo-500/30 text-white shadow-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-indigo-300 flex items-center gap-1.5">
+                  <span className="text-base">📲</span>
+                  <span>ដោនឡូត APP ប្រើ Offline</span>
+                </span>
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded-full font-bold">
+                  Offline Ready
+                </span>
               </div>
-            )}
+              <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
+                ដំឡើងលើ PC / Mac / ទូរស័ព្ទ ដើម្បីលក់ POS និងមើលស្តុកបានទោះគ្មាន Internet!
+              </p>
+              <button
+                type="button"
+                onClick={() => setOpenAppInstallModal(true)}
+                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black text-xs shadow-md shadow-indigo-600/30 transition transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-indigo-400/30"
+              >
+                <span>📥</span>
+                <span>ដោនឡូត / ដំឡើងកម្មវិធី</span>
+              </button>
+            </div>
+
             <button 
               type="button"
               onClick={() => {
@@ -35501,6 +35533,12 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'stores' && canManageStores && MasterStoresManagementView()}
       </main>
 
+
+      {/* ⭐️ ផ្ទាំងដោនឡូត & ដំឡើងកម្មវិធីប្រើប្រាស់ពេលគ្មាន INTERNET (PWA INSTALL MODAL) ⭐️ */}
+      <AppInstallModal
+        isOpen={openAppInstallModal}
+        onClose={() => setOpenAppInstallModal(false)}
+      />
 
       {/* ⭐️ ម៉ាស៊ីនស្កេនកាមេរ៉ា FULL OPTION (CAMERA SCANNER MODAL) ⭐️ */}
       <BarcodeCameraModal

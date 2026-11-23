@@ -2,17 +2,25 @@
   "name": "Sabay Luk POS & Multi-Store SaaS",
   "short_name": "Sabay Luk",
   "description": "ប្រព័ន្ធគ្រប់គ្រងការលក់ POS ស្តុកទំនិញ Size/Color ចេញវិក្កយបត្រ Bakong KHQR និងហាងលក់ទំនិញអនឡាញ E-Commerce នៅកម្ពុជា",
-  "start_url": "/",
-  "display": "browser",
-  "orientation": "portrait",
+  "start_url": "/admin/dashboard",
+  "display": "standalone",
+  "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#ff6a00",
   "scope": "/",
   "lang": "km",
+  "dir": "ltr",
+  "categories": ["business", "finance", "shopping", "productivity"],
   "icons": [
     {
       "src": "/icon-192x192.png",
       "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     },
@@ -32,7 +40,7 @@
     {
       "name": "ប្រព័ន្ធលក់ POS",
       "short_name": "POS",
-      "description": "បើកប្រព័ន្ធគិតលុយ និងលក់ទំនិញភ្លាមៗ",
+      "description": "បើកប្រព័ន្ធគិតលុយ និងលក់ទំនិញភ្លាមៗទោះគ្មាន Internet",
       "url": "/admin/dashboard?tab=pos",
       "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
     },
