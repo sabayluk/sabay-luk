@@ -4062,6 +4062,7 @@ export default function UnifiedAdminDashboard() {
     telegram: 'sabay_luk',
     telegramBotToken: '',
     telegramChatId: '',
+    telegramBotUsername: '',
     enableLowStockAlert: true,
     lowStockThreshold: 5,
     abaMerchantId: '',
@@ -4230,6 +4231,9 @@ export default function UnifiedAdminDashboard() {
       telegramChatId: isDefault 
         ? (savedParsed?.telegramChatId ?? dbSettings.telegramChatId ?? DEFAULT_STORE_SETTINGS.telegramChatId ?? '')
         : (savedParsed?.telegramChatId ?? dbSettings.telegramChatId ?? ''),
+      telegramBotUsername: isDefault
+        ? (savedParsed?.telegramBotUsername ?? dbSettings.telegramBotUsername ?? DEFAULT_STORE_SETTINGS.telegramBotUsername ?? '')
+        : (savedParsed?.telegramBotUsername ?? dbSettings.telegramBotUsername ?? ''),
       abaMerchantId: isDefault 
         ? (savedParsed?.abaMerchantId ?? dbSettings.abaMerchantId ?? DEFAULT_STORE_SETTINGS.abaMerchantId ?? '')
         : (savedParsed?.abaMerchantId ?? dbSettings.abaMerchantId ?? ''),
@@ -4345,10 +4349,27 @@ export default function UnifiedAdminDashboard() {
     if (guardDemoAction("កែប្រែការកំណត់ហាង")) return;
 
     const cleanTg = (storeSettings.telegram || '').replace(/^@/, '').trim();
+    let cleanBotUser = (storeSettings.telegramBotUsername || '').replace(/^@/, '').trim();
+
+    // 🤖 ប្រសិនបើមាន Bot Token តែពុំទាន់បានដាក់ Username Bot: Auto-detect ពី Telegram API ស្វ័យប្រវត្តិ
+    if (sectionType === 'telegram' && storeSettings.telegramBotToken && !cleanBotUser) {
+      try {
+        const meRes = await fetch(`https://api.telegram.org/bot${storeSettings.telegramBotToken.trim()}/getMe`);
+        const meData = await meRes.json();
+        if (meData?.ok && meData?.result?.username) {
+          cleanBotUser = meData.result.username;
+        }
+      } catch (meErr) {
+        console.warn('Auto-detect Telegram Bot username failed:', meErr);
+      }
+    }
+
     const updatedSettings = {
       ...storeSettings,
-      telegram: cleanTg
+      telegram: cleanTg,
+      telegramBotUsername: cleanBotUser
     };
+    setStoreSettings(updatedSettings);
 
     // ⭐️ STRICT MULTI-TENANT ISOLATION: រក្សាទុកដាច់ដោយឡែកតាម storeId ហាមជាន់គ្នា ⭐️
     const storeId = activeStore?.id || 'store_default_sabayluk';
@@ -5104,6 +5125,20 @@ export default function UnifiedAdminDashboard() {
   const handleTestTelegramAlert = async () => {
     setTelegramTesting(true);
     setTelegramStatusMsg('កំពុងសាកល្បងផ្ញើសារទៅកាន់ Telegram...');
+
+    // Auto-detect Telegram Bot Username ពេល test
+    if (storeSettings.telegramBotToken && !storeSettings.telegramBotUsername) {
+      try {
+        const meRes = await fetch(`https://api.telegram.org/bot${storeSettings.telegramBotToken.trim()}/getMe`);
+        const meData = await meRes.json();
+        if (meData?.ok && meData?.result?.username) {
+          const detectedUsername = meData.result.username;
+          setStoreSettings(prev => ({ ...prev, telegramBotUsername: detectedUsername }));
+          updateStoreSettingsImmediate({ telegramBotUsername: detectedUsername });
+        }
+      } catch (_) {}
+    }
+
     const res = await sendTelegramNotification({ action: 'test' });
     setTelegramTesting(false);
     if (res.success) {
@@ -33325,7 +33360,7 @@ export default function UnifiedAdminDashboard() {
             </div>
 
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">
                     Telegram Bot Token <span className="text-red-500">*</span>
@@ -33352,6 +33387,29 @@ export default function UnifiedAdminDashboard() {
                     className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-mono focus:border-blue-500 outline-none transition bg-white" 
                   />
                   <p className="text-[11px] text-gray-400 mt-1">អាចជា User ID ឬ Group/Channel ID របស់ម្ចាស់ហាងនេះ</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">
+                    Telegram Bot Username (@ឈ្មោះBot)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-3 text-gray-400 font-bold text-xs">@</span>
+                    <input 
+                      type="text" 
+                      value={(storeSettings.telegramBotUsername || '').replace(/^@/, '')} 
+                      onChange={(e) => setStoreSettings({ ...storeSettings, telegramBotUsername: e.target.value.replace(/^@/, '').trim() })}
+                      placeholder="SabayLuk_bot" 
+                      className="w-full border-2 border-gray-200 p-3 pl-8 rounded-2xl text-xs font-mono focus:border-blue-500 outline-none transition bg-white" 
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    {storeSettings.telegramBotUsername ? (
+                      <span className="text-emerald-600 font-bold">✓ Bot សកម្ម: @{storeSettings.telegramBotUsername.replace(/^@/, '')}</span>
+                    ) : (
+                      'សម្រាប់ភ្ញៀវចុច Track តាម Bot ក្រោយទិញ (បញ្ចប់ដោយ bot)'
+                    )}
+                  </p>
                 </div>
               </div>
 
@@ -33430,6 +33488,7 @@ export default function UnifiedAdminDashboard() {
                   <li>ដាក់ឈ្មោះ Bot របស់ហាងបង (ឧ. <i>{activeStore?.name || 'Sabay'} Alert Bot</i>) និងដាក់ username បញ្ចប់ដោយ bot (ឧ. <i>{activeStore?.slug || 'my_store'}_alert_bot</i>)។</li>
                   <li>ចម្លង <b>HTTP API Token</b> ដែល @BotFather ផ្ញើមក យកមកបិទភ្ជាប់ក្នុងប្រអប់ <b>Telegram Bot Token</b> ខាងលើ។</li>
                   <li>ដើម្បីយក <b>Chat ID</b>: ឆាតទៅកាន់ <b>@userinfobot</b> វានឹងប្រាប់ <code>Id: 123456789</code> របស់បងភ្លាម ឬបើចង់ឱ្យ Alert ចូល Group គ្រាន់តែ Add Bot ចូល Group រួចយក Group Chat ID (ផ្តើមដោយ <code>-100...</code>)។</li>
+                  <li>បញ្ចូល <b>Telegram Bot Username</b> (ឧ. <i>@{activeStore?.slug || 'my_store'}_alert_bot</i>) ឬគ្រាន់តែចុច <b>"សាកល្បងផ្ញើសារ Test Telegram"</b> ប្រព័ន្ធនឹងស្វែងរក Bot Username បំពេញចូលដោយស្វ័យប្រវត្តិ។</li>
                 </ol>
               </div>
             </div>

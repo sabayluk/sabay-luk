@@ -6322,23 +6322,48 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             {/* Modal Footer CTAs */}
             <div className="pt-3 border-t border-slate-100 space-y-2 shrink-0">
               {/* ⭐️ Telegram Order Tracking & Bot Notification Button ⭐️ */}
-              <a
-                href={(() => {
-                  const rawTg = (storeSettings?.telegram || currentStore?.telegram || 'sabay_luk').replace(/^@/, '').trim();
-                  const cleanTg = rawTg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : rawTg;
-                  const botUser = (storeSettings?.telegramBotUsername || currentStore?.settings?.telegramBotUsername || '').replace(/^@/, '').trim();
-                  if (botUser) {
-                    return `https://t.me/${botUser}?start=track_${completedOrder.order_id}`;
-                  }
-                  return `https://t.me/${cleanTg}?text=${encodeURIComponent(`សួស្តី! ខ្ញុំចង់តាមដានការដឹកជញ្ជូន និងទទួលដំណឹងការកុម្ម៉ង់លេខ #${completedOrder.order_id} របស់ខ្ញុំ`)}`;
-                })()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full bg-gradient-to-r from-[#229ED9] via-[#0088cc] to-[#1773a5] hover:from-[#1e8bc0] hover:to-[#13628e] text-white py-3 px-4 rounded-2xl font-black text-xs transition flex items-center justify-center gap-2 shadow-md shadow-sky-500/25 active:scale-98 text-center"
-              >
-                <span className="text-base">✈️</span>
-                <span>តាមដានការដឹកជញ្ជូនតាម Telegram Bot ↗</span>
-              </a>
+              {(() => {
+                const rawTg = (storeSettings?.telegram || currentStore?.telegram || 'sabay_luk').replace(/^@/, '').trim();
+                const cleanTg = rawTg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : rawTg;
+                const rawBotUser = (storeSettings?.telegramBotUsername || currentStore?.settings?.telegramBotUsername || '').replace(/^@/, '').trim();
+                const hasBot = Boolean(rawBotUser && (rawBotUser.toLowerCase().endsWith('bot') || rawBotUser.toLowerCase().includes('bot')));
+
+                if (hasBot) {
+                  return (
+                    <div className="space-y-1">
+                      <a
+                        href={`https://t.me/${rawBotUser}?start=track_${completedOrder.order_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full bg-gradient-to-r from-[#229ED9] via-[#0088cc] to-[#1773a5] hover:from-[#1e8bc0] hover:to-[#13628e] text-white py-3 px-4 rounded-2xl font-black text-xs transition flex items-center justify-center gap-2 shadow-md shadow-sky-500/25 active:scale-98 text-center"
+                      >
+                        <span className="text-base">🤖</span>
+                        <span>តាមដានការដឹកជញ្ជូនតាម Telegram Bot (@{rawBotUser}) ↗</span>
+                      </a>
+                      <p className="text-[10px] text-center text-slate-400 font-medium">
+                        ✓ ចុចដើម្បីចូលទៅកាន់ Telegram Bot ស្វ័យប្រវត្តិសម្រាប់តាមដានទំនិញ
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-1">
+                    <a
+                      href={`https://t.me/${cleanTg}?text=${encodeURIComponent(`សួស្តី! ខ្ញុំចង់តាមដានការដឹកជញ្ជូន និងទទួលដំណឹងការកុម្ម៉ង់លេខ #${completedOrder.order_id} របស់ខ្ញុំ`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-gradient-to-r from-[#229ED9] via-[#0088cc] to-[#1773a5] hover:from-[#1e8bc0] hover:to-[#13628e] text-white py-3 px-4 rounded-2xl font-black text-xs transition flex items-center justify-center gap-2 shadow-md shadow-sky-500/25 active:scale-98 text-center"
+                    >
+                      <span className="text-base">💬</span>
+                      <span>ឆាតតាមដានជាមួយហាងតាម Telegram (@{cleanTg}) ↗</span>
+                    </a>
+                    <p className="text-[10px] text-center text-slate-400 font-medium">
+                      (ហាងមិនទាន់បានកំណត់ Bot ស្វ័យប្រវត្តិទេ — ប្រព័ន្ធភ្ជាប់ទៅកាន់ Telegram ផ្ទាល់របស់ហាង)
+                    </p>
+                  </div>
+                );
+              })()}
 
               <Link
                 href={`/track?order=${encodeURIComponent(completedOrder.order_id)}`}
