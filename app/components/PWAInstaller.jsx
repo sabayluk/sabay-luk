@@ -20,6 +20,7 @@ export default function PWAInstaller() {
     const handleOffline = () => {
       setIsOnline(false);
       setShowStatusToast(true);
+      setTimeout(() => setShowStatusToast(false), 3000);
     };
 
     window.addEventListener('online', handleOnline);
@@ -100,15 +101,14 @@ export default function PWAInstaller() {
           </p>
         )}
       </div>
-      {isOnline && (
-        <button
-          type="button"
-          onClick={() => setShowStatusToast(false)}
-          className="ml-2 text-white/80 hover:text-white cursor-pointer font-bold"
-        >
-          ✕
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => setShowStatusToast(false)}
+        className="ml-auto text-white/80 hover:text-white cursor-pointer font-bold px-1.5 py-0.5 rounded-md hover:bg-black/20 text-xs"
+        title="បិទ"
+      >
+        ✕
+      </button>
     </div>
   );
 }

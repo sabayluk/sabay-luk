@@ -988,6 +988,15 @@ export default function UnifiedAdminDashboard() {
   // ⭐️ Global Toast Notification State
   const [toastNotification, setToastNotification] = useState(null);
 
+  // ⭐️ Global Toast Auto-Dismiss (បង្ហាញត្រឹមតែ 2.5 វិនាទី - ម៉ាភ្លែត ហើយបាត់វិញដោយស្វ័យប្រវត្តិ) ⭐️
+  useEffect(() => {
+    if (!toastNotification) return;
+    const timer = setTimeout(() => {
+      setToastNotification(null);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [toastNotification]);
+
   // ⭐️ Global Modern Confirmation Modal (ផ្ទាំងលោតបញ្ជាក់ទំនើប ជំនួស browser window.confirm) ⭐️
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -39176,9 +39185,24 @@ export default function UnifiedAdminDashboard() {
 
       {/* ⭐️ GLOBAL TOAST NOTIFICATION ⭐️ */}
       {toastNotification && (
-        <div className="fixed bottom-16 md:bottom-6 right-4 sm:right-6 z-[9999] bg-slate-900/95 backdrop-blur-md text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 text-xs font-black flex items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-200">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>{toastNotification}</span>
+        <div 
+          onClick={() => setToastNotification(null)}
+          className="fixed bottom-16 md:bottom-6 right-4 sm:right-6 z-[9999] bg-slate-900/95 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700/80 text-xs font-black flex items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-200 max-w-sm cursor-pointer select-none hover:bg-slate-800 transition active:scale-95"
+          title="ចុចដើម្បីបិទ"
+        >
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+          <span className="flex-1 leading-snug">{toastNotification}</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setToastNotification(null);
+            }}
+            className="text-slate-400 hover:text-white p-1 rounded-lg text-xs font-bold cursor-pointer shrink-0"
+            title="បិទ"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>
