@@ -26719,49 +26719,6 @@ export default function UnifiedAdminDashboard() {
               </div>
             </div>
 
-            {/* ⭐️ TELEGRAM ALERT TOGGLE (ប៊ូតុងបិទ/បើកផ្ញើដំណឹងទៅ Telegram ពេលលក់) ⭐️ */}
-            <div className="mb-3.5 p-2.5 bg-gradient-to-r from-sky-50 via-blue-50/60 to-indigo-50/50 rounded-2xl border border-sky-200/90 flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black transition shrink-0 ${
-                  posEnableTelegramAlert 
-                    ? 'bg-sky-500 text-white shadow-xs' 
-                    : 'bg-gray-200 text-gray-500'
-                }`}>
-                  ✈️
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-black text-gray-900 leading-tight flex items-center gap-1.5">
-                    <span>ផ្ញើដំណឹង Telegram</span>
-                    {posEnableTelegramAlert && (
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                    )}
-                  </p>
-                  <p className="text-[10px] text-gray-500 font-medium truncate">
-                    {posEnableTelegramAlert ? 'បើកផ្ញើវិក្កយបត្រពេលលក់' : 'បានបិទការផ្ញើដំណឹង'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const newVal = !posEnableTelegramAlert;
-                  setPosEnableTelegramAlert(newVal);
-                  if (typeof window !== 'undefined') {
-                    localStorage.setItem('sabay_pos_telegram_alert', JSON.stringify(newVal));
-                  }
-                  setToastNotification(newVal ? '✈️ បានបើកការផ្ញើវិក្កយបត្រទៅ Telegram!' : '🔕 បានបិទការផ្ញើដំណឹងទៅ Telegram');
-                  setTimeout(() => setToastNotification(null), 2500);
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1 active:scale-95 shrink-0 border ${
-                  posEnableTelegramAlert
-                    ? 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600 shadow-sm'
-                    : 'bg-white hover:bg-gray-100 text-gray-600 border-gray-300'
-                }`}
-              >
-                <span>{posEnableTelegramAlert ? '✓ បើក' : '✕ បិទ'}</span>
-              </button>
-            </div>
-
             <div className="flex justify-between items-end mb-5">
               <div>
                 <span className="text-xs font-black text-gray-400 uppercase tracking-wider block">ទឹកប្រាក់សរុប (Total)</span>
@@ -26964,49 +26921,6 @@ export default function UnifiedAdminDashboard() {
                   </div>
                   <span className="text-2xl font-black text-blue-600">${posTotal.toFixed(2)}</span>
                 </div>
-              </div>
-
-              {/* ⭐️ TELEGRAM ALERT TOGGLE (Mobile Cart Drawer) ⭐️ */}
-              <div className="p-2.5 bg-gradient-to-r from-sky-50 via-blue-50/60 to-indigo-50/50 rounded-2xl border border-sky-200 flex items-center justify-between shadow-2xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black transition shrink-0 ${
-                    posEnableTelegramAlert 
-                      ? 'bg-sky-500 text-white shadow-xs' 
-                      : 'bg-gray-200 text-gray-500'
-                  }`}>
-                    ✈️
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-gray-900 leading-tight flex items-center gap-1">
-                      <span>ផ្ញើដំណឹង Telegram</span>
-                      {posEnableTelegramAlert && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                      )}
-                    </p>
-                    <p className="text-[10px] text-gray-500 font-medium truncate">
-                      {posEnableTelegramAlert ? 'បើកផ្ញើវិក្កយបត្រពេលលក់' : 'បានបិទការផ្ញើដំណឹង'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newVal = !posEnableTelegramAlert;
-                    setPosEnableTelegramAlert(newVal);
-                    if (typeof window !== 'undefined') {
-                      localStorage.setItem('sabay_pos_telegram_alert', JSON.stringify(newVal));
-                    }
-                    setToastNotification(newVal ? '✈️ បានបើកការផ្ញើវិក្កយបត្រទៅ Telegram!' : '🔕 បានបិទការផ្ញើដំណឹងទៅ Telegram');
-                    setTimeout(() => setToastNotification(null), 2500);
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1 active:scale-95 shrink-0 border ${
-                    posEnableTelegramAlert
-                      ? 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600 shadow-sm'
-                      : 'bg-white hover:bg-gray-100 text-gray-600 border-gray-300'
-                  }`}
-                >
-                  <span>{posEnableTelegramAlert ? '✓ បើក' : '✕ បិទ'}</span>
-                </button>
               </div>
 
               {/* Mobile Pay CTA */}
