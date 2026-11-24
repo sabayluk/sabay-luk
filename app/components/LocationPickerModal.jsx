@@ -39,6 +39,7 @@ export default function LocationPickerModal({
   selectedProvince = 'ភ្នំពេញ'
 }) {
   const iframeRef = useRef(null);
+  const pendingCoordsRef = useRef(null);
 
   // Parse initial coordinates if provided via Google Maps url
   const parseInitialCoords = () => {
@@ -63,6 +64,8 @@ export default function LocationPickerModal({
 
   // 🎯 មុខងារទាញយកទីតាំង GPS បច្ចុប្បន្ន (Geolocation API)
   const [isLocating, setIsLocating] = useState(false);
+  const [isAutoLocating, setIsAutoLocating] = useState(false);
+  const [autoLocateSuccess, setAutoLocateSuccess] = useState(false);
   const [locationError, setLocationError] = useState('');
 
   // ⭐️ ជំហាន Modal: 'MAP' (រើសលើផែនទី) ឬ 'CONFIRM_DETAILS' (បញ្ជាក់ផ្លូវ, សង្កាត់, ភូមិ, ឃុំ, ខណ្ឌ, ក្រុង) ⭐️
@@ -77,15 +80,20 @@ export default function LocationPickerModal({
     landmark: ''
   });
 
-  // Sync coords when modal opens
+  // Sync coords when modal opens & Auto-detect Current Customer GPS Location
   useEffect(() => {
     if (isOpen) {
+      const hasSpecificCustomCoords = Boolean(
+        initialUrl && (initialUrl.includes('q=') || initialUrl.includes('@'))
+      );
+
       const init = parseInitialCoords();
       setCoords(init);
       setActiveProvince(selectedProvince || 'ភ្នំពេញ');
       setSearchQuery('');
       setSearchResults([]);
       setSearchError('');
+      setLocationError('');
       setModalStep('MAP');
       setAddressDetails({
         street: '',
@@ -95,6 +103,15 @@ export default function LocationPickerModal({
         province: selectedProvince || 'ភ្នំពេញ',
         landmark: ''
       });
+
+      // ⭐️ ពេលចុចរើសទីតាំងដំបូងចេញមក (Auto GPS Detection) ⭐️
+      // ប្រសិនបើអតិថិជនមិនទាន់មានទីតាំងចាស់ទេ ប្រព័ន្ធចាប់ទីតាំង GPS បច្ចុប្បន្នស្វ័យប្រវត្តិតែម្តង
+      if (!hasSpecificCustomCoords) {
+        const autoTimer = setTimeout(() => {
+          handleGetCurrentLocation(true);
+        }, 200);
+        return () => clearTimeout(autoTimer);
+      }
     }
   }, [isOpen, initialUrl, selectedProvince]);
 
@@ -106,6 +123,18 @@ export default function LocationPickerModal({
         const lng = Number(e.data.lng);
         if (!isNaN(lat) && !isNaN(lng)) {
           setCoords({ lat, lng });
+        }
+      } else if (e.data && e.data.type === 'MAP_READY') {
+        if (pendingCoordsRef.current) {
+          const { lat, lng, zoom } = pendingCoordsRef.current;
+          if (iframeRef.current && iframeRef.current.contentWindow) {
+            iframeRef.current.contentWindow.postMessage({
+              type: 'SET_LOCATION',
+              lat,
+              lng,
+              zoom: zoom || 17
+            }, '*');
+          }
         }
       }
     };
@@ -158,8 +187,9 @@ export default function LocationPickerModal({
   }, [coords.lat, coords.lng, isOpen, activeProvince]);
 
   // Post new center to iframe map
-  const sendLocationToIframe = (lat, lng, zoom = 16) => {
+  const sendLocationToIframe = (lat, lng, zoom = 17) => {
     setCoords({ lat, lng });
+    pendingCoordsRef.current = { lat, lng, zoom };
     if (iframeRef.current && iframeRef.current.contentWindow) {
       iframeRef.current.contentWindow.postMessage({
         type: 'SET_LOCATION',
@@ -181,14 +211,19 @@ export default function LocationPickerModal({
   };
 
   // 🎯 មុខងារទាញយកទីតាំង GPS បច្ចុប្បន្នផ្ទាល់ខ្លួន (HTML5 Geolocation API)
-  const handleGetCurrentLocation = () => {
+  const handleGetCurrentLocation = (isAuto = false) => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
-      alert('ឧបករណ៍ ឬកម្មវិធីរុករក (Browser) របស់អ្នកមិនគាំទ្រ GPS ទីតាំងទេ!');
+      if (!isAuto) {
+        alert('ឧបករណ៍ ឬកម្មវិធីរុករក (Browser) របស់អ្នកមិនគាំទ្រ GPS ទីតាំងទេ!');
+      }
       return;
     }
 
     setIsLocating(true);
     setLocationError('');
+    if (isAuto) {
+      setIsAutoLocating(true);
+    }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -196,9 +231,13 @@ export default function LocationPickerModal({
         const lng = Number(position.coords.longitude.toFixed(6));
         sendLocationToIframe(lat, lng, 17);
         setIsLocating(false);
+        setIsAutoLocating(false);
+        setAutoLocateSuccess(true);
+        setTimeout(() => setAutoLocateSuccess(false), 3500);
       },
       (error) => {
         setIsLocating(false);
+        setIsAutoLocating(false);
         let errMsg = 'មិនអាចទាញយកទីតាំងបច្ចុប្បន្នបានទេ!';
         if (error.code === 1) { // PERMISSION_DENIED
           errMsg = 'សូមបើកសិទ្ធិ (Allow Location Access) នៅក្នុងទូរស័ព្ទ ឬ Browser ដើម្បីទាញយកទីតាំងបច្ចុប្បន្ន!';
@@ -207,12 +246,14 @@ export default function LocationPickerModal({
         } else if (error.code === 3) { // TIMEOUT
           errMsg = 'ការទាញយកទីតាំងចំណាយពេលយូរពេក! សូមសាកល្បងម្ដងទៀត។';
         }
-        setLocationError(errMsg);
+        if (!isAuto) {
+          setLocationError(errMsg);
+        }
       },
       {
         enableHighAccuracy: true,
-        timeout: 12000,
-        maximumAge: 0
+        timeout: 10000,
+        maximumAge: 60000 // Cache 1 នាទី សម្រាប់ឆ្លើយតបលឿនបំផុត
       }
     );
   };
@@ -369,8 +410,9 @@ export default function LocationPickerModal({
 
     setTimeout(() => {
       map.invalidateSize();
+      window.parent.postMessage({ type: 'MAP_READY' }, '*');
       notify(startLat, startLng);
-    }, 400);
+    }, 300);
   </script>
 </body>
 </html>`;
@@ -518,8 +560,27 @@ export default function LocationPickerModal({
                 title="Interactive Delivery Location Picker Map"
                 srcDoc={srcDoc}
                 className="w-full h-full border-0 block"
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-same-origin allow-popups"
+                allow="geolocation"
               />
+
+              {/* 🎯 Floating Status Indicator for Auto GPS Detection */}
+              {isAutoLocating && (
+                <div className="absolute top-3 left-3 z-10 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="bg-slate-900/90 backdrop-blur-md text-emerald-400 border border-emerald-500/40 text-[11px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    <span>កំពុងចាប់ទីតាំង GPS របស់បង...</span>
+                  </div>
+                </div>
+              )}
+              {autoLocateSuccess && (
+                <div className="absolute top-3 left-3 z-10 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="bg-emerald-600 text-white border border-emerald-400 text-[11px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
+                    <span>🎯</span>
+                    <span>បានចាប់ទីតាំង GPS បច្ចុប្បន្នជោគជ័យ!</span>
+                  </div>
+                </div>
+              )}
 
               {/* 🎯 Floating GPS Current Location Button directly on Map */}
               <div className="absolute top-3 right-3 z-10">
