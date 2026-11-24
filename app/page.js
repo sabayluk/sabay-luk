@@ -149,7 +149,7 @@ export default function SaaSPlatformLandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           {/* Brand Logo */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-12 h-12 rounded-2xl overflow-hidden border border-slate-200/90 bg-white p-1 flex items-center justify-center shadow-md shadow-orange-500/15 group-hover:scale-105 transition transform">
+            <div className="w-12 h-12 rounded-xl overflow-hidden bg-transparent flex items-center justify-center group-hover:scale-105 transition transform">
               <img 
                 src="/sabayluk_icon.png" 
                 alt="Sabay Luk Logo" 

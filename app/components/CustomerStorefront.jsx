@@ -2958,11 +2958,11 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
             className="flex items-center gap-2.5 cursor-pointer group select-none min-w-0 flex-1 sm:flex-initial"
           >
             {(storeSettings.logoUrl || currentStore?.settings?.logoUrl) ? (
-              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-2xl bg-white dark:bg-slate-800 p-1 flex items-center justify-center shadow-xs border border-gray-100 dark:border-slate-700/60 shrink-0 group-hover:scale-105 transition">
+              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-transparent flex items-center justify-center shrink-0 group-hover:scale-105 transition overflow-hidden">
                 <img 
                   src={storeSettings.logoUrl || currentStore?.settings?.logoUrl} 
                   alt={storeSettings.storeName || 'Store Logo'} 
-                  className="h-full w-full object-contain rounded-xl" 
+                  className="h-full w-full object-contain" 
                 />
               </div>
             ) : (
