@@ -6307,6 +6307,25 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
 
             {/* Modal Footer CTAs */}
             <div className="pt-3 border-t border-slate-100 space-y-2 shrink-0">
+              {/* ⭐️ Telegram Order Tracking & Bot Notification Button ⭐️ */}
+              <a
+                href={(() => {
+                  const rawTg = (storeSettings?.telegram || currentStore?.telegram || 'sabay_luk').replace(/^@/, '').trim();
+                  const cleanTg = rawTg.toLowerCase() === 'sabayluk' ? 'sabay_luk' : rawTg;
+                  const botUser = (storeSettings?.telegramBotUsername || currentStore?.settings?.telegramBotUsername || '').replace(/^@/, '').trim();
+                  if (botUser) {
+                    return `https://t.me/${botUser}?start=track_${completedOrder.order_id}`;
+                  }
+                  return `https://t.me/${cleanTg}?text=${encodeURIComponent(`សួស្តី! ខ្ញុំចង់តាមដានការដឹកជញ្ជូន និងទទួលដំណឹងការកុម្ម៉ង់លេខ #${completedOrder.order_id} របស់ខ្ញុំ`)}`;
+                })()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full bg-gradient-to-r from-[#229ED9] via-[#0088cc] to-[#1773a5] hover:from-[#1e8bc0] hover:to-[#13628e] text-white py-3 px-4 rounded-2xl font-black text-xs transition flex items-center justify-center gap-2 shadow-md shadow-sky-500/25 active:scale-98 text-center"
+              >
+                <span className="text-base">✈️</span>
+                <span>តាមដានការដឹកជញ្ជូនតាម Telegram Bot ↗</span>
+              </a>
+
               <Link
                 href={`/track?order=${encodeURIComponent(completedOrder.order_id)}`}
                 className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white py-3 rounded-2xl font-black text-xs transition flex items-center justify-center gap-2 shadow-md shadow-orange-500/25 active:scale-98"
