@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 
 // Cambodian 25 province default coordinates
 export const PROVINCE_COORDINATES = {
@@ -40,6 +40,9 @@ export default function LocationPickerModal({
 }) {
   const iframeRef = useRef(null);
   const pendingCoordsRef = useRef(null);
+  const isMapReadyRef = useRef(false);
+  const userInteractedRef = useRef(false);
+  const autoLocateAttemptedRef = useRef(false);
 
   // Parse initial coordinates if provided via Google Maps url
   const parseInitialCoords = () => {
@@ -55,6 +58,8 @@ export default function LocationPickerModal({
   };
 
   const initial = parseInitialCoords();
+  const initialCoordsRef = useRef(initial);
+
   const [coords, setCoords] = useState(initial);
   const [activeProvince, setActiveProvince] = useState(selectedProvince || 'ភ្នំពេញ');
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,6 +93,11 @@ export default function LocationPickerModal({
       );
 
       const init = parseInitialCoords();
+      initialCoordsRef.current = init;
+      isMapReadyRef.current = false;
+      userInteractedRef.current = false;
+      autoLocateAttemptedRef.current = false;
+
       setCoords(init);
       setActiveProvince(selectedProvince || 'ភ្នំពេញ');
       setSearchQuery('');
@@ -107,13 +117,14 @@ export default function LocationPickerModal({
       // ⭐️ ពេលចុចរើសទីតាំងដំបូងចេញមក (Auto GPS Detection) ⭐️
       // ប្រសិនបើអតិថិជនមិនទាន់មានទីតាំងចាស់ទេ ប្រព័ន្ធចាប់ទីតាំង GPS បច្ចុប្បន្នស្វ័យប្រវត្តិតែម្តង
       if (!hasSpecificCustomCoords) {
+        autoLocateAttemptedRef.current = true;
         const autoTimer = setTimeout(() => {
           handleGetCurrentLocation(true);
-        }, 200);
+        }, 300);
         return () => clearTimeout(autoTimer);
       }
     }
-  }, [isOpen, initialUrl, selectedProvince]);
+  }, [isOpen]);
 
   // Listen to messages from Leaflet inside the iframe
   useEffect(() => {
@@ -122,9 +133,11 @@ export default function LocationPickerModal({
         const lat = Number(e.data.lat);
         const lng = Number(e.data.lng);
         if (!isNaN(lat) && !isNaN(lng)) {
+          userInteractedRef.current = true;
           setCoords({ lat, lng });
         }
       } else if (e.data && e.data.type === 'MAP_READY') {
+        isMapReadyRef.current = true;
         if (pendingCoordsRef.current) {
           const { lat, lng, zoom } = pendingCoordsRef.current;
           if (iframeRef.current && iframeRef.current.contentWindow) {
@@ -132,7 +145,7 @@ export default function LocationPickerModal({
               type: 'SET_LOCATION',
               lat,
               lng,
-              zoom: zoom || 17
+              zoom: zoom || 16
             }, '*');
           }
         }
@@ -184,24 +197,29 @@ export default function LocationPickerModal({
     }, 450);
 
     return () => clearTimeout(timer);
-  }, [coords.lat, coords.lng, isOpen, activeProvince]);
+  }, [coords.lat, coords.lng, isOpen]);
 
-  // Post new center to iframe map
-  const sendLocationToIframe = (lat, lng, zoom = 17) => {
+  // Post new center to iframe map without re-rendering or destroying the iframe
+  const sendLocationToIframe = (lat, lng, zoom = 16) => {
     setCoords({ lat, lng });
     pendingCoordsRef.current = { lat, lng, zoom };
     if (iframeRef.current && iframeRef.current.contentWindow) {
-      iframeRef.current.contentWindow.postMessage({
-        type: 'SET_LOCATION',
-        lat,
-        lng,
-        zoom
-      }, '*');
+      try {
+        iframeRef.current.contentWindow.postMessage({
+          type: 'SET_LOCATION',
+          lat,
+          lng,
+          zoom
+        }, '*');
+      } catch (err) {
+        console.warn('Could not postMessage to map iframe:', err);
+      }
     }
   };
 
   // Jump to province
   const handleSelectProvince = (provName) => {
+    userInteractedRef.current = true;
     setActiveProvince(provName);
     setAddressDetails(prev => ({ ...prev, province: provName }));
     const p = PROVINCE_COORDINATES[provName];
@@ -219,6 +237,10 @@ export default function LocationPickerModal({
       return;
     }
 
+    if (!isAuto) {
+      userInteractedRef.current = true;
+    }
+
     setIsLocating(true);
     setLocationError('');
     if (isAuto) {
@@ -227,6 +249,13 @@ export default function LocationPickerModal({
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        // If user already moved the pin or chose another location manually, do not override
+        if (isAuto && userInteractedRef.current) {
+          setIsLocating(false);
+          setIsAutoLocating(false);
+          return;
+        }
+
         const lat = Number(position.coords.latitude.toFixed(6));
         const lng = Number(position.coords.longitude.toFixed(6));
         sendLocationToIframe(lat, lng, 17);
@@ -253,7 +282,7 @@ export default function LocationPickerModal({
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 60000 // Cache 1 នាទី សម្រាប់ឆ្លើយតបលឿនបំផុត
+        maximumAge: 60000
       }
     );
   };
@@ -264,6 +293,7 @@ export default function LocationPickerModal({
     const query = searchQuery.trim();
     if (!query) return;
 
+    userInteractedRef.current = true;
     setIsSearching(true);
     setSearchError('');
     try {
@@ -286,6 +316,7 @@ export default function LocationPickerModal({
 
   // Select search result
   const handlePickSearchResult = (item) => {
+    userInteractedRef.current = true;
     sendLocationToIframe(parseFloat(item.lat), parseFloat(item.lon), 16);
     setSearchResults([]);
   };
@@ -293,6 +324,18 @@ export default function LocationPickerModal({
   // ⭐️ ជំហានទី ១៖ បញ្ជាក់លើផែនទី រួចបន្តទៅបញ្ជាក់ ផ្លូវ, សង្កាត់, ភូមិ, ឃុំ, ខណ្ឌ ⭐️
   const handleProceedToConfirmDetails = () => {
     setModalStep('CONFIRM_DETAILS');
+  };
+
+  // Switch back to Map view from address details
+  const handleBackToMap = () => {
+    setModalStep('MAP');
+    setTimeout(() => {
+      if (iframeRef.current && iframeRef.current.contentWindow) {
+        try {
+          iframeRef.current.contentWindow.postMessage({ type: 'INVALIDATE_SIZE' }, '*');
+        } catch (e) {}
+      }
+    }, 100);
   };
 
   // ⭐️ ជំហានទី ២៖ រក្សាទុក និងបញ្ចប់ការកំណត់ទីតាំង ⭐️
@@ -322,44 +365,100 @@ export default function LocationPickerModal({
     onClose();
   };
 
-  if (!isOpen) return null;
+  // Stable memoized iframe HTML: only initialized once when modal opens so the iframe NEVER reloads or jumps!
+  const srcDoc = useMemo(() => {
+    if (!isOpen) return '';
+    const startLat = initialCoordsRef.current?.lat || 11.5564;
+    const startLng = initialCoordsRef.current?.lng || 104.9282;
 
-  const srcDoc = `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <style>
-    html, body, #map { height: 100%; width: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    html, body, #map {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      touch-action: pan-x pan-y;
+      background: #f1f5f9;
+    }
     .custom-pin {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 34px;
+      font-size: 42px;
       line-height: 1;
-      filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+      filter: drop-shadow(0 5px 8px rgba(0,0,0,0.45));
       cursor: grab;
       user-select: none;
-      transition: transform 0.15s ease;
+      touch-action: none;
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
     .custom-pin:active {
-      transform: scale(1.2) translateY(-8px);
+      transform: scale(1.25) translateY(-10px);
       cursor: grabbing;
     }
+    .leaflet-bar {
+      border: none !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+      border-radius: 12px !important;
+      overflow: hidden;
+    }
     .leaflet-bar a {
-      background-color: #ffffff;
-      color: #1e293b;
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      font-weight: bold !important;
+      width: 36px !important;
+      height: 36px !important;
+      line-height: 36px !important;
+      border-bottom: 1px solid #e2e8f0 !important;
+    }
+    .leaflet-bar a:hover {
+      background-color: #f8fafc !important;
+      color: #ea580c !important;
+    }
+    /* Floating helper tooltip inside map */
+    .map-helper {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.90);
+      backdrop-filter: blur(8px);
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 16px;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+      pointer-events: none;
+      z-index: 1000;
+      white-space: nowrap;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div class="map-helper">📍 ចុចលើផែនទី ឬអូស Pin ទៅទីតាំងដែលចង់ឱ្យដឹក</div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script>
-    const startLat = ${coords.lat};
-    const startLng = ${coords.lng};
-    const map = L.map('map', { zoomControl: true }).setView([startLat, startLng], 15);
+    const startLat = ${startLat};
+    const startLng = ${startLng};
+
+    const map = L.map('map', {
+      zoomControl: false,
+      tap: false,
+      attributionControl: false
+    }).setView([startLat, startLng], 16);
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
@@ -369,16 +468,17 @@ export default function LocationPickerModal({
     const pinIcon = L.divIcon({
       className: 'custom-pin',
       html: '📍',
-      iconSize: [42, 42],
-      iconAnchor: [21, 38]
+      iconSize: [46, 46],
+      iconAnchor: [23, 42]
     });
 
-    let marker = L.marker([startLat, startLng], {
+    const marker = L.marker([startLat, startLng], {
       draggable: true,
+      autoPan: true,
       icon: pinIcon
     }).addTo(map);
 
-    function notify(lat, lng) {
+    function notifyParent(lat, lng) {
       window.parent.postMessage({
         type: 'MAP_PIN_MOVED',
         lat: Number(lat.toFixed(6)),
@@ -386,36 +486,47 @@ export default function LocationPickerModal({
       }, '*');
     }
 
+    // Drag pin event
     marker.on('dragend', function(e) {
       const pos = e.target.getLatLng();
-      notify(pos.lat, pos.lng);
+      map.panTo(pos, { animate: true, duration: 0.35 });
+      notifyParent(pos.lat, pos.lng);
     });
 
+    // Tap or click anywhere on the map to jump pin directly
     map.on('click', function(e) {
       marker.setLatLng(e.latlng);
-      notify(e.latlng.lat, e.latlng.lng);
+      map.panTo(e.latlng, { animate: true, duration: 0.35 });
+      notifyParent(e.latlng.lat, e.latlng.lng);
     });
 
+    // Receive commands from parent window
     window.addEventListener('message', function(ev) {
       if (!ev.data) return;
       if (ev.data.type === 'SET_LOCATION') {
-        const { lat, lng, zoom } = ev.data;
-        if (lat && lng) {
-          map.setView([lat, lng], zoom || 15);
+        const lat = Number(ev.data.lat);
+        const lng = Number(ev.data.lng);
+        const zoom = Number(ev.data.zoom) || 16;
+        if (!isNaN(lat) && !isNaN(lng)) {
           marker.setLatLng([lat, lng]);
-          notify(lat, lng);
+          map.flyTo([lat, lng], zoom, { animate: true, duration: 0.8 });
         }
+      } else if (ev.data.type === 'INVALIDATE_SIZE') {
+        map.invalidateSize();
       }
     });
 
+    // Notify parent map is fully ready and visible
     setTimeout(() => {
       map.invalidateSize();
       window.parent.postMessage({ type: 'MAP_READY' }, '*');
-      notify(startLat, startLng);
-    }, 300);
+    }, 150);
   </script>
 </body>
 </html>`;
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   return (
     <div 
@@ -441,7 +552,7 @@ export default function LocationPickerModal({
               </h3>
               <p className="text-[11px] text-slate-300">
                 {modalStep === 'MAP' 
-                  ? 'ចុច ឬអូស Pin លើផែនទីដើម្បីកំណត់ទីតាំង GPS ជាក់ស្តែង'
+                  ? 'ចុចលើផែនទី ឬអូស Pin ដើម្បីប្តូរទីតាំង GPS ទៅកន្លែងណាក៏បានតាមចិត្ត'
                   : 'សូមពិនិត្យ ឬបំពេញបន្ថែមឈ្មោះផ្លូវ សង្កាត់ ខណ្ឌ ដើម្បីអ្នកដឹកងាយស្រួលរក'
                 }
               </p>
@@ -457,348 +568,337 @@ export default function LocationPickerModal({
           </button>
         </div>
 
-        {/* 🌟 VIEW 1: MAP SELECTION SCREEN 🌟 */}
-        {modalStep === 'MAP' ? (
-          <>
-            {/* Toolbar: Search & Province Jump */}
-            <div className="p-3 bg-slate-50 border-b border-slate-200 space-y-2">
-              {/* Search bar */}
-              <form onSubmit={handleSearch} className="flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    placeholder="🔎 វាយស្វែងរកទីតាំង/ផ្សារ/ផ្លូវ (ឧ. វត្តភ្នំ, អុីអន, ទួលគោក...)"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-white border border-slate-300 focus:border-orange-500 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-800 outline-none shadow-2xs"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="submit"
-                  disabled={isSearching}
-                  className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition cursor-pointer shrink-0 disabled:opacity-50"
-                >
-                  {isSearching ? 'កំពុងរក...' : 'ស្វែងរក'}
-                </button>
-              </form>
-
-              {/* Search Results Dropdown */}
-              {searchResults.length > 0 && (
-                <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-lg space-y-1 max-h-40 overflow-y-auto text-xs">
-                  <div className="text-[10px] font-bold text-slate-400 px-2">លទ្ធផលស្វែងរក (ចុចដើម្បីកំណត់ទីតាំង)៖</div>
-                  {searchResults.map((item, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handlePickSearchResult(item)}
-                      className="w-full text-left px-2.5 py-1.5 hover:bg-orange-50 rounded-lg text-slate-700 transition flex items-center gap-2 cursor-pointer"
-                    >
-                      <span>📍</span>
-                      <span className="truncate">{item.display_name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {searchError && (
-                <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
-                  ⚠️ {searchError}
-                </div>
-              )}
-
-              {locationError && (
-                <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl flex items-center justify-between">
-                  <span>⚠️ {locationError}</span>
-                  <button type="button" onClick={() => setLocationError('')} className="text-rose-400 hover:text-rose-700 ml-2 font-bold cursor-pointer">✕</button>
-                </div>
-              )}
-
-              {/* Quick 25 Provinces Selector & Current GPS Button */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
-                <button
-                  type="button"
-                  onClick={handleGetCurrentLocation}
-                  disabled={isLocating}
-                  className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-3 py-1.5 rounded-xl font-black transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-75"
-                  title="ចុចដើម្បីទាញយកទីតាំងផ្ទាល់ខ្លួនតាម GPS"
-                >
-                  <span className={isLocating ? 'animate-spin' : ''}>{isLocating ? '⏳' : '🎯'}</span>
-                  <span>{isLocating ? 'កំពុងទាញទីតាំង...' : 'ទីតាំងបច្ចុប្បន្ន (GPS)'}</span>
-                </button>
-                <div className="w-[1px] h-4 bg-slate-300 shrink-0 mx-0.5" />
-                <span className="text-slate-500 font-bold shrink-0">រើសខេត្ត/ក្រុង:</span>
-                {Object.keys(PROVINCE_COORDINATES).map((prov) => (
+        {/* 🌟 VIEW 1: MAP SELECTION SCREEN (Kept mounted to preserve state!) 🌟 */}
+        <div className={modalStep === 'MAP' ? 'flex flex-col flex-1' : 'hidden'}>
+          {/* Toolbar: Search & Province Jump */}
+          <div className="p-3 bg-slate-50 border-b border-slate-200 space-y-2">
+            {/* Search bar */}
+            <form onSubmit={handleSearch} className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="🔎 វាយស្វែងរកទីតាំង/ផ្សារ/ផ្លូវ (ឧ. វត្តភ្នំ, អុីអន, ទួលគោក...)"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white border border-slate-300 focus:border-orange-500 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-800 outline-none shadow-2xs"
+                />
+                {searchQuery && (
                   <button
-                    key={prov}
                     type="button"
-                    onClick={() => handleSelectProvince(prov)}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer ${
-                      activeProvince === prov
-                        ? 'bg-orange-500 text-white shadow-xs'
-                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-                    }`}
+                    onClick={() => { setSearchQuery(''); setSearchResults([]); }}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs font-bold"
                   >
-                    {prov}
+                    ✕
+                  </button>
+                )}
+              </div>
+              <button
+                type="submit"
+                disabled={isSearching}
+                className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition cursor-pointer shrink-0 disabled:opacity-50"
+              >
+                {isSearching ? 'កំពុងរក...' : 'ស្វែងរក'}
+              </button>
+            </form>
+
+            {/* Search Results Dropdown */}
+            {searchResults.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-xl p-2 shadow-lg space-y-1 max-h-40 overflow-y-auto text-xs">
+                <div className="text-[10px] font-bold text-slate-400 px-2">លទ្ធផលស្វែងរក (ចុចដើម្បីកំណត់ទីតាំង)៖</div>
+                {searchResults.map((item, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handlePickSearchResult(item)}
+                    className="w-full text-left px-2.5 py-1.5 hover:bg-orange-50 rounded-lg text-slate-700 transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>📍</span>
+                    <span className="truncate">{item.display_name}</span>
                   </button>
                 ))}
               </div>
-            </div>
+            )}
 
-            {/* Map Container */}
-            <div className="relative w-full h-[340px] sm:h-[400px] bg-slate-100">
-              <iframe
-                ref={iframeRef}
-                title="Interactive Delivery Location Picker Map"
-                srcDoc={srcDoc}
-                className="w-full h-full border-0 block"
-                sandbox="allow-scripts allow-same-origin allow-popups"
-                allow="geolocation"
-              />
+            {searchError && (
+              <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl">
+                ⚠️ {searchError}
+              </div>
+            )}
 
-              {/* 🎯 Floating Status Indicator for Auto GPS Detection */}
-              {isAutoLocating && (
-                <div className="absolute top-3 left-3 z-10 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="bg-slate-900/90 backdrop-blur-md text-emerald-400 border border-emerald-500/40 text-[11px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                    <span>កំពុងចាប់ទីតាំង GPS របស់បង...</span>
-                  </div>
-                </div>
-              )}
-              {autoLocateSuccess && (
-                <div className="absolute top-3 left-3 z-10 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="bg-emerald-600 text-white border border-emerald-400 text-[11px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
-                    <span>🎯</span>
-                    <span>បានចាប់ទីតាំង GPS បច្ចុប្បន្នជោគជ័យ!</span>
-                  </div>
-                </div>
-              )}
+            {locationError && (
+              <div className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl flex items-center justify-between">
+                <span>⚠️ {locationError}</span>
+                <button type="button" onClick={() => setLocationError('')} className="text-rose-400 hover:text-rose-700 ml-2 font-bold cursor-pointer">✕</button>
+              </div>
+            )}
 
-              {/* 🎯 Floating GPS Current Location Button directly on Map */}
-              <div className="absolute top-3 right-3 z-10">
+            {/* Quick 25 Provinces Selector & Current GPS Button */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px]">
+              <button
+                type="button"
+                onClick={() => handleGetCurrentLocation(false)}
+                disabled={isLocating}
+                className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-3 py-1.5 rounded-xl font-black transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-75"
+                title="ចុចដើម្បីទាញយកទីតាំងផ្ទាល់ខ្លួនតាម GPS"
+              >
+                <span className={isLocating ? 'animate-spin' : ''}>{isLocating ? '⏳' : '🎯'}</span>
+                <span>{isLocating ? 'កំពុងទាញទីតាំង...' : 'ទីតាំងបច្ចុប្បន្ន (GPS)'}</span>
+              </button>
+              <div className="w-[1px] h-4 bg-slate-300 shrink-0 mx-0.5" />
+              <span className="text-slate-500 font-bold shrink-0">រើសខេត្ត/ក្រុង:</span>
+              {Object.keys(PROVINCE_COORDINATES).map((prov) => (
                 <button
+                  key={prov}
                   type="button"
-                  onClick={handleGetCurrentLocation}
-                  disabled={isLocating}
-                  className="bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-700 px-3.5 py-2 rounded-2xl shadow-xl border border-slate-200/90 text-xs font-black flex items-center gap-2 backdrop-blur-md transition active:scale-90 cursor-pointer disabled:opacity-75 group"
-                  title="ចុចទាញយកទីតាំងបច្ចុប្បន្នរបស់អ្នក (GPS)"
+                  onClick={() => handleSelectProvince(prov)}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition shrink-0 cursor-pointer ${
+                    activeProvince === prov
+                      ? 'bg-orange-500 text-white shadow-xs'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                  }`}
                 >
-                  <span className={`text-base ${isLocating ? 'animate-spin' : 'group-hover:scale-125 transition-transform'}`}>
-                    {isLocating ? '⏳' : '🎯'}
-                  </span>
-                  <span>{isLocating ? 'កំពុងទាញ...' : 'ទីតាំងបច្ចុប្បន្ន'}</span>
+                  {prov}
                 </button>
-              </div>
+              ))}
+            </div>
+          </div>
 
-              {/* Instructions Floating Pill */}
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none z-10 w-[90%] sm:w-auto text-center">
-                <div className="bg-slate-900/90 backdrop-blur-md text-white text-[11px] font-bold px-4 py-2 rounded-full shadow-lg border border-white/20 inline-flex items-center gap-2">
-                  <span>📍</span>
-                  <span>ចុចលើផែនទី ឬអូស Pin ទៅកាន់ទីតាំងផ្ទះដែលចង់ឱ្យដឹក</span>
+          {/* Map Container */}
+          <div className="relative w-full h-[360px] sm:h-[420px] bg-slate-100">
+            <iframe
+              ref={iframeRef}
+              title="Interactive Delivery Location Picker Map"
+              srcDoc={srcDoc}
+              className="w-full h-full border-0 block"
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              allow="geolocation"
+            />
+
+            {/* 🎯 Floating Status Indicator for Auto GPS Detection */}
+            {isAutoLocating && (
+              <div className="absolute top-3 left-3 z-10 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="bg-slate-900/90 backdrop-blur-md text-emerald-400 border border-emerald-500/40 text-[11px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                  <span>កំពុងចាប់ទីតាំង GPS របស់បង...</span>
                 </div>
               </div>
-            </div>
+            )}
+            {autoLocateSuccess && (
+              <div className="absolute top-3 left-3 z-10 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="bg-emerald-600 text-white border border-emerald-400 text-[11px] font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
+                  <span>🎯</span>
+                  <span>បានចាប់ទីតាំង GPS បច្ចុប្បន្នជោគជ័យ!</span>
+                </div>
+              </div>
+            )}
 
-            {/* Modal Footer */}
-            <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                <span className="text-emerald-600 font-black">● GPS:</span>
-                <span className="font-mono font-bold bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-800 text-[11px]">
-                  {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+            {/* 🎯 Floating GPS Current Location Button directly on Map */}
+            <div className="absolute top-3 right-3 z-10">
+              <button
+                type="button"
+                onClick={() => handleGetCurrentLocation(false)}
+                disabled={isLocating}
+                className="bg-white/95 hover:bg-white text-slate-800 hover:text-emerald-700 px-3.5 py-2 rounded-2xl shadow-xl border border-slate-200/90 text-xs font-black flex items-center gap-2 backdrop-blur-md transition active:scale-90 cursor-pointer disabled:opacity-75 group"
+                title="ចុចទាញយកទីតាំងបច្ចុប្បន្នរបស់អ្នក (GPS)"
+              >
+                <span className={`text-base ${isLocating ? 'animate-spin' : 'group-hover:scale-125 transition-transform'}`}>
+                  {isLocating ? '⏳' : '🎯'}
                 </span>
-                <button
-                  type="button"
-                  onClick={handleGetCurrentLocation}
-                  disabled={isLocating}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-black transition flex items-center gap-1 active:scale-95 cursor-pointer disabled:opacity-60"
-                  title="ទាញទីតាំងបច្ចុប្បន្នតាម GPS"
-                >
-                  <span className={isLocating ? 'animate-spin' : ''}>{isLocating ? '⏳' : '🎯'}</span>
-                  <span>{isLocating ? 'កំពុងទាញ...' : 'ទីតាំងខ្ញុំ'}</span>
-                </button>
-                {isReverseGeocoding && (
-                  <span className="text-[10px] text-orange-500 animate-pulse font-bold">កំពុងទាញឈ្មោះទីតាំង...</span>
-                )}
-              </div>
+                <span>{isLocating ? 'កំពុងទាញ...' : 'ទីតាំងបច្ចុប្បន្ន'}</span>
+              </button>
+            </div>
+          </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => { setModalStep('MAP'); onClose(); }}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold transition cursor-pointer"
-                >
-                  បោះបង់
-                </button>
-                <button
-                  type="button"
-                  onClick={handleProceedToConfirmDetails}
-                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-[#ff6a00] hover:from-orange-600 hover:to-[#e55f00] text-white text-xs font-black shadow-md shadow-orange-500/25 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>👉</span>
-                  <span>បន្តទៅបញ្ជាក់ទីតាំងលម្អិត</span>
-                </button>
+          {/* Modal Footer */}
+          <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-slate-600 flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <span className="text-emerald-600 font-black">● GPS:</span>
+              <span className="font-mono font-bold bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 text-slate-800 text-[11px]">
+                {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleGetCurrentLocation(false)}
+                disabled={isLocating}
+                className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-black transition flex items-center gap-1 active:scale-95 cursor-pointer disabled:opacity-60"
+                title="ទាញទីតាំងបច្ចុប្បន្នតាម GPS"
+              >
+                <span className={isLocating ? 'animate-spin' : ''}>{isLocating ? '⏳' : '🎯'}</span>
+                <span>{isLocating ? 'កំពុងទាញ...' : 'ទីតាំងខ្ញុំ'}</span>
+              </button>
+              {isReverseGeocoding && (
+                <span className="text-[10px] text-orange-500 animate-pulse font-bold">កំពុងទាញឈ្មោះទីតាំង...</span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => { setModalStep('MAP'); onClose(); }}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold transition cursor-pointer"
+              >
+                បោះបង់
+              </button>
+              <button
+                type="button"
+                onClick={handleProceedToConfirmDetails}
+                className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-[#ff6a00] hover:from-orange-600 hover:to-[#e55f00] text-white text-xs font-black shadow-md shadow-orange-500/25 active:scale-95 transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>👉</span>
+                <span>បន្តទៅបញ្ជាក់ទីតាំងលម្អិត</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 🌟 VIEW 2: DETAILED ADDRESS CONFIRMATION (ផ្លូវ, សង្កាត់, ភូមិ, ឃុំ, ខណ្ឌ, ក្រុង) 🌟 */}
+        <div className={modalStep === 'CONFIRM_DETAILS' ? 'p-5 sm:p-6 space-y-4 overflow-y-auto flex-1' : 'hidden'}>
+          {/* GPS Badge & Map Mini Banner */}
+          <div className="bg-gradient-to-r from-orange-50 to-amber-50 p-3.5 rounded-2xl border border-orange-200 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">🗺️</span>
+              <div>
+                <h4 className="text-xs font-black text-slate-900">
+                  កូអរដោនេ GPS លើផែនទី (Google Maps)
+                </h4>
+                <p className="text-[11px] font-mono font-bold text-slate-600 mt-0.5">
+                  {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
+                </p>
               </div>
             </div>
-          </>
-        ) : (
-          /* 🌟 VIEW 2: DETAILED ADDRESS CONFIRMATION (ផ្លូវ, សង្កាត់, ភូមិ, ឃុំ, ខណ្ឌ, ក្រុង) 🌟 */
-          <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+            <button
+              type="button"
+              onClick={handleBackToMap}
+              className="text-[11px] font-bold text-orange-600 hover:text-orange-800 bg-white px-3 py-1.5 rounded-xl border border-orange-300 shadow-2xs hover:bg-orange-50 transition cursor-pointer"
+            >
+              ✏️ ប្តូរទីតាំងលើ Map
+            </button>
+          </div>
+
+          <p className="text-xs text-slate-600 font-medium">
+            ប្រព័ន្ធបានស្វែងរកទីតាំងស្វ័យប្រវត្តិតាម GPS ជូនអ្នក។ សូមពិនិត្យ ឬវាយបន្ថែមផ្ទះលេខ ផ្លូវ សង្កាត់ ខណ្ឌ ឱ្យបានត្រឹមត្រូវ៖
+          </p>
+
+          {/* Detailed Form Inputs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             
-            {/* GPS Badge & Map Mini Banner */}
-            <div className="bg-gradient-to-r from-orange-50 to-amber-50 p-3.5 rounded-2xl border border-orange-200 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="text-2xl">🗺️</span>
-                <div>
-                  <h4 className="text-xs font-black text-slate-900">
-                    កូអរដោនេ GPS លើផែនទី (Google Maps)
-                  </h4>
-                  <p className="text-[11px] font-mono font-bold text-slate-600 mt-0.5">
-                    {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalStep('MAP')}
-                className="text-[11px] font-bold text-orange-600 hover:text-orange-800 bg-white px-3 py-1.5 rounded-xl border border-orange-300 shadow-2xs hover:bg-orange-50 transition cursor-pointer"
-              >
-                ✏️ ប្តូរទីតាំងលើ Map
-              </button>
+            {/* 1. ផ្ទះលេខ & ផ្លូវ */}
+            <div className="sm:col-span-2">
+              <label className="text-xs font-black text-slate-800 mb-1 flex items-center gap-1.5">
+                <span>🏠</span> <span>ផ្ទះលេខ / ផ្លូវ (Street & House No.) *</span>
+              </label>
+              <input
+                type="text"
+                placeholder="ឧ. ផ្ទះលេខ ១២A, ផ្លូវ ២៧១ ឬ ផ្លូវបេតុង..."
+                value={addressDetails.street}
+                onChange={(e) => setAddressDetails({ ...addressDetails, street: e.target.value })}
+                className="w-full bg-slate-50 focus:bg-white border-2 border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 outline-none transition"
+              />
             </div>
 
-            <p className="text-xs text-slate-600 font-medium">
-              ប្រព័ន្ធបានស្វែងរកទីតាំងស្វ័យប្រវត្តិតាម GPS ជូនអ្នក។ សូមពិនិត្យ ឬវាយបន្ថែមផ្ទះលេខ ផ្លូវ សង្កាត់ ខណ្ឌ ឱ្យបានត្រឹមត្រូវ៖
-            </p>
-
-            {/* Detailed Form Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              
-              {/* 1. ផ្ទះលេខ & ផ្លូវ */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-black text-slate-800 mb-1 flex items-center gap-1.5">
-                  <span>🏠</span> <span>ផ្ទះលេខ / ផ្លូវ (Street & House No.) *</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="ឧ. ផ្ទះលេខ ១២A, ផ្លូវ ២៧១ ឬ ផ្លូវបេតុង..."
-                  value={addressDetails.street}
-                  onChange={(e) => setAddressDetails({ ...addressDetails, street: e.target.value })}
-                  className="w-full bg-slate-50 focus:bg-white border-2 border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 outline-none transition"
-                />
-              </div>
-
-              {/* 2. ភូមិ */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                  <span>🏡</span> <span>ភូមិ (Village / Phum)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="ឧ. ភូមិ ១, ភូមិក្បាលទំនប់..."
-                  value={addressDetails.village}
-                  onChange={(e) => setAddressDetails({ ...addressDetails, village: e.target.value })}
-                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition"
-                />
-              </div>
-
-              {/* 3. សង្កាត់ / ឃុំ */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                  <span>📍</span> <span>សង្កាត់ / ឃុំ (Sangkat / Commune) *</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="ឧ. សង្កាត់បឹងទំពុន, សង្កាត់ផ្សារដើមគរ..."
-                  value={addressDetails.sangkat}
-                  onChange={(e) => setAddressDetails({ ...addressDetails, sangkat: e.target.value })}
-                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition"
-                />
-              </div>
-
-              {/* 4. ខណ្ឌ / ស្រុក / ក្រុង */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                  <span>🏙️</span> <span>ខណ្ឌ / ស្រុក / ក្រុង (Khan / District) *</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="ឧ. ខណ្ឌមានជ័យ, ខណ្ឌទួលគោក, ក្រុងសៀមរាប..."
-                  value={addressDetails.district}
-                  onChange={(e) => setAddressDetails({ ...addressDetails, district: e.target.value })}
-                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition"
-                />
-              </div>
-
-              {/* 5. រាជធានី / ខេត្ត */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                  <span>🏛️</span> <span>រាជធានី / ខេត្ត (Province / City) *</span>
-                </label>
-                <select
-                  value={addressDetails.province}
-                  onChange={(e) => {
-                    const prov = e.target.value;
-                    setAddressDetails({ ...addressDetails, province: prov });
-                    setActiveProvince(prov);
-                  }}
-                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition cursor-pointer"
-                >
-                  {Object.keys(PROVINCE_COORDINATES).map((prov) => (
-                    <option key={prov} value={prov}>
-                      {PROVINCE_COORDINATES[prov].label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 6. ចំណាំទីតាំងបន្ថែម (Landmark / Note) */}
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <span>🚩</span> <span>ចំណាំទីតាំងបន្ថែម (Landmark / Direction)</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="ឧ. ទល់មុខផ្សារ..., ជិតស្តុប..., ផ្ទះវីឡាពណ៌ស, ហាងកាហ្វេ..."
-                  value={addressDetails.landmark}
-                  onChange={(e) => setAddressDetails({ ...addressDetails, landmark: e.target.value })}
-                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition placeholder:text-slate-400"
-                />
-              </div>
-
+            {/* 2. ភូមិ */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <span>🏡</span> <span>ភូមិ (Village / Phum)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="ឧ. ភូមិ ១, ភូមិក្បាលទំនប់..."
+                value={addressDetails.village}
+                onChange={(e) => setAddressDetails({ ...addressDetails, village: e.target.value })}
+                className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition"
+              />
             </div>
 
-            {/* Bottom Action Buttons */}
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setModalStep('MAP')}
-                className="px-5 py-3 rounded-2xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer"
+            {/* 3. សង្កាត់ / ឃុំ */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <span>📍</span> <span>សង្កាត់ / ឃុំ (Sangkat / Commune) *</span>
+              </label>
+              <input
+                type="text"
+                placeholder="ឧ. សង្កាត់បឹងទំពុន, សង្កាត់ផ្សារដើមគរ..."
+                value={addressDetails.sangkat}
+                onChange={(e) => setAddressDetails({ ...addressDetails, sangkat: e.target.value })}
+                className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition"
+              />
+            </div>
+
+            {/* 4. ខណ្ឌ / ស្រុក / ក្រុង */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <span>🏙️</span> <span>ខណ្ឌ / ស្រុក / ក្រុង (Khan / District) *</span>
+              </label>
+              <input
+                type="text"
+                placeholder="ឧ. ខណ្ឌមានជ័យ, ខណ្ឌទួលគោក, ក្រុងសៀមរាប..."
+                value={addressDetails.district}
+                onChange={(e) => setAddressDetails({ ...addressDetails, district: e.target.value })}
+                className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition"
+              />
+            </div>
+
+            {/* 5. រាជធានី / ខេត្ត */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                <span>🏛️</span> <span>រាជធានី / ខេត្ត (Province / City) *</span>
+              </label>
+              <select
+                value={addressDetails.province}
+                onChange={(e) => {
+                  const prov = e.target.value;
+                  setAddressDetails({ ...addressDetails, province: prov });
+                  setActiveProvince(prov);
+                }}
+                className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none transition cursor-pointer"
               >
-                ← ថយទៅផែនទី
-              </button>
-              <button
-                type="button"
-                onClick={handleFinalConfirmLocation}
-                className="px-7 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs sm:text-sm font-black shadow-lg shadow-emerald-600/25 active:scale-95 transition flex items-center gap-2 cursor-pointer"
-              >
-                <span>✅</span>
-                <span>បញ្ជាក់ទីតាំង និងដាក់ក្នុងវិក្កយបត្រ</span>
-              </button>
+                {Object.keys(PROVINCE_COORDINATES).map((prov) => (
+                  <option key={prov} value={prov}>
+                    {PROVINCE_COORDINATES[prov].label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 6. ចំណាំទីតាំងបន្ថែម (Landmark / Note) */}
+            <div className="sm:col-span-2">
+              <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>🚩</span> <span>ចំណាំទីតាំងបន្ថែម (Landmark / Direction)</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">ស្រេចចិត្ត</span>
+              </label>
+              <input
+                type="text"
+                placeholder="ឧ. ទល់មុខផ្សារ..., ជិតស្តុប..., ផ្ទះវីឡាពណ៌ស, ហាងកាហ្វេ..."
+                value={addressDetails.landmark}
+                onChange={(e) => setAddressDetails({ ...addressDetails, landmark: e.target.value })}
+                className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-orange-500 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 outline-none transition placeholder:text-slate-400"
+              />
             </div>
 
           </div>
-        )}
+
+          {/* Bottom Action Buttons */}
+          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={handleBackToMap}
+              className="px-5 py-3 rounded-2xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer"
+            >
+              ← ថយទៅផែនទី
+            </button>
+            <button
+              type="button"
+              onClick={handleFinalConfirmLocation}
+              className="px-7 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs sm:text-sm font-black shadow-lg shadow-emerald-600/25 active:scale-95 transition flex items-center gap-2 cursor-pointer"
+            >
+              <span>✅</span>
+              <span>បញ្ជាក់ទីតាំង និងដាក់ក្នុងវិក្កយបត្រ</span>
+            </button>
+          </div>
+
+        </div>
 
       </div>
     </div>
