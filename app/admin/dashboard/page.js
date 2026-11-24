@@ -26900,12 +26900,35 @@ export default function UnifiedAdminDashboard() {
                       {/* Info */}
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-xs text-gray-900 truncate">{item.name}</p>
-                        <p className="text-[10px] text-gray-500 font-mono mt-0.5">
-                          {item.selectedSize ? `Size: ${item.selectedSize}` : ''} {item.selectedColor ? `• ${item.selectedColor}` : ''}
-                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {item.size && item.size !== 'N/A' && (
+                            <span className="text-[10px] bg-orange-50 text-orange-600 font-bold px-1.5 py-0.2 rounded border border-orange-200">
+                              Size: {item.size}
+                            </span>
+                          )}
+                          {item.color && item.color !== 'N/A' && (
+                            <span className="text-[10px] bg-gray-100 text-gray-600 font-bold px-1.5 py-0.2 rounded">
+                              {item.color}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleItemPriceMode(item.cartItemId)}
+                            className={`text-[9px] font-black px-1.5 py-0.5 rounded cursor-pointer transition border ${
+                              item.priceMode === 'wholesale'
+                                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200'
+                                : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border-blue-200'
+                            }`}
+                            title="ចុចដើម្បីប្តូរតម្លៃទំនិញនេះ រវាង ដុំ/រាយ"
+                          >
+                            {item.priceMode === 'wholesale' ? '💼 ដុំ' : '🛍️ រាយ'}
+                          </button>
+                        </div>
                         <p className="text-xs font-black text-blue-600 mt-0.5">
                           ${(item.price || 0).toFixed(2)}
-                          <span className="text-[10px] text-gray-400 font-normal ml-1">x {item.quantity} = <b>${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</b></span>
+                          <span className="text-[10px] text-gray-500 font-normal ml-1">
+                            x {item.qty} = <b>${((item.price || 0) * (item.qty || 1)).toFixed(2)}</b>
+                          </span>
                         </p>
                       </div>
 
@@ -26913,18 +26936,18 @@ export default function UnifiedAdminDashboard() {
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
-                          onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
+                          onClick={() => updatePosQty(item.cartItemId, -1)}
                           className="w-7 h-7 rounded-xl bg-white border border-gray-300 hover:bg-gray-100 active:scale-95 flex items-center justify-center text-xs font-black text-gray-700 shadow-xs transition cursor-pointer"
                         >-</button>
-                        <span className="text-xs font-black min-w-[20px] text-center text-gray-900">{item.quantity}</span>
+                        <span className="text-xs font-black min-w-[20px] text-center text-gray-900">{item.qty}</span>
                         <button
                           type="button"
-                          onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
+                          onClick={() => updatePosQty(item.cartItemId, 1)}
                           className="w-7 h-7 rounded-xl bg-white border border-gray-300 hover:bg-gray-100 active:scale-95 flex items-center justify-center text-xs font-black text-gray-700 shadow-xs transition cursor-pointer"
                         >+</button>
                         <button
                           type="button"
-                          onClick={() => removeFromCart(item.cartItemId)}
+                          onClick={() => removePosItem(item.cartItemId)}
                           className="w-7 h-7 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 active:scale-95 flex items-center justify-center text-xs font-bold transition ml-0.5 cursor-pointer"
                           title="លុបចេញពីកន្ត្រក"
                         >✕</button>
