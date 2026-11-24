@@ -6120,23 +6120,29 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                 <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                     <h4 className="font-black text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <span>📦</span> បញ្ជីមុខទំនិញដែលបានកុម្ម៉ង់ ({completedOrder.items.filter(it => !it.is_tax_meta).length} មុខ)
+                      <span>📦</span> បញ្ជីមុខទំនិញដែលបានកុម្ម៉ង់ ({completedOrder.items.filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title)).length} មុខ)
                     </h4>
                   </div>
                   
                   <div className="space-y-2.5 divide-y divide-slate-200/60">
-                    {completedOrder.items.filter(it => !it.is_tax_meta).map((it, idx) => (
+                    {completedOrder.items.filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title)).map((it, idx) => (
                       <div key={idx} className="flex items-center gap-3 pt-2.5 first:pt-0">
-                        <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 shadow-2xs">
-                          <img
-                            src={it.image_url || it.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80'}
-                            alt={it.name}
-                            onError={(e) => {
-                              e.currentTarget.onerror = null;
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80';
-                            }}
-                            className="w-full h-full object-cover"
-                          />
+                        <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 shadow-2xs flex items-center justify-center">
+                          {it.image_url || it.image ? (
+                            <img
+                              src={it.image_url || it.image}
+                              alt={it.name || ''}
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.parentElement) {
+                                  e.currentTarget.parentElement.innerHTML = '<span class="text-xl">📦</span>';
+                                }
+                              }}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xl">📦</span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <h5 className="font-black text-xs text-slate-900 truncate">
@@ -6273,18 +6279,26 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                     <span className="text-[10px] bg-amber-200/70 text-amber-800 px-2 py-0.5 rounded-full font-bold">1 Order = 1 Feedback</span>
                   </div>
                   <div className="space-y-1.5">
-                    {completedOrder.items.filter(it => !it.is_tax_meta).map((it, idx) => (
+                    {completedOrder.items.filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title)).map((it, idx) => (
                       <div key={idx} className="flex items-center justify-between gap-2 bg-white p-2 rounded-xl border border-amber-100 shadow-2xs">
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <img 
-                            src={it.image_url || it.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80'} 
-                            alt={it.name} 
-                            onError={(e) => {
-                              e.currentTarget.onerror = null;
-                              e.currentTarget.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80';
-                            }}
-                            className="w-8 h-8 rounded-lg object-cover" 
-                          />
+                          <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 overflow-hidden">
+                            {it.image_url || it.image ? (
+                              <img 
+                                src={it.image_url || it.image} 
+                                alt={it.name || ''} 
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  if (e.currentTarget.parentElement) {
+                                    e.currentTarget.parentElement.innerHTML = '<span>📦</span>';
+                                  }
+                                }}
+                                className="w-full h-full object-cover" 
+                              />
+                            ) : (
+                              <span>📦</span>
+                            )}
+                          </div>
                           <span className="text-xs font-bold text-slate-800 truncate">{it.name}</span>
                         </div>
                         <button

@@ -134,7 +134,7 @@ export default function ShippingLabelModal({
     cleanAddress.includes('កំពត') ? 'កំពត (Kampot)' :
     'ភ្នំពេញ (Phnom Penh)';
 
-  const items = Array.isArray(order.items) ? order.items.filter(it => !it.is_tax_meta) : [];
+  const items = Array.isArray(order.items) ? order.items.filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title)) : [];
   const totalItemCount = items.reduce((sum, it) => sum + (parseInt(it.qty, 10) || 1), 0);
   const codNum = parseFloat(codAmount) || 0;
   const codRiel = Math.round(codNum * exchangeRate);

@@ -3675,7 +3675,7 @@ export default function UnifiedAdminDashboard() {
 
     // Is full refund?
     const totalOriginalQty = (Array.isArray(refundOrder.items) ? refundOrder.items : [])
-      .filter(it => !it.is_tax_meta)
+      .filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title))
       .reduce((s, it) => s + (parseInt(it.qty || it.quantity || 1) || 1), 0);
     const totalReturnedQty = selectedItems.reduce((s, it) => s + it.returnQty, 0);
     const isFullRefund = totalReturnedQty >= totalOriginalQty;
@@ -14707,7 +14707,7 @@ export default function UnifiedAdminDashboard() {
       filteredOrders.forEach(order => {
         const items = Array.isArray(order.items) ? order.items : [];
         items.forEach(it => {
-          if (!it || it.is_tax_meta) return;
+          if (!it || it.is_tax_meta || it.is_delivery_meta) return;
           const key = `${it.name || it.id}_${it.size || ''}_${it.color || ''}`;
           const qty = parseInt(it.qty || it.quantity || 1) || 1;
           const price = parseFloat(it.price || 0) || 0;
@@ -15389,7 +15389,7 @@ export default function UnifiedAdminDashboard() {
 
                             <button 
                               onClick={() => {
-                                const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+                                const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
                                 const orderTax = getOrderTax(order);
                                 const sub = Number(order.subtotal || order.total || 0);
                                 const disc = Number(order.discount || 0);
@@ -15453,7 +15453,7 @@ export default function UnifiedAdminDashboard() {
                             <button
                               type="button"
                               onClick={async () => {
-                                const orderItems = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+                                const orderItems = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
                                 const res = await sendTelegramNotification({
                                   action: 'send_invoice',
                                   order: {
@@ -15499,7 +15499,7 @@ export default function UnifiedAdminDashboard() {
               <div className="md:hidden divide-y divide-gray-100">
                 {filteredOrders.map(order => {
                   const displayId = order.order_id || order.id;
-                  const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+                  const items = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
                   const slipUrl = order.payment_slip_url || order.slip_url || (Array.isArray(order.items) && (order.items[0]?.payment_slip_url || order.items[0]?.slip_url));
 
                   return (
@@ -15704,7 +15704,7 @@ export default function UnifiedAdminDashboard() {
                         <button
                           type="button"
                           onClick={async () => {
-                            const orderItems = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => !it.is_tax_meta);
+                            const orderItems = (order.items && Array.isArray(order.items) ? order.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
                             const res = await sendTelegramNotification({
                               action: 'send_invoice',
                               order: {
@@ -15864,7 +15864,11 @@ export default function UnifiedAdminDashboard() {
         {/* ⭐️ MODAL មើលលម្អិតមុខទំនិញក្នុង ORDER (VIEW ORDER DETAILS & MAPS) ⭐️ */}
         {selectedOrderDetails && (() => {
           const ord = selectedOrderDetails;
-          const orderItems = (ord.items && Array.isArray(ord.items) ? ord.items : []).filter(it => !it.is_tax_meta);
+          const orderItems = (ord.items && Array.isArray(ord.items) ? ord.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
+          const deliveryMeta = (Array.isArray(ord.items) ? ord.items : []).find(it => it && it.is_delivery_meta);
+          const deliveryFeeAmt = parseFloat(ord.delivery_fee || deliveryMeta?.delivery_fee || 0);
+          const taxMeta = (Array.isArray(ord.items) ? ord.items : []).find(it => it && it.is_tax_meta);
+          const taxAmt = parseFloat(ord.tax_amount || taxMeta?.tax_amount || 0);
           const rawAddress = ord.address || ord.delivery_address || 'ទូទៅ / នៅហាង';
           
           // Extract Telegram & Email from all possible order sources
@@ -16125,16 +16129,22 @@ export default function UnifiedAdminDashboard() {
                       {orderItems.length > 0 ? (
                         orderItems.map((item, idx) => (
                           <div key={idx} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80">
-                            <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 overflow-hidden shrink-0 shadow-2xs">
-                              <img 
-                                src={item.image_url || item.image || 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80'} 
-                                className="w-full h-full object-cover" 
-                                alt=""
-                                onError={(e) => {
-                                  e.currentTarget.onerror = null;
-                                  e.currentTarget.src = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=200&auto=format&fit=crop&q=80';
-                                }}
-                              />
+                            <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 shadow-2xs flex items-center justify-center">
+                              {item.image_url || item.image ? (
+                                <img 
+                                  src={item.image_url || item.image} 
+                                  className="w-full h-full object-cover" 
+                                  alt={item.name || ''}
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    if (e.currentTarget.parentElement) {
+                                      e.currentTarget.parentElement.innerHTML = '<span class="text-xl">📦</span>';
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-xl">📦</span>
+                              )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <h5 className="text-xs font-black text-slate-900 truncate">{item.name}</h5>
@@ -16176,6 +16186,18 @@ export default function UnifiedAdminDashboard() {
                       <div className="flex justify-between text-emerald-600 font-bold">
                         <span>បញ្ចុះតម្លៃ ({ord.coupon_code || 'Promo'}):</span>
                         <span className="font-mono">-${discountAmt.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {deliveryFeeAmt > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>ថ្លៃដឹកជញ្ជូន ({deliveryMeta?.destination || 'ដឹកជញ្ជូន'}):</span>
+                        <span className="font-mono text-slate-900">+${deliveryFeeAmt.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {taxAmt > 0 && (
+                      <div className="flex justify-between text-slate-600">
+                        <span>{taxMeta?.tax_label || 'ពន្ធអាករ (VAT)'}:</span>
+                        <span className="font-mono text-slate-900">+${taxAmt.toFixed(2)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-slate-600">

@@ -264,7 +264,7 @@ export default function WorldStandardFinanceView({
 
     // Cost of Goods Sold (COGS - ថ្លៃដើមទំនិញដែលបានលក់ចេញ)
     const totalCOGS = filteredOrders.reduce((sum, o) => {
-      const items = Array.isArray(o.items) ? o.items.filter(it => !it.is_tax_meta) : [];
+      const items = Array.isArray(o.items) ? o.items.filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title)) : [];
       const orderCost = items.reduce((iSum, it) => {
         const prod = products.find(p => String(p.id) === String(it.id));
         const costPerUnit = prod && prod.cost_price ? parseFloat(prod.cost_price) : 0;

@@ -308,7 +308,7 @@ export default function OrderTrackingPage() {
                 {/* Selected Order Full Details Card */}
                 {selectedOrder && (() => {
                   const step = getStatusStep(selectedOrder.status);
-                  const items = (selectedOrder.items && Array.isArray(selectedOrder.items) ? selectedOrder.items : []).filter(it => !it.is_tax_meta);
+                  const items = (selectedOrder.items && Array.isArray(selectedOrder.items) ? selectedOrder.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
                   const orderDate = selectedOrder.created_at ? new Date(selectedOrder.created_at).toLocaleString('km-KH') : 'ថ្មីៗនេះ';
 
                   const rawAddress = selectedOrder.address || selectedOrder.delivery_address || '';
