@@ -15302,11 +15302,12 @@ export default function UnifiedAdminDashboard() {
             ) : (
               <>
               {/* ⭐️ DESKTOP ORDERS TABLE (hidden md:block) ⭐️ */}
-              <div className="hidden md:block overflow-x-auto">
+              <div className="hidden md:block overflow-x-auto min-h-[380px]">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
                       <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">Order ID</th>
+                      <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">ទំនិញ (Items)</th>
                       <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">កាលបរិច្ឆេទ</th>
                       <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">អតិថិជន</th>
                       <th className="px-6 py-4 font-black text-xs text-gray-500 uppercase">ប្រភេទ</th>
@@ -15324,10 +15325,128 @@ export default function UnifiedAdminDashboard() {
                       if (order.status === 'Cancelled') statusColor = 'bg-red-50 text-red-700 border-red-200';
 
                       const displayId = order.order_id || order.id;
+                      const orderItems = (Array.isArray(order.items) ? order.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && !it.is_pos_meta && (it.name || it.title));
 
                       return (
                         <tr key={order.id} id={`order-row-${order.id}`} className={`hover:bg-gray-50/80 transition ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset animate-pulse' : ''}`}>
                           <td className="px-6 py-4 font-black text-blue-600 text-xs">{displayId}</td>
+                          
+                          {/* ⭐️ រូបថតទំនិញដែលបានលក់ & Hover Zoom Preview ⭐️ */}
+                          <td className="px-6 py-4">
+                            {orderItems.length === 0 ? (
+                              <span className="text-xs text-gray-400 font-bold italic">គ្មានទិន្នន័យ</span>
+                            ) : (
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {orderItems.slice(0, 3).map((it, idx) => {
+                                    const matchedProd = currentStoreProducts?.find(p => String(p.id) === String(it.id) || (p.sku && it.sku && p.sku === it.sku));
+                                    const imgUrl = it.image_url || it.image || matchedProd?.image_url || '';
+                                    const itemName = it.name || it.title || matchedProd?.name || 'ទំនិញ';
+                                    const itemSku = it.sku || matchedProd?.sku || '';
+                                    const itemQty = parseInt(it.qty || it.quantity || 1) || 1;
+                                    const itemPrice = parseFloat(it.price || 0) || 0;
+                                    const itemSize = it.size || '';
+                                    const itemColor = it.color || '';
+
+                                    return (
+                                      <div key={idx} className="relative group/preview inline-block shrink-0">
+                                        <div className="relative cursor-pointer">
+                                          {imgUrl ? (
+                                            <img 
+                                              src={imgUrl} 
+                                              alt={itemName} 
+                                              className="w-10 h-10 rounded-xl object-cover bg-gray-100 border border-gray-200 shadow-2xs group-hover/preview:scale-110 group-hover/preview:border-blue-500 group-hover/preview:ring-2 group-hover/preview:ring-blue-400 transition-all duration-150"
+                                            />
+                                          ) : (
+                                            <div className="w-10 h-10 rounded-xl bg-gray-100 border border-dashed border-gray-300 flex items-center justify-center text-sm shadow-2xs group-hover/preview:scale-105 transition">
+                                              🛍️
+                                            </div>
+                                          )}
+                                          {itemQty > 1 && (
+                                            <span className="absolute -top-1.5 -right-1.5 bg-blue-600 text-white font-mono text-[9px] font-black px-1.5 py-0.2 rounded-full border border-white shadow-2xs">
+                                              x{itemQty}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* 🔍 Pop-up Large Zoom Preview on Hover */}
+                                        <div className="absolute left-14 top-1/2 -translate-y-1/2 z-50 w-64 p-3.5 bg-white rounded-3xl shadow-2xl border-2 border-slate-900 opacity-0 invisible group-hover/preview:opacity-100 group-hover/preview:visible transition-all duration-200 pointer-events-none drop-shadow-2xl">
+                                          <div className="w-full h-52 bg-gray-50 rounded-2xl overflow-hidden flex items-center justify-center border border-gray-100 p-1">
+                                            {imgUrl ? (
+                                              <img src={imgUrl} alt={itemName} className="w-full h-full object-contain" />
+                                            ) : (
+                                              <span className="text-4xl">🛍️</span>
+                                            )}
+                                          </div>
+                                          <div className="mt-2.5 px-1 space-y-1.5">
+                                            <p className="text-xs font-black text-gray-900 line-clamp-2 leading-tight" title={itemName}>
+                                              {itemName}
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                                              {itemSku && (
+                                                <span className="font-mono font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                                  SKU: {itemSku}
+                                                </span>
+                                              )}
+                                              {itemSize && (
+                                                <span className="font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-800">
+                                                  Size: {itemSize}
+                                                </span>
+                                              )}
+                                              {itemColor && (
+                                                <span className="font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                                  {itemColor}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center justify-between pt-1.5 border-t border-gray-100 text-[11px] font-bold">
+                                              <span className="text-gray-500">
+                                                ចំនួន: <b className="text-blue-600 font-mono">x{itemQty}</b>
+                                              </span>
+                                              <span className="text-emerald-600 font-mono font-black text-xs">
+                                                ${(itemPrice * itemQty).toFixed(2)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+
+                                  {orderItems.length > 3 && (
+                                    <span className="text-[10px] font-black text-gray-500 bg-gray-100 px-1.5 py-1 rounded-lg border border-gray-200 shrink-0">
+                                      +{orderItems.length - 3}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Item info beside thumbnail (Name & Size) */}
+                                <div className="min-w-0 max-w-[150px]">
+                                  {(() => {
+                                    const firstIt = orderItems[0];
+                                    const matched = currentStoreProducts?.find(p => String(p.id) === String(firstIt.id) || (p.sku && firstIt.sku && p.sku === firstIt.sku));
+                                    const name = firstIt.name || firstIt.title || matched?.name || 'ទំនិញ';
+                                    const size = firstIt.size || '';
+                                    return (
+                                      <>
+                                        <p className="text-xs font-black text-gray-900 truncate" title={name}>
+                                          {name}
+                                        </p>
+                                        <p className="text-[10px] text-gray-400 font-bold truncate">
+                                          {size && <span className="text-orange-600 font-mono mr-1">Size: {size}</span>}
+                                          {orderItems.length > 1 ? (
+                                            <span className="text-blue-600 font-bold">({orderItems.length} មុខ)</span>
+                                          ) : (
+                                            <span className="text-gray-500 font-mono">x{firstIt.qty || firstIt.quantity || 1}</span>
+                                          )}
+                                        </p>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {(() => {
                               const rawDate = order.created_at || order.date;
@@ -15638,20 +15757,47 @@ export default function UnifiedAdminDashboard() {
 
                       {/* Customer & Total */}
                       <div className="flex items-start justify-between gap-2 pt-0.5">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-black text-xs text-gray-900 truncate">
-                            {order.customer || 'អតិថិជនទូទៅ'}
-                          </p>
-                          {order.phone && (
-                            <p className="text-[10px] text-gray-400 font-mono font-bold mt-0.5">
-                              📞 {order.phone}
+                        <div className="min-w-0 flex-1 flex items-start gap-2.5">
+                          {items.length > 0 && (() => {
+                            const firstIt = items[0];
+                            const matched = currentStoreProducts?.find(p => String(p.id) === String(firstIt.id) || (p.sku && firstIt.sku && p.sku === firstIt.sku));
+                            const imgUrl = firstIt.image_url || firstIt.image || matched?.image_url || '';
+                            return (
+                              <div className="relative group/mpreview shrink-0">
+                                <div className="w-11 h-11 rounded-xl overflow-hidden bg-gray-100 border border-gray-200 shadow-2xs">
+                                  {imgUrl ? (
+                                    <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-base">🛍️</div>
+                                  )}
+                                </div>
+                                {imgUrl && (
+                                  <div className="absolute left-12 top-0 z-50 w-52 p-2 bg-white rounded-2xl shadow-2xl border-2 border-slate-900 opacity-0 invisible group-hover/mpreview:opacity-100 group-hover/mpreview:visible transition-all duration-200 pointer-events-none">
+                                    <div className="w-full h-44 bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center p-1">
+                                      <img src={imgUrl} alt="" className="w-full h-full object-contain" />
+                                    </div>
+                                    <p className="text-[11px] font-black text-gray-900 truncate mt-1">{firstIt.name}</p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          <div className="min-w-0 flex-1">
+                            <p className="font-black text-xs text-gray-900 truncate">
+                              {order.customer || 'អតិថិជនទូទៅ'}
                             </p>
-                          )}
-                          {items.length > 0 && (
-                            <p className="text-[10px] text-gray-500 mt-1 line-clamp-1">
-                              📦 {items.map(it => `${it.name || 'ទំនិញ'} x${it.quantity || it.qty || 1}`).join(', ')}
-                            </p>
-                          )}
+                            {order.phone && (
+                              <p className="text-[10px] text-gray-400 font-mono font-bold mt-0.5">
+                                📞 {order.phone}
+                              </p>
+                            )}
+                            {items.length > 0 && (
+                              <p className="text-[10px] text-gray-500 mt-1 line-clamp-1">
+                                📦 {items.map(it => `${it.name || 'ទំនិញ'} x${it.quantity || it.qty || 1}${it.size ? ` (${it.size})` : ''}`).join(', ')}
+                              </p>
+                            )}
+                          </div>
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-sm font-black text-emerald-600 font-mono">
