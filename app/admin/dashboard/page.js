@@ -2453,6 +2453,98 @@ export default function UnifiedAdminDashboard() {
   const [pointsHistoryModalOpen, setPointsHistoryModalOpen] = useState(false);
   const [debtReminderCustomer, setDebtReminderCustomer] = useState(null);
   const [debtReminderModalOpen, setDebtReminderModalOpen] = useState(false);
+  const [debtReminderTelegram, setDebtReminderTelegram] = useState('');
+  const [debtReminderSending, setDebtReminderSending] = useState(false);
+  const [debtReminderSentStatus, setDebtReminderSentStatus] = useState(null);
+
+  // ⭐️ Helper បើកផ្ទាំងដាស់តឿនបំណុល និងទាញយក Telegram អតិថិជន
+  const handleOpenDebtReminderModal = (cust) => {
+    if (!cust) return;
+    setDebtReminderCustomer(cust);
+    setDebtReminderTelegram((cust.telegram || '').replace(/^@/, ''));
+    setDebtReminderSentStatus(null);
+    setDebtReminderModalOpen(true);
+  };
+
+  // ⭐️ រក្សាទុក Telegram អតិថិជនភ្លាមៗពីក្នុង Modal ដាស់តឿន
+  const handleSaveCustomerTelegram = async () => {
+    if (!debtReminderCustomer) return;
+    const cleanTg = (debtReminderTelegram || '').trim().replace(/^@/, '');
+    const updatedCust = { ...debtReminderCustomer, telegram: cleanTg };
+    setDebtReminderCustomer(updatedCust);
+
+    // Update in customers state
+    setCustomers(prev => prev.map(c => c.id === debtReminderCustomer.id ? { ...c, telegram: cleanTg } : c));
+
+    // Update Supabase
+    try {
+      await supabase.from('customers').update({ telegram: cleanTg }).eq('id', debtReminderCustomer.id);
+    } catch (e) {
+      console.warn('Update customer telegram in cloud error:', e);
+    }
+
+    // Update LocalStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('sabay_customers');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const next = parsed.map(c => c.id === debtReminderCustomer.id ? { ...c, telegram: cleanTg } : c);
+          localStorage.setItem('sabay_customers', JSON.stringify(next));
+        }
+      } catch (_) {}
+    }
+
+    setToastNotification(`✅ បានរក្សាទុក Telegram @${cleanTg || 'N/A'} ជូនអតិថិជន "${debtReminderCustomer.name}"!`);
+    setTimeout(() => setToastNotification(null), 3000);
+  };
+
+  // ⭐️ ផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិតាម Telegram Bot
+  const handleSendDebtReminderAuto = async (reminderMsg) => {
+    if (!debtReminderCustomer) return;
+    setDebtReminderSending(true);
+    setDebtReminderSentStatus(null);
+
+    const cleanTg = (debtReminderTelegram || '').trim().replace(/^@/, '');
+    if (cleanTg && cleanTg !== debtReminderCustomer.telegram) {
+      await handleSaveCustomerTelegram();
+    }
+
+    try {
+      const metrics = getCustomerMetrics(debtReminderCustomer);
+      const res = await sendTelegramNotification({
+        action: 'debt_reminder',
+        customer: {
+          ...debtReminderCustomer,
+          telegram: cleanTg || debtReminderCustomer.telegram,
+          debtBalance: metrics.debtBalance,
+          dueDate: metrics.debtDueDate
+        },
+        message: reminderMsg
+      });
+
+      if (res?.success) {
+        setDebtReminderSentStatus({
+          type: 'success',
+          msg: '✅ បានផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិតាម Telegram Bot ជោគជ័យ!'
+        });
+        setToastNotification('✈️ បានផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិ!');
+        setTimeout(() => setToastNotification(null), 3500);
+      } else {
+        setDebtReminderSentStatus({
+          type: 'error',
+          msg: `❌ ${res?.message || 'សូមពិនិត្យមើលការភ្ជាប់ Telegram Bot ក្នុង Settings'}`
+        });
+      }
+    } catch (err) {
+      setDebtReminderSentStatus({
+        type: 'error',
+        msg: `❌ Error: ${err.message}`
+      });
+    } finally {
+      setDebtReminderSending(false);
+    }
+  };
 
   // Customer Form - Additional Debt & Loyalty fields
   const [custFormDebtLimit, setCustFormDebtLimit] = useState('200');
@@ -29698,10 +29790,7 @@ export default function UnifiedAdminDashboard() {
                         <span className="text-rose-200 font-black">(${m.debtBalance.toFixed(2)})</span>
                         <button
                           type="button"
-                          onClick={() => {
-                            setDebtReminderCustomer(oc);
-                            setDebtReminderModalOpen(true);
-                          }}
+                          onClick={() => handleOpenDebtReminderModal(oc)}
                           className="bg-white text-rose-700 hover:bg-rose-50 text-[10px] font-black px-2 py-0.5 rounded-lg shadow-xs transition cursor-pointer"
                         >
                           💬 រំលឹក
@@ -30244,10 +30333,7 @@ export default function UnifiedAdminDashboard() {
                             {metric.debtBalance > 0 && (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setDebtReminderCustomer(c);
-                                  setDebtReminderModalOpen(true);
-                                }}
+                                onClick={() => handleOpenDebtReminderModal(c)}
                                 title="ផ្ញើសាររំលឹកបំណុលតាម Telegram / Phone"
                                 className="px-2 py-1 text-xs font-black text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs"
                               >
@@ -31573,6 +31659,43 @@ export default function UnifiedAdminDashboard() {
                     )}
                   </div>
 
+                  {/* ⭐️ TELEGRAM របស់អតិថិជន (CUSTOMER TELEGRAM ACCOUNT) ⭐️ */}
+                  <div className="p-3.5 bg-sky-50/80 border border-sky-200 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-black text-sky-950 uppercase flex items-center gap-1.5">
+                        <span>✈️</span> គណនី Telegram របស់អតិថិជន:
+                      </label>
+                      {c.telegram && (
+                        <span className="text-[10px] font-bold text-sky-700 bg-white px-2 py-0.5 rounded-lg border border-sky-200">
+                          Profile: @{c.telegram.replace(/^@/, '')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sky-600 font-black text-xs">@</span>
+                        <input
+                          type="text"
+                          value={debtReminderTelegram}
+                          onChange={(e) => setDebtReminderTelegram(e.target.value)}
+                          placeholder="username (ឧ. sokvila ឬ 010123456)"
+                          className="w-full pl-7 pr-3 py-2 bg-white border border-sky-300 focus:border-sky-600 rounded-xl text-xs font-bold text-gray-900 outline-none shadow-inner font-mono"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomerTelegram}
+                        className="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer shrink-0 active:scale-95 flex items-center gap-1"
+                        title="រក្សាទុក Telegram នេះទៅក្នុង Profile អតិថិជន"
+                      >
+                        <span>💾</span> រក្សាទុក
+                      </button>
+                    </div>
+                    <p className="text-[10.5px] text-sky-700 leading-tight">
+                      💡 អាចវាយបញ្ចូល Telegram Username (ឧ. sok_vila) ឬលេខទូរស័ព្ទរបស់ភ្ញៀវ រួចចុច <b>"រក្សាទុក"</b> ឬចុចផ្ញើសារបានភ្លាមៗ។
+                    </p>
+                  </div>
+
                   {/* Ready-to-send Message */}
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5 flex items-center justify-between">
@@ -31582,39 +31705,84 @@ export default function UnifiedAdminDashboard() {
                         onClick={() => {
                           if (typeof navigator !== 'undefined') {
                             navigator.clipboard.writeText(reminderMsg);
-                            alert('✅ បានចម្លងអត្ថបទសារដាស់តឿនជោគជ័យ!');
+                            setToastNotification('✅ បានចម្លងអត្ថបទសារដាស់តឿនជោគជ័យ!');
+                            setTimeout(() => setToastNotification(null), 2500);
                           }
                         }}
-                        className="text-blue-600 hover:underline text-[11px] font-black cursor-pointer"
+                        className="text-blue-600 hover:underline text-[11px] font-black cursor-pointer flex items-center gap-1"
                       >
-                        📋 ចម្លងសារ (Copy)
+                        <span>📋</span> ចម្លងសារ (Copy)
                       </button>
                     </label>
                     <textarea
                       readOnly
-                      rows="5"
+                      rows="4"
                       value={reminderMsg}
                       className="w-full text-xs font-bold p-3 rounded-2xl border border-gray-200 bg-gray-50 text-gray-800 outline-none leading-relaxed select-all"
                     />
                   </div>
 
-                  {/* Quick Action Buttons */}
+                  {/* Sent Feedback Notification Banner */}
+                  {debtReminderSentStatus && (
+                    <div className={`p-3 rounded-2xl text-xs font-black animate-in fade-in flex items-center gap-2 ${
+                      debtReminderSentStatus.type === 'success'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs'
+                        : 'bg-rose-50 text-rose-800 border border-rose-300'
+                    }`}>
+                      <span className="text-sm">{debtReminderSentStatus.type === 'success' ? '✅' : '❌'}</span>
+                      <span>{debtReminderSentStatus.msg}</span>
+                    </div>
+                  )}
+
+                  {/* Quick Action Buttons (Auto Send & Direct Telegram) */}
                   <div className="space-y-2 pt-1">
-                    {c.telegram && (
-                      <a
-                        href={`https://t.me/${c.telegram.replace(/^@/, '')}?text=${encodeURIComponent(reminderMsg)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-black text-xs py-3 rounded-2xl transition flex items-center justify-center gap-2 shadow-md shadow-sky-500/20"
-                      >
-                        <span>✈️</span>
-                        <span>ផ្ញើសារតាម Telegram ទៅ @{c.telegram.replace(/^@/, '')}</span>
-                      </a>
-                    )}
+                    {/* ⭐️ BUTTON 1: ⚡ ផ្ញើសារ Auto ទៅកាន់ភ្ញៀវ (AUTO BOT SEND) ⭐️ */}
+                    <button
+                      type="button"
+                      onClick={() => handleSendDebtReminderAuto(reminderMsg)}
+                      disabled={debtReminderSending}
+                      className="w-full bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black text-xs sm:text-sm py-3 rounded-2xl transition flex items-center justify-center gap-2 shadow-lg shadow-sky-500/25 cursor-pointer active:scale-98 disabled:opacity-50"
+                    >
+                      {debtReminderSending ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+                          <span>កំពុងផ្ញើសារ Auto ទៅកាន់ភ្ញៀវ...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-base">⚡</span>
+                          <span>ផ្ញើសារ Auto ទៅកាន់ភ្ញៀវ (Auto Bot Send)</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* ⭐️ BUTTON 2: ✈️ បើក Chat Telegram ផ្ទាល់ (DIRECT CHAT WITH PREFILLED TEXT) ⭐️ */}
+                    {(() => {
+                      const activeTg = (debtReminderTelegram || c.telegram || '').replace(/^@/, '').trim();
+                      if (activeTg) {
+                        return (
+                          <a
+                            href={`https://t.me/${activeTg}?text=${encodeURIComponent(reminderMsg)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => {
+                              if (activeTg !== (c.telegram || '')) handleSaveCustomerTelegram();
+                            }}
+                            className="w-full bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 font-black text-xs py-2.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer active:scale-98"
+                          >
+                            <span>✈️</span>
+                            <span>បើក Chat Telegram ផ្ទាល់ទៅ @{activeTg} (Auto បញ្ចូលសារ)</span>
+                          </a>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    {/* ⭐️ BUTTON 3: 📞 ខលទូរស័ព្ទផ្ទាល់ ⭐️ */}
                     {c.phone && (
                       <a
                         href={`tel:${c.phone}`}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-sm"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-2.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-98"
                       >
                         <span>📞</span>
                         <span>ខលទូរស័ព្ទផ្ទាល់ទៅកាន់ {c.phone}</span>

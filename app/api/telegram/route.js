@@ -652,6 +652,26 @@ export async function POST(request) {
         (z.notes ? `📝 <b>កំណត់ហេតុបិទវេន:</b> <i>${z.notes}</i>\n` : '') +
         `━━━━━━━━━━━━━━━━━━\n` +
         `⚡ <i>របាយការណ៍បិទបញ្ជីត្រូវបានកត់ត្រាចូលប្រព័ន្ធដោយជោគជ័យ!</i>`;
+    } else if (action === 'debt_reminder') {
+      const cust = body.customer || {};
+      const custName = escapeHtml(cust.name || 'អតិថិជន');
+      const custPhone = escapeHtml(cust.phone || '');
+      const custTg = escapeHtml((cust.telegram || '').replace(/^@/, ''));
+      const debtAmount = Number(cust.debtBalance || cust.debt_balance || body.debtBalance || 0).toFixed(2);
+      const dueDate = cust.debtDueDate || cust.dueDate || body.dueDate || '';
+
+      finalMessage = body.message ? body.message : (
+        `⚠️ <b>សាររំលឹកពីការទូទាត់បំណុល (DEBT REMINDER NOTICE)</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🏪 <b>ហាង:</b> <b>${escapeHtml(storeName || 'SABAY LUK')}</b>\n` +
+        `👤 <b>អតិថិជន:</b> <b>${custName}</b>\n` +
+        (custPhone ? `📞 <b>លេខទូរស័ព្ទ:</b> <code>${custPhone}</code>\n` : '') +
+        (custTg ? `✈️ <b>Telegram:</b> @${custTg}\n` : '') +
+        `💰 <b>ទឹកប្រាក់ជំពាក់សរុប:</b> <b>$${debtAmount}</b>\n` +
+        (dueDate ? `📅 <b>កាលបរិច្ឆេទកំណត់សង:</b> <b>${escapeHtml(dueDate)}</b>\n` : '') +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `<i>សូមលោក/លោកស្រីមេត្តាជួយទូទាត់បំណុលតាមការកំណត់។ សូមអរគុណ! 🙏✨</i>`
+      );
     }
 
     if (!finalMessage) {
@@ -667,8 +687,10 @@ export async function POST(request) {
       });
     }
 
+    const targetChat = body.targetChatId || body.targetChat || chat;
+
     const payload = {
-      chat_id: chat,
+      chat_id: targetChat,
       text: finalMessage,
       parse_mode: 'HTML'
     };
