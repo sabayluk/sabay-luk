@@ -2913,91 +2913,176 @@ export default function UnifiedAdminDashboard() {
     const storePhone = store?.phone || storeSettings.phone || '096 720 5522';
     const storeAddress = store?.address || storeSettings.address || 'ភ្នំពេញ, កម្ពុជា';
     const curBalance = parseFloat(customer.debt_balance || 0);
+    const limit = parseFloat(customer.debt_limit || 200);
+    const availableCredit = Math.max(0, limit - curBalance);
     const history = customer.debt_history || [];
+    const exchangeRate = storeSettings.exchangeRate || 4100;
+    const isOverdue = curBalance > 0 && customer.debt_due_date && new Date(customer.debt_due_date).getTime() < Date.now();
 
-    const printWin = window.open('', '_blank', 'width=500,height=700');
+    const printWin = window.open('', '_blank', 'width=520,height=750');
     if (!printWin) {
       window.print();
       return;
     }
 
-    const rowsHtml = history.length === 0 ? `
-      <tr><td colspan="4" style="text-align:center; padding:10px; color:#888;">មិនមានប្រវត្តិប្រតិបត្តិការឡើយ</td></tr>
-    ` : history.map(h => `
-      <tr style="border-bottom: 1px dashed #ddd; font-size: 10px;">
-        <td style="padding: 4px 0;">${new Date(h.date).toLocaleDateString('km-KH')}</td>
-        <td style="padding: 4px 0;">${h.type === 'CHARGE' ? '📦 ជំពាក់' : '💵 សង'} (${h.note || ''})</td>
-        <td style="padding: 4px 0; text-align: right; color: ${h.type === 'CHARGE' ? '#dc2626' : '#16a34a'}; font-weight: bold;">
-          ${h.type === 'CHARGE' ? '+' : '-'}$${parseFloat(h.amount || 0).toFixed(2)}
-        </td>
-        <td style="padding: 4px 0; text-align: right; font-weight: bold;">$${parseFloat(h.remaining_balance || 0).toFixed(2)}</td>
-      </tr>
-    `).join('');
+    const itemsHtml = history.length === 0 ? `
+      <div style="text-align:center; padding:15px; color:#888; font-size:11px;">មិនមានប្រវត្តិប្រតិបត្តិការឡើយ</div>
+    ` : history.map(h => {
+      const isCharge = h.type === 'CHARGE';
+      const d = h.date ? new Date(h.date) : new Date();
+      const dateStr = !isNaN(d.getTime()) ? d.toLocaleDateString('km-KH') : (h.date || '');
+      const timeStr = !isNaN(d.getTime()) ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+      
+      // Look up matched order for detailed products
+      const matchedOrder = h.order_id 
+        ? (currentStoreOrders?.find(o => String(o.order_id || o.id) === String(h.order_id)) || realOrders?.find(o => String(o.order_id || o.id) === String(h.order_id)))
+        : null;
+      
+      const orderItems = (matchedOrder && Array.isArray(matchedOrder.items))
+        ? matchedOrder.items.filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && !it.is_pos_meta && (it.name || it.title))
+        : [];
+
+      return `
+        <div style="padding: 6px 0; border-bottom: 1px dashed #bbb; font-size: 10px; line-height: 1.4;">
+          <!-- Header of transaction: Date/Time + Type badge -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+            <span style="font-weight: bold; color: #111;">
+              📅 ${dateStr} ${timeStr ? `🕒 ${timeStr}` : ''}
+            </span>
+            <span style="font-weight: bold; font-size: 9.5px; padding: 1px 6px; border-radius: 4px; border: 1px solid ${isCharge ? '#fca5a5' : '#86efac'}; background-color: ${isCharge ? '#fee2e2' : '#dcfce7'}; color: ${isCharge ? '#b91c1c' : '#15803d'};">
+              ${isCharge ? '📦 ជំពាក់ (DEBT)' : '💵 សង (REPAID)'}
+            </span>
+          </div>
+
+          <!-- Order Reference -->
+          ${h.order_id ? `
+            <div style="font-weight: bold; color: #1d4ed8; font-size: 10px; margin-bottom: 2px;">
+              🧾 វិក្កយបត្រ: #${h.order_id}
+            </div>
+          ` : ''}
+
+          <!-- Detailed items list if matched -->
+          ${orderItems.length > 0 ? `
+            <div style="background-color: #f1f5f9; border-left: 2.5px solid #64748b; padding: 3px 6px; margin: 3px 0; border-radius: 2px; font-size: 9.5px;">
+              <div style="font-weight: bold; color: #334155; margin-bottom: 2px;">🛍️ មុខទំនិញលម្អិត:</div>
+              ${orderItems.map(it => `
+                <div style="display: flex; justify-content: space-between; color: #0f172a; margin-left: 3px;">
+                  <span>• ${it.name || 'ទំនិញ'} ${it.size ? `[Size: ${it.size}]` : ''} ${it.color && it.color !== 'N/A' ? `[${it.color}]` : ''} x${it.qty || it.quantity || 1}</span>
+                  <span style="font-weight: bold;">$${(parseFloat(it.price || 0) * (it.qty || it.quantity || 1)).toFixed(2)}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+
+          <!-- Note -->
+          ${h.note ? `
+            <div style="color: #4b5563; font-size: 9px; margin: 2px 0;">
+              📝 ចំណាំ: ${h.note}
+            </div>
+          ` : ''}
+
+          <!-- Due Date & Cashier -->
+          <div style="display: flex; justify-content: space-between; font-size: 9px; color: #64748b; margin-top: 2px;">
+            <span>${h.due_date ? `<b style="color: #dc2626;">⏳ ថ្ងៃកំណត់សង: ${h.due_date}</b>` : ''}</span>
+            <span>អ្នកកត់ត្រា: ${h.recorded_by || 'Admin'}</span>
+          </div>
+
+          <!-- Transaction Amount vs Remaining Balance -->
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px; padding-top: 3px; border-top: 1px dotted #ccc; font-size: 10.5px;">
+            <span>ទឹកប្រាក់: <b style="font-size: 11px; color: ${isCharge ? '#dc2626' : '#16a34a'};">${isCharge ? '+' : '-'}$${parseFloat(h.amount || 0).toFixed(2)}</b></span>
+            <span>បំណុលនៅសល់: <b style="font-size: 11px; color: #000;">$${parseFloat(h.remaining_balance || 0).toFixed(2)}</b></span>
+          </div>
+        </div>
+      `;
+    }).join('');
 
     printWin.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8" />
           <title>Debt Statement - ${customer.name}</title>
           <style>
             @page { size: 80mm auto; margin: 0; }
-            body { font-family: monospace; width: 76mm; margin: 0 auto; padding: 5mm 2mm; font-size: 11px; line-height: 1.3; color: #000; }
+            body { font-family: 'Courier New', Courier, monospace, 'Khmer OS Battambang', 'Segoe UI', Tahoma, sans-serif; width: 74mm; margin: 0 auto; padding: 4mm 2mm; font-size: 10.5px; line-height: 1.35; color: #000; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
             .dashed { border-bottom: 1px dashed #000; margin: 6px 0; }
-            table { width: 100%; border-collapse: collapse; }
           </style>
         </head>
         <body>
           <div class="center">
-            <h2 style="margin: 0; font-size: 16px;">${storeName}</h2>
-            <p style="margin: 2px 0; font-size: 10px;">${storePhone} • ${storeAddress}</p>
+            <h2 style="margin: 0; font-size: 16px; text-transform: uppercase;">${storeName}</h2>
+            <p style="margin: 2px 0; font-size: 9.5px; color: #333;">${storePhone} • ${storeAddress}</p>
             <div class="dashed"></div>
-            <h3 style="margin: 4px 0; font-size: 13px;">*** របាយការណ៍បំណុលអតិថិជន ***</h3>
-            <div style="font-size: 10px; font-weight: bold; color: #333;">STATEMENT OF ACCOUNT</div>
+            <h3 style="margin: 3px 0; font-size: 12.5px;">*** របាយការណ៍បំណុលអតិថិជន ***</h3>
+            <div style="font-size: 9.5px; font-weight: bold; color: #444; letter-spacing: 0.5px;">STATEMENT OF ACCOUNT (LEDGER)</div>
             <div class="dashed"></div>
           </div>
 
-          <div style="font-size: 10px; margin-bottom: 6px;">
+          <div style="font-size: 10px; margin-bottom: 6px; line-height: 1.45;">
             <div><b>អតិថិជន:</b> ${customer.name}</div>
             <div><b>ទូរស័ព្ទ:</b> ${customer.phone || 'មិនមាន'}</div>
             ${customer.address ? `<div><b>អាសយដ្ឋាន:</b> ${customer.address}</div>` : ''}
             <div><b>កាលបរិច្ឆេទចេញ:</b> ${new Date().toLocaleString('km-KH')}</div>
-            ${customer.debt_due_date ? `<div><b>កាលកំណត់សង:</b> ${customer.debt_due_date}</div>` : ''}
+            <div><b>កម្រិតបំណុលអនុញ្ញាត:</b> $${limit.toFixed(2)}</div>
+            ${customer.debt_due_date ? `<div style="color: #dc2626;"><b>ថ្ងៃកំណត់សងចុងក្រោយ:</b> ${customer.debt_due_date}</div>` : ''}
+          </div>
+
+          <div class="dashed"></div>
+          <div style="font-size: 10px; font-weight: bold; text-align: center; background: #e2e8f0; padding: 2px 0; margin-bottom: 4px;">
+            ប្រវត្តិប្រតិបត្តិការជំពាក់ & សងប្រាក់
+          </div>
+
+          <div style="margin-bottom: 6px;">
+            ${itemsHtml}
           </div>
 
           <div class="dashed"></div>
 
-          <table>
-            <thead>
-              <tr style="border-bottom: 1px solid #000; font-size: 10px;">
-                <th style="text-align: left; padding: 2px 0;">កាលបរិច្ឆេទ</th>
-                <th style="text-align: left; padding: 2px 0;">ប្រតិបត្តិការ</th>
-                <th style="text-align: right; padding: 2px 0;">ទឹកប្រាក់</th>
-                <th style="text-align: right; padding: 2px 0;">នៅសល់</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
-          </table>
-
-          <div class="dashed"></div>
-
-          <div style="margin: 6px 0; font-size: 12px;">
-            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; color: #dc2626;">
-              <span>បំណុលនៅសល់សរុប:</span>
+          <!-- Total Balance Summary Box -->
+          <div style="margin: 6px 0; font-size: 11px; line-height: 1.5; background: #f8fafc; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px;">
+            <div style="display: flex; justify-content: space-between; color: #475569;">
+              <span>កម្រិតបំណុល (Credit Limit):</span>
+              <span class="bold">$${limit.toFixed(2)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 13.5px; color: #dc2626; margin-top: 3px; padding-top: 2px; border-top: 1px dotted #ccc;">
+              <span>បំណុលនៅសល់សរុប (TOTAL DUE):</span>
               <span>$${curBalance.toFixed(2)}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #444;">
-              <span>ជាប្រាក់រៀល:</span>
-              <span class="bold">${Math.round(curBalance * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛</span>
+            <div style="display: flex; justify-content: space-between; font-size: 10.5px; color: #1e293b;">
+              <span>គិតជាប្រាក់រៀល (IN KHR):</span>
+              <span class="bold">${Math.round(curBalance * exchangeRate).toLocaleString()} ៛</span>
             </div>
+            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #15803d; margin-top: 2px;">
+              <span>នៅសល់អាចជំពាក់បាន (Available Credit):</span>
+              <span class="bold">$${availableCredit.toFixed(2)}</span>
+            </div>
+            ${isOverdue ? `
+              <div style="color: #dc2626; font-weight: bold; font-size: 9.5px; text-align: center; margin-top: 4px; background: #fee2e2; padding: 3px; border-radius: 3px; border: 1px solid #fca5a5;">
+                🚨 ស្ថានភាព: ហួសកាលកំណត់សង! សូមរួសរាន់ទូទាត់!
+              </div>
+            ` : ''}
           </div>
 
           <div class="dashed"></div>
 
-          <div style="font-size: 9px; margin-top: 15px; text-align: center; color: #555;">
-            សូមពិនិត្យ និងទូទាត់ប្រាក់ឱ្យបានទាន់ពេលវេលា។ សូមអរគុណ!
+          <!-- Official Signatures -->
+          <div style="display: flex; justify-content: space-between; margin-top: 18px; margin-bottom: 12px; font-size: 9.5px; text-align: center;">
+            <div style="width: 46%;">
+              <div style="font-weight: bold;">ហត្ថលេខាអតិថិជន</div>
+              <div style="margin-top: 30px; border-bottom: 1px dotted #000;"></div>
+              <div style="margin-top: 3px; color: #555; font-size: 9px;">${customer.name}</div>
+            </div>
+            <div style="width: 46%;">
+              <div style="font-weight: bold;">ហត្ថលេខាអ្នកគិតលុយ/ហាង</div>
+              <div style="margin-top: 30px; border-bottom: 1px dotted #000;"></div>
+              <div style="margin-top: 3px; color: #555; font-size: 9px;">${storeName}</div>
+            </div>
+          </div>
+
+          <div style="font-size: 9px; margin-top: 10px; text-align: center; color: #555; line-height: 1.3;">
+            *** សូមពិនិត្យ និងទូទាត់ប្រាក់ឱ្យបានទាន់ពេលវេលា។ សូមអរគុណ! ***
           </div>
 
           <script>
@@ -31483,20 +31568,28 @@ export default function UnifiedAdminDashboard() {
           const c = selectedDebtCustomerForLedger;
           const m = getCustomerMetrics(c);
           const history = c.debt_history || [];
+          const availableCredit = Math.max(0, m.debtLimit - m.debtBalance);
+
           return (
-            <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-              <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-rose-50 via-orange-50/40 to-white shrink-0">
+            <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+              <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-rose-50 via-orange-50/30 to-white shrink-0">
                   <div className="flex items-center gap-3">
-                    <span className="p-2.5 bg-rose-600 text-white rounded-2xl text-lg shadow-md shadow-rose-500/20">
+                    <span className="p-2.5 bg-rose-600 text-white rounded-2xl text-xl shadow-md shadow-rose-500/20">
                       📜
                     </span>
                     <div>
-                      <h3 className="font-black text-gray-900 text-base flex items-center gap-2">
-                        របាយការណ៍បំណុល (Statement of Account)
-                      </h3>
-                      <p className="text-[11px] text-gray-500 font-bold">
-                        {c.name} • {c.phone || 'គ្មានលេខ'} • Limit: ${m.debtLimit.toFixed(0)}
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-gray-900 text-base sm:text-lg">
+                          របាយការណ៍បំណុល (Statement of Account)
+                        </h3>
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200 uppercase">
+                          Ledger
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 font-bold mt-0.5">
+                        {c.name} {c.phone ? `• 📞 ${c.phone}` : ''} {c.address ? `• 📍 ${c.address}` : ''}
                       </p>
                     </div>
                   </div>
@@ -31512,95 +31605,298 @@ export default function UnifiedAdminDashboard() {
                   </button>
                 </div>
 
-                <div className="p-6 overflow-y-auto space-y-4 flex-1">
-                  {/* Balance Overview Card */}
-                  <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white flex flex-wrap items-center justify-between gap-3 shadow-sm">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">បំណុលនៅសល់បច្ចុប្បន្ន</span>
-                      <div className="flex items-baseline gap-2 mt-0.5">
-                        <span className="text-2xl font-black text-rose-400 font-mono">${m.debtBalance.toFixed(2)}</span>
-                        <span className="text-xs text-slate-400 font-bold">({Math.round(m.debtBalance * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
+                <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1">
+                  {/* Financial Overview Cards Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Card 1: Current Debt */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-850 to-rose-950 text-white border border-rose-500/20 shadow-sm flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">បំណុលនៅសល់បច្ចុប្បន្ន</span>
+                        <span className="text-xs">⚠️</span>
+                      </div>
+                      <div className="mt-1">
+                        <div className="text-2xl sm:text-3xl font-black text-rose-400 font-mono">
+                          ${m.debtBalance.toFixed(2)}
+                        </div>
+                        <p className="text-[11px] text-slate-300 font-mono font-bold mt-0.5">
+                          ~ {(Math.round(m.debtBalance * (storeSettings.exchangeRate || 4100))).toLocaleString()} ៛
+                        </p>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-white/10 text-[11px]">
+                        {m.debtDueDate ? (
+                          <span className={`font-bold flex items-center gap-1 ${m.isOverdue ? 'text-rose-400 animate-pulse' : 'text-slate-300'}`}>
+                            <span>⏳ កាលកំណត់សង:</span>
+                            <span className="font-mono">{m.debtDueDate}</span>
+                            {m.isOverdue && <span className="bg-rose-600 text-white text-[9px] px-1 rounded">ហួសកាលកំណត់!</span>}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">មិនទាន់កំណត់ថ្ងៃសង</span>
+                        )}
                       </div>
                     </div>
-                    {m.debtDueDate && (
-                      <div className="text-right">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">កាលបរិច្ឆេទសងត្រឹម</span>
-                        <span className={`text-xs font-black ${m.isOverdue ? 'text-rose-400 animate-pulse' : 'text-slate-200'}`}>
-                          {m.debtDueDate} {m.isOverdue ? '🚨 ហួសកាលកំណត់!' : ''}
-                        </span>
+
+                    {/* Card 2: Credit Limit & Available */}
+                    <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-2xs flex flex-col justify-between">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">កម្រិតបំណុលអនុញ្ញាត</span>
+                        <span className="text-xs">💳</span>
                       </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handlePrintDebtLedgerSlip(c)}
-                      className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer border border-white/20"
-                    >
-                      <span>🖨️</span> បោះពុម្ពប័ណ្ណ Statement (80mm)
-                    </button>
+                      <div className="mt-1">
+                        <div className="text-2xl sm:text-3xl font-black text-gray-900 font-mono">
+                          ${m.debtLimit.toFixed(2)}
+                        </div>
+                        <p className="text-[11px] text-emerald-600 font-mono font-black mt-0.5">
+                          នៅសល់អាចជំពាក់បាន: ${availableCredit.toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="mt-2 pt-2 border-t border-gray-100 text-[11px] text-gray-500 flex items-center justify-between">
+                        <span>ស្ថានភាព: {m.debtBalance > 0 ? (m.isOverdue ? '🚨 ជំពាក់ហួសកំណត់' : '⚠️ កំពុងជំពាក់') : '✓ គ្មានបំណុល'}</span>
+                        <span className="font-bold text-gray-700">{Math.round((m.debtBalance / Math.max(1, m.debtLimit)) * 100)}% នៃ Limit</span>
+                      </div>
+                    </div>
+
+                    {/* Card 3: Quick Action Launchers */}
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-50 to-blue-50/50 border border-blue-100 shadow-2xs flex flex-col justify-between gap-2">
+                      <span className="text-[10px] text-blue-900 font-black uppercase tracking-wider">សកម្មភាពរហ័ស (Actions)</span>
+                      
+                      <div className="grid grid-cols-1 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handlePrintDebtLedgerSlip(c)}
+                          className="w-full bg-slate-900 hover:bg-black text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-98"
+                        >
+                          <span>🖨️</span>
+                          <span>បោះពុម្ព Statement (80mm)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDebtReminderModal(c)}
+                          className="w-full bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98"
+                        >
+                          <span>💬</span>
+                          <span>ផ្ញើសាររំលឹក (Telegram/SMS)</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* History Ledger Table */}
-                  <div>
-                    <h4 className="text-xs font-black text-gray-700 uppercase tracking-wide mb-2 flex items-center justify-between">
-                      <span>ប្រវត្តិប្រតិបត្តិការ ({history.length})</span>
-                      <span className="text-[10px] text-gray-400 lowercase font-medium">sort by newest</span>
-                    </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs sm:text-sm font-black text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <span>📜</span>
+                        <span>ប្រវត្តិប្រតិបត្តិការលម្អិត ({history.length})</span>
+                      </h4>
+                      <span className="text-[11px] text-gray-400 font-bold">កាលបរិច្ឆេទថ្មីបំផុតនៅខាងលើ (Sort Newest)</span>
+                    </div>
 
                     {history.length === 0 ? (
-                      <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                        <p className="text-xs font-bold">មិនទាន់មានប្រវត្តិជំពាក់ ឬសងបំណុលឡើយ</p>
+                      <div className="p-12 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200 space-y-1">
+                        <span className="text-3xl block">🧾</span>
+                        <p className="text-xs font-bold text-gray-600">មិនទាន់មានប្រវត្តិជំពាក់ ឬសងបំណុលឡើយ</p>
                       </div>
                     ) : (
                       <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-2xs">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-gray-50 text-gray-500 uppercase font-black text-[10px]">
-                            <tr>
-                              <th className="px-3.5 py-2.5">កាលបរិច្ឆេទ</th>
-                              <th className="px-3.5 py-2.5">ប្រភេទ</th>
-                              <th className="px-3.5 py-2.5">ទឹកប្រាក់</th>
-                              <th className="px-3.5 py-2.5">នៅសល់</th>
-                              <th className="px-3.5 py-2.5">កំណត់ចំណាំ</th>
-                              <th className="px-3.5 py-2.5 text-right">បុគ្គលិក</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 font-mono">
-                            {history.map((h, idx) => (
-                              <tr key={h.id || idx} className="hover:bg-gray-50/80 transition font-sans">
-                                <td className="px-3.5 py-2 text-[11px] text-gray-600">
-                                  {new Date(h.date).toLocaleDateString('km-KH')}
-                                </td>
-                                <td className="px-3.5 py-2">
-                                  {h.type === 'CHARGE' ? (
-                                    <span className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md font-black text-[10px] border border-rose-200">
-                                      📦 ជំពាក់
-                                    </span>
-                                  ) : (
-                                    <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md font-black text-[10px] border border-emerald-200">
-                                      💵 សង
-                                    </span>
-                                  )}
-                                </td>
-                                <td className={`px-3.5 py-2 font-mono font-black ${h.type === 'CHARGE' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                  {h.type === 'CHARGE' ? '+' : '-'}${parseFloat(h.amount || 0).toFixed(2)}
-                                </td>
-                                <td className="px-3.5 py-2 font-mono font-black text-slate-800">
-                                  ${parseFloat(h.remaining_balance || 0).toFixed(2)}
-                                </td>
-                                <td className="px-3.5 py-2 text-[11px] text-gray-600 max-w-[150px] truncate" title={h.note}>
-                                  {h.note || '-'}
-                                </td>
-                                <td className="px-3.5 py-2 text-right text-[10px] text-gray-400">
-                                  {h.recorded_by || 'Staff'}
-                                </td>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-gray-50/90 border-b border-gray-200 text-gray-600 uppercase font-black text-[10px] tracking-wider">
+                              <tr>
+                                <th className="px-4 py-3">កាលបរិច្ឆេទ & ម៉ោង</th>
+                                <th className="px-4 py-3">ប្រភេទ & លេខយោង</th>
+                                <th className="px-4 py-3">មុខទំនិញ & ព័ត៌មានលម្អិត</th>
+                                <th className="px-4 py-3">ទឹកប្រាក់</th>
+                                <th className="px-4 py-3">បំណុលនៅសល់</th>
+                                <th className="px-4 py-3">កំណត់សង / បុគ្គលិក</th>
+                                <th className="px-4 py-3 text-right">សកម្មភាព</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {history.map((h, idx) => {
+                                const isCharge = h.type === 'CHARGE';
+                                const d = h.date ? new Date(h.date) : new Date();
+                                const dateStr = !isNaN(d.getTime()) ? d.toLocaleDateString('km-KH') : (h.date || '');
+                                const timeStr = !isNaN(d.getTime()) ? d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+                                
+                                const matchedOrder = h.order_id 
+                                  ? (currentStoreOrders?.find(o => String(o.order_id || o.id) === String(h.order_id)) || realOrders?.find(o => String(o.order_id || o.id) === String(h.order_id)))
+                                  : null;
+                                
+                                const orderItems = (matchedOrder && Array.isArray(matchedOrder.items))
+                                  ? matchedOrder.items.filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && !it.is_pos_meta && (it.name || it.title))
+                                  : [];
+
+                                return (
+                                  <tr key={h.id || idx} className="hover:bg-gray-50/80 transition">
+                                    {/* Date & Time */}
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <div className="font-bold text-gray-900 text-xs">
+                                        {dateStr}
+                                      </div>
+                                      {timeStr && (
+                                        <div className="text-[10px] text-gray-400 font-mono flex items-center gap-1 mt-0.5">
+                                          <span>🕒</span>
+                                          <span>{timeStr}</span>
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* Type & Order Reference */}
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <div className="space-y-1">
+                                        {isCharge ? (
+                                          <span className="bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md font-black text-[10px] border border-rose-300 inline-flex items-center gap-1 shadow-2xs">
+                                            <span>📦</span>
+                                            <span>ជំពាក់ (DEBT)</span>
+                                          </span>
+                                        ) : (
+                                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-black text-[10px] border border-emerald-300 inline-flex items-center gap-1 shadow-2xs">
+                                            <span>💵</span>
+                                            <span>សង (REPAID)</span>
+                                          </span>
+                                        )}
+                                        {h.order_id && (
+                                          <div className="font-mono text-blue-600 font-black text-[11px] flex items-center gap-1">
+                                            <span>🧾</span>
+                                            <span>#{h.order_id}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    {/* Detailed Items & Notes */}
+                                    <td className="px-4 py-3 min-w-[240px]">
+                                      {orderItems.length > 0 ? (
+                                        <div className="space-y-1.5">
+                                          <div className="space-y-1">
+                                            {orderItems.map((it, iIdx) => {
+                                              const matchedProd = currentStoreProducts?.find(p => String(p.id) === String(it.id) || (p.sku && it.sku && p.sku === it.sku));
+                                              const imgUrl = it.image_url || it.image || matchedProd?.image_url || '';
+                                              const price = parseFloat(it.price || 0);
+                                              const qty = parseInt(it.qty || it.quantity || 1) || 1;
+                                              return (
+                                                <div key={iIdx} className="flex items-center gap-2 p-1.5 rounded-xl bg-gray-50 border border-gray-100 hover:bg-white transition">
+                                                  <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 overflow-hidden shrink-0 flex items-center justify-center shadow-2xs">
+                                                    {imgUrl ? (
+                                                      <img src={imgUrl} alt={it.name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                      <span className="text-xs">🛍️</span>
+                                                    )}
+                                                  </div>
+                                                  <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-1">
+                                                      <span className="text-xs font-black text-gray-900 truncate">{it.name || 'ទំនិញ'}</span>
+                                                      {it.size && <span className="text-[9px] font-bold bg-orange-100 text-orange-800 px-1 py-0.2 rounded">Size: {it.size}</span>}
+                                                      {it.color && it.color !== 'N/A' && <span className="text-[9px] font-bold bg-slate-100 text-slate-700 px-1 py-0.2 rounded">{it.color}</span>}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-500 font-mono">
+                                                      x{qty} @${price.toFixed(2)} = <b className="text-emerald-600">${(price * qty).toFixed(2)}</b>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                          {h.note && (
+                                            <p className="text-[11px] text-gray-700 bg-amber-50/80 border border-amber-200/80 rounded-lg p-1.5 font-medium leading-relaxed">
+                                              📝 {h.note}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <p className="text-xs text-gray-800 font-medium leading-relaxed">
+                                          {h.note || (isCharge ? 'លក់ជំពាក់' : 'សងបំណុល')}
+                                        </p>
+                                      )}
+                                    </td>
+
+                                    {/* Amount */}
+                                    <td className={`px-4 py-3 font-mono font-black text-sm whitespace-nowrap ${isCharge ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                      {isCharge ? '+' : '-'}${parseFloat(h.amount || 0).toFixed(2)}
+                                    </td>
+
+                                    {/* Remaining Balance */}
+                                    <td className="px-4 py-3 font-mono font-black text-sm text-slate-900 whitespace-nowrap">
+                                      ${parseFloat(h.remaining_balance || 0).toFixed(2)}
+                                    </td>
+
+                                    {/* Due Date & Staff */}
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      {h.due_date ? (
+                                        <div className="text-[10px] font-mono font-bold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-md inline-block">
+                                          ⏳ {h.due_date}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400 text-[10px]">-</span>
+                                      )}
+                                      <div className="text-[10px] text-gray-400 mt-1 font-bold">
+                                        👤 {h.recorded_by || 'Admin'}
+                                      </div>
+                                    </td>
+
+                                    {/* Actions */}
+                                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                                      {matchedOrder && (
+                                        <div className="flex items-center justify-end gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedOrderDetails(matchedOrder)}
+                                            className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] rounded-lg border border-blue-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                            title="មើលព័ត៌មានលម្អិតវិក្កយបត្រ"
+                                          >
+                                            <span>👁️</span>
+                                            <span>វិក្កយបត្រ</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const orderItems = (matchedOrder.items && Array.isArray(matchedOrder.items) ? matchedOrder.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
+                                              const sub = Number(matchedOrder.subtotal || matchedOrder.total || 0);
+                                              const disc = Number(matchedOrder.discount || 0);
+                                              const tot = Number(matchedOrder.total || matchedOrder.total_amount || 0);
+                                              setReceiptData({
+                                                orderId: matchedOrder.order_id || matchedOrder.id,
+                                                date: matchedOrder.created_at ? new Date(matchedOrder.created_at).toLocaleString('km-KH') : new Date().toLocaleString('km-KH'),
+                                                items: orderItems,
+                                                subtotal: sub,
+                                                discount: disc,
+                                                taxAmount: 0,
+                                                taxRate: 0,
+                                                taxMode: 'exclusive',
+                                                taxLabel: 'ពន្ធអាករ',
+                                                vatTin: '',
+                                                total: tot,
+                                                totalKHR: Math.round(tot * (storeSettings.exchangeRate || 4100)),
+                                                method: matchedOrder.payment || matchedOrder.payment_method || 'Credit / ជំពាក់',
+                                                tendered: tot,
+                                                change: 0,
+                                                customer: matchedOrder.customer || c.name,
+                                                phone: matchedOrder.phone || c.phone || '',
+                                                address: matchedOrder.address || c.address || '',
+                                                telegram: c.telegram || null
+                                              });
+                                            }}
+                                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] rounded-lg border border-slate-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                            title="បោះពុម្ពវិក្កយបត្រឡើងវិញ"
+                                          >
+                                            <span>🖨️</span>
+                                            <span>Slip</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
 
+                {/* Modal Footer */}
                 <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
                   <button
                     type="button"
