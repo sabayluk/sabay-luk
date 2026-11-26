@@ -31468,42 +31468,36 @@ export default function UnifiedAdminDashboard() {
           );
         })()}
 
-        {/* ⭐️ MODAL កាតសមាជិក VIP ឌីជីថល (DIGITAL VIP MEMBER CARD) ⭐️ */}
+        {/* ⭐️ MODAL កាតសមាជិក VIP ឌីជីថល (DIGITAL VIP MEMBER CARD - ULTRA LUXURY ORANGE EDITION) ⭐️ */}
         {digitalCardModalOpen && digitalCardCustomer && (() => {
           const c = digitalCardCustomer;
           const m = getCustomerMetrics(c);
           const store = getActiveStore();
           const storeName = store?.name || storeSettings.storeName || 'SABAY LUK';
+          const storeLogo = storeSettings.logoUrl || activeStore?.settings?.logoUrl;
           
-          let cardTheme = 'from-amber-600 via-yellow-600 to-amber-700 border-amber-300/40 text-amber-50';
-          let tierTitle = 'VIP MEMBER';
-          let chipColor = 'bg-amber-200 text-amber-900';
-
-          if (c.tier === 'DIAMOND' || m.calculatedTier === 'DIAMOND') {
-            cardTheme = 'from-slate-900 via-indigo-950 to-slate-900 border-indigo-400/50 text-indigo-100';
-            tierTitle = 'DIAMOND MEMBER';
-            chipColor = 'bg-indigo-300 text-indigo-950';
-          } else if (c.tier === 'WHOLESALE') {
-            cardTheme = 'from-purple-900 via-indigo-900 to-purple-950 border-purple-400/40 text-purple-100';
-            tierTitle = 'WHOLESALE VIP';
-            chipColor = 'bg-purple-200 text-purple-900';
-          } else if (c.tier === 'LOYAL') {
-            cardTheme = 'from-emerald-700 via-teal-700 to-emerald-800 border-emerald-300/40 text-emerald-50';
-            tierTitle = 'LOYAL MEMBER';
-            chipColor = 'bg-emerald-200 text-emerald-900';
-          } else {
-            cardTheme = 'from-slate-800 via-slate-700 to-slate-900 border-slate-600/40 text-slate-100';
-            tierTitle = 'STANDARD MEMBER';
-            chipColor = 'bg-slate-300 text-slate-900';
-          }
+          const tierLabel = c.tier === 'VIP' ? 'VIP MEMBER' : c.tier === 'WHOLESALE' ? 'WHOLESALE VIP' : c.tier === 'LOYAL' ? 'LOYAL MEMBER' : 'MEMBER';
+          const tierIcon = c.tier === 'VIP' ? '🥇' : c.tier === 'WHOLESALE' ? '💼' : c.tier === 'LOYAL' ? '🥈' : '⭐';
+          const customerCode = c.id || `CUS-${c.phone ? c.phone.slice(-4) : '0001'}`;
 
           return (
-            <div className="fixed inset-0 z-[120] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
-              <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">🪪</span>
-                    <h3 className="font-black text-gray-900 text-sm">កាតសមាជិក VIP ឌីជីថល (Digital Member Card)</h3>
+            <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+              <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+                
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-orange-50 via-amber-50/50 to-white">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-10 h-10 rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 text-white flex items-center justify-center text-xl shadow-md shadow-orange-500/25">
+                      🪪
+                    </span>
+                    <div>
+                      <h3 className="font-black text-gray-900 text-sm sm:text-base">
+                        កាតសមាជិក VIP ឌីជីថល (Digital VIP Card)
+                      </h3>
+                      <p className="text-[11px] text-gray-500 font-bold">
+                        {c.name} • {c.phone || 'គ្មានលេខទូរស័ព្ទ'}
+                      </p>
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -31511,100 +31505,221 @@ export default function UnifiedAdminDashboard() {
                       setDigitalCardModalOpen(false);
                       setDigitalCardCustomer(null);
                     }}
-                    className="w-7 h-7 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 flex items-center justify-center text-xs font-black cursor-pointer"
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex items-center justify-center text-xs font-black transition cursor-pointer"
                   >
                     ✕
                   </button>
                 </div>
 
-                <div className="p-6 flex flex-col items-center gap-5">
-                  {/* Luxury Digital Card Preview */}
-                  <div className={`w-full aspect-[1.586] rounded-3xl bg-gradient-to-tr ${cardTheme} border p-5 flex flex-col justify-between shadow-2xl relative overflow-hidden select-none`}>
-                    {/* Background Sheen & Hologram Effect */}
-                    <div className="absolute -right-16 -top-16 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
-                    <div className="absolute -left-16 -bottom-16 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+                  
+                  {/* ⭐️ ULTRA-MODERN LUXURY ORANGE VIP CARD (កាតពណ៌ទឹកក្រូចទំនើបស្តង់ដារពិភពលោក) ⭐️ */}
+                  <div className="relative group perspective-1000">
+                    <div className="w-full aspect-[1.586] rounded-3xl bg-gradient-to-br from-[#ff4800] via-[#ff6a00] to-[#e04000] p-4 sm:p-6 flex flex-col justify-between shadow-[0_15px_40px_rgba(255,106,0,0.38)] border-2 border-amber-200/40 relative overflow-hidden select-none text-white transition-all duration-300">
+                      
+                      {/* Holographic Sheen & Radial Glass Glow Overlays */}
+                      <div className="absolute -right-12 -top-12 w-48 h-48 bg-radial from-amber-300/40 to-transparent rounded-full blur-2xl pointer-events-none" />
+                      <div className="absolute -left-12 -bottom-12 w-48 h-48 bg-radial from-orange-300/30 to-transparent rounded-full blur-2xl pointer-events-none" />
+                      <div className="absolute inset-0 bg-gradient-to-tr from-white/20 via-white/5 to-transparent pointer-events-none" />
+                      
+                      {/* Laser Watermark Lines */}
+                      <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
 
-                    {/* Top Row: Store Branding & Contactless Icon */}
-                    <div className="flex items-center justify-between relative z-10">
-                      <div>
-                        <h4 className="font-black text-sm tracking-wider uppercase drop-shadow-sm">{storeName}</h4>
-                        <span className="text-[9px] font-bold tracking-widest uppercase opacity-80">{tierTitle}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-base opacity-75">📶</span>
-                        <span className="text-xs font-black px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-xs uppercase tracking-wider text-[9px]">
-                          {c.tier}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Middle: EMV Chip & Points Balance */}
-                    <div className="flex items-center justify-between my-2 relative z-10">
-                      <div className={`w-11 h-8 rounded-lg ${chipColor} flex items-center justify-center shadow-inner font-mono text-[9px] font-black tracking-tighter opacity-90`}>
-                        |||||
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[9px] uppercase tracking-wider opacity-75 block font-bold">ពិន្ទុរង្វាន់ LOYALTY</span>
-                        <div className="flex items-center gap-1 font-mono font-black text-lg text-amber-300 drop-shadow-sm">
-                          <span>⭐</span> {m.loyaltyPoints.toLocaleString()} <span className="text-[10px] text-white/80">pts</span>
+                      {/* 1. TOP ROW: Store Logo, Name & Contactless Wave */}
+                      <div className="flex items-start justify-between relative z-10">
+                        <div className="flex items-center gap-2.5">
+                          {storeLogo ? (
+                            <img src={storeLogo} alt="Logo" className="w-9 h-9 rounded-xl object-contain bg-white/20 p-1 border border-white/30 backdrop-blur-xs shadow-xs" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-xl bg-white/20 border border-white/30 backdrop-blur-xs flex items-center justify-center font-black text-amber-200 text-base shadow-xs">
+                              {storeName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <h4 className="font-black text-sm sm:text-base tracking-wider uppercase text-white drop-shadow-md leading-tight">
+                              {storeName}
+                            </h4>
+                            <span className="text-[9px] font-black tracking-widest uppercase text-amber-200 drop-shadow-xs flex items-center gap-1">
+                              <span>⭐</span> OFFICIAL MEMBER CLUB
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Bottom: Customer Name, Member ID & Barcode */}
-                    <div className="flex items-end justify-between relative z-10 pt-1 border-t border-white/15">
-                      <div>
-                        <span className="text-[8px] uppercase tracking-wider opacity-70 block">MEMBER NAME</span>
-                        <h5 className="font-black text-sm tracking-wide leading-tight truncate max-w-[170px]">{c.name}</h5>
-                        <p className="text-[9px] font-mono opacity-80 mt-0.5">{c.id} • {c.phone}</p>
-                      </div>
-                      <div className="text-right">
-                        <div className="h-6 w-24 bg-white/95 rounded px-1.5 py-0.5 flex items-center justify-center shadow-xs">
-                          <span className="font-mono text-[8px] font-black text-black tracking-widest">
-                            ||| | |||| | ||
+                        {/* Tier Badge & Contactless Wave */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/80 font-mono text-xs tracking-tighter" title="Contactless RFID">
+                            (((•)))
+                          </span>
+                          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-white/25 backdrop-blur-md uppercase tracking-wider text-white border border-white/40 shadow-xs flex items-center gap-1">
+                            <span>{tierIcon}</span>
+                            <span>{tierLabel}</span>
                           </span>
                         </div>
-                        <span className="text-[8px] font-mono opacity-70 mt-0.5 block">SINCE {c.joined || '2026'}</span>
                       </div>
+
+                      {/* 2. MIDDLE ROW: Metallic Gold EMV Chip & Loyalty Points Display */}
+                      <div className="flex items-center justify-between my-1 sm:my-2 relative z-10">
+                        
+                        {/* Realistic Golden EMV Security Chip */}
+                        <div className="w-12 h-9 rounded-xl bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-500 border border-yellow-200 p-1 shadow-md relative overflow-hidden flex flex-col justify-between">
+                          <div className="w-full h-0.5 bg-amber-700/40 rounded-full" />
+                          <div className="flex justify-between items-center px-1">
+                            <div className="w-3 h-3 rounded-full border border-amber-800/50" />
+                            <div className="w-2 h-0.5 bg-amber-800/40" />
+                          </div>
+                          <div className="w-full h-0.5 bg-amber-700/40 rounded-full" />
+                        </div>
+
+                        {/* Loyalty Points Pill (Ultra Vibrant Gold & White) */}
+                        <div className="bg-black/25 backdrop-blur-md px-3.5 py-1.5 rounded-2xl border border-white/20 text-right shadow-inner">
+                          <span className="text-[8.5px] uppercase tracking-widest text-amber-200 font-bold block">
+                            ពិន្ទុសន្សំ LOYALTY
+                          </span>
+                          <div className="flex items-center justify-end gap-1.5 font-mono font-black text-lg sm:text-xl text-yellow-300 drop-shadow-sm">
+                            <span className="text-base">🪙</span>
+                            <span>{m.loyaltyPoints.toLocaleString()}</span>
+                            <span className="text-[10px] text-white/80 font-sans">pts</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3. BOTTOM ROW: Customer Info & Scannable Barcode */}
+                      <div className="flex items-end justify-between relative z-10 pt-2 border-t border-white/25">
+                        <div className="min-w-0 pr-2">
+                          <span className="text-[8px] uppercase tracking-widest text-amber-100 font-bold block">
+                            MEMBER NAME / ឈ្មោះសមាជិក
+                          </span>
+                          <h5 className="font-black text-sm sm:text-base tracking-wide text-white truncate drop-shadow-sm">
+                            {c.name}
+                          </h5>
+                          <p className="text-[10px] font-mono text-white/90 font-bold tracking-wider mt-0.5">
+                            ID: <span className="text-yellow-200">{customerCode}</span> {c.phone ? `• ${c.phone}` : ''}
+                          </p>
+                        </div>
+
+                        {/* Barcode Graphic + Member Since */}
+                        <div className="text-right shrink-0">
+                          <div className="h-7 w-28 bg-white/95 backdrop-blur-xs rounded-lg px-2 py-0.5 flex flex-col items-center justify-center shadow-md">
+                            <div className="font-mono text-[9px] font-black text-black tracking-[0.2em] leading-none">
+                              ||||||||||||||||||||
+                            </div>
+                            <span className="font-mono text-[7px] text-gray-700 font-black">
+                              {customerCode}
+                            </span>
+                          </div>
+                          <span className="text-[8px] font-mono text-white/80 font-bold mt-0.5 block tracking-wider">
+                            SINCE {c.joined || new Date().toISOString().slice(0, 7)}
+                          </span>
+                        </div>
+                      </div>
+
                     </div>
                   </div>
 
-                  {/* Card Perks Description */}
-                  <div className="w-full bg-gray-50 rounded-2xl p-3.5 border border-gray-200 text-xs space-y-1.5">
-                    <div className="flex justify-between font-bold">
-                      <span className="text-gray-500">អត្ថប្រយោជន៍កម្រិត:</span>
-                      <span className="text-blue-700">{c.tier} (បញ្ចុះតម្លៃ {c.discount_percent || 0}%)</span>
+                  {/* ⭐️ Interactive Quick Action Bar (ងាយស្រួលប្រើប្រាស់) ⭐️ */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof navigator !== 'undefined') {
+                          navigator.clipboard.writeText(customerCode);
+                          setToastNotification(`📋 បានចម្លងលេខកាតសមាជិក: ${customerCode}`);
+                          setTimeout(() => setToastNotification(null), 2500);
+                        }
+                      }}
+                      className="p-2.5 rounded-2xl bg-orange-50 hover:bg-orange-100 text-orange-900 border border-orange-200 text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                      title="ចម្លងលេខកាតអតិថិជនដើម្បី Paste ក្នុង POS"
+                    >
+                      <span>📋</span>
+                      <span>ចម្លងលេខ ID ({customerCode})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDigitalCardModalOpen(false);
+                        setCustomerName(c.name);
+                        if (c.phone) setCustomerPhone(c.phone);
+                        setActiveTab('pos');
+                        setToastNotification(`🛍️ បានជ្រើសរើស ${c.name} ក្នុង POS រួចរាល់!`);
+                        setTimeout(() => setToastNotification(null), 2500);
+                      }}
+                      className="p-2.5 rounded-2xl bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                      title="ជ្រើសរើសអតិថិជននេះចូលទៅកន្រ្តកលក់ POS ភ្លាមៗ"
+                    >
+                      <span>🛒</span>
+                      <span>លក់ក្នុង POS ភ្លាម</span>
+                    </button>
+                  </div>
+
+                  {/* ⭐️ Card Perks & Financial Value Description ⭐️ */}
+                  <div className="w-full bg-gradient-to-br from-orange-50/80 via-white to-amber-50/60 rounded-2xl p-4 border border-orange-200/90 text-xs space-y-2 shadow-xs">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-orange-200/80">
+                      <span className="font-bold text-gray-600 flex items-center gap-1.5">
+                        <span>🎁</span> អត្ថប្រយោជន៍កម្រិតសមាជិក:
+                      </span>
+                      <span className="font-black text-orange-800 bg-orange-100 px-2 py-0.5 rounded-lg border border-orange-200">
+                        {tierLabel} (បញ្ចុះ {c.discount_percent || 0}%)
+                      </span>
                     </div>
-                    <div className="flex justify-between font-bold">
-                      <span className="text-gray-500">តម្លៃទឹកប្រាក់ប្តូរបាន:</span>
-                      <span className="text-emerald-700">${(m.loyaltyPoints / 50).toFixed(2)} (ស្មើនឹង {Math.round((m.loyaltyPoints / 50) * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
+
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gray-600 flex items-center gap-1.5">
+                        <span>💰</span> តម្លៃទឹកប្រាក់ប្តូរបាន:
+                      </span>
+                      <span className="font-mono font-black text-emerald-700 text-sm">
+                        ${(m.loyaltyPoints / 50).toFixed(2)} <span className="text-gray-500 text-[11px] font-sans font-bold">(≈ {Math.round((m.loyaltyPoints / 50) * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
+                      </span>
                     </div>
-                    <div className="flex justify-between font-bold">
-                      <span className="text-gray-500">លក្ខខណ្ឌប្តូរពិន្ទុ:</span>
-                      <span className="text-gray-700">50 ពិន្ទុ = បញ្ចុះតម្លៃ $1 ក្នុង POS</span>
+
+                    <div className="flex items-center justify-between text-gray-700 pt-1 border-t border-orange-100">
+                      <span className="font-bold flex items-center gap-1.5">
+                        <span>⚡</span> លក្ខខណ្ឌប្តូរពិន្ទុ:
+                      </span>
+                      <span className="font-bold text-gray-900">
+                        50 ពិន្ទុ = បញ្ចុះតម្លៃ $1 ក្នុង POS
+                      </span>
                     </div>
                   </div>
+
                 </div>
 
-                <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span>🖨️</span> បោះពុម្ពកាត (Print Card)
-                  </button>
+                {/* Footer Buttons */}
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="bg-slate-900 hover:bg-black text-white px-4 py-2.5 rounded-2xl text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <span>🖨️</span> បោះពុម្ពកាត (Print Card)
+                    </button>
+
+                    {c.telegram && (
+                      <a
+                        href={`https://t.me/${c.telegram.replace(/^@/, '')}?text=${encodeURIComponent(`ជម្រាបសួរលោក/លោកស្រី ${c.name}! 🙏\nនេះជាកាតសមាជិក ${tierLabel} ឌីជីថលរបស់អ្នកនៅហាង ${storeName}។\nលេខកាត: ${customerCode}\nពិន្ទុសន្សំ: ${m.loyaltyPoints} pts\nសូមអរគុណច្រើន! ✨`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-sky-500 hover:bg-sky-600 text-white px-3 py-2.5 rounded-2xl text-xs font-black shadow-sm transition flex items-center gap-1 cursor-pointer active:scale-95"
+                        title="ផ្ញើព័ត៌មានកាតទៅ Telegram អតិថិជន"
+                      >
+                        <span>✈️</span> Telegram
+                      </a>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => {
                       setDigitalCardModalOpen(false);
                       setDigitalCardCustomer(null);
                     }}
-                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer"
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2.5 rounded-2xl text-xs font-black transition cursor-pointer"
                   >
                     បិទផ្ទាំង
                   </button>
                 </div>
+
               </div>
             </div>
           );
