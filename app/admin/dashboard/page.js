@@ -3205,6 +3205,32 @@ export default function UnifiedAdminDashboard() {
           address: o.delivery_address || o.address || ''
         };
       });
+
+      // Merge queued offline orders waiting to sync for this store
+      try {
+        const offlineQueue = getOfflineOrdersQueue();
+        const pendingForStore = offlineQueue
+          .filter(q => (q.orderPayload?.store_id || 'store_default_sabayluk') === storeId)
+          .map(q => ({
+            ...q.orderPayload,
+            id: q.id || `offline_${q.orderPayload?.order_id}`,
+            customer: q.orderPayload?.customer_name || 'អតិថិជនទូទៅ',
+            total: q.orderPayload?.total_amount != null ? q.orderPayload.total_amount : (q.orderPayload?.total || 0),
+            payment: q.orderPayload?.payment_method || 'Cash',
+            phone: q.orderPayload?.phone_number || q.orderPayload?.phone || '',
+            address: q.orderPayload?.delivery_address || q.orderPayload?.address || 'POS មុខហាង',
+            created_at: q.orderPayload?.created_at || q.queued_at || new Date().toISOString(),
+            is_offline_pending: true
+          }));
+
+        const existingOrderIds = new Set(mapped.map(m => String(m.order_id || m.id)));
+        pendingForStore.forEach(po => {
+          if (!existingOrderIds.has(String(po.order_id))) {
+            mapped.unshift(po);
+          }
+        });
+      } catch (_) {}
+
       setRealOrders(mapped);
     }
     setLoadingOrders(false);
@@ -6486,17 +6512,15 @@ export default function UnifiedAdminDashboard() {
         customer_name: resolvedCustomerName,
         phone: resolvedCustomerPhone,
         phone_number: resolvedCustomerPhone,
-        cashier_name: currentStaff?.name || 'វិចិត្រ (ម្ចាស់ហាង)',
-        cashier_id: currentStaff?.id || 'STAFF-1',
         address: 'POS មុខហាង',
         delivery_address: 'POS មុខហាង',
         total_amount: posTotal,
         subtotal: posSubtotal,
         discount: posDiscountValue,
-        tax_amount: posTaxAmount,
         payment_method: paymentMethod,
         status: 'Completed',
         order_type: 'POS',
+        created_at: new Date().toISOString(),
         items: [
           ...posCart.map(item => ({
             id: item.id,
@@ -6514,13 +6538,39 @@ export default function UnifiedAdminDashboard() {
             tax_mode: posTaxMode,
             tax_label: storeSettings.taxLabel || 'ពន្ធអាករ (VAT 10%)',
             vat_tin: storeSettings.vatTin || invoiceSettings.vatTin || ''
-          }] : [])
+          }] : []),
+          {
+            is_pos_meta: true,
+            cashier_name: currentStaff?.name || 'Admin',
+            cashier_id: currentStaff?.id || 'STAFF-1',
+            tax_amount: posTaxAmount
+          }
         ]
       };
 
+      // ⭐️ សម្អាត Cloud Payload ឱ្យស្របតាម Schema របស់តារាង orders ក្នុង Supabase
+      const VALID_ORDER_COLS = [
+        'order_id', 'store_id', 'customer_name', 'phone', 'phone_number',
+        'address', 'delivery_address', 'total_amount', 'subtotal', 'discount',
+        'payment_method', 'status', 'order_type', 'items', 'created_at'
+      ];
+      const cloudPayload = {};
+      VALID_ORDER_COLS.forEach(k => {
+        if (orderPayload[k] !== undefined) cloudPayload[k] = orderPayload[k];
+      });
+
       if (isCurrentlyOnline) {
         try {
-          const { error: orderError } = await supabase.from('orders').insert([orderPayload]);
+          let { error: orderError } = await supabase.from('orders').insert([cloudPayload]);
+          // Resilient retry បើសិន schema មិនទាន់ស្គាល់ column ណាមួយ
+          if (orderError && orderError.message && orderError.message.includes('Could not find the') && orderError.message.includes('column')) {
+            const match = orderError.message.match(/Could not find the '([^']+)' column/);
+            if (match && match[1]) {
+              delete cloudPayload[match[1]];
+              const retry = await supabase.from('orders').insert([cloudPayload]);
+              orderError = retry.error;
+            }
+          }
           if (orderError) throw orderError;
         } catch (netErr) {
           console.warn('Failed cloud save, queuing offline order:', netErr);
@@ -6533,7 +6583,13 @@ export default function UnifiedAdminDashboard() {
       }
 
       // Add to local realOrders state so UI reflects the new sale immediately
-      setRealOrders(prev => [{ ...orderPayload, id: `ord_${Date.now()}` }, ...prev]);
+      setRealOrders(prev => [{
+        ...orderPayload,
+        id: `ord_${Date.now()}`,
+        customer: resolvedCustomerName,
+        total: posTotal,
+        payment: paymentMethod
+      }, ...prev]);
 
       // ២.៥ ⭐️ គ្រប់គ្រងបំណុល (Debt Charge) និងពិន្ទុ Loyalty (Points Accrual & Redemption) ⭐️
       const matchedCust = customers.find(c => 
