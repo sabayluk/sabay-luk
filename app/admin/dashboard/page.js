@@ -1041,6 +1041,91 @@ export default function UnifiedAdminDashboard() {
     }
     setConfirmModal(prev => ({ ...prev, isOpen: false, resolveFn: null, rejectFn: null }));
   };
+
+  // ⭐️ Global Modern Alert Modal (ផ្ទាំងលោតជូនដំណឹងទំនើប ជំនួស browser window.alert) ⭐️
+  const [alertModal, setAlertModal] = useState({
+    isOpen: false,
+    title: 'ជូនដំណឹង',
+    message: '',
+    buttonText: 'យល់ព្រម (OK)',
+    type: 'success', // 'success' | 'warning' | 'error' | 'info'
+    icon: '🎉',
+    resolveFn: null
+  });
+
+  const showAlertModal = ({
+    title = '',
+    message = '',
+    buttonText = 'យល់ព្រម (OK)',
+    type = '',
+    icon = ''
+  } = {}) => {
+    return new Promise((resolve) => {
+      let resolvedType = type;
+      let resolvedIcon = icon;
+      let resolvedTitle = title;
+      const msgStr = String(message || '');
+
+      if (!resolvedType) {
+        if (msgStr.includes('🎉') || msgStr.includes('✅') || msgStr.includes('ជោគជ័យ')) {
+          resolvedType = 'success';
+        } else if (msgStr.includes('❌') || msgStr.includes('បរាជ័យ') || msgStr.includes('មិនអាច') || msgStr.toLowerCase().includes('error')) {
+          resolvedType = 'error';
+        } else if (msgStr.includes('⚠️') || msgStr.includes('សូម') || msgStr.includes('ប្រយ័ត្ន')) {
+          resolvedType = 'warning';
+        } else {
+          resolvedType = 'info';
+        }
+      }
+
+      if (!resolvedIcon) {
+        if (resolvedType === 'success') resolvedIcon = '🎉';
+        else if (resolvedType === 'error') resolvedIcon = '❌';
+        else if (resolvedType === 'warning') resolvedIcon = '⚠️';
+        else resolvedIcon = '✨';
+      }
+
+      if (!resolvedTitle) {
+        if (resolvedType === 'success') resolvedTitle = 'ជោគជ័យ (Success)';
+        else if (resolvedType === 'error') resolvedTitle = 'មានបញ្ហា (Error)';
+        else if (resolvedType === 'warning') resolvedTitle = 'សូមពិនិត្យ (Notice)';
+        else resolvedTitle = 'ជូនដំណឹង (Notification)';
+      }
+
+      if (resolvedType === 'success') {
+        setToastNotification(msgStr);
+      }
+
+      setAlertModal({
+        isOpen: true,
+        title: resolvedTitle,
+        message: msgStr,
+        buttonText,
+        type: resolvedType,
+        icon: resolvedIcon,
+        resolveFn: () => resolve(true)
+      });
+    });
+  };
+
+  const handleCloseAlertModal = () => {
+    if (alertModal.resolveFn) {
+      alertModal.resolveFn();
+    }
+    setAlertModal(prev => ({ ...prev, isOpen: false, resolveFn: null }));
+  };
+
+  // ⭐️ Override browser window.alert inside the app to render modern luxury popup ⭐️
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nativeAlert = window.alert;
+    window.alert = (msg) => {
+      showAlertModal({ message: msg });
+    };
+    return () => {
+      window.alert = nativeAlert;
+    };
+  }, []);
   
   // ⭐️ ពិនិត្យមើលថាតើកំពុងបើកក្នុងទម្រង់ Desktop PWA App ឬ browser ធម្មតា
   const [isAppWindow, setIsAppWindow] = useState(false);
@@ -2507,7 +2592,13 @@ export default function UnifiedAdminDashboard() {
         }
         return c;
       }));
-      alert('✅ កែប្រែព័ត៌មានអតិថិជនជោគជ័យ!');
+      setCustomerModalOpen(false);
+      showAlertModal({
+        title: 'កែប្រែអតិថិជនជោគជ័យ',
+        message: `✅ បានកែប្រែព័ត៌មានអតិថិជន "${custFormName.trim()}" ដោយជោគជ័យ!`,
+        type: 'success',
+        icon: '👤'
+      });
     } else {
       // បង្កើតអតិថិជនថ្មី
       const newCustomer = {
@@ -2531,10 +2622,14 @@ export default function UnifiedAdminDashboard() {
         points_history: []
       };
       setCustomers(prev => [newCustomer, ...prev]);
-      alert('🎉 បង្កើតអតិថិជនថ្មីបានជោគជ័យ!');
+      setCustomerModalOpen(false);
+      showAlertModal({
+        title: 'បង្កើតអតិថិជនថ្មីជោគជ័យ',
+        message: `🎉 បានបង្កើតអតិថិជនថ្មី "${newCustomer.name}" ចូលក្នុងប្រព័ន្ធដោយជោគជ័យ!`,
+        type: 'success',
+        icon: '🎉'
+      });
     }
-
-    setCustomerModalOpen(false);
   };
 
   // ⭐️ មុខងារសងបំណុលអតិថិជន (RECORD DEBT REPAYMENT) ⭐️
@@ -39459,6 +39554,95 @@ export default function UnifiedAdminDashboard() {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* ⭐️ ULTRA-MODERN ALERT POPUP (ផ្ទាំងលោតជូនដំណឹងទំនើប ជំនួស browser window.alert) ⭐️ */}
+      {alertModal.isOpen && (
+        <div 
+          className="fixed inset-0 z-[100000] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={handleCloseAlertModal}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl border border-slate-100 flex flex-col items-center text-center transform scale-100 animate-in zoom-in-95 duration-200 relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top decorative gradient bar */}
+            <div className={`absolute top-0 left-0 right-0 h-1.5 ${
+              alertModal.type === 'success'
+                ? 'bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-600'
+                : alertModal.type === 'error'
+                ? 'bg-gradient-to-r from-rose-500 via-red-500 to-pink-500'
+                : alertModal.type === 'warning'
+                ? 'bg-gradient-to-r from-amber-400 via-orange-500 to-yellow-500'
+                : 'bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500'
+            }`} />
+
+            {/* Top close button */}
+            <button
+              type="button"
+              onClick={handleCloseAlertModal}
+              className="absolute top-3.5 right-3.5 w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center text-xs font-bold transition cursor-pointer"
+              title="បិទ (Close)"
+            >
+              ✕
+            </button>
+
+            {/* Glowing Icon Badge with soft pulse */}
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-3.5 shadow-sm relative ${
+              alertModal.type === 'success'
+                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                : alertModal.type === 'error'
+                ? 'bg-rose-50 text-rose-500 border border-rose-100'
+                : alertModal.type === 'warning'
+                ? 'bg-amber-50 text-amber-500 border border-amber-100'
+                : 'bg-blue-50 text-blue-500 border border-blue-100'
+            }`}>
+              <span className="relative z-10">{alertModal.icon || '🎉'}</span>
+              <div className={`absolute inset-0 rounded-2xl animate-ping opacity-25 ${
+                alertModal.type === 'success' ? 'bg-emerald-400' :
+                alertModal.type === 'error' ? 'bg-rose-400' :
+                alertModal.type === 'warning' ? 'bg-amber-400' : 'bg-blue-400'
+              }`} />
+            </div>
+
+            {/* Platform / Store Subtitle Tag */}
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-wider mb-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+              <span>{storeSettings?.storeName || activeStore?.name || 'SABAY LUK'}</span>
+            </div>
+
+            {/* Title */}
+            <h3 className="text-base font-black text-slate-900 tracking-tight mb-2">
+              {alertModal.title}
+            </h3>
+
+            {/* Message Body */}
+            <p className="text-xs sm:text-sm text-slate-600 font-bold leading-relaxed mb-6 whitespace-pre-line">
+              {alertModal.message}
+            </p>
+
+            {/* Action Button */}
+            <div className="w-full">
+              <button
+                type="button"
+                autoFocus
+                onClick={handleCloseAlertModal}
+                className={`w-full py-3.5 px-6 rounded-2xl font-black text-xs text-white shadow-lg active:scale-95 transition cursor-pointer flex items-center justify-center gap-2 ${
+                  alertModal.type === 'success'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-emerald-600/30'
+                    : alertModal.type === 'error'
+                    ? 'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 shadow-rose-600/30'
+                    : alertModal.type === 'warning'
+                    ? 'bg-gradient-to-r from-[#ff6a00] to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-orange-500/30'
+                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-600/30'
+                }`}
+              >
+                <span>✓</span>
+                <span>{alertModal.buttonText || 'យល់ព្រម (OK)'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
