@@ -3128,7 +3128,6 @@ export default function UnifiedAdminDashboard() {
   const [orderDatePeriod, setOrderDatePeriod] = useState('all'); // 'all' | 'today' | 'yesterday' | '7days' | 'month' | 'custom'
   const [orderCustomStartDate, setOrderCustomStartDate] = useState('');
   const [orderCustomEndDate, setOrderCustomEndDate] = useState('');
-  const [ordersViewMode, setOrdersViewMode] = useState('sales'); // 'sales' | 'stock_in'
   const [showOrderItemsBreakdown, setShowOrderItemsBreakdown] = useState(true);
 
   // ⭐️ STATES សម្រាប់ប្រព័ន្ធ REFUND & RETURN ទំនិញស្វ័យប្រវត្តិ (WORLD-STANDARD RETURN & REFUND SYSTEM) ⭐️
@@ -14875,31 +14874,6 @@ export default function UnifiedAdminDashboard() {
       return sum + (parseFloat(o.refunded_amount || o.refund_details?.refunded_amount || 0) || (o.status === 'Refunded' ? parseFloat(o.total || 0) : 0));
     }, 0);
 
-    // ៤. ចម្រាញ់ Stock In Movements ប្រសិនបើ Merchant ចង់ពិនិត្យប្រវត្តិនាំចូលស្តុក
-    const filteredStockInMovements = (stockMovements || []).filter(m => {
-      if (m.type !== 'IN') return false;
-      if (!m.created_at) return orderDatePeriod === 'all';
-      let mDate = '';
-      try {
-        const d = new Date(m.created_at);
-        if (!isNaN(d.getTime())) mDate = d.toLocaleDateString('en-CA');
-      } catch (_) {
-        mDate = m.created_at.slice(0, 10);
-      }
-      if (orderDatePeriod === 'today') return mDate === todayStr;
-      if (orderDatePeriod === 'yesterday') return mDate === yesterdayStr;
-      if (orderDatePeriod === '7days') return mDate >= sevenDaysAgoStr && mDate <= todayStr;
-      if (orderDatePeriod === 'month') return mDate >= monthStartStr && mDate <= todayStr;
-      if (orderDatePeriod === 'custom') {
-        if (orderCustomStartDate && mDate < orderCustomStartDate) return false;
-        if (orderCustomEndDate && mDate > orderCustomEndDate) return false;
-        return true;
-      }
-      return true;
-    });
-
-    const totalStockInQty = filteredStockInMovements.reduce((sum, m) => sum + (Math.abs(parseInt(m.qty_change)) || 0), 0);
-
     // Label នៃកាលបរិច្ឆេទដែលបានជ្រើសរើស
     const getPeriodLabel = () => {
       if (orderDatePeriod === 'today') return `ថ្ងៃនេះ (${todayStr})`;
@@ -14929,7 +14903,7 @@ export default function UnifiedAdminDashboard() {
                   ប្រវត្តិការទិញ-លក់
                 </h2>
                 <p className="text-[11px] sm:text-xs text-gray-500 hidden sm:block">
-                  ពិនិត្យតាមដានទំនិញលក់បាន ទឹកប្រាក់សរុប និងទំនិញនាំចូលស្តុកតាមកាលបរិច្ឆេទ
+                  ពិនិត្យតាមដានទំនិញលក់បាន វិក្កយបត្រ និងទឹកប្រាក់សរុបតាមកាលបរិច្ឆេទ
                 </p>
               </div>
             </div>
@@ -14949,7 +14923,6 @@ export default function UnifiedAdminDashboard() {
                 type="button"
                 onClick={() => {
                   fetchRealOrders();
-                  fetchStockMovements();
                 }}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-3 py-1.5 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
@@ -14980,38 +14953,18 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
-        {/* ⭐️ MODE SWITCHER: ការកុម្ម៉ង់ & លក់ទំនិញ (ORDERS) VS ការនាំចូលស្តុក (STOCK IN) ⭐️ */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-white p-2 sm:p-3 rounded-2xl border border-gray-100 shadow-2xs">
-          <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl">
-            <button
-              type="button"
-              onClick={() => setOrdersViewMode('sales')}
-              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                ordersViewMode === 'sales'
-                  ? 'bg-white text-gray-900 shadow-xs'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-            >
+        {/* ⭐️ ACTIVE PERIOD & ORDER SUMMARY BAR ⭐️ */}
+        <div className="flex items-center justify-between bg-white p-2.5 sm:p-3 rounded-2xl border border-gray-100 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black text-gray-800 flex items-center gap-1.5">
               <span>🛒</span>
-              <span>ការលក់ ({filteredOrders.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrdersViewMode('stock_in')}
-              className={`flex-1 sm:flex-initial px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                ordersViewMode === 'stock_in'
-                  ? 'bg-white text-gray-900 shadow-xs'
-                  : 'text-gray-500 hover:text-gray-900'
-              }`}
-            >
-              <span>📥</span>
-              <span>ទំនិញចូល ({filteredStockInMovements.length})</span>
-            </button>
+              <span>បញ្ជីការលក់ ({filteredOrders.length} វិក្កយបត្រ)</span>
+            </span>
           </div>
 
-          <div className="text-[11px] sm:text-xs font-bold text-gray-600 flex items-center justify-between sm:justify-end gap-2 px-1">
-            <span>កាលបរិច្ឆេទសកម្ម:</span>
-            <span className="font-black px-2 py-0.5 rounded-lg bg-orange-50 text-orange-700 border border-orange-200">
+          <div className="text-[11px] sm:text-xs font-bold text-gray-600 flex items-center gap-2">
+            <span className="hidden sm:inline">កាលបរិច្ឆេទសកម្ម:</span>
+            <span className="font-black px-2.5 py-1 rounded-xl bg-orange-50 text-orange-700 border border-orange-200 text-xs">
               📅 {getPeriodLabel()}
             </span>
           </div>
@@ -15058,29 +15011,27 @@ export default function UnifiedAdminDashboard() {
             </div>
 
             {/* Status Filter (សម្រាប់ Sales Orders) */}
-            {ordersViewMode === 'sales' && (
-              <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-                {['all', 'Completed', 'Preparing', 'Shipped', 'Cancelled', 'Refunded'].map(st => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setOrderFilterStatus(st)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
-                      orderFilterStatus === st 
-                        ? 'bg-blue-600 text-white shadow-2xs' 
-                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
-                    }`}
-                  >
-                    {st === 'all' && `ទាំងអស់`}
-                    {st === 'Completed' && '✓ ជោគជ័យ'}
-                    {st === 'Preparing' && '⏳ កំពុងរៀបចំ'}
-                    {st === 'Shipped' && '🚚 កំពុងដឹក'}
-                    {st === 'Cancelled' && '✕ បានបោះបង់'}
-                    {st === 'Refunded' && `🔄 បាន Refund${refundedOrdersCount > 0 ? ' (' + refundedOrdersCount + ')' : ''}`}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
+              {['all', 'Completed', 'Preparing', 'Shipped', 'Cancelled', 'Refunded'].map(st => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setOrderFilterStatus(st)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
+                    orderFilterStatus === st 
+                      ? 'bg-blue-600 text-white shadow-2xs' 
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  {st === 'all' && `ទាំងអស់`}
+                  {st === 'Completed' && '✓ ជោគជ័យ'}
+                  {st === 'Preparing' && '⏳ កំពុងរៀបចំ'}
+                  {st === 'Shipped' && '🚚 កំពុងដឹក'}
+                  {st === 'Cancelled' && '✕ បានបោះបង់'}
+                  {st === 'Refunded' && `🔄 បាន Refund${refundedOrdersCount > 0 ? ' (' + refundedOrdersCount + ')' : ''}`}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Custom Date Range Picker (From Date -> To Date) */}
@@ -15165,136 +15116,87 @@ export default function UnifiedAdminDashboard() {
         </div>
 
         {/* ⭐️ SUMMARY STATS CARDS FOR SELECTED DATE ⭐️ */}
-        {ordersViewMode === 'sales' ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-            {/* 1. Total Revenue */}
-            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-indigo-500/30 shadow-md">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider truncate">
-                ចំណូល ({getPeriodLabel()})
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+          {/* 1. Total Revenue */}
+          <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-indigo-500/30 shadow-md">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider truncate">
+              ចំណូល ({getPeriodLabel()})
+            </span>
+            <div className="flex items-baseline gap-1 mt-1 sm:mt-2">
+              <span className="text-xl sm:text-3xl font-black text-emerald-400 font-mono">
+                ${totalFilteredRevenue.toFixed(2)}
               </span>
-              <div className="flex items-baseline gap-1 mt-1 sm:mt-2">
-                <span className="text-xl sm:text-3xl font-black text-emerald-400 font-mono">
-                  ${totalFilteredRevenue.toFixed(2)}
-                </span>
-              </div>
-              <p className="text-[10px] sm:text-xs text-slate-300 font-mono mt-0.5 truncate">
-                ~ {(Math.round(totalFilteredRevenue * exchangeRate)).toLocaleString()} ៛
-              </p>
             </div>
+            <p className="text-[10px] sm:text-xs text-slate-300 font-mono mt-0.5 truncate">
+              ~ {(Math.round(totalFilteredRevenue * exchangeRate)).toLocaleString()} ៛
+            </p>
+          </div>
 
-            {/* 2. Total Orders */}
-            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
-                វិក្កយបត្រ (Orders)
+          {/* 2. Total Orders */}
+          <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
+            <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
+              វិក្កយបត្រ (Orders)
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-1 sm:mt-2">
+              <span className="text-xl sm:text-3xl font-black text-gray-900 font-mono">
+                {filteredOrders.length}
               </span>
-              <div className="flex items-baseline gap-1.5 mt-1 sm:mt-2">
-                <span className="text-xl sm:text-3xl font-black text-gray-900 font-mono">
-                  {filteredOrders.length}
-                </span>
-                <span className="text-[11px] sm:text-xs text-gray-500 font-bold">វិក្កយបត្រ</span>
-              </div>
-              <div className="flex items-center gap-1.5 mt-1 sm:mt-2 text-[10px] sm:text-[11px] font-bold truncate">
-                <span className="text-emerald-600">✓ {completedOrdersCount}</span>
-                <span className="text-gray-300">•</span>
-                <span className="text-amber-600">⏳ {pendingOrdersCount}</span>
-                {refundedOrdersCount > 0 && (
-                  <>
-                    <span className="text-gray-300">•</span>
-                    <span className="text-rose-600">🔄 {refundedOrdersCount} Refund</span>
-                  </>
-                )}
-              </div>
+              <span className="text-[11px] sm:text-xs text-gray-500 font-bold">វិក្កយបត្រ</span>
             </div>
-
-            {/* 3. Total Items Qty */}
-            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
-                ទំនិញលក់បាន
-              </span>
-              <div className="flex items-baseline gap-1.5 mt-1 sm:mt-2">
-                <span className="text-xl sm:text-3xl font-black text-blue-600 font-mono">
-                  {totalFilteredItemsQty}
-                </span>
-                <span className="text-[11px] sm:text-xs text-gray-500 font-bold">ចំនួន</span>
-              </div>
-              <p className="text-[10px] sm:text-[11px] text-gray-500 mt-1 sm:mt-2 truncate">
-                ពី <b>{orderItemsSummary.length}</b> មុខទំនិញ
-              </p>
-            </div>
-
-            {/* 4. Action Card: Toggle Breakdown */}
-            <div 
-              onClick={() => setShowOrderItemsBreakdown(prev => !prev)}
-              className="bg-gradient-to-br from-amber-50 to-orange-50/70 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-amber-200 shadow-xs flex flex-col justify-between cursor-pointer hover:border-amber-300 transition group"
-            >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] uppercase font-black text-amber-900 tracking-wider truncate">
-                    មុខទំនិញលម្អិត
-                  </span>
-                  <span className="text-base sm:text-lg group-hover:scale-110 transition-transform">📦</span>
-                </div>
-                <h4 className="text-xs sm:text-sm font-black text-gray-900 mt-1 sm:mt-2 truncate">
-                  {orderItemsSummary.length} មុខទំនិញ
-                </h4>
-              </div>
-
-              <div className="pt-1.5 text-[10px] sm:text-xs font-black text-amber-700 flex items-center gap-1">
-                <span>{showOrderItemsBreakdown ? '▲ លាក់' : '▼ បង្ហាញលម្អិត'}</span>
-              </div>
+            <div className="flex items-center gap-1.5 mt-1 sm:mt-2 text-[10px] sm:text-[11px] font-bold truncate">
+              <span className="text-emerald-600">✓ {completedOrdersCount}</span>
+              <span className="text-gray-300">•</span>
+              <span className="text-amber-600">⏳ {pendingOrdersCount}</span>
+              {refundedOrdersCount > 0 && (
+                <>
+                  <span className="text-gray-300">•</span>
+                  <span className="text-rose-600">🔄 {refundedOrdersCount} Refund</span>
+                </>
+              )}
             </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
-            <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-indigo-500/30 shadow-md">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider truncate">
-                ដងនាំចូល ({getPeriodLabel()})
+
+          {/* 3. Total Items Qty */}
+          <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
+            <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
+              ទំនិញលក់បាន
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-1 sm:mt-2">
+              <span className="text-xl sm:text-3xl font-black text-blue-600 font-mono">
+                {totalFilteredItemsQty}
               </span>
-              <div className="flex items-baseline gap-1 mt-1 sm:mt-2">
-                <span className="text-xl sm:text-3xl font-black text-amber-300 font-mono">
-                  {filteredStockInMovements.length}
+              <span className="text-[11px] sm:text-xs text-gray-500 font-bold">ចំនួន</span>
+            </div>
+            <p className="text-[10px] sm:text-[11px] text-gray-500 mt-1 sm:mt-2 truncate">
+              ពី <b>{orderItemsSummary.length}</b> មុខទំនិញ
+            </p>
+          </div>
+
+          {/* 4. Action Card: Toggle Breakdown */}
+          <div 
+            onClick={() => setShowOrderItemsBreakdown(prev => !prev)}
+            className="bg-gradient-to-br from-amber-50 to-orange-50/70 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-amber-200 shadow-xs flex flex-col justify-between cursor-pointer hover:border-amber-300 transition group"
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-black text-amber-900 tracking-wider truncate">
+                  មុខទំនិញលម្អិត
                 </span>
-                <span className="text-[10px] sm:text-xs text-slate-300 font-bold">លើក</span>
+                <span className="text-base sm:text-lg group-hover:scale-110 transition-transform">📦</span>
               </div>
+              <h4 className="text-xs sm:text-sm font-black text-gray-900 mt-1 sm:mt-2 truncate">
+                {orderItemsSummary.length} មុខទំនិញ
+              </h4>
             </div>
 
-            <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
-                នាំចូលសរុប
-              </span>
-              <div className="flex items-baseline gap-1 mt-1 sm:mt-2">
-                <span className="text-xl sm:text-3xl font-black text-emerald-600 font-mono">
-                  +{totalStockInQty}
-                </span>
-                <span className="text-[10px] sm:text-xs text-gray-500 font-bold">ចំនួន</span>
-              </div>
-              <p className="text-[10px] sm:text-[11px] text-gray-500 mt-1 truncate">នាំចូលស្តុកបន្ថែម</p>
-            </div>
-
-            <div className="col-span-2 sm:col-span-1 bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs flex items-center justify-between gap-2">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">គ្រប់គ្រងស្តុក</span>
-                <h4 className="text-xs sm:text-sm font-black text-gray-900 mt-0.5">នាំចូលស្តុក?</h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (products.length > 0) {
-                    handleOpenStockIn(products[0], 'IN');
-                  } else {
-                    alert('សូមបង្កើតទំនិញជាមុនសិន!');
-                  }
-                }}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
-              >
-                + នាំចូល
-              </button>
+            <div className="pt-1.5 text-[10px] sm:text-xs font-black text-amber-700 flex items-center gap-1">
+              <span>{showOrderItemsBreakdown ? '▲ លាក់' : '▼ បង្ហាញលម្អិត'}</span>
             </div>
           </div>
-        )}
+        </div>
 
         {/* ⭐️ ITEMIZED BREAKDOWN DRAWER: បញ្ជីមុខទំនិញដែលបានលក់ចេញក្នុងកាលបរិច្ឆេទនេះ ⭐️ */}
-        {ordersViewMode === 'sales' && showOrderItemsBreakdown && (
+        {showOrderItemsBreakdown && (
           <div className="bg-white rounded-3xl border-2 border-amber-300/80 p-5 shadow-sm space-y-4 animate-in slide-in-from-top-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
@@ -15353,9 +15255,8 @@ export default function UnifiedAdminDashboard() {
           </div>
         )}
 
-        {/* ⭐️ MAIN DATA TABLE (SALES ORDERS OR STOCK IN) ⭐️ */}
-        {ordersViewMode === 'sales' ? (
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* ⭐️ MAIN DATA TABLE (SALES ORDERS) ⭐️ */}
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-black text-gray-900">
@@ -15934,121 +15835,6 @@ export default function UnifiedAdminDashboard() {
               </>
             )}
           </div>
-        ) : (
-          /* ⭐️ STOCK IN MOVEMENTS TABLE ⭐️ */
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-black text-gray-900">
-                  ប្រវត្តិនាំទំនិញចូលស្តុក ({filteredStockInMovements.length})
-                </h3>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  ទំនិញដែលបាននាំចូលស្តុកក្នុង: {getPeriodLabel()} • បរិមាណសរុប: +{totalStockInQty}
-                </p>
-              </div>
-            </div>
-
-            {filteredStockInMovements.length === 0 ? (
-              <div className="p-16 text-center space-y-2">
-                <span className="text-4xl block">📥</span>
-                <p className="font-black text-sm text-gray-700">មិនមានប្រវត្តិនាំទំនិញចូលស្តុកក្នុងកាលបរិច្ឆេទនេះទេ</p>
-                <p className="text-xs text-gray-400">សូមសាកល្បងជ្រើសរើស "🌐 គ្រប់ពេល" ឬប្តូរថ្ងៃខែឆ្នាំឡើងវិញ។</p>
-              </div>
-            ) : (
-              <>
-              {/* ⭐️ DESKTOP ORDERS TABLE (hidden md:block) ⭐️ */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase font-black">
-                    <tr>
-                      <th className="px-6 py-4">កាលបរិច្ឆេទ & ម៉ោង</th>
-                      <th className="px-6 py-4">មុខទំនិញ</th>
-                      <th className="px-6 py-4">Variant (Size/ពណ៌)</th>
-                      <th className="px-6 py-4 text-center">បរិមាណនាំចូល</th>
-                      <th className="px-6 py-4 text-center">ស្តុកមុន ➔ ស្តុកថ្មី</th>
-                      <th className="px-6 py-4">មូលហេតុ / កំណត់សម្គាល់</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 font-medium">
-                    {filteredStockInMovements.map((m, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50/80 transition">
-                        <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">
-                          {m.created_at ? new Date(m.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="font-black text-gray-900 text-xs">{m.products?.name || 'ទំនិញ'}</p>
-                          <p className="text-[10px] text-gray-400 font-mono">SKU: {m.products?.sku || 'N/A'}</p>
-                        </td>
-                        <td className="px-6 py-4 text-xs">
-                          {m.product_variants?.size ? (
-                            <span className="bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded">
-                              Size: {m.product_variants.size} {m.product_variants.color ? `• ${m.product_variants.color}` : ''}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">ទូទៅ</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="text-sm font-black font-mono px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            +{Math.abs(parseInt(m.qty_change) || 0)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center text-xs font-mono">
-                          <span className="text-gray-500">{m.previous_qty || 0}</span>
-                          <span className="mx-1 text-gray-300">➔</span>
-                          <span className="font-bold text-emerald-600">{m.new_qty || 0}</span>
-                        </td>
-                        <td className="px-6 py-4 text-xs text-gray-600">
-                          {m.reason || 'នាំចូលស្តុកបន្ថែម'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* ⭐️ MOBILE STOCK IN CARDS (md:hidden) ⭐️ */}
-              <div className="md:hidden divide-y divide-gray-100">
-                {filteredStockInMovements.map((m, idx) => (
-                  <div key={`mobile-stock-${idx}`} className="p-3.5 space-y-2 bg-white">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-black text-xs text-gray-900 truncate">{m.products?.name || 'ទំនិញ'}</p>
-                        <p className="text-[10px] text-gray-400 font-mono">SKU: {m.products?.sku || 'N/A'}</p>
-                      </div>
-                      <span className="text-sm font-black font-mono px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                        +{Math.abs(parseInt(m.qty_change) || 0)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
-                      <div>
-                        {m.product_variants?.size ? (
-                          <span className="bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded text-[10px]">
-                            Size: {m.product_variants.size} {m.product_variants.color ? `• ${m.product_variants.color}` : ''}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400 text-[10px]">ទូទៅ</span>
-                        )}
-                      </div>
-                      <div className="text-[11px] font-mono text-gray-500">
-                        <span>{m.previous_qty || 0}</span>
-                        <span className="mx-1 text-gray-300">➔</span>
-                        <span className="font-bold text-emerald-600">{m.new_qty || 0}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-gray-400 pt-0.5">
-                      <span>{m.reason || 'នាំចូលស្តុកបន្ថែម'}</span>
-                      <span>{m.created_at ? new Date(m.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              </>
-            )}
-          </div>
-        )}
 
         {/* ⭐️ MODAL មើលលម្អិតមុខទំនិញក្នុង ORDER (VIEW ORDER DETAILS & MAPS) ⭐️ */}
         {selectedOrderDetails && (() => {
