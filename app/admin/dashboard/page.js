@@ -6555,6 +6555,7 @@ export default function UnifiedAdminDashboard() {
         items: [
           ...posCart.map(item => ({
             id: item.id,
+            sku: item.sku || '',
             name: item.name,
             size: item.size || 'N/A',
             color: item.color || 'N/A',
@@ -14838,7 +14839,13 @@ export default function UnifiedAdminDashboard() {
         const items = Array.isArray(order.items) ? order.items : [];
         items.forEach(it => {
           if (!it || it.is_tax_meta || it.is_delivery_meta || it.is_pos_meta || (!it.name && !it.title)) return;
-          const key = `${it.name || it.title || it.id}_${it.size || ''}_${it.color || ''}`;
+          
+          // ⭐️ កំណត់សម្គាល់ម៉ូដទំនិញតាម ID និង SKU (ការពារមិនឱ្យម៉ូដខុសគ្នា ច្រឡំបញ្ចូលគ្នាតែមួយ)
+          const matchedProd = currentStoreProducts.find(p => String(p.id) === String(it.id) || (p.sku && it.sku && p.sku === it.sku));
+          const prodId = it.id || it.product_id || matchedProd?.id || it.name;
+          const sku = it.sku || matchedProd?.sku || '';
+          const key = `${prodId}_${it.size || ''}_${it.color || ''}`;
+          
           const qty = parseInt(it.qty || it.quantity || 1) || 1;
           const price = parseFloat(it.price || 0) || 0;
           const total = qty * price;
@@ -14850,9 +14857,10 @@ export default function UnifiedAdminDashboard() {
             prev.ordersCount += 1;
           } else {
             map.set(key, {
-              id: it.id,
-              name: it.name || it.title || 'ទំនិញ',
-              image_url: it.image_url || it.image || '',
+              id: prodId,
+              sku: sku,
+              name: it.name || it.title || matchedProd?.name || 'ទំនិញ',
+              image_url: it.image_url || it.image || matchedProd?.image_url || '',
               size: it.size || '',
               color: it.color || '',
               price: price,
@@ -15243,9 +15251,16 @@ export default function UnifiedAdminDashboard() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-xs font-black text-gray-900 truncate" title={item.name}>
-                        {item.name}
-                      </h4>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-xs font-black text-gray-900 truncate" title={item.name}>
+                          {item.name}
+                        </h4>
+                        {item.sku && (
+                          <span className="font-mono text-[9px] font-black px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                            {item.sku}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 mt-0.5 text-[10px]">
                         {item.size && <span className="bg-orange-100 text-orange-800 font-bold px-1.5 py-0.2 rounded">Size: {item.size}</span>}
                         {item.color && <span className="bg-slate-200 text-slate-700 font-bold px-1.5 py-0.2 rounded">{item.color}</span>}
