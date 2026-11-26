@@ -6841,12 +6841,19 @@ export default function UnifiedAdminDashboard() {
 
       // Add to local realOrders state so UI reflects the new sale immediately on top without duplicate
       setRealOrders(prev => {
+        const isCreditSaleLocal = paymentMethod === 'Credit / ជំពាក់';
+        const downPaymentLocal = (isCreditSaleLocal && posCreditType === 'partial') 
+          ? Math.max(0, Math.min(posTotal, parseFloat(posCreditDownPayment) || 0)) 
+          : 0;
         const newOrder = {
           ...orderPayload,
           id: orderPayload.order_id || `ord_${Date.now()}`,
           customer: resolvedCustomerName,
           total: posTotal,
-          payment: paymentMethod
+          payment: paymentMethod,
+          is_credit_sale: isCreditSaleLocal,
+          credit_debt_amount: isCreditSaleLocal ? Math.max(0, posTotal - downPaymentLocal) : 0,
+          credit_due_date: posDueDate || null
         };
         const filteredPrev = prev.filter(p => String(p.order_id || p.id).trim() !== String(newOrder.order_id || newOrder.id).trim());
         return [newOrder, ...filteredPrev];
@@ -15043,13 +15050,31 @@ export default function UnifiedAdminDashboard() {
       return '';
     };
 
-    // ១. ចម្រាញ់ Order តាម Status, Search, និង Date Filter (Supporting Refunded & Partial Refunds)
+    // ⭐️ ជំនួយការត្រួតពិនិត្យការលក់ជំពាក់ (Credit Order Helpers) ⭐️
+    const isCreditOrder = (o) => {
+      if (!o) return false;
+      if (o.is_credit_sale) return true;
+      const pay = String(o.payment || o.payment_method || '').toLowerCase();
+      return pay.includes('credit') || pay.includes('ជំពាក់');
+    };
+
+    const getCreditDebtAmount = (o) => {
+      if (!isCreditOrder(o)) return 0;
+      if (o.credit_debt_amount != null && !isNaN(parseFloat(o.credit_debt_amount))) {
+        return parseFloat(o.credit_debt_amount);
+      }
+      return parseFloat(o.total || o.total_amount || 0) || 0;
+    };
+
+    // ១. ចម្រាញ់ Order តាម Status, Search, និង Date Filter (Supporting Credit, Refunded & Partial Refunds)
     const filteredOrders = currentStoreOrders.filter(o => {
       const matchStatus = orderFilterStatus === 'all' 
         ? true 
-        : orderFilterStatus === 'Refunded'
-          ? (o.status === 'Refunded' || o.status === 'Partially Refunded')
-          : o.status === orderFilterStatus;
+        : orderFilterStatus === 'Credit'
+          ? isCreditOrder(o)
+          : orderFilterStatus === 'Refunded'
+            ? (o.status === 'Refunded' || o.status === 'Partially Refunded')
+            : o.status === orderFilterStatus;
       const orderIdStr = (o.order_id || o.id || '').toString().toLowerCase();
       const customerStr = (o.customer || '').toLowerCase();
       const matchSearch = orderIdStr.includes(searchOrder.toLowerCase()) || customerStr.includes(searchOrder.toLowerCase());
@@ -15135,6 +15160,27 @@ export default function UnifiedAdminDashboard() {
     const totalFilteredRefundAmount = filteredOrders.reduce((sum, o) => {
       return sum + (parseFloat(o.refunded_amount || o.refund_details?.refunded_amount || 0) || (o.status === 'Refunded' ? parseFloat(o.total || 0) : 0));
     }, 0);
+
+    // ⭐️ គណនាស្ថិតិលក់ជំពាក់ក្នុងចន្លោះកាលបរិច្ឆេទនេះ (Period Credit Debt Metrics) ⭐️
+    const datePeriodOrders = currentStoreOrders.filter(o => {
+      const orderDate = getOrderDateKey(o);
+      if (!orderDate) return orderDatePeriod === 'all';
+      if (orderDatePeriod === 'today') return orderDate === todayStr;
+      if (orderDatePeriod === 'yesterday') return orderDate === yesterdayStr;
+      if (orderDatePeriod === '7days') return orderDate >= sevenDaysAgoStr && orderDate <= todayStr;
+      if (orderDatePeriod === 'month') return orderDate >= monthStartStr && orderDate <= todayStr;
+      if (orderDatePeriod === 'custom') {
+        if (orderCustomStartDate && orderDate < orderCustomStartDate) return false;
+        if (orderCustomEndDate && orderDate > orderCustomEndDate) return false;
+        return true;
+      }
+      return true;
+    });
+
+    const periodCreditOrders = datePeriodOrders.filter(o => o.status !== 'Cancelled' && isCreditOrder(o));
+    const totalPeriodCreditDebt = periodCreditOrders.reduce((sum, o) => sum + getCreditDebtAmount(o), 0);
+    const totalPeriodCreditOrdersCount = periodCreditOrders.length;
+    const currentFilteredCreditCount = filteredOrders.filter(o => o.status !== 'Cancelled' && isCreditOrder(o)).length;
 
     // Label នៃកាលបរិច្ឆេទដែលបានជ្រើសរើស
     const getPeriodLabel = () => {
@@ -15274,18 +15320,31 @@ export default function UnifiedAdminDashboard() {
 
             {/* Status Filter (សម្រាប់ Sales Orders) */}
             <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-              {['all', 'Completed', 'Preparing', 'Shipped', 'Cancelled', 'Refunded'].map(st => (
+              {['all', 'Credit', 'Completed', 'Preparing', 'Shipped', 'Cancelled', 'Refunded'].map(st => (
                 <button
                   key={st}
                   type="button"
                   onClick={() => setOrderFilterStatus(st)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap cursor-pointer shrink-0 flex items-center gap-1 ${
                     orderFilterStatus === st 
-                      ? 'bg-blue-600 text-white shadow-2xs' 
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
+                      ? (st === 'Credit' ? 'bg-rose-600 text-white shadow-2xs font-black' : 'bg-blue-600 text-white shadow-2xs') 
+                      : (st === 'Credit' ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-black' : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200')
                   }`}
                 >
                   {st === 'all' && `ទាំងអស់`}
+                  {st === 'Credit' && (
+                    <>
+                      <span>⚠️</span>
+                      <span>លក់ជំពាក់</span>
+                      {totalPeriodCreditOrdersCount > 0 && (
+                        <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                          orderFilterStatus === 'Credit' ? 'bg-white text-rose-700' : 'bg-rose-600 text-white'
+                        }`}>
+                          {totalPeriodCreditOrdersCount}
+                        </span>
+                      )}
+                    </>
+                  )}
                   {st === 'Completed' && '✓ ជោគជ័យ'}
                   {st === 'Preparing' && '⏳ កំពុងរៀបចំ'}
                   {st === 'Shipped' && '🚚 កំពុងដឹក'}
@@ -15378,7 +15437,7 @@ export default function UnifiedAdminDashboard() {
         </div>
 
         {/* ⭐️ SUMMARY STATS CARDS FOR SELECTED DATE ⭐️ */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-4">
           {/* 1. Total Revenue */}
           <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-indigo-500/30 shadow-md">
             <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider truncate">
@@ -15394,7 +15453,52 @@ export default function UnifiedAdminDashboard() {
             </p>
           </div>
 
-          {/* 2. Total Orders */}
+          {/* 2. Unpaid Credit Debt KPI Card */}
+          <div 
+            onClick={() => setOrderFilterStatus(orderFilterStatus === 'Credit' ? 'all' : 'Credit')}
+            className={`p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border-2 transition cursor-pointer group shadow-xs ${
+              orderFilterStatus === 'Credit'
+                ? 'bg-rose-600 text-white border-rose-700 shadow-md ring-2 ring-rose-400'
+                : 'bg-gradient-to-br from-rose-50/90 to-amber-50/70 hover:from-rose-100 hover:to-amber-100 border-rose-200 hover:border-rose-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] uppercase font-black tracking-wider truncate flex items-center gap-1 ${
+                orderFilterStatus === 'Credit' ? 'text-rose-100' : 'text-rose-700'
+              }`}>
+                <span>⚠️</span>
+                <span>បំណុលជំពាក់ ({getPeriodLabel()})</span>
+              </span>
+              {totalPeriodCreditOrdersCount > 0 && (
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full border ${
+                  orderFilterStatus === 'Credit' ? 'bg-white text-rose-700 border-rose-300' : 'bg-rose-600 text-white border-rose-700'
+                }`}>
+                  {totalPeriodCreditOrdersCount}
+                </span>
+              )}
+            </div>
+            <div className="flex items-baseline gap-1 mt-1 sm:mt-2">
+              <span className={`text-xl sm:text-3xl font-black font-mono ${
+                orderFilterStatus === 'Credit' ? 'text-white' : 'text-rose-600'
+              }`}>
+                ${totalPeriodCreditDebt.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between mt-0.5">
+              <p className={`text-[10px] sm:text-xs font-mono font-bold truncate ${
+                orderFilterStatus === 'Credit' ? 'text-rose-100' : 'text-rose-500'
+              }`}>
+                ~ {(Math.round(totalPeriodCreditDebt * exchangeRate)).toLocaleString()} ៛
+              </p>
+              <span className={`text-[10px] font-black underline ml-auto ${
+                orderFilterStatus === 'Credit' ? 'text-white' : 'text-rose-700 group-hover:text-rose-900'
+              }`}>
+                {orderFilterStatus === 'Credit' ? 'បង្ហាញទាំងអស់ ✕' : 'ចម្រាញ់មើល ➔'}
+              </span>
+            </div>
+          </div>
+
+          {/* 3. Total Orders */}
           <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
             <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
               វិក្កយបត្រ (Orders)
@@ -15409,16 +15513,16 @@ export default function UnifiedAdminDashboard() {
               <span className="text-emerald-600">✓ {completedOrdersCount}</span>
               <span className="text-gray-300">•</span>
               <span className="text-amber-600">⏳ {pendingOrdersCount}</span>
-              {refundedOrdersCount > 0 && (
+              {totalPeriodCreditOrdersCount > 0 && (
                 <>
                   <span className="text-gray-300">•</span>
-                  <span className="text-rose-600">🔄 {refundedOrdersCount} Refund</span>
+                  <span className="text-rose-600">⚠️ {totalPeriodCreditOrdersCount} ជំពាក់</span>
                 </>
               )}
             </div>
           </div>
 
-          {/* 3. Total Items Qty */}
+          {/* 4. Total Items Qty */}
           <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-xs">
             <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider truncate">
               ទំនិញលក់បាន
@@ -15434,7 +15538,7 @@ export default function UnifiedAdminDashboard() {
             </p>
           </div>
 
-          {/* 4. Action Card: Toggle Breakdown */}
+          {/* 5. Action Card: Toggle Breakdown */}
           <div 
             onClick={() => setShowOrderItemsBreakdown(prev => !prev)}
             className="bg-gradient-to-br from-amber-50 to-orange-50/70 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-amber-200 shadow-xs flex flex-col justify-between cursor-pointer hover:border-amber-300 transition group"
@@ -15574,7 +15678,7 @@ export default function UnifiedAdminDashboard() {
                       const orderItems = (Array.isArray(order.items) ? order.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && !it.is_pos_meta && (it.name || it.title));
 
                       return (
-                        <tr key={order.id} id={`order-row-${order.id}`} className={`hover:bg-gray-50/80 transition ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset animate-pulse' : ''}`}>
+                        <tr key={order.id} id={`order-row-${order.id}`} className={`hover:bg-gray-50/80 transition ${isCreditOrder(order) ? 'bg-rose-50/25 border-l-4 border-l-rose-500' : ''} ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset animate-pulse' : ''}`}>
                           <td className="px-6 py-4 font-black text-blue-600 text-xs">{displayId}</td>
                           
                           {/* ⭐️ រូបថតទំនិញដែលបានលក់ & Hover Zoom Preview ⭐️ */}
@@ -15749,8 +15853,22 @@ export default function UnifiedAdminDashboard() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-xs font-bold text-gray-700">
-                            <div className="flex items-center gap-1.5">
-                              <span className="bg-gray-100 px-2 py-1 rounded-md">{order.payment || order.payment_method || 'Cash'}</span>
+                            <div className="flex flex-col gap-1 items-start">
+                              {isCreditOrder(order) ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="bg-rose-100 text-rose-800 border border-rose-300 font-black text-[11px] px-2.5 py-1 rounded-lg inline-flex items-center gap-1 shadow-2xs">
+                                    <span>⚠️</span>
+                                    <span>Credit / ជំពាក់</span>
+                                  </span>
+                                  {order.credit_due_date && (
+                                    <span className="text-[10px] font-bold text-rose-600 font-mono">
+                                      កំណត់សង: {order.credit_due_date}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="bg-gray-100 px-2 py-1 rounded-md">{order.payment || order.payment_method || 'Cash'}</span>
+                              )}
                               {(order.payment_slip_url || order.slip_url || (Array.isArray(order.items) && (order.items[0]?.payment_slip_url || order.items[0]?.slip_url))) && (
                                 <button 
                                   onClick={() => setViewingSlipUrl(order.payment_slip_url || order.slip_url || order.items[0]?.payment_slip_url || order.items[0]?.slip_url)}
@@ -15767,24 +15885,45 @@ export default function UnifiedAdminDashboard() {
                             <p className="text-[10px] text-gray-400 font-bold">{(parseFloat(order.total || 0) * exchangeRate).toLocaleString()} ៛</p>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              <select
-                                value={order.status || 'Pending'}
-                                onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                                className={`text-xs font-bold border rounded-xl px-2.5 py-1.5 outline-none cursor-pointer shadow-2xs transition ${
-                                  order.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
-                                  order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-300' :
-                                  order.status === 'Preparing' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
-                                  order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-300' :
-                                  'bg-amber-50 text-amber-700 border-amber-300'
-                                }`}
-                              >
-                                <option value="Pending">🟡 រង់ចាំបញ្ជាក់ (Pending)</option>
-                                <option value="Preparing">🔵 កំពុងវេចខ្ចប់ (Processing)</option>
-                                <option value="Shipped">🚚 កំពុងដឹក (Out for Delivery)</option>
-                                <option value="Completed">🟢 ជោគជ័យ (Delivered)</option>
-                                <option value="Cancelled">❌ បោះបង់ (Cancelled)</option>
-                              </select>
+                            <div className="space-y-1.5">
+                              {isCreditOrder(order) && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs animate-pulse">
+                                    <span>⚠️</span>
+                                    <span>ជំពាក់ (UNPAID)</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveTab('customers');
+                                      setCustomerSubView('debt');
+                                    }}
+                                    className="text-[9px] font-black text-rose-700 hover:text-rose-900 bg-rose-100 hover:bg-rose-200 border border-rose-300 px-2 py-0.5 rounded-full cursor-pointer transition shadow-2xs flex items-center gap-0.5"
+                                    title="ទៅកាន់ផ្ទាំងគ្រប់គ្រងបំណុលក្នុង CRM"
+                                  >
+                                    <span>💳</span>
+                                    <span>គ្រប់គ្រងបំណុល</span>
+                                  </button>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={order.status || 'Pending'}
+                                  onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                                  className={`text-xs font-bold border rounded-xl px-2.5 py-1.5 outline-none cursor-pointer shadow-2xs transition ${
+                                    order.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
+                                    order.status === 'Shipped' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+                                    order.status === 'Preparing' ? 'bg-indigo-50 text-indigo-700 border-indigo-300' :
+                                    order.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-300' :
+                                    'bg-amber-50 text-amber-700 border-amber-300'
+                                  }`}
+                                >
+                                  <option value="Pending">🟡 រង់ចាំបញ្ជាក់ (Pending)</option>
+                                  <option value="Preparing">🔵 កំពុងវេចខ្ចប់ (Processing)</option>
+                                  <option value="Shipped">🚚 កំពុងដឹក (Out for Delivery)</option>
+                                  <option value="Completed">🟢 ជោគជ័យ (Delivered)</option>
+                                  <option value="Cancelled">❌ បោះបង់ (Cancelled)</option>
+                                </select>
 
                               {(!order.status || order.status === 'Pending') && (
                                 <button
@@ -15816,6 +15955,7 @@ export default function UnifiedAdminDashboard() {
                                   🟢 ជោគជ័យ
                                 </button>
                               )}
+                            </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 text-right pr-6 space-x-1.5 whitespace-nowrap">
@@ -15961,17 +16101,23 @@ export default function UnifiedAdminDashboard() {
                     <div 
                       key={`mobile-order-${order.id}`}
                       id={`mobile-order-card-${order.id}`}
-                      className={`p-3.5 space-y-2.5 transition ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400' : 'bg-white hover:bg-gray-50/60'}`}
+                      className={`p-3.5 space-y-2.5 transition ${isCreditOrder(order) ? 'bg-rose-50/20 border-l-4 border-l-rose-500' : 'bg-white hover:bg-gray-50/60'} ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400' : ''}`}
                     >
                       {/* Top: Order ID + Type + Date */}
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                           <span className="font-mono font-black text-xs text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-lg truncate">
                             {displayId}
                           </span>
                           <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${order.order_type === 'ONLINE' ? 'bg-orange-50 text-orange-600 border border-orange-200' : 'bg-gray-100 text-gray-700'}`}>
                             {order.order_type || 'POS'}
                           </span>
+                          {isCreditOrder(order) && (
+                            <span className="inline-flex items-center gap-0.5 bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md shadow-2xs animate-pulse">
+                              <span>⚠️</span>
+                              <span>ជំពាក់ (UNPAID)</span>
+                            </span>
+                          )}
                         </div>
                         <div className="shrink-0 text-right">
                           {(() => {
@@ -16056,11 +16202,30 @@ export default function UnifiedAdminDashboard() {
                       </div>
 
                       {/* Payment & Status Control */}
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold bg-gray-100 text-gray-700 px-2 py-1 rounded-md">
-                            {order.payment || order.payment_method || 'Cash'}
-                          </span>
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {isCreditOrder(order) ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <span>⚠️</span>
+                                <span>Credit / ជំពាក់</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveTab('customers');
+                                  setCustomerSubView('debt');
+                                }}
+                                className="text-[9px] font-black text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded cursor-pointer"
+                              >
+                                💳 គ្រប់គ្រង
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] font-bold bg-gray-100 text-gray-700 px-2 py-1 rounded-md">
+                              {order.payment || order.payment_method || 'Cash'}
+                            </span>
+                          )}
                           {slipUrl && (
                             <button 
                               type="button"
