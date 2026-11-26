@@ -274,6 +274,7 @@ const DEFAULT_STORE_SETTINGS = {
   businessHours: '8:00 AM - 9:00 PM',
   announcementText: '🔥 ដឹកជញ្ជូនឥតគិតថ្លៃ ២៥ ខេត្ត/ក្រុង • ធានាប្តូរ Size ក្នុងរយៈពេល ៧ ថ្ងៃ • ទំនិញម៉ាកសុទ្ធ ១០០%',
   showAnnouncement: true,
+  showWholesalePrice: true,
   bankAccountName: 'SENG SOVEASNA',
   bankAccountNumber: '010 723 080',
   bankAccountKhr: '004 500 394',
@@ -3887,8 +3888,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                           );
                         })()}
 
-                        {/* Wholesale Price Row */}
-                        {Boolean(product.wholesale_price && parseFloat(product.wholesale_price) > 0) ? (() => {
+                        {/* Wholesale Price Row (អាច បើក/បិទ បង្ហាញតាមការកំណត់ហាង) */}
+                        {Boolean(storeSettings.showWholesalePrice !== false && product.wholesale_price && parseFloat(product.wholesale_price) > 0) ? (() => {
                           const hasWsDiscount = Boolean(product.wholesale_discount && parseFloat(product.wholesale_discount) > 0);
                           const finalWs = hasWsDiscount 
                             ? Math.max(0, parseFloat(product.wholesale_price) - parseFloat(product.wholesale_discount)) 
@@ -4400,8 +4401,8 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
                           </span>
                         </div>
 
-                        {/* Wholesale Price (តម្លៃបោះដុំ) */}
-                        {selectedProductForVariant.wholesale_price && parseFloat(selectedProductForVariant.wholesale_price) > 0 && (
+                        {/* Wholesale Price (តម្លៃបោះដុំ - អាច បើក/បិទ បង្ហាញតាមការកំណត់ហាង) */}
+                        {Boolean(storeSettings.showWholesalePrice !== false && selectedProductForVariant.wholesale_price && parseFloat(selectedProductForVariant.wholesale_price) > 0) && (
                           <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-xl flex items-center justify-between text-blue-950">
                             <div>
                               <span className="text-xs font-black uppercase flex items-center gap-1.5 text-blue-900">

@@ -4236,6 +4236,7 @@ export default function UnifiedAdminDashboard() {
     khqrImageUrl: '/khqr-aba.jpg',
     showInvoiceLogo: true,
     showReceiptQr: true,
+    showWholesalePrice: true,
     enableDeliveryFee: true,
     deliveryPhnomPenh: '1.50',
     deliveryProvince: '2.50',
@@ -4283,6 +4284,7 @@ export default function UnifiedAdminDashboard() {
       khqrImageUrl: '', // ⭐️ STRICT ISOLATION: ហាម default ទៅ /khqr-aba.jpg លើហាងអតិថិជន
       showInvoiceLogo: true,
       showReceiptQr: true,
+      showWholesalePrice: true,
       enableDeliveryFee: true,
       deliveryPhnomPenh: '1.50',
       deliveryProvince: '2.50',
@@ -23505,37 +23507,71 @@ export default function UnifiedAdminDashboard() {
             </button>
           </div>
 
-          {/* View Switcher: Table View vs Grid Cards */}
+          {/* View Switcher & Wholesale Storefront Quick Toggle */}
           {inventorySubTab === 'items' && (
-            <div className="flex items-center self-end sm:self-auto gap-1 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200/80 shrink-0">
+            <div className="flex items-center self-end sm:self-auto gap-2 flex-wrap">
+              {/* ⭐️ Quick Toggle: បង្ហាញ ឬលាក់ តម្លៃបោះដុំលើមុខហាង Website ⭐️ */}
               <button
                 type="button"
                 onClick={() => {
-                  setInvViewMode('table');
-                  if (typeof window !== 'undefined') localStorage.setItem('sabay_inv_view_mode', 'table');
+                  const nextVal = storeSettings.showWholesalePrice === false;
+                  const updated = { ...storeSettings, showWholesalePrice: nextVal };
+                  setStoreSettings(updated);
+                  const storeId = activeStore?.id || 'store_default_sabayluk';
+                  localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(updated));
+                  if (storeId === 'store_default_sabayluk') {
+                    localStorage.setItem('sabay_store_settings', JSON.stringify(updated));
+                  }
+                  setToastNotification(nextVal ? '✅ បានបើកការបង្ហាញតម្លៃបោះដុំលើមុខហាង Website!' : '🔒 បានលាក់តម្លៃបោះដុំពីមុខហាង Website ជោគជ័យ!');
+                  setTimeout(() => setToastNotification(null), 3000);
                 }}
-                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition flex items-center gap-1 cursor-pointer ${
-                  invViewMode === 'table' ? 'bg-white text-blue-600 shadow-xs ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-900'
+                className={`px-3 py-1 sm:py-1.5 rounded-xl sm:rounded-2xl text-[11px] sm:text-xs font-black transition flex items-center gap-1.5 cursor-pointer border shadow-2xs active:scale-95 ${
+                  storeSettings.showWholesalePrice !== false
+                    ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-300'
                 }`}
-                title="មើលជាទម្រង់តារាងលម្អិត"
+                title="ចុចដើម្បី បើក ឬ បិទ ការបង្ហាញតម្លៃបោះដុំលើ Website មុខហាង"
               >
-                <span>📑</span>
-                <span>តារាង</span>
+                <span>📦 តម្លៃដុំមុខហាង:</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  storeSettings.showWholesalePrice !== false
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-400 text-white line-through'
+                }`}>
+                  {storeSettings.showWholesalePrice !== false ? '✅ បើក (ON)' : '🔒 លាក់ (OFF)'}
+                </span>
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setInvViewMode('grid');
-                  if (typeof window !== 'undefined') localStorage.setItem('sabay_inv_view_mode', 'grid');
-                }}
-                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition flex items-center gap-1 cursor-pointer ${
-                  invViewMode === 'grid' ? 'bg-white text-blue-600 shadow-xs ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-900'
-                }`}
-                title="មើលជាទម្រង់កាតរូបភាពទំនើប"
-              >
-                <span>🎴</span>
-                <span>កាត</span>
-              </button>
+
+              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl sm:rounded-2xl border border-gray-200/80 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInvViewMode('table');
+                    if (typeof window !== 'undefined') localStorage.setItem('sabay_inv_view_mode', 'table');
+                  }}
+                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition flex items-center gap-1 cursor-pointer ${
+                    invViewMode === 'table' ? 'bg-white text-blue-600 shadow-xs ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                  title="មើលជាទម្រង់តារាងលម្អិត"
+                >
+                  <span>📑</span>
+                  <span>តារាង</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInvViewMode('grid');
+                    if (typeof window !== 'undefined') localStorage.setItem('sabay_inv_view_mode', 'grid');
+                  }}
+                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition flex items-center gap-1 cursor-pointer ${
+                    invViewMode === 'grid' ? 'bg-white text-blue-600 shadow-xs ring-1 ring-black/5' : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                  title="មើលជាទម្រង់កាតរូបភាពទំនើប"
+                >
+                  <span>🎴</span>
+                  <span>កាត</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -31935,6 +31971,71 @@ export default function UnifiedAdminDashboard() {
                   placeholder="ពិពណ៌នាសង្ខេបអំពីហាង និងគុណភាពទំនិញ ដែលបង្ហាញលើ Footer ខាងក្រោមគេ..."
                   className="w-full border-2 border-gray-200 p-3 rounded-2xl text-xs font-medium focus:border-[#ff6a00] outline-none transition bg-white"
                 />
+              </div>
+
+              {/* ⭐️ TOGGLE: បង្ហាញ ឬលាក់តម្លៃបោះដុំលើមុខហាង Website (Wholesale Price Visibility) ⭐️ */}
+              <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-white border-2 border-blue-200/90 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                <div className="flex items-start gap-3.5">
+                  <span className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl shadow-md shadow-blue-500/25 shrink-0 font-black">
+                    📦
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-black text-gray-900">
+                        បង្ហាញតម្លៃបោះដុំលើមុខហាង Website (Wholesale Price)
+                      </h4>
+                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border transition ${
+                        storeSettings.showWholesalePrice !== false
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : 'bg-gray-100 text-gray-600 border-gray-300'
+                      }`}>
+                        {storeSettings.showWholesalePrice !== false ? '✅ កំពុងបង្ហាញ (ON)' : '🔒 បានលាក់ (OFF)'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                      {storeSettings.showWholesalePrice !== false
+                        ? 'បើក (ON)៖ អតិថិជនទូទៅអាចមើលឃើញទាំងតម្លៃលក់រាយ ($15.00) និងតម្លៃបោះដុំ ($10.00) លើកាតទំនិញមុខហាង។'
+                        : 'បិទ (OFF)៖ លាក់តម្លៃបោះដុំមិនឱ្យអតិថិជនទូទៅឃើញឡើយ ដោយបង្ហាញតែតម្លៃលក់រាយ ($15.00) ប៉ុណ្ណោះ។'
+                      }
+                    </p>
+                    <p className="text-[11px] text-blue-600 font-bold mt-1">
+                      💡 សម្រាប់ហាងដែលចង់លាក់តម្លៃបោះដុំពីអតិថិជនទូទៅ សូមចុចបិទ (OFF) ត្រង់នេះ។
+                    </p>
+                  </div>
+                </div>
+
+                {/* Modern Toggle Switch */}
+                <div className="shrink-0 flex items-center gap-2 self-end sm:self-center">
+                  <span className="text-xs font-bold text-gray-500 hidden sm:inline">
+                    {storeSettings.showWholesalePrice !== false ? 'បង្ហាញ' : 'លាក់'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextVal = storeSettings.showWholesalePrice === false;
+                      const updated = { ...storeSettings, showWholesalePrice: nextVal };
+                      setStoreSettings(updated);
+                      const storeId = activeStore?.id || 'store_default_sabayluk';
+                      localStorage.setItem(`sabay_store_settings_${storeId}`, JSON.stringify(updated));
+                      if (storeId === 'store_default_sabayluk') {
+                        localStorage.setItem('sabay_store_settings', JSON.stringify(updated));
+                      }
+                      setStoreSettingsSavedMsg(nextVal ? '✅ បានបើកការបង្ហាញតម្លៃបោះដុំលើមុខហាងជោគជ័យ!' : '🔒 បានលាក់តម្លៃបោះដុំពីមុខហាងជោគជ័យ!');
+                      setTimeout(() => setStoreSettingsSavedMsg(''), 3000);
+                    }}
+                    className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none shadow-inner ${
+                      storeSettings.showWholesalePrice !== false ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center text-[10px] font-black ${
+                        storeSettings.showWholesalePrice !== false ? 'translate-x-7 text-blue-600' : 'translate-x-0 text-gray-400'
+                      }`}
+                    >
+                      {storeSettings.showWholesalePrice !== false ? '✓' : '✕'}
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
