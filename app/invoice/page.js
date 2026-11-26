@@ -512,7 +512,10 @@ function InvoiceContent() {
               </h1>
             </div>
             <p className="text-xs text-purple-300 font-bold">
-              {storeSettings.storeNameKh || 'វិក្កយបត្រលក់ទំនិញផ្លូវការ (Official Sales Invoice)'}
+              {order?.payment_method?.includes('Credit') || order?.payment_method?.includes('ជំពាក់') || order?.is_credit_sale
+                ? 'វិក្កយបត្រលក់ជំពាក់ផ្លូវការ (Official Credit Sale Invoice)'
+                : (storeSettings.storeNameKh || 'វិក្កយបត្រលក់ទំនិញផ្លូវការ (Official Sales Invoice)')
+              }
             </p>
             <p className="text-[11px] text-gray-400">
               {storeSettings.slogan || 'ទំនិញសុទ្ធ ១០០% • ធានាគុណភាពខ្ពស់ • ដឹកជញ្ជូនរហ័សទូទាំងប្រទេស'}
@@ -712,18 +715,31 @@ function InvoiceContent() {
           {/* Summary & Stamp Section */}
           <div className="mt-6 pt-6 border-t border-gray-200 grid grid-cols-1 sm:grid-cols-2 gap-6 items-end">
             
-            {/* Left: Official Digital Paid Seal */}
+            {/* Left: Official Digital Paid / Credit Seal */}
             <div className="space-y-3">
-              <div className="inline-flex items-center gap-3 p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-500/80 text-emerald-800">
-                <span className="text-3xl">✅</span>
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider block">OFFICIAL DIGITAL INVOICE</span>
-                  <span className="text-sm font-black block">PAID & VERIFIED (បានទូទាត់រួច)</span>
-                  <span className="text-[10px] text-emerald-600 font-mono block mt-0.5">
-                    Auth ID: SABAY-{order?.order_id?.replace(/[^A-Za-z0-9]/g, '') || 'SEC'}
-                  </span>
+              {order?.payment_method?.includes('Credit') || order?.payment_method?.includes('ជំពាក់') || order?.is_credit_sale ? (
+                <div className="inline-flex items-center gap-3 p-4 rounded-2xl bg-amber-50 border-2 border-amber-500/80 text-amber-950">
+                  <span className="text-3xl">⚠️</span>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider block text-amber-800">OFFICIAL CREDIT INVOICE</span>
+                    <span className="text-sm font-black block text-rose-600">UNPAID (ការលក់ជំពាក់)</span>
+                    <span className="text-[10px] text-amber-800 font-mono block mt-0.5">
+                      {order?.credit_due_date ? `Due Date: ${order.credit_due_date}` : `Auth: SABAY-CREDIT-${order?.order_id?.replace(/[^A-Za-z0-9]/g, '') || 'SEC'}`}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="inline-flex items-center gap-3 p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-500/80 text-emerald-800">
+                  <span className="text-3xl">✅</span>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider block">OFFICIAL DIGITAL INVOICE</span>
+                    <span className="text-sm font-black block">PAID & VERIFIED (បានទូទាត់រួច)</span>
+                    <span className="text-[10px] text-emerald-600 font-mono block mt-0.5">
+                      Auth ID: SABAY-{order?.order_id?.replace(/[^A-Za-z0-9]/g, '') || 'SEC'}
+                    </span>
+                  </div>
+                </div>
+              )}
               <p className="text-[11px] text-gray-400">
                 វិក្កយបត្រនេះត្រូវបានបង្កើតឡើងដោយស្វ័យប្រវត្តិតាមប្រព័ន្ធកុំព្យូទ័រ និងមានសុពលភាពស្របច្បាប់ ១០០%។
               </p>
@@ -773,6 +789,27 @@ function InvoiceContent() {
             </div>
 
           </div>
+
+          {/* ⭐️ Official Signature Block for Credit Sale ⭐️ */}
+          {(order?.payment_method?.includes('Credit') || order?.payment_method?.includes('ជំពាក់') || order?.is_credit_sale) && (
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <p className="text-center text-xs text-gray-500 italic mb-4">
+                "ខ្ញុំបាទ/នាងខ្ញុំសូមសន្យានិងទទួលខុសត្រូវសងប្រាក់ជំពាក់ខាងលើឱ្យបានត្រឹមត្រូវតាមកាលកំណត់។"
+              </p>
+              <div className="grid grid-cols-2 gap-12 text-center text-xs">
+                <div>
+                  <p className="font-black text-gray-900">ហត្ថលេខាអ្នកលក់ (Cashier)</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">ឈ្មោះ: {order?.cashier_name || 'Admin'}</p>
+                  <div className="h-16 border-b border-dashed border-gray-400 mt-2"></div>
+                </div>
+                <div>
+                  <p className="font-black text-gray-900">ហត្ថលេខា និងស្នាមមេដៃអ្នកទិញ (Customer)</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">ឈ្មោះ: {order?.customer_name || order?.customer || 'អតិថិជន'}</p>
+                  <div className="h-16 border-b border-dashed border-gray-400 mt-2"></div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Footer Terms */}
           <div className="mt-8 pt-6 border-t border-gray-100 text-center text-gray-500 text-[11px] space-y-1">

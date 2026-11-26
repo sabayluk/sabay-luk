@@ -2462,6 +2462,10 @@ export default function UnifiedAdminDashboard() {
   // POS Credit / Debt & Loyalty states
   const [posDueDate, setPosDueDate] = useState('');
   const [posDebtNote, setPosDebtNote] = useState('');
+  const [posCreditType, setPosCreditType] = useState('full'); // 'full' (100% ជំពាក់) | 'partial' (បង់មុនខ្លះ + ជំពាក់)
+  const [posCreditDownPayment, setPosCreditDownPayment] = useState('');
+  const [posCreditDownPaymentMethod, setPosCreditDownPaymentMethod] = useState('Cash'); // 'Cash' | 'KHQR'
+  const [posCreditAllowOverLimit, setPosCreditAllowOverLimit] = useState(false);
   const [posUseLoyaltyPoints, setPosUseLoyaltyPoints] = useState(false);
   const [posLoyaltyPointsToRedeem, setPosLoyaltyPointsToRedeem] = useState(0);
 
@@ -6557,9 +6561,41 @@ export default function UnifiedAdminDashboard() {
     // ⭐️ មុខងារបញ្ជាក់ការលក់ និងរក្សាទុកប្រវត្តិ History Full Option ⭐️
   const processPayment = async () => {
     if (guardDemoAction("កាត់ស្តុក ឬលក់ជាក់ស្តែង")) return;
-    if (paymentMethod === 'Cash' && changeAmount < 0) return alert('❌ ទឹកប្រាក់ទទួលមិនគ្រប់គ្រាន់ទេ!');
-    if (paymentMethod === 'Credit / ជំពាក់' && (!customerName || customerName === 'អតិថិជនទូទៅ')) {
-      return alert('❌ សូមជ្រើសរើសអតិថិជនជាមុនសិន មុនពេលលក់ជំពាក់ (Credit Sale)!');
+    if (paymentMethod === 'Cash' && changeAmount < 0) {
+      return showAlertModal ? showAlertModal({
+        title: 'ទឹកប្រាក់ទទួលមិនគ្រប់គ្រាន់!',
+        message: 'ចំនួនទឹកប្រាក់ដែលទទួលបានពីអតិថិជនមិនទាន់គ្រប់គ្រាន់តាមតម្លៃវិក្កយបត្រទេ។',
+        type: 'warning'
+      }) : alert('❌ ទឹកប្រាក់ទទួលមិនគ្រប់គ្រាន់ទេ!');
+    }
+    
+    // ⭐️ ផ្ទៀងផ្ទាត់ការលក់ជំពាក់ (Credit Sale Verification)
+    if (paymentMethod === 'Credit / ជំពាក់') {
+      if (!customerName || customerName === 'អតិថិជនទូទៅ') {
+        return showAlertModal ? showAlertModal({
+          title: 'តម្រូវឱ្យមានព័ត៌មានអតិថិជន!',
+          message: 'ការលក់ជំពាក់ (Credit Sale) តម្រូវឱ្យមានព័ត៌មានអតិថិជនច្បាស់លាស់។ សូមជ្រើសរើស ឬបង្កើតអតិថិជនជាមុនសិន។',
+          type: 'warning'
+        }) : alert('❌ សូមជ្រើសរើសអតិថិជនជាមុនសិន មុនពេលលក់ជំពាក់ (Credit Sale)!');
+      }
+
+      const currentCust = customers.find(c => 
+        (c.name && customerName && c.name.toLowerCase() === customerName.toLowerCase()) || 
+        (c.phone && customerPhone && c.phone === customerPhone)
+      );
+      const currentDebt = currentCust ? (parseFloat(currentCust.debt_balance) || 0) : 0;
+      const creditLimit = currentCust ? (parseFloat(currentCust.debt_limit) || 200) : 200;
+      const downPaymentVal = posCreditType === 'partial' ? Math.max(0, Math.min(posTotal, parseFloat(posCreditDownPayment) || 0)) : 0;
+      const debtChargeAmount = Math.max(0, posTotal - downPaymentVal);
+      const newTotalDebt = currentDebt + debtChargeAmount;
+
+      if (newTotalDebt > creditLimit && !posCreditAllowOverLimit) {
+        return showAlertModal ? showAlertModal({
+          title: 'លើសកម្រិតឥណទាន (Credit Limit Exceeded)!',
+          message: `បំណុលសរុបថ្មី ($${newTotalDebt.toFixed(2)}) លើស Credit Limit ($${creditLimit.toFixed(2)}) ចំនួន $${(newTotalDebt - creditLimit).toFixed(2)}។ សូមគូសធីក "អនុញ្ញាតឱ្យជំពាក់លើសកម្រិត (Manager Override)" ឬបង់ប្រាក់កក់បន្ថែម។`,
+          type: 'warning'
+        }) : alert('❌ លើសកម្រិតឥណទានអនុញ្ញាត!');
+      }
     }
     setIsProcessingPayment(true);
 
@@ -6729,8 +6765,12 @@ export default function UnifiedAdminDashboard() {
       );
 
       const isCreditSale = paymentMethod === 'Credit / ជំពាក់';
+      const downPayment = (isCreditSale && posCreditType === 'partial') 
+        ? Math.max(0, Math.min(posTotal, parseFloat(posCreditDownPayment) || 0)) 
+        : 0;
+      const debtChargeAmount = isCreditSale ? Math.max(0, posTotal - downPayment) : 0;
       const prevDebt = matchedCust ? (parseFloat(matchedCust.debt_balance) || 0) : 0;
-      const newDebt = isCreditSale ? (prevDebt + posTotal) : prevDebt;
+      const newDebt = isCreditSale ? (prevDebt + debtChargeAmount) : prevDebt;
 
       const currentPts = matchedCust && matchedCust.loyalty_points != null ? Number(matchedCust.loyalty_points) : 0;
       const redeemedPoints = (posUseLoyaltyPoints && posLoyaltyPointsToRedeem > 0)
@@ -6747,11 +6787,16 @@ export default function UnifiedAdminDashboard() {
             order_id: generatedOrderId,
             date: new Date().toISOString(),
             type: 'CHARGE',
-            amount: posTotal,
+            total_amount: posTotal,
+            down_payment: downPayment,
+            down_payment_method: downPayment > 0 ? posCreditDownPaymentMethod : null,
+            amount: debtChargeAmount,
             prev_balance: prevDebt,
             remaining_balance: newDebt,
             due_date: posDueDate || null,
-            note: posDebtNote.trim() || `លក់ជំពាក់តាម POS #${generatedOrderId}`,
+            note: posDebtNote.trim() || (downPayment > 0 
+              ? `លក់ជំពាក់ (បង់មុន $${downPayment.toFixed(2)} [${posCreditDownPaymentMethod}], ជំពាក់ $${debtChargeAmount.toFixed(2)}) #${generatedOrderId}` 
+              : `លក់ជំពាក់តាម POS #${generatedOrderId}`),
             recorded_by: currentStaff?.name || 'Cashier'
           });
         }
@@ -6816,8 +6861,14 @@ export default function UnifiedAdminDashboard() {
         customer: resolvedCustomerName,
         phone: resolvedCustomerPhone,
         isCreditSale: isCreditSale,
+        creditType: isCreditSale ? posCreditType : null,
+        downPayment: downPayment,
+        downPaymentMethod: posCreditDownPaymentMethod,
+        debtChargeAmount: debtChargeAmount,
+        prevDebt: prevDebt,
         debtBalance: isCreditSale ? newDebt : prevDebt,
         dueDate: posDueDate || null,
+        debtNote: posDebtNote.trim() || '',
         earnedPoints: earnedPoints,
         redeemedPoints: redeemedPoints,
         loyaltyBalance: updatedPts
@@ -6832,6 +6883,12 @@ export default function UnifiedAdminDashboard() {
       setCustomerPhone('');
       setPosDueDate('');
       setPosDebtNote('');
+      setPosCreditType('full');
+      setPosCreditDownPayment('');
+      setPosCreditDownPaymentMethod('Cash');
+      setPosCreditAllowOverLimit(false);
+      setPosUseLoyaltyPoints(false);
+      setPosLoyaltyPointsToRedeem(0);
       setPosUseLoyaltyPoints(false);
       setPosLoyaltyPointsToRedeem(0);
 
@@ -26954,26 +27011,52 @@ export default function UnifiedAdminDashboard() {
               </div>
             </div>
 
-            {/* បង្ហាញព័ត៌មានកម្រិតអតិថិជនក្នុង POS (Customer Tier Badge) */}
+            {/* បង្ហាញព័ត៌មានកម្រិតអតិថិជន និងស្ថានភាពបំណុលក្នុង POS (Customer Tier & Debt Status) */}
             {(() => {
               const currentCust = customers.find(c => 
                 (c.name && customerName && c.name.toLowerCase() === customerName.toLowerCase()) || 
                 (c.phone && customerPhone && c.phone === customerPhone)
               );
               if (currentCust) {
+                const custDebt = parseFloat(currentCust.debt_balance) || 0;
+                const custLimit = parseFloat(currentCust.debt_limit) || 200;
+                const isOverLimit = custDebt > custLimit;
+
                 return (
-                  <div className="mt-1.5 flex items-center justify-between text-[11px] bg-slate-900/90 px-2.5 py-1 rounded-xl border border-slate-700 animate-in fade-in">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-black text-amber-400 text-[10px]">
-                        {currentCust.tier === 'VIP' ? '🥇 VIP' : currentCust.tier === 'WHOLESALE' ? '💼 បោះដុំ' : currentCust.tier === 'LOYAL' ? '🥈 ស្មោះត្រង់' : '🥉 ទូទៅ'}
-                      </span>
-                      {currentCust.discount_percent > 0 && (
-                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded border border-emerald-500/30">
-                          បញ្ចុះ {currentCust.discount_percent}%
+                  <div className="mt-2 space-y-1.5 animate-in fade-in">
+                    <div className="flex items-center justify-between text-[11px] bg-slate-900/90 px-2.5 py-1.5 rounded-xl border border-slate-700">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-black text-amber-400 text-[10px]">
+                          {currentCust.tier === 'VIP' ? '🥇 VIP' : currentCust.tier === 'WHOLESALE' ? '💼 បោះដុំ' : currentCust.tier === 'LOYAL' ? '🥈 ស្មោះត្រង់' : '🥉 ទូទៅ'}
                         </span>
-                      )}
+                        {currentCust.discount_percent > 0 && (
+                          <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded border border-emerald-500/30">
+                            បញ្ចុះ {currentCust.discount_percent}%
+                          </span>
+                        )}
+                        {currentCust.loyalty_points > 0 && (
+                          <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.2 rounded border border-amber-500/30">
+                            🪙 {Number(currentCust.loyalty_points)} pts
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-slate-400 text-[10px] truncate max-w-[110px] font-medium">{currentCust.address || 'គ្មានអាសយដ្ឋាន'}</span>
                     </div>
-                    <span className="text-slate-400 text-[10px] truncate max-w-[120px] font-medium">{currentCust.address || 'គ្មានអាសយដ្ឋាន'}</span>
+
+                    {/* Credit & Debt Health Bar */}
+                    <div className={`flex items-center justify-between text-[10px] font-bold px-2.5 py-1 rounded-xl border transition ${
+                      custDebt > 0 
+                        ? (isOverLimit ? 'bg-rose-950/80 text-rose-300 border-rose-600/60' : 'bg-amber-950/70 text-amber-300 border-amber-600/50')
+                        : 'bg-emerald-950/50 text-emerald-300 border-emerald-600/40'
+                    }`}>
+                      <div className="flex items-center gap-1">
+                        <span>{custDebt > 0 ? (isOverLimit ? '🚨' : '⚠️') : '✅'}</span>
+                        <span>{custDebt > 0 ? `ជំពាក់ចាស់: $${custDebt.toFixed(2)}` : 'គ្មានបំណុល'}</span>
+                      </div>
+                      <span className="opacity-80">
+                        Limit: ${custLimit.toFixed(0)} {custDebt > 0 && `(នៅសល់ $${Math.max(0, custLimit - custDebt).toFixed(0)})`}
+                      </span>
+                    </div>
                   </div>
                 );
               }
@@ -28101,7 +28184,7 @@ export default function UnifiedAdminDashboard() {
                 </div>
               )}
 
-              {/* Credit Sale Form */}
+              {/* ⭐️ FULL-OPTION WORLD-CLASS CREDIT SALE (ប្រព័ន្ធលក់ជំពាក់ស្តង់ដារពិភពលោក) ⭐️ */}
               {paymentMethod === 'Credit / ជំពាក់' && (() => {
                 const currentCust = customers.find(c => 
                   (c.name && customerName && c.name.toLowerCase() === customerName.toLowerCase()) || 
@@ -28110,82 +28193,282 @@ export default function UnifiedAdminDashboard() {
 
                 if (!currentCust || customerName === 'អតិថិជនទូទៅ') {
                   return (
-                    <div className="mb-6 p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 space-y-2">
+                    <div className="mb-6 p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 space-y-3">
                       <div className="flex items-center gap-2">
-                        <span className="text-xl">⚠️</span>
-                        <h4 className="font-black text-sm">មិនអាចលក់ជំពាក់បានទេ!</h4>
+                        <span className="text-2xl">⚠️</span>
+                        <div>
+                          <h4 className="font-black text-sm">មិនអាចលក់ជំពាក់បានទេ! (Customer Required)</h4>
+                          <p className="text-xs text-rose-700 leading-relaxed mt-0.5">
+                            ការលក់ជំពាក់ (Credit Sale) តម្រូវឱ្យមានអតិថិជនច្បាស់លាស់ដើម្បីតាមដានបំណុល។
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-xs leading-relaxed">
-                        ការលក់ជំពាក់ (Credit Sale) តម្រូវឱ្យមានព័ត៌មានអតិថិជនច្បាស់លាស់។ សូមជ្រើសរើស ឬចុចបង្កើតអតិថិជនថ្មីនៅខាងលើជាមុនសិន។
-                      </p>
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentModalOpen(false);
+                            setNewCustomerModalOpen(true);
+                          }}
+                          className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer"
+                        >
+                          + បង្កើតអតិថិជនថ្មី
+                        </button>
+                      </div>
                     </div>
                   );
                 }
 
                 const currentDebt = parseFloat(currentCust.debt_balance) || 0;
                 const creditLimit = parseFloat(currentCust.debt_limit) || 200;
-                const newTotalDebt = currentDebt + posTotal;
+                
+                // គណនាប្រាក់បង់មុន និងទំហំបំណុលពិតជាក់ស្តែង
+                const downPaymentVal = posCreditType === 'partial' ? Math.max(0, Math.min(posTotal, parseFloat(posCreditDownPayment) || 0)) : 0;
+                const debtChargeAmount = Math.max(0, posTotal - downPaymentVal);
+                const newTotalDebt = currentDebt + debtChargeAmount;
                 const isOverLimit = newTotalDebt > creditLimit;
+                const availableCredit = Math.max(0, creditLimit - currentDebt);
 
                 return (
-                  <div className="mb-6 space-y-3.5 p-4 rounded-2xl bg-rose-50/60 border border-rose-200">
+                  <div className="mb-6 space-y-4 p-4 rounded-2xl bg-gradient-to-br from-rose-50/80 via-white to-amber-50/60 border-2 border-rose-200/90 shadow-sm animate-in fade-in">
+                    
+                    {/* Header Banner */}
                     <div className="flex items-center justify-between border-b border-rose-200/80 pb-2.5">
-                      <span className="text-xs font-black text-rose-900 flex items-center gap-1.5">
-                        <span>📋</span> ព័ត៌មានបំណុលអតិថិជន (Credit Details)
-                      </span>
-                      {isOverLimit && (
-                        <span className="text-[10px] font-black bg-rose-600 text-white px-2 py-0.5 rounded-full animate-pulse">
-                          ⚠️ លើសកម្រិត Credit Limit!
+                      <div className="flex items-center gap-2">
+                        <span className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center text-sm shadow-xs font-black">
+                          💳
+                        </span>
+                        <div>
+                          <span className="text-xs font-black text-rose-950 block">
+                            កិច្ចសន្យាលក់ជំពាក់ (Credit Sale Contract)
+                          </span>
+                          <span className="text-[10px] text-gray-500 font-bold block">
+                            អតិថិជន: <b className="text-rose-700">{currentCust.name}</b> ({currentCust.phone || 'គ្មានលេខ'})
+                          </span>
+                        </div>
+                      </div>
+
+                      {isOverLimit ? (
+                        <span className="text-[10px] font-black bg-rose-600 text-white px-2.5 py-1 rounded-full animate-pulse shadow-xs flex items-center gap-1">
+                          <span>🚨</span> លើស Limit ${(newTotalDebt - creditLimit).toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full">
+                          ✅ ឥណទានគ្រប់គ្រាន់
                         </span>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="bg-white p-2 rounded-xl border border-rose-100">
+                    {/* Mode Selector: 100% Full Credit vs Partial Down Payment */}
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-700 uppercase mb-1.5">
+                        ទម្រង់នៃការជំពាក់ (Credit Terms):
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPosCreditType('full');
+                            setPosCreditDownPayment('');
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                            posCreditType === 'full'
+                              ? 'bg-rose-600 text-white border-rose-700 shadow-sm'
+                              : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black">💳 ជំពាក់ទាំងស្រុង (100%)</span>
+                            {posCreditType === 'full' && <span>✓</span>}
+                          </div>
+                          <p className={`text-[10px] mt-0.5 ${posCreditType === 'full' ? 'text-rose-100' : 'text-gray-500'}`}>
+                            ជំពាក់សរុប ${posTotal.toFixed(2)}
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPosCreditType('partial');
+                            if (!posCreditDownPayment) setPosCreditDownPayment((posTotal * 0.3).toFixed(2));
+                          }}
+                          className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                            posCreditType === 'partial'
+                              ? 'bg-amber-600 text-white border-amber-700 shadow-sm'
+                              : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black">💵 បង់មុនខ្លះ + ជំពាក់</span>
+                            {posCreditType === 'partial' && <span>✓</span>}
+                          </div>
+                          <p className={`text-[10px] mt-0.5 ${posCreditType === 'partial' ? 'text-amber-100' : 'text-gray-500'}`}>
+                            កក់/បង់មួយចំនួន + ជំពាក់សល់
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Partial Down Payment Input Form */}
+                    {posCreditType === 'partial' && (
+                      <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2 animate-in fade-in">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-amber-900">
+                            ប្រាក់បានបង់មុន / ប្រាក់កក់ (Down Payment):
+                          </label>
+                          <div className="flex items-center gap-1">
+                            {['Cash', 'KHQR'].map(m => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setPosCreditDownPaymentMethod(m)}
+                                className={`text-[10px] font-black px-2 py-0.5 rounded-lg border transition ${
+                                  posCreditDownPaymentMethod === m
+                                    ? 'bg-amber-600 text-white border-amber-700'
+                                    : 'bg-white text-gray-600 border-gray-200'
+                                }`}
+                              >
+                                {m}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-black text-sm">$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={posCreditDownPayment}
+                            onChange={(e) => setPosCreditDownPayment(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full bg-white border border-amber-300 rounded-xl pl-7 pr-3 py-2 text-sm font-black text-gray-900 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-mono"
+                          />
+                        </div>
+
+                        {/* Quick Percentage Presets */}
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] text-gray-500 font-bold">រហ័ស:</span>
+                          {[
+                            { pct: 0.2, label: '20%' },
+                            { pct: 0.3, label: '30%' },
+                            { pct: 0.5, label: '50%' },
+                            { pct: 0.7, label: '70%' }
+                          ].map(preset => (
+                            <button
+                              key={preset.pct}
+                              type="button"
+                              onClick={() => setPosCreditDownPayment((posTotal * preset.pct).toFixed(2))}
+                              className="text-[10px] font-black bg-white hover:bg-amber-100 text-amber-900 px-2 py-0.5 rounded-lg border border-amber-200 transition"
+                            >
+                              {preset.label} (${(posTotal * preset.pct).toFixed(2)})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Live Financial Health & Debt Computation (4-Box Grid) */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                      <div className="bg-white p-2.5 rounded-xl border border-gray-200 shadow-2xs">
                         <span className="text-[10px] text-gray-500 font-bold block">បំណុលចាស់</span>
-                        <span className="text-xs font-black text-gray-800">${currentDebt.toFixed(2)}</span>
+                        <span className="text-xs sm:text-sm font-black text-gray-800 font-mono">${currentDebt.toFixed(2)}</span>
                       </div>
-                      <div className="bg-white p-2 rounded-xl border border-rose-100">
-                        <span className="text-[10px] text-gray-500 font-bold block">ជំពាក់លើកនេះ</span>
-                        <span className="text-xs font-black text-rose-600">+${posTotal.toFixed(2)}</span>
+                      
+                      {posCreditType === 'partial' ? (
+                        <div className="bg-white p-2.5 rounded-xl border border-amber-200 shadow-2xs">
+                          <span className="text-[10px] text-amber-600 font-bold block">បង់មុន ({posCreditDownPaymentMethod})</span>
+                          <span className="text-xs sm:text-sm font-black text-amber-600 font-mono">-${downPaymentVal.toFixed(2)}</span>
+                        </div>
+                      ) : (
+                        <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-2xs">
+                          <span className="text-[10px] text-gray-500 font-bold block">សរុបវិក្កយបត្រ</span>
+                          <span className="text-xs sm:text-sm font-black text-gray-800 font-mono">${posTotal.toFixed(2)}</span>
+                        </div>
+                      )}
+
+                      <div className="bg-white p-2.5 rounded-xl border border-rose-200 shadow-2xs">
+                        <span className="text-[10px] text-rose-600 font-bold block">ជំពាក់លើកនេះ</span>
+                        <span className="text-xs sm:text-sm font-black text-rose-600 font-mono">+${debtChargeAmount.toFixed(2)}</span>
                       </div>
-                      <div className="bg-white p-2 rounded-xl border border-rose-200">
+
+                      <div className={`bg-white p-2.5 rounded-xl border shadow-2xs ${isOverLimit ? 'border-rose-400 bg-rose-50/50' : 'border-gray-200'}`}>
                         <span className="text-[10px] text-gray-500 font-bold block">បំណុលសរុបថ្មី</span>
-                        <span className={`text-xs font-black ${isOverLimit ? 'text-rose-600' : 'text-gray-900'}`}>
+                        <span className={`text-xs sm:text-sm font-black font-mono ${isOverLimit ? 'text-rose-600' : 'text-gray-900'}`}>
                           ${newTotalDebt.toFixed(2)}
                         </span>
                       </div>
                     </div>
 
-                    <div className="text-[11px] text-gray-600 font-bold flex justify-between px-1">
-                      <span>កម្រិតបំណុលអតិបរមា (Limit):</span>
-                      <span className="text-gray-900 font-black">${creditLimit.toFixed(2)}</span>
+                    <div className="flex justify-between items-center text-[11px] bg-white p-2.5 rounded-xl border border-gray-200 text-gray-700">
+                      <span>កម្រិតបំណុលអតិបរមា (Credit Limit):</span>
+                      <span className="font-mono font-black text-gray-900">${creditLimit.toFixed(2)}</span>
                     </div>
 
+                    {/* Over Limit Override Authorization */}
+                    {isOverLimit && (
+                      <div className="p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-900 space-y-1.5 animate-in fade-in">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-base">🚨</span>
+                          <span className="text-xs font-black">ទំហំបំណុលថ្មីលើសកម្រិតឥណទានដែលបានអនុញ្ញាត!</span>
+                        </div>
+                        <p className="text-[11px] text-rose-800 leading-tight">
+                          បំណុលសរុបថ្មី ${newTotalDebt.toFixed(2)} លើស Credit Limit (${creditLimit.toFixed(2)}) ចំនួន ${(newTotalDebt - creditLimit).toFixed(2)}។
+                        </p>
+                        <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={posCreditAllowOverLimit}
+                            onChange={(e) => setPosCreditAllowOverLimit(e.target.checked)}
+                            className="w-4 h-4 text-rose-600 rounded border-rose-400 focus:ring-rose-500"
+                          />
+                          <span className="text-xs font-black text-rose-950 underline decoration-rose-500">
+                            អនុញ្ញាតឱ្យជំពាក់លើសកម្រិត (Manager / Admin Override Approval)
+                          </span>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Due Date with 1-Click Smart Presets */}
                     <div>
-                      <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                        កាលបរិច្ឆេទសងបំណុល (Due Date)
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold text-gray-700 uppercase">
+                          កាលបរិច្ឆេទសងបំណុល (Due Date):
+                        </label>
+                        {posDueDate && (
+                          <span className="text-[10px] font-mono font-black text-rose-600">
+                            កំណត់: {posDueDate}
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="date"
                         value={posDueDate}
                         onChange={(e) => setPosDueDate(e.target.value)}
                         className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-rose-500"
                       />
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <span className="text-[10px] text-gray-400 font-bold">កំណត់រហ័ស:</span>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className="text-[10px] text-gray-400 font-bold">ជ្រើសរហ័ស:</span>
                         {[
-                          { days: 7, label: '+៧ ថ្ងៃ' },
-                          { days: 15, label: '+១៥ ថ្ងៃ' },
-                          { days: 30, label: '+១ ខែ' }
-                        ].map(q => (
+                          { days: 7, label: '+៧ ថ្ងៃ (Net 7)' },
+                          { days: 15, label: '+១៥ ថ្ងៃ (Net 15)' },
+                          { days: 30, label: '+៣០ ថ្ងៃ (Net 30)' },
+                          { days: 60, label: '+៦០ ថ្ងៃ (Net 60)' },
+                          { eom: true, label: 'ចុងខែ (EOM)' }
+                        ].map((q, idx) => (
                           <button
-                            key={q.days}
+                            key={idx}
                             type="button"
                             onClick={() => {
-                              const d = new Date();
-                              d.setDate(d.getDate() + q.days);
-                              setPosDueDate(d.toLocaleDateString('en-CA'));
+                              if (q.eom) {
+                                const now = new Date();
+                                const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                                setPosDueDate(lastDay.toLocaleDateString('en-CA'));
+                              } else {
+                                const d = new Date();
+                                d.setDate(d.getDate() + q.days);
+                                setPosDueDate(d.toLocaleDateString('en-CA'));
+                              }
                             }}
                             className="text-[10px] font-bold bg-white hover:bg-gray-100 text-gray-700 px-2 py-0.5 rounded-lg border border-gray-200 transition"
                           >
@@ -28195,15 +28478,16 @@ export default function UnifiedAdminDashboard() {
                       </div>
                     </div>
 
+                    {/* Debt Notes / Agreement */}
                     <div>
                       <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
-                        កំណត់ចំណាំបំណុល (Debt Note)
+                        កំណត់ចំណាំបំណុល & លក្ខខណ្ឌកិច្ចសន្យា (Debt Agreement Note):
                       </label>
                       <input
                         type="text"
                         value={posDebtNote}
                         onChange={(e) => setPosDebtNote(e.target.value)}
-                        placeholder="ឧ. ភ្ញៀវសន្យាសងពេលបើកប្រាក់ខែ..."
+                        placeholder="ឧ. សន្យាសងតាម ABA នៅថ្ងៃកំណត់, ទិញបោះដុំ..."
                         className="w-full bg-white border border-gray-300 rounded-xl px-3 py-2 text-xs font-bold text-gray-800 outline-none focus:border-rose-500"
                       />
                     </div>
@@ -35323,7 +35607,6 @@ export default function UnifiedAdminDashboard() {
                   { id: 'analytics', name: 'វិភាគទិន្នន័យ (P&L)', icon: '📊', perm: 'analytics', iconColor: 'text-emerald-400' },
                   { id: 'expenses', name: 'កត់ត្រាចំណាយ (Expenses)', icon: '💸', perm: 'expenses', iconColor: 'text-rose-400' },
                   { id: 'customers', name: 'អតិថិជន (CRM)', icon: '👥', perm: 'customers', iconColor: 'text-teal-400' },
-                  { id: 'debt_management', name: 'គ្រប់គ្រងបំណុល (Debt)', icon: '⚠️', perm: 'customers', count: debtorsCountGlobal, highlight: 'rose', tag: overdueDebtorsCountGlobal > 0 ? `${overdueDebtorsCountGlobal} ហួសកំណត់` : undefined, iconColor: 'text-rose-400' },
                   { id: 'loyalty_system', name: 'ប្រព័ន្ធ Loyalty & Rewards', icon: '🎁', perm: 'customers', iconColor: 'text-amber-400' },
                   { id: 'feedbacks', name: 'មតិយោបល់ (Feedbacks)', icon: '💬', perm: 'feedbacks', count: unreadFeedbacksCount, iconColor: 'text-amber-400' }
                 ]
@@ -38727,8 +39010,13 @@ export default function UnifiedAdminDashboard() {
                     )}
                     <div className="border-b border-black border-dashed my-2"></div>
                     <h3 className="font-black text-xs uppercase tracking-widest">
-                      *** វិក្កយបត្រផ្លូវការ / RECEIPT ***
+                      {receiptData.isCreditSale ? '*** វិក្កយបត្រលក់ជំពាក់ / CREDIT SALE ***' : '*** វិក្កយបត្រផ្លូវការ / RECEIPT ***'}
                     </h3>
+                    {receiptData.isCreditSale && (
+                      <div className="bg-rose-600 text-white font-black text-[9.5px] py-0.5 px-2.5 rounded-md uppercase tracking-wider inline-block mt-1 shadow-2xs">
+                        ⚠️ លក់ជំពាក់ (CREDIT SALE - UNPAID)
+                      </div>
+                    )}
                   </div>
 
                   {/* Metadata */}
@@ -38873,23 +39161,46 @@ export default function UnifiedAdminDashboard() {
                       </>
                     )}
 
-                    {/* Credit Sale Warning & Debt Details on Receipt */}
+                    {/* ⭐️ Official Full Option Credit Sale Breakdown on Receipt ⭐️ */}
                     {receiptData.isCreditSale && (
-                      <div className="bg-rose-50 p-1.5 rounded border border-rose-300 text-rose-900 text-[10px] my-1 font-bold space-y-0.5">
-                        <div className="flex justify-between text-rose-700">
-                          <span>⚠️ លក់ជំពាក់ (Credit):</span>
-                          <span>${receiptData.total.toFixed(2)}</span>
+                      <div className="bg-rose-50/90 p-2 rounded-xl border border-rose-300 text-rose-950 text-[10px] my-2 font-bold space-y-1">
+                        <div className="flex justify-between border-b border-rose-200/80 pb-1">
+                          <span className="font-black text-rose-900">សរុបវិក្កយបត្រ (Bill Total):</span>
+                          <span className="font-mono font-black">${receiptData.total.toFixed(2)}</span>
                         </div>
-                        {receiptData.debtBalance != null && (
-                          <div className="flex justify-between">
-                            <span>បំណុលសរុបបច្ចុប្បន្ន:</span>
-                            <span className="font-black text-rose-800">${receiptData.debtBalance.toFixed(2)}</span>
+                        {receiptData.downPayment > 0 && (
+                          <div className="flex justify-between text-amber-800">
+                            <span>ប្រាក់បានបង់មុន ({receiptData.downPaymentMethod || 'Cash'}):</span>
+                            <span className="font-mono font-black">-${receiptData.downPayment.toFixed(2)}</span>
                           </div>
                         )}
-                        {receiptData.dueDate && (
+                        <div className="flex justify-between text-rose-700">
+                          <span className="font-black">ជំពាក់លើកនេះ (Credit Charged):</span>
+                          <span className="font-mono font-black">
+                            +${(receiptData.debtChargeAmount != null ? receiptData.debtChargeAmount : (receiptData.total - (receiptData.downPayment || 0))).toFixed(2)}
+                          </span>
+                        </div>
+                        {receiptData.prevDebt > 0 && (
                           <div className="flex justify-between text-gray-700">
-                            <span>កាលបរិច្ឆេទសង:</span>
-                            <span>{receiptData.dueDate}</span>
+                            <span>បំណុលចាស់លើកមក (Old Debt):</span>
+                            <span className="font-mono">${receiptData.prevDebt.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-1 border-t border-rose-200/80 text-rose-950 font-black">
+                          <span>បំណុលសរុបបច្ចុប្បន្ន (Total Balance):</span>
+                          <span className="font-mono font-black text-xs text-rose-600">
+                            ${receiptData.debtBalance != null ? receiptData.debtBalance.toFixed(2) : receiptData.total.toFixed(2)}
+                          </span>
+                        </div>
+                        {receiptData.dueDate && (
+                          <div className="flex justify-between text-gray-800 pt-0.5">
+                            <span className="font-black">កាលបរិច្ឆេទសង (Due Date):</span>
+                            <span className="font-black text-rose-700 font-mono">{receiptData.dueDate}</span>
+                          </div>
+                        )}
+                        {receiptData.debtNote && (
+                          <div className="pt-0.5 text-gray-600 text-[9px] italic border-t border-rose-200/60 mt-1">
+                            ចំណាំ: {receiptData.debtNote}
                           </div>
                         )}
                       </div>
@@ -38910,6 +39221,25 @@ export default function UnifiedAdminDashboard() {
                     </div>
                   ) : (
                     <div className="border-b border-black border-dashed my-1.5"></div>
+                  )}
+
+                  {/* ⭐️ Official Signature Block for Credit Sale ⭐️ */}
+                  {receiptData.isCreditSale && (
+                    <div className="pt-2 pb-1 text-center text-[9.5px] space-y-1.5 border-t border-black border-dashed">
+                      <p className="text-[8.5px] text-gray-600 italic leading-tight px-1">
+                        "ខ្ញុំបាទ/នាងខ្ញុំសូមសន្យានិងទទួលខុសត្រូវសងប្រាក់ជំពាក់ខាងលើឱ្យបានត្រឹមត្រូវតាមកាលកំណត់។"
+                      </p>
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <div>
+                          <p className="font-black">អ្នកលក់ (Cashier)</p>
+                          <div className="h-9 border-b border-dashed border-gray-600 mt-1"></div>
+                        </div>
+                        <div>
+                          <p className="font-black">អតិថិជនជំពាក់ (Customer)</p>
+                          <div className="h-9 border-b border-dashed border-gray-600 mt-1"></div>
+                        </div>
+                      </div>
+                    </div>
                   )}
                   
                   {/* Receipt Footer */}
