@@ -3005,7 +3005,7 @@ export default function UnifiedAdminDashboard() {
     let data = null;
     let error = null;
     try {
-      let query = supabase.from('products').select('*');
+      let query = supabase.from('products').select('*, product_variants(id, size, color, stock_qty)');
       if (storeId === 'store_default_sabayluk') {
         query = query.or(`store_id.eq.${storeId},store_id.is.null`);
       } else {
@@ -3029,7 +3029,15 @@ export default function UnifiedAdminDashboard() {
     }
 
     if (!error && data) {
-      const mapped = data.map(parseProductMeta);
+      const mapped = data.map(p => {
+        const parsed = parseProductMeta(p);
+        // ⭐️ សុវត្ថិភាពស្តុកតឹងតែង៖ បើទំនិញមាន Variants ត្រូវគណនាស្តុកសរុបស្មើផលបូក Variants ជានិច្ច
+        if (p.product_variants && Array.isArray(p.product_variants) && p.product_variants.length > 0) {
+          const variantStockSum = p.product_variants.reduce((sum, v) => sum + (Number(v.stock_qty) || 0), 0);
+          parsed.stock_qty = variantStockSum;
+        }
+        return parsed;
+      });
       setProducts(mapped);
       // រក្សាទុក Cache ទំនិញក្នុង LocalStorage ដើម្បីលក់បានពេលគ្មាន Internet (Offline Mode)
       cacheProductsOffline(activeStore?.id, mapped);
@@ -23531,39 +23539,22 @@ export default function UnifiedAdminDashboard() {
                                 )}
                               </td>
 
-                              {/* Stock Counter with Quick Inline Stepper */}
+                              {/* Stock Display (Protected: Adjusted via Inflow/Outflow/Studio) */}
                               <td className="px-4 py-4 text-center">
                                 <div className="inline-flex flex-col items-center">
-                                  <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200">
-                                    <button
-                                      type="button"
-                                      disabled={isUpdating || product.stock_qty <= 0}
-                                      onClick={() => handleQuickStockAdjust(product, -1)}
-                                      className="w-7 h-7 rounded-lg bg-white hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-black text-sm flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
-                                      title="បន្ថយស្តុក ១ ឯកតា (-1)"
-                                    >
-                                      -
-                                    </button>
-                                    
-                                    <span className={`w-10 text-center font-black text-sm ${
-                                      isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-gray-900'
-                                    }`}>
-                                      {isUpdating ? '⏳' : product.stock_qty}
-                                    </span>
-
-                                    <button
-                                      type="button"
-                                      disabled={isUpdating}
-                                      onClick={() => handleQuickStockAdjust(product, 1)}
-                                      className="w-7 h-7 rounded-lg bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-600 font-black text-sm flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
-                                      title="បន្ថែមស្តុក ១ ឯកតា (+1)"
-                                    >
-                                      +
-                                    </button>
+                                  <div className={`px-3 py-1.5 rounded-xl font-mono font-black text-xs border shadow-2xs flex items-center gap-1 ${
+                                    isOut 
+                                      ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                      : isLow 
+                                        ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                                        : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  }`}>
+                                    <span className="text-sm font-black">{product.stock_qty}</span>
+                                    <span className="text-[10px] font-bold opacity-75">គូ</span>
                                   </div>
 
                                   {/* Mini Stock Progress Bar */}
-                                  <div className="w-20 bg-gray-200 h-1.5 rounded-full overflow-hidden mt-1.5">
+                                  <div className="w-16 bg-gray-200 h-1.5 rounded-full overflow-hidden mt-1.5">
                                     <div 
                                       style={{ width: `${Math.min(100, Math.max(5, (product.stock_qty / (product.low_stock_alert || 5) * 50)))}%` }} 
                                       className={`h-full ${isOut ? 'bg-rose-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`}
@@ -23761,31 +23752,19 @@ export default function UnifiedAdminDashboard() {
                             </div>
                           </div>
 
-                          {/* Bottom row: Inline Stock Stepper & Quick Action Buttons */}
+                          {/* Bottom row: Stock Badge & Quick Action Buttons */}
                           <div className="mt-2.5 flex items-center justify-between gap-1.5">
-                            {/* Stepper */}
-                            <div className="flex items-center bg-gray-100 rounded-xl p-0.5 border border-gray-200 shrink-0">
-                              <button
-                                type="button"
-                                disabled={isUpdating || product.stock_qty <= 0}
-                                onClick={() => handleQuickStockAdjust(product, -1)}
-                                className="w-7 h-7 rounded-lg bg-white hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-black text-xs flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
-                                title="-1"
-                              >
-                                -
-                              </button>
-                              <span className="w-8 text-center font-black text-xs text-gray-900">
-                                {isUpdating ? '⏳' : product.stock_qty}
-                              </span>
-                              <button
-                                type="button"
-                                disabled={isUpdating}
-                                onClick={() => handleQuickStockAdjust(product, 1)}
-                                className="w-7 h-7 rounded-lg bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-600 font-black text-xs flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
-                                title="+1"
-                              >
-                                +
-                              </button>
+                            {/* Stock Badge */}
+                            <div className={`px-2.5 py-1 rounded-xl font-mono font-black text-xs border shadow-2xs flex items-center gap-1 shrink-0 ${
+                              isOut 
+                                ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                : isLow 
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            }`}>
+                              <span>ស្តុក:</span>
+                              <span className="font-black text-sm">{product.stock_qty}</span>
+                              <span className="text-[10px] opacity-75">គូ</span>
                             </div>
 
                             {/* Actions */}
@@ -23970,33 +23949,19 @@ export default function UnifiedAdminDashboard() {
                             </div>
                           </div>
 
-                          {/* Card Footer: Quick Stepper & Actions */}
+                          {/* Card Footer: Stock Badge & Actions */}
                           <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                            {/* Inline Stock Stepper */}
-                            <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl border border-gray-200">
-                              <button
-                                type="button"
-                                disabled={isUpdating || product.stock_qty <= 0}
-                                onClick={() => handleQuickStockAdjust(product, -1)}
-                                className="w-6 h-6 rounded-lg bg-white hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-black text-xs flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
-                                title="-1"
-                              >
-                                -
-                              </button>
-                              
-                              <span className="w-7 text-center font-black text-xs text-gray-900">
-                                {isUpdating ? '⏳' : product.stock_qty}
-                              </span>
-
-                              <button
-                                type="button"
-                                disabled={isUpdating}
-                                onClick={() => handleQuickStockAdjust(product, 1)}
-                                className="w-6 h-6 rounded-lg bg-white hover:bg-emerald-50 text-gray-700 hover:text-emerald-600 font-black text-xs flex items-center justify-center shadow-xs transition active:scale-90 disabled:opacity-30 cursor-pointer"
-                                title="+1"
-                              >
-                                +
-                              </button>
+                            {/* Stock Badge */}
+                            <div className={`px-2.5 py-1 rounded-xl font-mono font-black text-xs border shadow-2xs flex items-center gap-1 ${
+                              isOut 
+                                ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                : isLow 
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            }`}>
+                              <span>ស្តុក:</span>
+                              <span className="font-black text-sm">{product.stock_qty}</span>
+                              <span className="text-[10px] opacity-75">គូ</span>
                             </div>
 
                             {/* Action Buttons */}
