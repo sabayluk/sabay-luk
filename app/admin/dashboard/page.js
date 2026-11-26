@@ -3176,7 +3176,7 @@ export default function UnifiedAdminDashboard() {
     } else {
       query = query.eq('store_id', storeId);
     }
-    const { data, error } = await query.order('id', { ascending: false });
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (!error && data) {
       let localRefunds = [];
@@ -3223,15 +3223,35 @@ export default function UnifiedAdminDashboard() {
             is_offline_pending: true
           }));
 
-        const existingOrderIds = new Set(mapped.map(m => String(m.order_id || m.id)));
+        const existingOrderIds = new Set(mapped.map(m => String(m.order_id || m.id).trim()));
         pendingForStore.forEach(po => {
-          if (!existingOrderIds.has(String(po.order_id))) {
+          const poKey = String(po.order_id || po.id).trim();
+          if (poKey && !existingOrderIds.has(poKey)) {
             mapped.unshift(po);
+            existingOrderIds.add(poKey);
           }
         });
       } catch (_) {}
 
-      setRealOrders(mapped);
+      // Strict deduplication & sort newest first by created_at DESC
+      const seenOrderIds = new Set();
+      const uniqueOrders = [];
+      for (const order of mapped) {
+        const key = String(order.order_id || order.id || '').trim();
+        if (key && !seenOrderIds.has(key)) {
+          seenOrderIds.add(key);
+          uniqueOrders.push(order);
+        } else if (!key) {
+          uniqueOrders.push(order);
+        }
+      }
+      uniqueOrders.sort((a, b) => {
+        const timeA = new Date(a.created_at || a.date || 0).getTime();
+        const timeB = new Date(b.created_at || b.date || 0).getTime();
+        return timeB - timeA;
+      });
+
+      setRealOrders(uniqueOrders);
     }
     setLoadingOrders(false);
   };
@@ -3326,6 +3346,10 @@ export default function UnifiedAdminDashboard() {
     return realOrders.filter(o => {
       const oStore = o.store_id || 'store_default_sabayluk';
       return oStore === storeId;
+    }).sort((a, b) => {
+      const timeA = new Date(a.created_at || a.date || 0).getTime();
+      const timeB = new Date(b.created_at || b.date || 0).getTime();
+      return timeB - timeA;
     });
   }, [realOrders, activeStore?.id]);
 
@@ -6582,14 +6606,18 @@ export default function UnifiedAdminDashboard() {
         setToastNotification('📡 បានកត់ត្រាការលក់ក្រៅបណ្តាញ (Offline Saved)! នឹង Sync ស្វ័យប្រវត្តិតាមក្រោយ។');
       }
 
-      // Add to local realOrders state so UI reflects the new sale immediately
-      setRealOrders(prev => [{
-        ...orderPayload,
-        id: `ord_${Date.now()}`,
-        customer: resolvedCustomerName,
-        total: posTotal,
-        payment: paymentMethod
-      }, ...prev]);
+      // Add to local realOrders state so UI reflects the new sale immediately on top without duplicate
+      setRealOrders(prev => {
+        const newOrder = {
+          ...orderPayload,
+          id: orderPayload.order_id || `ord_${Date.now()}`,
+          customer: resolvedCustomerName,
+          total: posTotal,
+          payment: paymentMethod
+        };
+        const filteredPrev = prev.filter(p => String(p.order_id || p.id).trim() !== String(newOrder.order_id || newOrder.id).trim());
+        return [newOrder, ...filteredPrev];
+      });
 
       // ២.៥ ⭐️ គ្រប់គ្រងបំណុល (Debt Charge) និងពិន្ទុ Loyalty (Points Accrual & Redemption) ⭐️
       const matchedCust = customers.find(c => 
@@ -14790,6 +14818,10 @@ export default function UnifiedAdminDashboard() {
         return true;
       }
       return true; // 'all'
+    }).sort((a, b) => {
+      const timeA = new Date(a.created_at || a.date || 0).getTime();
+      const timeB = new Date(b.created_at || b.date || 0).getTime();
+      return timeB - timeA;
     });
 
     // ២. គណនាមុខទំនិញដែលបានលក់ចេញក្នុងកាលបរិច្ឆេទនេះ (Itemized Sales Breakdown)
@@ -14798,8 +14830,8 @@ export default function UnifiedAdminDashboard() {
       filteredOrders.forEach(order => {
         const items = Array.isArray(order.items) ? order.items : [];
         items.forEach(it => {
-          if (!it || it.is_tax_meta || it.is_delivery_meta) return;
-          const key = `${it.name || it.id}_${it.size || ''}_${it.color || ''}`;
+          if (!it || it.is_tax_meta || it.is_delivery_meta || it.is_pos_meta || (!it.name && !it.title)) return;
+          const key = `${it.name || it.title || it.id}_${it.size || ''}_${it.color || ''}`;
           const qty = parseInt(it.qty || it.quantity || 1) || 1;
           const price = parseFloat(it.price || 0) || 0;
           const total = qty * price;
@@ -14812,7 +14844,7 @@ export default function UnifiedAdminDashboard() {
           } else {
             map.set(key, {
               id: it.id,
-              name: it.name || 'ទំនិញ',
+              name: it.name || it.title || 'ទំនិញ',
               image_url: it.image_url || it.image || '',
               size: it.size || '',
               color: it.color || '',
@@ -15372,8 +15404,51 @@ export default function UnifiedAdminDashboard() {
                       return (
                         <tr key={order.id} id={`order-row-${order.id}`} className={`hover:bg-gray-50/80 transition ${highlightedOrderId === order.id ? 'bg-emerald-50 ring-2 ring-emerald-400 ring-inset animate-pulse' : ''}`}>
                           <td className="px-6 py-4 font-black text-blue-600 text-xs">{displayId}</td>
-                          <td className="px-6 py-4 text-xs text-gray-500 whitespace-nowrap">
-                            {order.created_at ? new Date(order.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : 'POS Sale'}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {(() => {
+                              const rawDate = order.created_at || order.date;
+                              if (!rawDate) {
+                                return <span className="text-xs text-gray-400 font-bold">POS Sale</span>;
+                              }
+                              const d = new Date(rawDate);
+                              if (isNaN(d.getTime())) {
+                                return <span className="text-xs text-gray-600 font-bold">{rawDate}</span>;
+                              }
+                              const now = new Date();
+                              const isToday = d.toDateString() === now.toDateString();
+                              const yesterday = new Date(now.getTime() - 86400000);
+                              const isYesterday = d.toDateString() === yesterday.toDateString();
+
+                              const day = String(d.getDate()).padStart(2, '0');
+                              const month = String(d.getMonth() + 1).padStart(2, '0');
+                              const year = d.getFullYear();
+                              const hours = String(d.getHours()).padStart(2, '0');
+                              const minutes = String(d.getMinutes()).padStart(2, '0');
+
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-gray-800 text-xs tracking-tight">
+                                      {day}/{month}/{year}
+                                    </span>
+                                    {isToday && (
+                                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        🟢 ថ្ងៃនេះ
+                                      </span>
+                                    )}
+                                    {isYesterday && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                        ម្សិលមិញ
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium">
+                                    <span className="text-gray-400">🕒</span>
+                                    <span>{hours}:{minutes}</span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="px-6 py-4">
                             <p className="font-bold text-gray-900 text-xs">{order.customer || 'អតិថិជនទូទៅ'}</p>
@@ -15609,9 +15684,32 @@ export default function UnifiedAdminDashboard() {
                             {order.order_type || 'POS'}
                           </span>
                         </div>
-                        <span className="text-[10px] text-gray-400 font-bold shrink-0">
-                          {order.created_at ? new Date(order.created_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : 'POS'}
-                        </span>
+                        <div className="shrink-0 text-right">
+                          {(() => {
+                            const rawDate = order.created_at || order.date;
+                            if (!rawDate) return <span className="text-[10px] text-gray-400 font-bold">POS</span>;
+                            const d = new Date(rawDate);
+                            if (isNaN(d.getTime())) return <span className="text-[10px] text-gray-400 font-bold">{rawDate}</span>;
+                            const now = new Date();
+                            const isToday = d.toDateString() === now.toDateString();
+                            const day = String(d.getDate()).padStart(2, '0');
+                            const month = String(d.getMonth() + 1).padStart(2, '0');
+                            const hours = String(d.getHours()).padStart(2, '0');
+                            const minutes = String(d.getMinutes()).padStart(2, '0');
+                            return (
+                              <div className="flex items-center gap-1">
+                                {isToday && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    🟢 ថ្ងៃនេះ
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-gray-600 font-bold whitespace-nowrap">
+                                  {day}/{month} {hours}:{minutes}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </div>
 
                       {/* Customer & Total */}
