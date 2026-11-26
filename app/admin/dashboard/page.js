@@ -23505,10 +23505,78 @@ export default function UnifiedAdminDashboard() {
                                 </span>
                               </td>
 
-                              {/* Size & Color */}
-                              <td className="px-4 py-4 text-[11px] text-gray-500 whitespace-nowrap">
-                                <div>Size: <span className="font-bold text-gray-800">{product.size ? product.size.replace(/:\d+/g, '') : 'N/A'}</span></div>
-                                <div className="mt-0.5">Color: <span className="font-bold text-orange-600">{product.color || 'N/A'}</span></div>
+                              {/* Size & Color with Modern Stock Breakdown */}
+                              <td className="px-4 py-4 text-[11px]">
+                                {(() => {
+                                  let variantsList = [];
+                                  if (product.product_variants && Array.isArray(product.product_variants) && product.product_variants.length > 0) {
+                                    variantsList = [...product.product_variants].sort((a, b) => {
+                                      const numA = parseFloat(a.size);
+                                      const numB = parseFloat(b.size);
+                                      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                                      return String(a.size || '').localeCompare(String(b.size || ''));
+                                    }).map(v => ({
+                                      size: v.size || 'ទូទៅ',
+                                      color: v.color || '',
+                                      stock: Number(v.stock_qty) || 0
+                                    }));
+                                  } else if (product.size && typeof product.size === 'string') {
+                                    variantsList = product.size.split(',').map(s => s.trim()).filter(Boolean).map(part => {
+                                      if (part.includes(':')) {
+                                        const [sz, qty] = part.split(':');
+                                        return { size: sz.trim(), color: product.color || '', stock: parseInt(qty) || 0 };
+                                      }
+                                      return { size: part, color: product.color || '', stock: null };
+                                    });
+                                  }
+
+                                  if (variantsList.length === 0) {
+                                    return <span className="text-gray-400 font-bold">N/A</span>;
+                                  }
+
+                                  return (
+                                    <div className="space-y-1.5 min-w-[170px] max-w-[240px]">
+                                      {/* Interactive / Modern Size Badges with Stock */}
+                                      <div className="flex flex-wrap gap-1">
+                                        {variantsList.map((item, idx) => (
+                                          <div
+                                            key={idx}
+                                            className={`inline-flex items-center px-1.5 py-0.5 rounded-lg border text-[11px] font-mono transition-all ${
+                                              item.stock === 0
+                                                ? 'bg-rose-50 border-rose-200 text-rose-700 opacity-60'
+                                                : item.stock != null && item.stock <= 2
+                                                  ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
+                                                  : 'bg-slate-50 hover:bg-blue-50 border-slate-200 hover:border-blue-300 text-slate-800 shadow-2xs'
+                                            }`}
+                                            title={`Size ${item.size} | ស្តុក: ${item.stock != null ? item.stock + ' គូ' : 'មានស្តុក'}`}
+                                          >
+                                            <span className="font-bold text-gray-700">{item.size}</span>
+                                            {item.stock != null && (
+                                              <span className={`ml-1 text-[10px] font-black px-1 py-0.2 rounded ${
+                                                item.stock === 0 
+                                                  ? 'bg-rose-200 text-rose-900' 
+                                                  : item.stock <= 2 
+                                                    ? 'bg-amber-200 text-amber-950 font-black' 
+                                                    : 'bg-emerald-100 text-emerald-800 font-black'
+                                              }`}>
+                                                {item.stock}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                      {/* Color Display */}
+                                      {product.color && (
+                                        <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-slate-700 inline-block"></span>
+                                          <span className="text-gray-400">Color:</span>
+                                          <span className="text-gray-700 font-black">{product.color}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
 
                               {/* Prices */}
@@ -23752,6 +23820,57 @@ export default function UnifiedAdminDashboard() {
                             </div>
                           </div>
 
+                          {/* Size Stock Breakdown Pills (Mobile) */}
+                          {(() => {
+                            let variantsList = [];
+                            if (product.product_variants && Array.isArray(product.product_variants) && product.product_variants.length > 0) {
+                              variantsList = [...product.product_variants].sort((a, b) => {
+                                const numA = parseFloat(a.size);
+                                const numB = parseFloat(b.size);
+                                if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                                return String(a.size || '').localeCompare(String(b.size || ''));
+                              }).map(v => ({
+                                size: v.size || 'ទូទៅ',
+                                stock: Number(v.stock_qty) || 0
+                              }));
+                            } else if (product.size && typeof product.size === 'string') {
+                              variantsList = product.size.split(',').map(s => s.trim()).filter(Boolean).map(part => {
+                                if (part.includes(':')) {
+                                  const [sz, qty] = part.split(':');
+                                  return { size: sz.trim(), stock: parseInt(qty) || 0 };
+                                }
+                                return { size: part, stock: null };
+                              });
+                            }
+                            if (variantsList.length === 0) return null;
+                            return (
+                              <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1 items-center">
+                                <span className="text-[10px] text-gray-400 font-bold mr-0.5">Size/ស្តុក:</span>
+                                {variantsList.map((item, idx) => (
+                                  <span
+                                    key={idx}
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded-md border text-[10px] font-mono ${
+                                      item.stock === 0
+                                        ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                        : item.stock != null && item.stock <= 2
+                                          ? 'bg-amber-50 border-amber-300 text-amber-900'
+                                          : 'bg-slate-50 border-slate-200 text-slate-800'
+                                    }`}
+                                  >
+                                    <span className="font-bold text-gray-700">{item.size}</span>
+                                    {item.stock != null && (
+                                      <span className={`ml-1 text-[9px] font-black px-1 rounded ${
+                                        item.stock === 0 ? 'bg-rose-200 text-rose-900' : 'bg-emerald-100 text-emerald-800'
+                                      }`}>
+                                        {item.stock}
+                                      </span>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
+
                           {/* Bottom row: Stock Badge & Quick Action Buttons */}
                           <div className="mt-2.5 flex items-center justify-between gap-1.5">
                             {/* Stock Badge */}
@@ -23947,6 +24066,56 @@ export default function UnifiedAdminDashboard() {
                                 />
                               </div>
                             </div>
+
+                            {/* Per-size Stock Breakdown Pills (Grid View) */}
+                            {(() => {
+                              let variantsList = [];
+                              if (product.product_variants && Array.isArray(product.product_variants) && product.product_variants.length > 0) {
+                                variantsList = [...product.product_variants].sort((a, b) => {
+                                  const numA = parseFloat(a.size);
+                                  const numB = parseFloat(b.size);
+                                  if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                                  return String(a.size || '').localeCompare(String(b.size || ''));
+                                }).map(v => ({
+                                  size: v.size || 'ទូទៅ',
+                                  stock: Number(v.stock_qty) || 0
+                                }));
+                              } else if (product.size && typeof product.size === 'string') {
+                                variantsList = product.size.split(',').map(s => s.trim()).filter(Boolean).map(part => {
+                                  if (part.includes(':')) {
+                                    const [sz, qty] = part.split(':');
+                                    return { size: sz.trim(), stock: parseInt(qty) || 0 };
+                                  }
+                                  return { size: part, stock: null };
+                                });
+                              }
+                              if (variantsList.length === 0) return null;
+                              return (
+                                <div className="mt-2.5 pt-2 border-t border-gray-100 flex flex-wrap gap-1 items-center">
+                                  {variantsList.map((item, idx) => (
+                                    <span
+                                      key={idx}
+                                      className={`inline-flex items-center px-1.5 py-0.5 rounded-md border text-[10px] font-mono ${
+                                        item.stock === 0
+                                          ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                          : item.stock != null && item.stock <= 2
+                                            ? 'bg-amber-50 border-amber-300 text-amber-900'
+                                            : 'bg-slate-50 border-slate-200 text-slate-800'
+                                      }`}
+                                    >
+                                      <span className="font-bold text-gray-700">{item.size}</span>
+                                      {item.stock != null && (
+                                        <span className={`ml-1 text-[9px] font-black px-1 rounded ${
+                                          item.stock === 0 ? 'bg-rose-200 text-rose-900' : 'bg-emerald-100 text-emerald-800'
+                                        }`}>
+                                          {item.stock}
+                                        </span>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Card Footer: Stock Badge & Actions */}
