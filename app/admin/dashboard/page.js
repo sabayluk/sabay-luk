@@ -16271,49 +16271,62 @@ export default function UnifiedAdminDashboard() {
                     
                     <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                       {orderItems.length > 0 ? (
-                        orderItems.map((item, idx) => (
-                          <div key={idx} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80">
-                            <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 shadow-2xs flex items-center justify-center">
-                              {item.image_url || item.image ? (
-                                <img 
-                                  src={item.image_url || item.image} 
-                                  className="w-full h-full object-cover" 
-                                  alt={item.name || ''}
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                    if (e.currentTarget.parentElement) {
-                                      e.currentTarget.parentElement.innerHTML = '<span class="text-xl">📦</span>';
-                                    }
-                                  }}
-                                />
-                              ) : (
-                                <span className="text-xl">📦</span>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h5 className="text-xs font-black text-slate-900 truncate">{item.name}</h5>
-                              <div className="flex flex-wrap gap-1.5 mt-0.5 text-[10px]">
-                                {item.size && item.size !== 'N/A' && (
-                                  <span className="bg-white text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
-                                    Size: {item.size}
-                                  </span>
+                        orderItems.map((item, idx) => {
+                          const matchedProd = currentStoreProducts?.find(p => String(p.id) === String(item.id) || (p.sku && item.sku && p.sku === item.sku)) || products?.find(p => String(p.id) === String(item.id) || (p.sku && item.sku && p.sku === item.sku));
+                          const itemSku = item.sku || matchedProd?.sku || '';
+
+                          return (
+                            <div key={idx} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                              <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 shadow-2xs flex items-center justify-center">
+                                {item.image_url || item.image || matchedProd?.image_url ? (
+                                  <img 
+                                    src={item.image_url || item.image || matchedProd?.image_url} 
+                                    className="w-full h-full object-cover" 
+                                    alt={item.name || ''}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      if (e.currentTarget.parentElement) {
+                                        e.currentTarget.parentElement.innerHTML = '<span class="text-xl">📦</span>';
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="text-xl">📦</span>
                                 )}
-                                {item.color && item.color !== 'N/A' && (
-                                  <span className="bg-white text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
-                                    {item.color}
-                                  </span>
-                                )}
-                                <span className="text-slate-400 font-mono">x{item.qty || 1}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h5 className="text-xs font-black text-slate-900 truncate">
+                                  {itemSku ? <span className="font-mono text-blue-600 mr-1.5 font-black">[{itemSku}]</span> : null}
+                                  {item.name}
+                                </h5>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px]">
+                                  {itemSku && (
+                                    <span className="bg-blue-50 text-blue-700 font-mono font-black px-1.5 py-0.2 rounded border border-blue-200">
+                                      Code: {itemSku}
+                                    </span>
+                                  )}
+                                  {item.size && item.size !== 'N/A' && (
+                                    <span className="bg-white text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
+                                      Size: {item.size}
+                                    </span>
+                                  )}
+                                  {item.color && item.color !== 'N/A' && (
+                                    <span className="bg-white text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
+                                      {item.color}
+                                    </span>
+                                  )}
+                                  <span className="text-slate-400 font-mono">x{item.qty || 1}</span>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-xs font-black text-slate-900 font-mono">
+                                  ${(parseFloat(item.price || 0) * (item.qty || 1)).toFixed(2)}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-mono">@${Number(item.price || 0).toFixed(2)}</p>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-xs font-black text-slate-900 font-mono">
-                                ${(parseFloat(item.price || 0) * (item.qty || 1)).toFixed(2)}
-                              </p>
-                              <p className="text-[10px] text-slate-400 font-mono">@${Number(item.price || 0).toFixed(2)}</p>
-                            </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <p className="text-center text-slate-400 py-6 text-xs">គ្មានមុខទំនិញលម្អិត</p>
                       )}
@@ -38682,20 +38695,37 @@ export default function UnifiedAdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {receiptData.items.map((item, idx) => (
-                        <tr key={idx} className="border-b border-gray-200/50">
-                          <td className="py-1">
-                            <p className="font-bold line-clamp-1">{item.name}</p>
-                            <div className="text-[9px] text-gray-600 flex gap-2">
-                              {item.size && <span>Size: {item.size}</span>}
-                              {item.color && <span>Color: {item.color}</span>}
-                              <span>@${Number(item.price).toFixed(2)}</span>
-                            </div>
-                          </td>
-                          <td className="py-1 text-center font-bold">{item.qty}</td>
-                          <td className="py-1 text-right font-bold">${(item.price * item.qty).toFixed(2)}</td>
-                        </tr>
-                      ))}
+                      {receiptData.items.map((item, idx) => {
+                        const matchedProd = currentStoreProducts?.find(p => String(p.id) === String(item.id) || (p.sku && item.sku && p.sku === item.sku)) || products?.find(p => String(p.id) === String(item.id) || (p.sku && item.sku && p.sku === item.sku));
+                        const itemSku = item.sku || matchedProd?.sku || '';
+
+                        return (
+                          <tr key={idx} className="border-b border-gray-200/50">
+                            <td className="py-1">
+                              <p className="font-bold line-clamp-2">
+                                {itemSku ? (
+                                  <span className="font-mono text-black font-black mr-1 underline decoration-dotted">
+                                    [{itemSku}]
+                                  </span>
+                                ) : null}
+                                {item.name}
+                              </p>
+                              <div className="text-[9px] text-gray-700 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                                {itemSku && (
+                                  <span className="font-mono text-black font-black">
+                                    Code: {itemSku}
+                                  </span>
+                                )}
+                                {item.size && <span>Size: {item.size}</span>}
+                                {item.color && <span>Color: {item.color}</span>}
+                                <span className="font-mono text-gray-500">@${Number(item.price).toFixed(2)}</span>
+                              </div>
+                            </td>
+                            <td className="py-1 text-center font-bold">{item.qty}</td>
+                            <td className="py-1 text-right font-bold">${(item.price * item.qty).toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                   <div className="border-b border-black border-dashed my-2"></div>

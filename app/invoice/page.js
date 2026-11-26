@@ -677,10 +677,20 @@ function InvoiceContent() {
                       <tr key={idx} className="hover:bg-gray-50/50">
                         <td className="py-3.5 px-3 text-center text-gray-400 font-mono">{idx + 1}</td>
                         <td className="py-3.5 px-3">
-                          <span className="font-black text-gray-900 block">{item.name || 'ស្បែកជើង'}</span>
+                          <span className="font-black text-gray-900 block">
+                            {item.sku ? <span className="font-mono text-blue-600 mr-1.5 font-black">[{item.sku}]</span> : null}
+                            {item.name || 'ស្បែកជើង'}
+                          </span>
                         </td>
                         <td className="py-3.5 px-3 text-center text-gray-600 font-bold">
-                          {variantStr || 'Standard'}
+                          <div className="flex flex-col items-center gap-0.5">
+                            {item.sku && (
+                              <span className="font-mono text-[10px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                Code: {item.sku}
+                              </span>
+                            )}
+                            <span>{variantStr || 'Standard'}</span>
+                          </div>
                         </td>
                         <td className="py-3.5 px-3 text-right font-mono font-bold text-gray-800">
                           ${price.toFixed(2)}
