@@ -6549,8 +6549,8 @@ export default function UnifiedAdminDashboard() {
       const redeemedPoints = (posUseLoyaltyPoints && posLoyaltyPointsToRedeem > 0)
         ? Math.min(currentPts, posLoyaltyPointsToRedeem)
         : 0;
-      const earnedPoints = Math.floor(posTotal); // $1 = 1 point
-      const updatedPts = Math.max(0, currentPts - redeemedPoints + earnedPoints);
+      const earnedPoints = matchedCust ? Math.floor(posTotal) : 0; // $1 = 1 point
+      const updatedPts = matchedCust ? Math.max(0, currentPts - redeemedPoints + earnedPoints) : null;
 
       if (matchedCust) {
         const debtHist = [...(matchedCust.debt_history || [])];
@@ -38530,30 +38530,6 @@ export default function UnifiedAdminDashboard() {
                           <div className="flex justify-between text-gray-700">
                             <span>កាលបរិច្ឆេទសង:</span>
                             <span>{receiptData.dueDate}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Loyalty Points Section on Receipt */}
-                    {(receiptData.earnedPoints > 0 || receiptData.loyaltyBalance != null || receiptData.redeemedPoints > 0) && (
-                      <div className="bg-amber-50/80 p-1.5 rounded border border-amber-300 text-amber-950 text-[10px] my-1 font-bold space-y-0.5">
-                        {receiptData.redeemedPoints > 0 && (
-                          <div className="flex justify-between text-red-700">
-                            <span>🎁 ពិន្ទុដែលបានកាត់:</span>
-                            <span>-{receiptData.redeemedPoints} pts</span>
-                          </div>
-                        )}
-                        {receiptData.earnedPoints > 0 && (
-                          <div className="flex justify-between text-emerald-700">
-                            <span>⭐ ពិន្ទុទទួលបានលើកនេះ:</span>
-                            <span>+{receiptData.earnedPoints} pts</span>
-                          </div>
-                        )}
-                        {receiptData.loyaltyBalance != null && (
-                          <div className="flex justify-between border-t border-amber-200/80 pt-0.5 mt-0.5">
-                            <span>ពិន្ទុសន្សំបច្ចុប្បន្ន:</span>
-                            <span className="font-black">{receiptData.loyaltyBalance} pts</span>
                           </div>
                         )}
                       </div>
