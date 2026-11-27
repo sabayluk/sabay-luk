@@ -36793,7 +36793,6 @@ export default function UnifiedAdminDashboard() {
                   { id: 'analytics', name: 'វិភាគទិន្នន័យ (P&L)', icon: '📊', perm: 'analytics', iconColor: 'text-emerald-400' },
                   { id: 'expenses', name: 'កត់ត្រាចំណាយ (Expenses)', icon: '💸', perm: 'expenses', iconColor: 'text-rose-400' },
                   { id: 'customers', name: 'អតិថិជន (CRM)', icon: '👥', perm: 'customers', iconColor: 'text-teal-400' },
-                  { id: 'loyalty_system', name: 'ប្រព័ន្ធ Loyalty & Rewards', icon: '🎁', perm: 'customers', iconColor: 'text-amber-400' },
                   { id: 'feedbacks', name: 'មតិយោបល់ (Feedbacks)', icon: '💬', perm: 'feedbacks', count: unreadFeedbacksCount, iconColor: 'text-amber-400' }
                 ]
               },
