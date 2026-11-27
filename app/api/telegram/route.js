@@ -678,7 +678,7 @@ export async function POST(request) {
       return NextResponse.json({ success: false, message: 'មិនមានអត្ថបទសារសម្រាប់ផ្ញើទេ' }, { status: 400 });
     }
 
-    if (!token || !chat) {
+    if (!token || (!chat && !body.targetChatId && !body.targetChat)) {
       return NextResponse.json({
         success: true,
         message: 'Telegram Bot Token / Chat ID មិនទាន់កំណត់ក្នុង Setting (Simulated)',
@@ -687,7 +687,57 @@ export async function POST(request) {
       });
     }
 
-    const targetChat = body.targetChatId || body.targetChat || chat;
+    let targetChat = body.targetChatId || body.targetChat || chat;
+    let resolvedChatId = null;
+    let botUsername = null;
+
+    // ⭐️ ប្រសិនបើ targetChat ជា Username (ឧ. snaurbangarbs ឬ @snaurbangarbs)
+    // Telegram Bot API តម្រូវឱ្យប្រើ numeric chat_id។ ប្រសិនបើភ្ញៀវបានចុច /start ក្នុង Bot
+    // ប្រព័ន្ធនឹងទាញយក chat_id របស់ភ្ញៀវពី getUpdates របស់ Bot ដោយស្វ័យប្រវត្តិ!
+    const isNumericChat = /^-?\d+$/.test(String(targetChat || '').trim());
+    if (token && targetChat && !isNumericChat) {
+      const cleanUser = String(targetChat).replace(/^@/, '').toLowerCase().trim();
+      try {
+        const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+        const meData = await meRes.json();
+        if (meData?.ok && meData.result?.username) {
+          botUsername = meData.result.username;
+        }
+
+        const updRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=100`);
+        const updData = await updRes.json();
+        if (updData?.ok && Array.isArray(updData.result)) {
+          for (let i = updData.result.length - 1; i >= 0; i--) {
+            const u = updData.result[i];
+            const fromUser = u.message?.from || u.callback_query?.from;
+            const chatObj = u.message?.chat;
+            if (fromUser?.username && fromUser.username.toLowerCase() === cleanUser) {
+              resolvedChatId = String(fromUser.id);
+              break;
+            }
+            if (chatObj?.username && chatObj.username.toLowerCase() === cleanUser) {
+              resolvedChatId = String(chatObj.id);
+              break;
+            }
+          }
+        }
+      } catch (lookupErr) {
+        console.warn('Telegram username lookup error:', lookupErr);
+      }
+
+      if (resolvedChatId) {
+        targetChat = resolvedChatId;
+      } else {
+        // រកមិនទាន់ឃើញការចុច Start ពី username នេះ
+        return NextResponse.json({
+          success: false,
+          notStarted: true,
+          botUsername: botUsername || 'mario_order_alert_bot',
+          cleanUsername: cleanUser,
+          message: `⚠️ រកមិនទាន់ឃើញការចុច Start ពីគណនី @${cleanUser} ក្នុង Bot @${botUsername || 'ហាង'} នៅឡើយទេ។ សូមឱ្យអតិថិជនចុច Start លើ Bot ជាមុនសិន។`
+        }, { status: 400 });
+      }
+    }
 
     const payload = {
       chat_id: targetChat,
@@ -789,6 +839,8 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       message: 'បានផ្ញើវិក្កយបត្រ និងសារជូនដំណឹងទៅ Telegram ជោគជ័យ!',
+      resolvedChatId: resolvedChatId || (isNumericChat ? targetChat : null),
+      botUsername: botUsername || undefined,
       data
     });
   } catch (err) {

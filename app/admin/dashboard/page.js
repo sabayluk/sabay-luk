@@ -2499,7 +2499,7 @@ export default function UnifiedAdminDashboard() {
     setTimeout(() => setToastNotification(null), 3000);
   };
 
-  // ⭐️ ផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិតាម Telegram
+  // ⭐️ ផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិតាម Telegram Bot
   const handleSendDebtReminderAuto = async (reminderMsg) => {
     if (!debtReminderCustomer) return;
     setDebtReminderSending(true);
@@ -2511,24 +2511,9 @@ export default function UnifiedAdminDashboard() {
     }
 
     try {
-      // 💡 គោលការណ៍សុវត្ថិភាព Telegram Bot API៖ Bot មិនអនុញ្ញាតឱ្យផ្ញើសារទៅកាន់គណនីឯកជនតាមរយៈ @username ដោយគ្មានការ Start Bot ឡើយ។
-      // ដូច្នេះប្រសិនបើជា @username ប្រព័ន្ធនឹងបើក Telegram ផ្ទាល់ជាមួយសារបំពេញស្រាប់តែម្ដង ធានាថាភ្ញៀវទទួលបាន 100%!
-      const isNumericChatId = /^-?\d+$/.test(cleanTg);
-
-      if (cleanTg && !isNumericChatId) {
-        // បើក Telegram Direct Chat ភ្លាមៗជាមួយសារដែលបានរៀបចំរួចរាល់
-        window.open(`https://t.me/${cleanTg}?text=${encodeURIComponent(reminderMsg)}`, '_blank');
-        setDebtReminderSentStatus({
-          type: 'success',
-          msg: `✅ បានបើក Telegram ទៅកាន់ @${cleanTg} រួចរាល់! សាររំលឹកត្រូវបានបំពេញដោយស្វ័យប្រវត្តិក្នងប្រអប់ Chat សូមចុច Send (ឬ Enter) ជាការស្រេច។`
-        });
-        setToastNotification(`✈️ បានបើក Telegram ទៅកាន់ @${cleanTg}!`);
-        setTimeout(() => setToastNotification(null), 3500);
-        return;
-      }
-
-      // ប្រសិនបើជា Numeric Chat ID (ឬ Bot Dispatch)
       const metrics = getCustomerMetrics(debtReminderCustomer);
+      const targetId = debtReminderCustomer.telegramChatId || cleanTg;
+
       const res = await sendTelegramNotification({
         action: 'debt_reminder',
         customer: {
@@ -2537,46 +2522,52 @@ export default function UnifiedAdminDashboard() {
           debtBalance: metrics.debtBalance,
           dueDate: metrics.debtDueDate
         },
-        targetChatId: cleanTg || undefined,
+        targetChatId: targetId || undefined,
         message: reminderMsg
       });
 
       if (res?.success) {
+        // ប្រសិនបើ resolve បាន numeric Chat ID ថ្មី រក្សាទុកក្នុង customer record
+        if (res.resolvedChatId && res.resolvedChatId !== debtReminderCustomer.telegramChatId) {
+          const updated = { ...debtReminderCustomer, telegram: cleanTg, telegramChatId: res.resolvedChatId };
+          setDebtReminderCustomer(updated);
+          setCustomers(prev => prev.map(c => c.id === debtReminderCustomer.id ? updated : c));
+        }
+
+        const botName = res.botUsername || storeSettings.telegramBotUsername || 'mario_order_alert_bot';
         setDebtReminderSentStatus({
           type: 'success',
-          msg: '✅ បានផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិតាម Telegram Bot ជោគជ័យ!'
+          msg: `✅ Telegram Bot (@${botName}) បានផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិទៅកាន់ @${cleanTg} ជោគជ័យ!`
         });
-        setToastNotification('✈️ បានផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិ!');
+        setToastNotification(`✈️ Bot បានផ្ញើសារ Auto ទៅកាន់ @${cleanTg}!`);
         setTimeout(() => setToastNotification(null), 3500);
+      } else if (res?.notStarted) {
+        const botName = res.botUsername || storeSettings.telegramBotUsername || 'mario_order_alert_bot';
+        setDebtReminderSentStatus({
+          type: 'warning',
+          notStarted: true,
+          botUsername: botName,
+          cleanUsername: cleanTg,
+          msg: `⚠️ រកមិនទាន់ឃើញការចុច Start ពី @${cleanTg} ក្នុង Bot @${botName} នៅឡើយទេ។`
+        });
       } else {
         const isChatNotFound = (res?.message || '').toLowerCase().includes('chat not found');
-        if (cleanTg && isChatNotFound) {
-          // Fallback បើក Telegram Direct Chat ជូនភ្លាម
-          window.open(`https://t.me/${cleanTg}?text=${encodeURIComponent(reminderMsg)}`, '_blank');
-          setDebtReminderSentStatus({
-            type: 'success',
-            msg: `💡 ច្បាប់ Telegram Bot មិនអនុញ្ញាតផ្ញើទៅ @${cleanTg} ដោយគ្មាន Start Bot ឡើយ។ ប្រព័ន្ធបានបើក Telegram ផ្ទាល់ជូនលោកអ្នកជាមួយសារស្រាប់!`
-          });
-        } else {
-          setDebtReminderSentStatus({
-            type: 'error',
-            msg: `❌ ${res?.message || 'សូមពិនិត្យមើលការភ្ជាប់ Telegram Bot ក្នុង Settings'}`
-          });
-        }
+        const botName = storeSettings.telegramBotUsername || 'mario_order_alert_bot';
+        setDebtReminderSentStatus({
+          type: 'warning',
+          notStarted: isChatNotFound,
+          botUsername: botName,
+          cleanUsername: cleanTg,
+          msg: isChatNotFound
+            ? `⚠️ រកមិនទាន់ឃើញការចុច Start ពី @${cleanTg} ក្នុង Bot @${botName} នៅឡើយទេ។`
+            : `❌ ${res?.message || 'សូមពិនិត្យមើលការភ្ជាប់ Telegram Bot ក្នុង Settings'}`
+        });
       }
     } catch (err) {
-      if (cleanTg) {
-        window.open(`https://t.me/${cleanTg}?text=${encodeURIComponent(reminderMsg)}`, '_blank');
-        setDebtReminderSentStatus({
-          type: 'success',
-          msg: `✅ បានបើក Telegram ទៅកាន់ @${cleanTg} រួចរាល់! សូមចុច Send ក្នុង Telegram ជាការស្រេច។`
-        });
-      } else {
-        setDebtReminderSentStatus({
-          type: 'error',
-          msg: `❌ Error: ${err.message}`
-        });
-      }
+      setDebtReminderSentStatus({
+        type: 'error',
+        msg: `❌ Error: ${err.message}`
+      });
     } finally {
       setDebtReminderSending(false);
     }
@@ -31819,6 +31810,26 @@ export default function UnifiedAdminDashboard() {
                         <span>💾</span> រក្សាទុក
                       </button>
                     </div>
+                    <div className="flex items-center justify-between text-[11px] text-sky-800 font-bold bg-white/80 p-2 rounded-xl border border-sky-200">
+                      <span className="flex items-center gap-1.5">
+                        <span>🤖</span>
+                        <span>Bot ហាង: <b>@{storeSettings.telegramBotUsername || 'mario_order_alert_bot'}</b></span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const botUrl = `https://t.me/${storeSettings.telegramBotUsername || 'mario_order_alert_bot'}`;
+                          if (typeof navigator !== 'undefined') {
+                            navigator.clipboard.writeText(botUrl);
+                            setToastNotification(`📋 បានចម្លង ${botUrl} ផ្ញើឱ្យភ្ញៀវចុច Start!`);
+                            setTimeout(() => setToastNotification(null), 3000);
+                          }
+                        }}
+                        className="text-[10px] text-sky-600 hover:text-sky-800 underline font-black cursor-pointer"
+                      >
+                        🔗 ចម្លង Link ផ្ញើឱ្យភ្ញៀវ Start
+                      </button>
+                    </div>
                     <p className="text-[10.5px] text-sky-700 leading-tight">
                       💡 អាចវាយបញ្ចូល Telegram Username (ឧ. sok_vila) ឬលេខទូរស័ព្ទរបស់ភ្ញៀវ រួចចុច <b>"រក្សាទុក"</b> ឬចុចផ្ញើសារបានភ្លាមៗ។
                     </p>
@@ -31852,13 +31863,56 @@ export default function UnifiedAdminDashboard() {
 
                   {/* Sent Feedback Notification Banner */}
                   {debtReminderSentStatus && (
-                    <div className={`p-3 rounded-2xl text-xs font-black animate-in fade-in flex items-center gap-2 ${
+                    <div className={`p-3.5 rounded-2xl text-xs font-bold animate-in fade-in space-y-2 ${
                       debtReminderSentStatus.type === 'success'
                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs'
+                        : debtReminderSentStatus.type === 'warning'
+                        ? 'bg-amber-50 text-amber-900 border border-amber-300 shadow-xs'
                         : 'bg-rose-50 text-rose-800 border border-rose-300'
                     }`}>
-                      <span className="text-sm">{debtReminderSentStatus.type === 'success' ? '✅' : '❌'}</span>
-                      <span>{debtReminderSentStatus.msg}</span>
+                      <div className="flex items-start gap-2">
+                        <span className="text-sm shrink-0">
+                          {debtReminderSentStatus.type === 'success' ? '✅' : debtReminderSentStatus.type === 'warning' ? '⚠️' : '❌'}
+                        </span>
+                        <div className="flex-1 text-[11.5px] leading-relaxed">
+                          {debtReminderSentStatus.msg}
+                        </div>
+                      </div>
+
+                      {debtReminderSentStatus.notStarted && (
+                        <div className="pt-1.5 border-t border-amber-200/80 flex flex-col gap-2">
+                          <p className="text-[11px] text-amber-800 leading-normal">
+                            👉 ដើម្បីឱ្យ Bot អាចផ្ញើសារ Auto ទៅកាន់ <b>@{debtReminderSentStatus.cleanUsername}</b> បាន ភ្ញៀវត្រូវចុច Start លើ Bot <b>@{debtReminderSentStatus.botUsername || 'mario_order_alert_bot'}</b> តែម្តងគត់៖
+                          </p>
+                          <div className="flex flex-col sm:flex-row items-center gap-2">
+                            <a
+                              href={`https://t.me/${debtReminderSentStatus.cleanUsername}?text=${encodeURIComponent(
+                                `ជម្រាបសួរលោក/លោកស្រី! សូមជួយចុច Start លើ Telegram Bot របស់ហាងយើងខ្ញុំមួយ ដើម្បីឱ្យប្រព័ន្ធអាចផ្ញើវិក្កយបត្រ និងដំណឹងស្វ័យប្រវត្តិតាមរយៈ Bot បាន៖ https://t.me/${debtReminderSentStatus.botUsername || 'mario_order_alert_bot'}`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full sm:flex-1 bg-amber-600 hover:bg-amber-700 text-white font-black text-[11px] py-2 px-3 rounded-xl transition text-center shadow-xs cursor-pointer active:scale-98 flex items-center justify-center gap-1.5"
+                            >
+                              <span>✈️</span>
+                              <span>ផ្ញើ Link Bot ឱ្យភ្ញៀវ Start</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const botLink = `https://t.me/${debtReminderSentStatus.botUsername || 'mario_order_alert_bot'}`;
+                                if (typeof navigator !== 'undefined') {
+                                  navigator.clipboard.writeText(botLink);
+                                  setToastNotification(`📋 បានចម្លង ${botLink}!`);
+                                  setTimeout(() => setToastNotification(null), 3000);
+                                }
+                              }}
+                              className="w-full sm:w-auto bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-black text-[11px] py-2 px-3 rounded-xl transition cursor-pointer active:scale-98"
+                            >
+                              📋 ចម្លង Link
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
