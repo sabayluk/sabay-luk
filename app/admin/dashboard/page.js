@@ -24100,18 +24100,18 @@ export default function UnifiedAdminDashboard() {
                                   <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded border border-emerald-100">រាយ</span>
                                 </div>
 
-                                {product.wholesale_price && parseFloat(product.wholesale_price) > 0 && (
+                                {Number(product.wholesale_price) > 0 ? (
                                   <div className="flex items-center gap-1 text-[11px] font-bold text-indigo-600 mt-0.5">
                                     <span>${(Math.max(0, Number(product.wholesale_price) - (Number(product.wholesale_discount) || 0))).toFixed(2)}</span>
                                     <span className="text-[9px] text-indigo-400">ដុំ</span>
                                   </div>
-                                )}
+                                ) : null}
 
-                                {product.cost_price && parseFloat(product.cost_price) > 0 && (
+                                {Number(product.cost_price) > 0 ? (
                                   <div className="text-[10px] text-gray-400 font-medium mt-0.5">
                                     ដើម: ${parseFloat(product.cost_price).toFixed(2)}
                                   </div>
-                                )}
+                                ) : null}
                               </td>
 
                               {/* Stock Display (Protected: Adjusted via Inflow/Outflow/Studio) */}
@@ -24315,11 +24315,11 @@ export default function UnifiedAdminDashboard() {
                                   ${parseFloat(product.price).toFixed(2)}
                                 </span>
                               )}
-                              {product.wholesale_price && parseFloat(product.wholesale_price) > 0 && (
+                              {Number(product.wholesale_price) > 0 ? (
                                 <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
                                   ដុំ ${parseFloat(product.wholesale_price).toFixed(2)}
                                 </span>
-                              )}
+                              ) : null}
                             </div>
 
                             <div className="text-[10px] text-gray-500 font-bold">
@@ -24549,11 +24549,11 @@ export default function UnifiedAdminDashboard() {
                                   ${parseFloat(product.price).toFixed(2)}
                                 </span>
                               )}
-                              {product.wholesale_price && parseFloat(product.wholesale_price) > 0 && (
+                              {Number(product.wholesale_price) > 0 ? (
                                 <span className="text-[11px] font-bold text-indigo-600 ml-auto bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
                                   ដុំ: ${parseFloat(product.wholesale_price).toFixed(2)}
                                 </span>
-                              )}
+                              ) : null}
                             </div>
 
                             {/* Stock Health Progress Bar */}
@@ -26512,15 +26512,6 @@ export default function UnifiedAdminDashboard() {
                 <span className="text-[10px] font-bold text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-xs">
                   $1 = {exchangeRate.toLocaleString()}៛
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setOpenAppInstallModal(true)}
-                  className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1 shrink-0 active:scale-95 cursor-pointer"
-                  title="ដោនឡូត APP ប្រើពេលអត់មាន Internet"
-                >
-                  <span>📲</span>
-                  <span>App Offline</span>
-                </button>
               </div>
 
               {/* Retail / Wholesale Segmented Toggle */}
@@ -26755,20 +26746,6 @@ export default function UnifiedAdminDashboard() {
               )}
             </button>
 
-            {/* ⭐️ ដោនឡូត APP ប្រើពេលគ្មាន INTERNET (OFFLINE POS PWA) ⭐️ */}
-            <button
-              type="button"
-              onClick={() => setOpenAppInstallModal(true)}
-              className="bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-600 hover:from-indigo-700 hover:to-blue-700 text-white px-3.5 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-indigo-600/25 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-[1.02] active:scale-95 shrink-0"
-              title="ដោនឡូត APP យកមកប្រើលើ PC ឬទូរស័ព្ទ សម្រាប់លក់ពេលអត់មាន Internet (Offline POS)"
-            >
-              <span className="text-sm">📲</span>
-              <span>ដោនឡូត APP (Offline)</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-            </button>
-
-
-
             {/* ⭐️ TOGGLE របៀបលក់: លក់រាយ (Retail) vs លក់បោះដុំ (Wholesale) ⭐️ */}
             <div className="bg-white p-1 rounded-2xl border-2 border-gray-200 shadow-sm flex items-center shrink-0">
               <button
@@ -26977,7 +26954,7 @@ export default function UnifiedAdminDashboard() {
                                 ${getProductPosPrice(product, 'wholesale').toFixed(2)}
                               </p>
                             </div>
-                            {product.wholesale_price && parseFloat(product.wholesale_price) > 0 ? (
+                            {Number(product.wholesale_price) > 0 ? (
                               <p className="text-[8px] sm:text-[9px] text-gray-400 line-through font-bold">
                                 រាយ: ${parseFloat(product.price).toFixed(2)}
                               </p>
@@ -26997,11 +26974,11 @@ export default function UnifiedAdminDashboard() {
                                 ${getProductPosPrice(product, 'retail').toFixed(2)}
                               </p>
                             </div>
-                            {product.wholesale_price && parseFloat(product.wholesale_price) > 0 && (
+                            {Number(product.wholesale_price) > 0 ? (
                               <p className="text-[8px] sm:text-[9px] text-purple-600 font-bold">
                                 ដុំ: ${parseFloat(product.wholesale_price).toFixed(2)}
                               </p>
-                            )}
+                            ) : null}
                           </div>
                         )}
                       </div>
