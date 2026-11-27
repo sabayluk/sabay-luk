@@ -6596,7 +6596,7 @@ export default function UnifiedAdminDashboard() {
   // ៥. គណនាប្រាក់ ($ និង ៛) រួមទាំងពន្ធអាករ VAT 10% & Loyalty Discount Full Option
   const posSubtotal = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const posPointsDiscount = (posUseLoyaltyPoints && posLoyaltyPointsToRedeem > 0)
-    ? (Math.floor(posLoyaltyPointsToRedeem / 50) * 1.0)
+    ? Number(((posLoyaltyPointsToRedeem / 50) * 1.0).toFixed(2))
     : 0;
   const baseDiscountVal = discountType === '%' ? posSubtotal * (Number(discount) / 100) : Number(discount);
   const posDiscountValue = baseDiscountVal + posPointsDiscount;
@@ -26951,16 +26951,37 @@ export default function UnifiedAdminDashboard() {
                     setCustomerName('អតិថិជនទូទៅ');
                     setCustomerPhone('');
                     setDiscount(0);
+                    setPosUseLoyaltyPoints(false);
+                    setPosLoyaltyPointsToRedeem(0);
                   }}
-                  className="text-[10px] font-bold bg-slate-700 hover:bg-slate-600 text-blue-300 hover:text-white px-2 py-0.5 rounded-lg border border-slate-600 transition"
+                  className="text-[10px] font-bold bg-slate-700 hover:bg-slate-600 text-blue-300 hover:text-white px-2 py-0.5 rounded-lg border border-slate-600 transition cursor-pointer"
                   title="កំណត់ជាអតិថិជនទូទៅ"
                 >
                   ⚡ ទូទៅ
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    const currentCust = customers.find(c => 
+                      (c.name && customerName && c.name.toLowerCase() === customerName.toLowerCase()) || 
+                      (c.phone && customerPhone && c.phone === customerPhone)
+                    );
+                    if (currentCust) {
+                      setDigitalCardCustomer(currentCust);
+                      setDigitalCardModalOpen(true);
+                    } else {
+                      setPosCustomerDropdownOpen(true);
+                    }
+                  }}
+                  className="text-[10px] font-bold bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 px-2 py-0.5 rounded-lg border border-amber-500/40 transition flex items-center gap-1 cursor-pointer shadow-xs"
+                  title="ស្កេន ឬមើលកាត VIP ឌីជីថល"
+                >
+                  <span>🪪</span> កាត VIP
+                </button>
+                <button
+                  type="button"
                   onClick={openCreateCustomerModal}
-                  className="text-[10px] font-bold bg-blue-600 hover:bg-blue-500 text-white px-2 py-0.5 rounded-lg transition flex items-center gap-1 shadow-xs"
+                  className="text-[10px] font-bold bg-blue-600 hover:bg-blue-500 text-white px-2 py-0.5 rounded-lg transition flex items-center gap-1 shadow-xs cursor-pointer"
                   title="បង្កើតអតិថិជនថ្មី"
                 >
                   <span>+</span> អតិថិជន
@@ -26983,14 +27004,20 @@ export default function UnifiedAdminDashboard() {
                     setCustomerName(val);
                     setCustomerPickerSearch(val);
                     setPosCustomerDropdownOpen(true);
-                    const matched = customers.find(c => c.name && c.name.toLowerCase() === val.toLowerCase());
+                    const valTrim = val.trim().toLowerCase();
+                    const matched = customers.find(c => 
+                      (c.name && c.name.toLowerCase() === valTrim) ||
+                      (c.phone && c.phone === val.trim()) ||
+                      (c.id && c.id.toLowerCase() === valTrim) ||
+                      (c.id && c.id.toLowerCase().replace(/[^0-9]/g, '') === valTrim.replace(/[^0-9]/g, ''))
+                    );
                     if (matched) {
                       if (matched.phone) setCustomerPhone(matched.phone);
                       if (matched.discount_percent > 0) setDiscount(matched.discount_percent);
                       if (matched.tier === 'WHOLESALE') handleSwitchPriceMode('wholesale');
                     }
                   }}
-                  placeholder="ចុចរើស ឬវាយឈ្មោះ..."
+                  placeholder="🔍 ឈ្មោះ, លេខ, ឬស្កេនកាត VIP..."
                   className="w-full bg-slate-900 border border-slate-600 text-white text-xs font-bold rounded-xl pl-2.5 pr-6 py-2 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none placeholder-slate-500 shadow-inner cursor-pointer"
                 />
                 <button
@@ -27029,7 +27056,7 @@ export default function UnifiedAdminDashboard() {
                           type="text"
                           value={customerPickerSearch}
                           onChange={(e) => setCustomerPickerSearch(e.target.value)}
-                          placeholder="🔍 ស្វែងរកឈ្មោះ ឬលេខទូរស័ព្ទ..."
+                          placeholder="🔍 ស្វែងរកឈ្មោះ, លេខទូរស័ព្ទ, ឬ ID កាត VIP (CUS-)..."
                           className="w-full bg-slate-950 border border-slate-700 text-white placeholder-slate-400 rounded-lg px-2.5 py-1.5 text-xs font-bold outline-none focus:border-blue-400"
                           autoFocus
                         />
@@ -27063,6 +27090,7 @@ export default function UnifiedAdminDashboard() {
                             const q = customerPickerSearch.toLowerCase().trim();
                             return (c.name && c.name.toLowerCase().includes(q)) || 
                                    (c.phone && c.phone.includes(q)) ||
+                                   (c.id && c.id.toLowerCase().includes(q)) ||
                                    (c.tier && c.tier.toLowerCase().includes(q));
                           })
                           .map(cust => (
@@ -27092,9 +27120,15 @@ export default function UnifiedAdminDashboard() {
                                     <span className="text-[9px] bg-slate-800 text-amber-400 px-1.5 py-0.2 rounded font-mono">
                                       {cust.tier}
                                     </span>
+                                    {cust.loyalty_points > 0 && (
+                                      <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1 rounded border border-amber-500/30">
+                                        ⭐ {Number(cust.loyalty_points)} pts
+                                      </span>
+                                    )}
                                   </p>
-                                  <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
-                                    📞 {cust.phone || 'គ្មានលេខ'}
+                                  <p className="text-[10px] text-slate-400 mt-0.5 font-medium flex items-center gap-1.5">
+                                    <span>📞 {cust.phone || 'គ្មានលេខ'}</span>
+                                    <span className="text-slate-500 font-mono">({cust.id || 'CUS-ID'})</span>
                                   </p>
                                 </div>
                               </div>
@@ -27119,7 +27153,7 @@ export default function UnifiedAdminDashboard() {
                   onChange={(e) => {
                     const val = e.target.value;
                     setCustomerPhone(val);
-                    const matched = customers.find(c => c.phone && c.phone === val);
+                    const matched = customers.find(c => c.phone && c.phone === val.trim());
                     if (matched) {
                       setCustomerName(matched.name);
                       if (matched.discount_percent > 0) setDiscount(matched.discount_percent);
@@ -27142,6 +27176,7 @@ export default function UnifiedAdminDashboard() {
                 const custDebt = parseFloat(currentCust.debt_balance) || 0;
                 const custLimit = parseFloat(currentCust.debt_limit) || 200;
                 const isOverLimit = custDebt > custLimit;
+                const custPts = currentCust.loyalty_points != null ? Number(currentCust.loyalty_points) : 0;
 
                 return (
                   <div className="mt-2 space-y-1.5 animate-in fade-in">
@@ -27155,14 +27190,88 @@ export default function UnifiedAdminDashboard() {
                             បញ្ចុះ {currentCust.discount_percent}%
                           </span>
                         )}
-                        {currentCust.loyalty_points > 0 && (
-                          <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.2 rounded border border-amber-500/30">
-                            🪙 {Number(currentCust.loyalty_points)} pts
-                          </span>
+                        <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.2 rounded border border-amber-500/30">
+                          🪙 {custPts} pts
+                        </span>
+                      </div>
+                      
+                      {/* ⭐️ ប៊ូតុងបើកកាត VIP ឌីជីថល ផ្ទាល់ក្នុង POS ⭐️ */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDigitalCardCustomer(currentCust);
+                          setDigitalCardModalOpen(true);
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black px-2 py-0.5 rounded-lg transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
+                        title="មើល និងបោះពុម្ពកាតសមាជិក VIP"
+                      >
+                        <span>🪪</span>
+                        <span>កាត VIP</span>
+                      </button>
+                    </div>
+
+                    {/* ⭐️ Loyalty Points Redemption directly inside POS Cart ⭐️ */}
+                    {custPts >= 10 ? (
+                      <div className="bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-950/50 border border-amber-500/50 rounded-xl p-2 space-y-1.5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-1.5 text-[11px] font-black text-amber-300 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={posUseLoyaltyPoints}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setPosUseLoyaltyPoints(checked);
+                                if (checked && posLoyaltyPointsToRedeem === 0) {
+                                  const maxRedeemable = Math.min(custPts, Math.floor(posSubtotal * 50));
+                                  setPosLoyaltyPointsToRedeem(maxRedeemable >= 10 ? Math.min(50, maxRedeemable) : maxRedeemable);
+                                }
+                              }}
+                              className="w-3.5 h-3.5 rounded text-amber-500 focus:ring-amber-400 cursor-pointer"
+                            />
+                            <span>🎁 ប្រើពិន្ទុបញ្ចុះតម្លៃ (50 pts = $1)</span>
+                          </label>
+                          {posUseLoyaltyPoints && (
+                            <span className="text-[11px] font-black text-emerald-400 font-mono">
+                              -${((posLoyaltyPointsToRedeem / 50) * 1.0).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+
+                        {posUseLoyaltyPoints && (
+                          <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-amber-800/50">
+                            {[10, 25, 50, 100, 200].filter(pts => pts <= custPts).map(pts => (
+                              <button
+                                key={pts}
+                                type="button"
+                                onClick={() => setPosLoyaltyPointsToRedeem(pts)}
+                                className={`px-1.5 py-0.5 rounded-md text-[9px] font-black transition cursor-pointer ${
+                                  posLoyaltyPointsToRedeem === pts
+                                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                                    : 'bg-slate-900 border border-amber-600/50 text-amber-200 hover:bg-amber-950'
+                                }`}
+                              >
+                                {pts} pts (-${(pts/50).toFixed(2)})
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const maxPts = Math.min(custPts, Math.floor(posSubtotal * 50));
+                                setPosLoyaltyPointsToRedeem(maxPts);
+                              }}
+                              className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-amber-600 text-white hover:bg-amber-500 transition cursor-pointer"
+                            >
+                              ប្រើអស់ ({Math.min(custPts, Math.floor(posSubtotal * 50))} pts)
+                            </button>
+                          </div>
                         )}
                       </div>
-                      <span className="text-slate-400 text-[10px] truncate max-w-[110px] font-medium">{currentCust.address || 'គ្មានអាសយដ្ឋាន'}</span>
-                    </div>
+                    ) : (
+                      <div className="text-[10px] text-slate-400 bg-slate-900/60 px-2 py-1 rounded-lg border border-slate-800 flex items-center justify-between">
+                        <span>🪙 ពិន្ទុសន្សំ: {custPts} pts</span>
+                        <span className="text-amber-400/80">ទិញ $1 ទទួលបាន 1 pt</span>
+                      </div>
+                    )}
 
                     {/* Credit & Debt Health Bar */}
                     <div className={`flex items-center justify-between text-[10px] font-bold px-2.5 py-1 rounded-xl border transition ${
@@ -27267,6 +27376,15 @@ export default function UnifiedAdminDashboard() {
                   </select>
                 </div>
               </div>
+
+              {posPointsDiscount > 0 && (
+                <div className="flex justify-between items-center text-amber-800 bg-amber-50/90 px-2 py-1.5 rounded-xl border border-amber-200 text-xs">
+                  <span className="flex items-center gap-1 font-bold">
+                    <span>🎁</span> បញ្ចុះតម្លៃពិន្ទុ Loyalty ({posLoyaltyPointsToRedeem} pts):
+                  </span>
+                  <span className="font-mono font-black text-emerald-700">-${posPointsDiscount.toFixed(2)}</span>
+                </div>
+              )}
 
               {/* ⭐️ កន្លែងគិតពន្ធអាករ VAT 10% (TAX / VAT CALCULATOR) ⭐️ */}
               <div className="p-2.5 bg-blue-50/80 rounded-2xl border border-blue-200 space-y-2">
@@ -27983,11 +28101,24 @@ export default function UnifiedAdminDashboard() {
                         }}
                         onClick={() => setModalCustomerDropdownOpen(true)}
                         onChange={(e) => {
-                          setCustomerName(e.target.value);
-                          setCustomerPickerSearch(e.target.value);
+                          const val = e.target.value;
+                          setCustomerName(val);
+                          setCustomerPickerSearch(val);
                           setModalCustomerDropdownOpen(true);
+                          const valTrim = val.trim().toLowerCase();
+                          const matched = customers.find(c => 
+                            (c.name && c.name.toLowerCase() === valTrim) ||
+                            (c.phone && c.phone === val.trim()) ||
+                            (c.id && c.id.toLowerCase() === valTrim) ||
+                            (c.id && c.id.toLowerCase().replace(/[^0-9]/g, '') === valTrim.replace(/[^0-9]/g, ''))
+                          );
+                          if (matched) {
+                            if (matched.phone) setCustomerPhone(matched.phone);
+                            if (matched.discount_percent > 0) setDiscount(matched.discount_percent);
+                            if (matched.tier === 'WHOLESALE') handleSwitchPriceMode('wholesale');
+                          }
                         }}
-                        placeholder="ចុចរើស ឬវាយឈ្មោះអតិថិជន..."
+                        placeholder="🔍 ឈ្មោះ, លេខ, ឬស្កេនកាត VIP (CUS-)..."
                         className="w-full bg-white border-2 border-gray-200 focus:border-blue-500 text-gray-900 text-xs font-bold rounded-xl pl-3 pr-8 py-2.5 outline-none transition shadow-inner placeholder-gray-400 cursor-pointer"
                       />
                       <button
@@ -28094,6 +28225,7 @@ export default function UnifiedAdminDashboard() {
                             const q = customerPickerSearch.toLowerCase().trim();
                             return (c.name && c.name.toLowerCase().includes(q)) || 
                                    (c.phone && c.phone.includes(q)) ||
+                                   (c.id && c.id.toLowerCase().includes(q)) ||
                                    (c.tier && c.tier.toLowerCase().includes(q)) ||
                                    (c.address && c.address.toLowerCase().includes(q));
                           })
@@ -28210,14 +28342,27 @@ export default function UnifiedAdminDashboard() {
                               </span>
                             )}
                           </div>
-                          <span className="text-gray-500 text-[11px] truncate max-w-[150px] font-medium">
-                            {currentCust.address || 'ភ្នំពេញ'}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDigitalCardCustomer(currentCust);
+                                setDigitalCardModalOpen(true);
+                              }}
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-black px-2 py-0.5 rounded-lg transition flex items-center gap-1 cursor-pointer active:scale-95"
+                              title="មើល និងបោះពុម្ពកាតសមាជិក VIP"
+                            >
+                              <span>🪪</span> កាត VIP
+                            </button>
+                            <span className="text-gray-500 text-[11px] truncate max-w-[130px] font-medium">
+                              {currentCust.address || 'ភ្នំពេញ'}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Loyalty Points Redemption Option */}
-                        {custPts >= 50 && (
-                          <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-2.5 space-y-2">
+                        {custPts >= 10 ? (
+                          <div className="bg-gradient-to-r from-amber-50 to-orange-50/60 border border-amber-300 rounded-2xl p-3 space-y-2 shadow-xs">
                             <div className="flex items-center justify-between">
                               <label className="flex items-center gap-2 text-xs font-black text-amber-900 cursor-pointer select-none">
                                 <input
@@ -28227,25 +28372,25 @@ export default function UnifiedAdminDashboard() {
                                     const checked = e.target.checked;
                                     setPosUseLoyaltyPoints(checked);
                                     if (checked && posLoyaltyPointsToRedeem === 0) {
-                                      const maxRedeemable = Math.min(custPts, Math.floor(posSubtotal) * 50);
-                                      setPosLoyaltyPointsToRedeem(maxRedeemable >= 50 ? 50 : 0);
+                                      const maxRedeemable = Math.min(custPts, Math.floor(posSubtotal * 50));
+                                      setPosLoyaltyPointsToRedeem(maxRedeemable >= 10 ? Math.min(50, maxRedeemable) : maxRedeemable);
                                     }
                                   }}
-                                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
                                 />
                                 <span>🎁 ប្រើប្រាស់ពិន្ទុ Loyalty (៥០ ពិន្ទុ = $១.០០)</span>
                               </label>
                               {posUseLoyaltyPoints && (
-                                <span className="text-xs font-black text-emerald-700">
-                                  បញ្ចុះតម្លៃ: -${(Math.floor(posLoyaltyPointsToRedeem / 50) * 1.0).toFixed(2)}
+                                <span className="text-xs font-black text-emerald-700 font-mono">
+                                  បញ្ចុះតម្លៃ: -${((posLoyaltyPointsToRedeem / 50) * 1.0).toFixed(2)}
                                 </span>
                               )}
                             </div>
 
                             {posUseLoyaltyPoints && (
-                              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-amber-200/60">
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-amber-200">
                                 <span className="text-[10px] font-bold text-amber-800 mr-1">ជ្រើសរើសពិន្ទុ:</span>
-                                {[50, 100, 200, 500].filter(pts => pts <= custPts).map(pts => (
+                                {[10, 25, 50, 100, 200, 500].filter(pts => pts <= custPts).map(pts => (
                                   <button
                                     key={pts}
                                     type="button"
@@ -28256,21 +28401,31 @@ export default function UnifiedAdminDashboard() {
                                         : 'bg-white border border-amber-300 text-amber-900 hover:bg-amber-100'
                                     }`}
                                   >
-                                    {pts} pts (-${(pts/50).toFixed(0)})
+                                    {pts} pts (-${(pts/50).toFixed(2)})
                                   </button>
                                 ))}
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const maxPts = Math.min(custPts, Math.floor(posSubtotal) * 50);
+                                    const maxPts = Math.min(custPts, Math.floor(posSubtotal * 50));
                                     setPosLoyaltyPointsToRedeem(maxPts);
                                   }}
                                   className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-200 text-amber-950 hover:bg-amber-300 transition cursor-pointer"
                                 >
-                                  ប្រើអតិបរមា
+                                  ប្រើអស់ ({Math.min(custPts, Math.floor(posSubtotal * 50))} pts)
                                 </button>
                               </div>
                             )}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-gray-500 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <span>🪙</span>
+                              <span>ពិន្ទុសន្សំ: <b>{custPts} pts</b></span>
+                            </span>
+                            <span className="text-[10px] text-amber-800 font-medium">
+                              សន្សំឱ្យបាន 10 pts ឡើងទៅដើម្បីប្រើកាត់លុយ ($1 = 1 pt)
+                            </span>
                           </div>
                         )}
                       </div>
