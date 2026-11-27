@@ -22420,50 +22420,6 @@ export default function UnifiedAdminDashboard() {
               </button>
             </div>
           </div>
-
-          {/* ⭐️ BILLING CYCLE TOGGLE SWITCH (JUST LIKE LANDING PAGE) ⭐️ */}
-          <div className="mt-8 pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-slate-300 uppercase tracking-wider">
-                ជ្រើសរើសវដ្តបង់ប្រាក់:
-              </span>
-              {upgradeBillingCycle === 'yearly' && (
-                <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 rounded-full animate-pulse">
-                  🔥 សន្សំសំចៃ ២០% (បានប្រើ ២ ខែ Free)
-                </span>
-              )}
-            </div>
-
-            <div className="inline-flex bg-slate-900/90 p-1 rounded-2xl border border-slate-700/80 shadow-inner">
-              <button
-                type="button"
-                onClick={() => setUpgradeBillingCycle('monthly')}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
-                  upgradeBillingCycle === 'monthly'
-                    ? 'bg-white text-slate-950 shadow-md'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <span>📅</span>
-                <span>បង់ប្រចាំខែ (Monthly)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setUpgradeBillingCycle('yearly')}
-                className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
-                  upgradeBillingCycle === 'yearly'
-                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <span>🎉</span>
-                <span>បង់ប្រចាំឆ្នាំ (Yearly)</span>
-                <span className="text-[9px] font-black bg-white/20 px-1.5 py-0.2 rounded-full ml-1">
-                  -20%
-                </span>
-              </button>
-            </div>
-          </div>
         </div>
 
         
@@ -22636,6 +22592,58 @@ export default function UnifiedAdminDashboard() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* ⭐️ BILLING CYCLE TOGGLE SWITCH (JUST LIKE LANDING PAGE) ⭐️ */}
+        <div className="bg-slate-900/95 backdrop-blur-md p-4 sm:p-5 rounded-3xl border border-slate-800 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="w-8 h-8 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-sm font-black border border-orange-500/30">
+              ⚡
+            </span>
+            <div>
+              <span className="text-xs sm:text-sm font-black text-white uppercase tracking-wider block">
+                ជ្រើសរើសវដ្តបង់ប្រាក់ (Billing Cycle):
+              </span>
+              <p className="text-[11px] text-slate-400">
+                ជ្រើសរើសបង់ប្រចាំខែ ឬប្រចាំឆ្នាំ ដើម្បីទទួលបានការបញ្ចុះតម្លៃពិសេស
+              </p>
+            </div>
+            {upgradeBillingCycle === 'yearly' && (
+              <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-0.5 rounded-full animate-pulse">
+                🔥 សន្សំសំចៃ ២០% (បានប្រើ ២ ខែ Free)
+              </span>
+            )}
+          </div>
+
+          <div className="inline-flex bg-slate-950 p-1.5 rounded-2xl border border-slate-700/80 shadow-inner shrink-0">
+            <button
+              type="button"
+              onClick={() => setUpgradeBillingCycle('monthly')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                upgradeBillingCycle === 'monthly'
+                  ? 'bg-white text-slate-950 shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span>📅</span>
+              <span>បង់ប្រចាំខែ (Monthly)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUpgradeBillingCycle('yearly')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                upgradeBillingCycle === 'yearly'
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <span>🎉</span>
+              <span>បង់ប្រចាំឆ្នាំ (Yearly)</span>
+              <span className="text-[9px] font-black bg-white/20 px-1.5 py-0.2 rounded-full ml-1">
+                -20%
+              </span>
+            </button>
           </div>
         </div>
 
