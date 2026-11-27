@@ -2499,18 +2499,35 @@ export default function UnifiedAdminDashboard() {
     setTimeout(() => setToastNotification(null), 3000);
   };
 
-  // ⭐️ ផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិតាម Telegram Bot
+  // ⭐️ ផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិតាម Telegram
   const handleSendDebtReminderAuto = async (reminderMsg) => {
     if (!debtReminderCustomer) return;
     setDebtReminderSending(true);
     setDebtReminderSentStatus(null);
 
-    const cleanTg = (debtReminderTelegram || '').trim().replace(/^@/, '');
+    const cleanTg = (debtReminderTelegram || debtReminderCustomer.telegram || '').trim().replace(/^@/, '');
     if (cleanTg && cleanTg !== debtReminderCustomer.telegram) {
       await handleSaveCustomerTelegram();
     }
 
     try {
+      // 💡 គោលការណ៍សុវត្ថិភាព Telegram Bot API៖ Bot មិនអនុញ្ញាតឱ្យផ្ញើសារទៅកាន់គណនីឯកជនតាមរយៈ @username ដោយគ្មានការ Start Bot ឡើយ។
+      // ដូច្នេះប្រសិនបើជា @username ប្រព័ន្ធនឹងបើក Telegram ផ្ទាល់ជាមួយសារបំពេញស្រាប់តែម្ដង ធានាថាភ្ញៀវទទួលបាន 100%!
+      const isNumericChatId = /^-?\d+$/.test(cleanTg);
+
+      if (cleanTg && !isNumericChatId) {
+        // បើក Telegram Direct Chat ភ្លាមៗជាមួយសារដែលបានរៀបចំរួចរាល់
+        window.open(`https://t.me/${cleanTg}?text=${encodeURIComponent(reminderMsg)}`, '_blank');
+        setDebtReminderSentStatus({
+          type: 'success',
+          msg: `✅ បានបើក Telegram ទៅកាន់ @${cleanTg} រួចរាល់! សាររំលឹកត្រូវបានបំពេញដោយស្វ័យប្រវត្តិក្នងប្រអប់ Chat សូមចុច Send (ឬ Enter) ជាការស្រេច។`
+        });
+        setToastNotification(`✈️ បានបើក Telegram ទៅកាន់ @${cleanTg}!`);
+        setTimeout(() => setToastNotification(null), 3500);
+        return;
+      }
+
+      // ប្រសិនបើជា Numeric Chat ID (ឬ Bot Dispatch)
       const metrics = getCustomerMetrics(debtReminderCustomer);
       const res = await sendTelegramNotification({
         action: 'debt_reminder',
@@ -2520,6 +2537,7 @@ export default function UnifiedAdminDashboard() {
           debtBalance: metrics.debtBalance,
           dueDate: metrics.debtDueDate
         },
+        targetChatId: cleanTg || undefined,
         message: reminderMsg
       });
 
@@ -2531,16 +2549,34 @@ export default function UnifiedAdminDashboard() {
         setToastNotification('✈️ បានផ្ញើសាររំលឹកបំណុលស្វ័យប្រវត្តិ!');
         setTimeout(() => setToastNotification(null), 3500);
       } else {
-        setDebtReminderSentStatus({
-          type: 'error',
-          msg: `❌ ${res?.message || 'សូមពិនិត្យមើលការភ្ជាប់ Telegram Bot ក្នុង Settings'}`
-        });
+        const isChatNotFound = (res?.message || '').toLowerCase().includes('chat not found');
+        if (cleanTg && isChatNotFound) {
+          // Fallback បើក Telegram Direct Chat ជូនភ្លាម
+          window.open(`https://t.me/${cleanTg}?text=${encodeURIComponent(reminderMsg)}`, '_blank');
+          setDebtReminderSentStatus({
+            type: 'success',
+            msg: `💡 ច្បាប់ Telegram Bot មិនអនុញ្ញាតផ្ញើទៅ @${cleanTg} ដោយគ្មាន Start Bot ឡើយ។ ប្រព័ន្ធបានបើក Telegram ផ្ទាល់ជូនលោកអ្នកជាមួយសារស្រាប់!`
+          });
+        } else {
+          setDebtReminderSentStatus({
+            type: 'error',
+            msg: `❌ ${res?.message || 'សូមពិនិត្យមើលការភ្ជាប់ Telegram Bot ក្នុង Settings'}`
+          });
+        }
       }
     } catch (err) {
-      setDebtReminderSentStatus({
-        type: 'error',
-        msg: `❌ Error: ${err.message}`
-      });
+      if (cleanTg) {
+        window.open(`https://t.me/${cleanTg}?text=${encodeURIComponent(reminderMsg)}`, '_blank');
+        setDebtReminderSentStatus({
+          type: 'success',
+          msg: `✅ បានបើក Telegram ទៅកាន់ @${cleanTg} រួចរាល់! សូមចុច Send ក្នុង Telegram ជាការស្រេច។`
+        });
+      } else {
+        setDebtReminderSentStatus({
+          type: 'error',
+          msg: `❌ Error: ${err.message}`
+        });
+      }
     } finally {
       setDebtReminderSending(false);
     }
@@ -5420,9 +5456,9 @@ export default function UnifiedAdminDashboard() {
   };
 
   // ⭐️ មុខងារផ្ញើសារតាម Telegram (Telegram Notification Dispatcher) ⭐️
-  const sendTelegramNotification = async ({ action, items, message, stockData, order }) => {
+  const sendTelegramNotification = async ({ action, items, message, stockData, order, customer, targetChatId }) => {
     const token = storeSettings.telegramBotToken || activeStore?.settings?.telegramBotToken || '';
-    const chat = storeSettings.telegramChatId || activeStore?.settings?.telegramChatId || '';
+    const chat = targetChatId || storeSettings.telegramChatId || activeStore?.settings?.telegramChatId || '';
 
     try {
       const res = await fetch('/api/telegram', {
@@ -5431,6 +5467,8 @@ export default function UnifiedAdminDashboard() {
         body: JSON.stringify({
           botToken: token || undefined,
           chatId: chat || undefined,
+          targetChatId: targetChatId || undefined,
+          customer,
           storeId: activeStore?.id || 'store_default_sabayluk',
           storeSlug: activeStore?.slug || 'sabay-luk',
           storeName: storeSettings.storeName || activeStore?.name || 'SABAY LUK',
