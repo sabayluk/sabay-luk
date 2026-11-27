@@ -31139,7 +31139,7 @@ export default function UnifiedAdminDashboard() {
 
                 <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1">
                   {/* Financial Overview Cards Row */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Card 1: Current Debt */}
                     <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-850 to-rose-950 text-white border border-rose-500/20 shadow-sm flex flex-col justify-between">
                       <div className="flex items-center justify-between">
@@ -31184,31 +31184,6 @@ export default function UnifiedAdminDashboard() {
                       <div className="mt-2 pt-2 border-t border-gray-100 text-[11px] text-gray-500 flex items-center justify-between">
                         <span>ស្ថានភាព: {m.debtBalance > 0 ? (m.isOverdue ? '🚨 ជំពាក់ហួសកំណត់' : '⚠️ កំពុងជំពាក់') : '✓ គ្មានបំណុល'}</span>
                         <span className="font-bold text-gray-700">{Math.round((m.debtBalance / Math.max(1, m.debtLimit)) * 100)}% នៃ Limit</span>
-                      </div>
-                    </div>
-
-                    {/* Card 3: Quick Action Launchers */}
-                    <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-50 to-blue-50/50 border border-blue-100 shadow-2xs flex flex-col justify-between gap-2">
-                      <span className="text-[10px] text-blue-900 font-black uppercase tracking-wider">សកម្មភាពរហ័ស (Actions)</span>
-                      
-                      <div className="grid grid-cols-1 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handlePrintDebtLedgerSlip(c)}
-                          className="w-full bg-slate-900 hover:bg-black text-white px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-98"
-                        >
-                          <span>🖨️</span>
-                          <span>បោះពុម្ព Statement (80mm)</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDebtReminderModal(c)}
-                          className="w-full bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98"
-                        >
-                          <span>💬</span>
-                          <span>ផ្ញើសាររំលឹក (Telegram/SMS)</span>
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -31369,61 +31344,15 @@ export default function UnifiedAdminDashboard() {
                                     {/* Actions */}
                                     <td className="px-4 py-3 text-right whitespace-nowrap">
                                       {matchedOrder && (
-                                        <div className="flex items-center justify-end gap-1">
+                                        <div className="flex items-center justify-end">
                                           <button
                                             type="button"
                                             onClick={() => setSelectedOrderDetails(matchedOrder)}
-                                            className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] rounded-lg border border-blue-200 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[11px] rounded-lg border border-blue-200 transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
                                             title="មើលព័ត៌មានលម្អិតវិក្កយបត្រ"
                                           >
                                             <span>👁️</span>
                                             <span>វិក្កយបត្រ</span>
-                                          </button>
-                                          <a
-                                            href={getInvoiceUrl(matchedOrder.order_id || matchedOrder.id)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={(e) => openInvoiceInBrowser(matchedOrder.order_id || matchedOrder.id, e)}
-                                            className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-[11px] rounded-lg border border-purple-200 transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
-                                            title="បើកវិក្កយបត្រ PDF លើ Web Browser"
-                                          >
-                                            <span>🌐</span>
-                                            <span>PDF</span>
-                                          </a>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const orderItems = (matchedOrder.items && Array.isArray(matchedOrder.items) ? matchedOrder.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
-                                              const sub = Number(matchedOrder.subtotal || matchedOrder.total || 0);
-                                              const disc = Number(matchedOrder.discount || 0);
-                                              const tot = Number(matchedOrder.total || matchedOrder.total_amount || 0);
-                                              setReceiptData({
-                                                orderId: matchedOrder.order_id || matchedOrder.id,
-                                                date: matchedOrder.created_at ? new Date(matchedOrder.created_at).toLocaleString('km-KH') : new Date().toLocaleString('km-KH'),
-                                                items: orderItems,
-                                                subtotal: sub,
-                                                discount: disc,
-                                                taxAmount: 0,
-                                                taxRate: 0,
-                                                taxMode: 'exclusive',
-                                                taxLabel: 'ពន្ធអាករ',
-                                                vatTin: '',
-                                                total: tot,
-                                                totalKHR: Math.round(tot * (storeSettings.exchangeRate || 4100)),
-                                                method: matchedOrder.payment || matchedOrder.payment_method || 'Credit / ជំពាក់',
-                                                tendered: tot,
-                                                change: 0,
-                                                customer: matchedOrder.customer || c.name,
-                                                phone: matchedOrder.phone || c.phone || '',
-                                                address: matchedOrder.address || c.address || '',
-                                                telegram: c.telegram || null
-                                              });
-                                            }}
-                                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] rounded-lg border border-slate-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                                            title="បោះពុម្ពវិក្កយបត្រ Slip ឡើងវិញ"
-                                          >
-                                            <span>🖨️</span>
-                                            <span>Slip</span>
                                           </button>
                                         </div>
                                       )}
