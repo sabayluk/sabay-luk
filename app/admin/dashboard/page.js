@@ -3431,6 +3431,17 @@ export default function UnifiedAdminDashboard() {
     return true; // បើកជា Default តាមការស្នើសុំ
   });
 
+  // ⭐️ ប៊ូតុងបិទ/បើក ព្រីនវិក្កយបត្រស្វ័យប្រវត្តិពេលគិតលុយរួច (POS Auto-Print Slip on Checkout) ⭐️
+  const [posAutoPrintSlip, setPosAutoPrintSlip] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sabay_pos_auto_print');
+      if (saved !== null) {
+        try { return JSON.parse(saved); } catch (_) {}
+      }
+    }
+    return true; // បើកជា Default តាមការស្នើសុំ
+  });
+
     // ================= STATES សម្រាប់ ORDERS, REAL ANALYTICS & BARCODE =================
   const [realOrders, setRealOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
@@ -7091,6 +7102,20 @@ export default function UnifiedAdminDashboard() {
 
       setReceiptData(receipt);
       setPaymentModalOpen(false);
+
+      // 🚨 ៤.០ ស្វ័យប្រវត្តិកម្មព្រីនវិក្កយបត្រ Slip ពេលគិតលុយរួច (POS AUTO-PRINT SLIP ON CHECKOUT) ⭐️
+      if (posAutoPrintSlip) {
+        setTimeout(() => {
+          try {
+            const printBtn = document.getElementById('receipt-print-trigger-btn');
+            if (printBtn) {
+              printBtn.click();
+            }
+          } catch (pErr) {
+            console.warn('Auto print error:', pErr);
+          }
+        }, 400);
+      }
       setPosCart([]);
       setAmountTendered('');
       setDiscount(0);
@@ -27121,12 +27146,46 @@ export default function UnifiedAdminDashboard() {
               </div>
             </div>
 
-            <div className="flex justify-between items-end mb-5">
+            <div className="flex justify-between items-end mb-4">
               <div>
                 <span className="text-xs font-black text-gray-400 uppercase tracking-wider block">ទឹកប្រាក់សរុប (Total)</span>
                 <span className="text-xs text-orange-600 font-black">{posTotalKHR.toLocaleString()} ៛</span>
               </div>
               <span className="text-4xl font-black text-blue-600">${posTotal.toFixed(2)}</span>
+            </div>
+
+            {/* ⭐️ Quick Toggle: ⚡ ព្រីនស្វ័យប្រវត្តិ (AUTO-PRINT SLIP ON CHECKOUT) ⭐️ */}
+            <div className="mb-3 p-2 bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50/30 border border-amber-200/80 rounded-xl flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-base shrink-0">⚡</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-amber-950 leading-tight">
+                    <span>ព្រីនស្វ័យប្រវត្តិ (Auto-Print)</span>
+                  </p>
+                  <p className="text-[10px] text-amber-700/80 font-medium truncate">
+                    {posAutoPrintSlip ? 'ព្រីន Slip ចេញភ្លាមពេលគិតលុយរួច' : 'បិទការព្រីនស្វ័យប្រវត្តិ'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const newVal = !posAutoPrintSlip;
+                  setPosAutoPrintSlip(newVal);
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('sabay_pos_auto_print', JSON.stringify(newVal));
+                  }
+                  setToastNotification(newVal ? '⚡ បានបើកការព្រីនស្វ័យប្រវត្តិពេលគិតលុយ!' : '🔕 បានបិទការព្រីនស្វ័យប្រវត្តិ');
+                  setTimeout(() => setToastNotification(null), 2500);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition cursor-pointer flex items-center gap-1 border active:scale-95 shrink-0 ${
+                  posAutoPrintSlip
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600 shadow-xs'
+                    : 'bg-white hover:bg-gray-50 text-gray-600 border-gray-300'
+                }`}
+              >
+                <span>{posAutoPrintSlip ? '✓ បើក (ON)' : '✕ បិទ (OFF)'}</span>
+              </button>
             </div>
 
             <button
@@ -27624,43 +27683,85 @@ export default function UnifiedAdminDashboard() {
                   </div>
                 </div>
 
-                {/* ⭐️ TELEGRAM INVOICE ALERT TOGGLE (នៅក្នុងផ្ទាំង Checkout Modal) ⭐️ */}
-                <div className="mb-4 p-2.5 sm:p-3 bg-gradient-to-r from-sky-50 via-blue-50/60 to-indigo-50/50 rounded-2xl border border-sky-200/90 flex items-center justify-between shadow-2xs">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black transition shrink-0 ${
-                      posEnableTelegramAlert ? 'bg-sky-500 text-white shadow-xs' : 'bg-gray-200 text-gray-500'
-                    }`}>
-                      ✈️
+                {/* ⭐️ POS CHECKOUT QUICK TOGGLES (Auto-Print Slip & Telegram Invoice Alert) ⭐️ */}
+                <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Toggle 1: ⚡ ព្រីនស្វ័យប្រវត្តិ (Auto-Print Slip) */}
+                  <div className="p-2.5 bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50/30 rounded-2xl border border-amber-200/90 flex items-center justify-between shadow-2xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black transition shrink-0 ${
+                        posAutoPrintSlip ? 'bg-amber-500 text-white shadow-xs' : 'bg-gray-200 text-gray-500'
+                      }`}>
+                        ⚡
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-gray-900 leading-tight flex items-center gap-1">
+                          <span>ព្រីន Slip Auto</span>
+                          {posAutoPrintSlip && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
+                        </p>
+                        <p className="text-[10px] text-gray-500 font-medium truncate">
+                          {posAutoPrintSlip ? 'ព្រីនវិក្កយបត្រភ្លាមៗ' : 'បិទការព្រីន Auto'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-black text-gray-900 leading-tight flex items-center gap-1.5">
-                        <span>ផ្ញើវិក្កយបត្រទៅ Telegram</span>
-                        {posEnableTelegramAlert && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
-                      </p>
-                      <p className="text-[10px] text-gray-500 font-medium truncate">
-                        {posEnableTelegramAlert ? 'បើកផ្ញើវិក្កយបត្រស្វ័យប្រវត្តពេលលក់ជោគជ័យ' : 'បានបិទការផ្ញើដំណឹង'}
-                      </p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newVal = !posAutoPrintSlip;
+                        setPosAutoPrintSlip(newVal);
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('sabay_pos_auto_print', JSON.stringify(newVal));
+                        }
+                        setToastNotification(newVal ? '⚡ បានបើកការព្រីនស្វ័យប្រវត្តិពេលគិតលុយ!' : '🔕 បានបិទការព្រីនស្វ័យប្រវត្តិ');
+                        setTimeout(() => setToastNotification(null), 2500);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1 active:scale-95 shrink-0 border ${
+                        posAutoPrintSlip
+                          ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600 shadow-xs'
+                          : 'bg-white hover:bg-gray-100 text-gray-600 border-gray-300'
+                      }`}
+                    >
+                      <span>{posAutoPrintSlip ? '✓ បើក' : '✕ បិទ'}</span>
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newVal = !posEnableTelegramAlert;
-                      setPosEnableTelegramAlert(newVal);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('sabay_pos_telegram_alert', JSON.stringify(newVal));
-                      }
-                      setToastNotification(newVal ? '✈️ បានបើកការផ្ញើវិក្កយបត្រទៅ Telegram!' : '🔕 បានបិទការផ្ញើដំណឹងទៅ Telegram');
-                      setTimeout(() => setToastNotification(null), 2500);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1 active:scale-95 shrink-0 border ${
-                      posEnableTelegramAlert
-                        ? 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600 shadow-sm'
-                        : 'bg-white hover:bg-gray-100 text-gray-600 border-gray-300'
-                    }`}
-                  >
-                    <span>{posEnableTelegramAlert ? '✓ បើក (ON)' : '✕ បិទ (OFF)'}</span>
-                  </button>
+
+                  {/* Toggle 2: ✈️ ផ្ញើវិក្កយបត្រទៅ Telegram */}
+                  <div className="p-2.5 bg-gradient-to-r from-sky-50 via-blue-50/60 to-indigo-50/50 rounded-2xl border border-sky-200/90 flex items-center justify-between shadow-2xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm font-black transition shrink-0 ${
+                        posEnableTelegramAlert ? 'bg-sky-500 text-white shadow-xs' : 'bg-gray-200 text-gray-500'
+                      }`}>
+                        ✈️
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-gray-900 leading-tight flex items-center gap-1">
+                          <span>ផ្ញើ Telegram</span>
+                          {posEnableTelegramAlert && <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />}
+                        </p>
+                        <p className="text-[10px] text-gray-500 font-medium truncate">
+                          {posEnableTelegramAlert ? 'ផ្ញើវិក្កយបត្រពេលលក់' : 'បិទការផ្ញើដំណឹង'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newVal = !posEnableTelegramAlert;
+                        setPosEnableTelegramAlert(newVal);
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('sabay_pos_telegram_alert', JSON.stringify(newVal));
+                        }
+                        setToastNotification(newVal ? '✈️ បានបើកការផ្ញើវិក្កយបត្រទៅ Telegram!' : '🔕 បានបិទការផ្ញើដំណឹងទៅ Telegram');
+                        setTimeout(() => setToastNotification(null), 2500);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center gap-1 active:scale-95 shrink-0 border ${
+                        posEnableTelegramAlert
+                          ? 'bg-sky-600 hover:bg-sky-700 text-white border-sky-600 shadow-xs'
+                          : 'bg-white hover:bg-gray-100 text-gray-600 border-gray-300'
+                      }`}
+                    >
+                      <span>{posEnableTelegramAlert ? '✓ បើក' : '✕ បិទ'}</span>
+                    </button>
+                  </div>
                 </div>
 
               {/* ⭐️ កន្លែង ADD / កែសម្រួល & ជ្រើសរើសអតិថិជនទំនើប (MODERN CUSTOMER SELECTOR PICKER - BIG & TALL) ⭐️ */}
@@ -39850,6 +39951,31 @@ export default function UnifiedAdminDashboard() {
                   <span>📱 QR:</span>
                   <span className={storeSettings.showReceiptQr !== false ? 'text-blue-700 font-black' : 'text-rose-600 font-bold line-through'}>
                     {storeSettings.showReceiptQr !== false ? '✅ បើក' : '❌ បិទ'}
+                  </span>
+                </button>
+
+                {/* ⭐️ Quick Toggle: Auto-Print ON/OFF ⭐️ */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newVal = !posAutoPrintSlip;
+                    setPosAutoPrintSlip(newVal);
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('sabay_pos_auto_print', JSON.stringify(newVal));
+                    }
+                    setToastNotification(newVal ? '⚡ បានបើកការព្រីនស្វ័យប្រវត្តិ!' : '🔕 បានបិទការព្រីនស្វ័យប្រវត្តិ');
+                    setTimeout(() => setToastNotification(null), 2500);
+                  }}
+                  className={`px-2 py-1 rounded-xl text-xs font-black transition flex items-center gap-1 cursor-pointer border ${
+                    posAutoPrintSlip
+                      ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 shadow-2xs'
+                      : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
+                  }`}
+                  title="ចុចដើម្បី បើក/បិទ ការព្រីនស្វ័យប្រវត្តិពេលគិតលុយរួច"
+                >
+                  <span>⚡ Auto:</span>
+                  <span className={posAutoPrintSlip ? 'text-amber-800 font-black' : 'text-gray-400 font-bold line-through'}>
+                    {posAutoPrintSlip ? '✅ បើក' : '❌ បិទ'}
                   </span>
                 </button>
 
