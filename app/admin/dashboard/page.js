@@ -31369,7 +31369,7 @@ export default function UnifiedAdminDashboard() {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
+                <div className="p-4 sm:p-5 bg-gradient-to-r from-gray-50 via-white to-gray-50 border-t border-gray-100 flex flex-col-reverse sm:flex-row items-center justify-between gap-3 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -31381,9 +31381,15 @@ export default function UnifiedAdminDashboard() {
                       setDebtLedgerModalOpen(false);
                     }}
                     disabled={m.debtBalance <= 0}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                    className="w-full sm:w-auto flex-1 sm:flex-initial bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white px-6 sm:px-8 py-3.5 rounded-2xl text-sm sm:text-base font-black shadow-lg shadow-emerald-600/25 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed group"
                   >
-                    <span>💵</span> កត់ត្រាសងបំណុលឥឡូវនេះ
+                    <span className="text-xl group-hover:scale-110 transition-transform">💵</span>
+                    <span>កត់ត្រាសងបំណុលឥឡូវនេះ (Record Repayment)</span>
+                    {m.debtBalance > 0 && (
+                      <span className="bg-emerald-950/40 border border-emerald-300/40 text-emerald-100 text-xs px-2.5 py-0.5 rounded-full font-mono">
+                        ${m.debtBalance.toFixed(2)}
+                      </span>
+                    )}
                   </button>
                   <button
                     type="button"
@@ -31391,7 +31397,7 @@ export default function UnifiedAdminDashboard() {
                       setDebtLedgerModalOpen(false);
                       setSelectedDebtCustomerForLedger(null);
                     }}
-                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-black transition cursor-pointer"
+                    className="w-full sm:w-auto bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 px-6 py-3.5 rounded-2xl text-xs sm:text-sm font-black transition cursor-pointer active:scale-98 text-center"
                   >
                     បិទផ្ទាំងនេះ
                   </button>
