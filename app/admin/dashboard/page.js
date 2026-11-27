@@ -30177,53 +30177,58 @@ export default function UnifiedAdminDashboard() {
                         {/* សកម្មភាព (Actions) */}
                         <td className="px-5 py-4 text-right pr-6">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            {/* ប៊ូតុងសងបំណុល (Debt Repay Button) */}
-                            {metric.debtBalance > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDebtRepayCustomer({ ...c, debt_balance: metric.debtBalance });
-                                  setDebtRepayAmount(metric.debtBalance.toString());
-                                  setDebtRepayMethod('Cash');
-                                  setDebtRepayNote('');
-                                  setDebtRepayModalOpen(true);
-                                }}
-                                title="កត់ត្រាការសងបំណុល (Record Debt Repayment)"
-                                className="px-2.5 py-1 text-xs font-black text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                              >
-                                <span>💵</span>
-                                <span>សងបំណុល</span>
-                              </button>
-                            )}
-
-                            {/* ប៊ូតុងវិក្កយបត្របំណុល (Statement of Account Ledger) */}
-                            {metric.debtBalance > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => {
+                            {/* ប៊ូតុងសងបំណុល (Debt Repay Button - ALWAYS AVAILABLE) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (metric.debtBalance <= 0) {
+                                  setToastNotification(`ℹ️ អតិថិជន "${c.name}" បានទូទាត់រួចរាល់ គ្មានបំណុលជំពាក់ឡើយ ($0.00)!`);
+                                  setTimeout(() => setToastNotification(null), 3000);
                                   setSelectedDebtCustomerForLedger(c);
                                   setDebtLedgerModalOpen(true);
-                                }}
-                                title="មើលប្រវត្តិជំពាក់ & សង (Statement of Account)"
-                                className="px-2.5 py-1 text-xs font-black text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                              >
-                                <span>📜</span>
-                                <span>វិក្កយបត្រ</span>
-                              </button>
-                            )}
+                                  return;
+                                }
+                                setDebtRepayCustomer({ ...c, debt_balance: metric.debtBalance });
+                                setDebtRepayAmount(metric.debtBalance.toString());
+                                setDebtRepayMethod('Cash');
+                                setDebtRepayNote('');
+                                setDebtRepayModalOpen(true);
+                              }}
+                              title="កត់ត្រាការសងបំណុល (Record Debt Repayment)"
+                              className={`px-2.5 py-1 text-xs font-black rounded-xl transition cursor-pointer flex items-center gap-1 border shadow-2xs active:scale-95 ${
+                                metric.debtBalance > 0
+                                  ? 'text-rose-700 bg-rose-50 hover:bg-rose-100 border-rose-200'
+                                  : 'text-gray-600 bg-gray-50 hover:bg-gray-100 border-gray-200'
+                              }`}
+                            >
+                              <span>💵</span>
+                              <span>សងបំណុល</span>
+                            </button>
 
-                            {/* ប៊ូតុងផ្ញើសាររំលឹកបំណុល (Debt Reminder Message) */}
-                            {metric.debtBalance > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenDebtReminderModal(c)}
-                                title="ផ្ញើសាររំលឹកបំណុលតាម Telegram / Phone"
-                                className="px-2 py-1 text-xs font-black text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                              >
-                                <span>💬</span>
-                                <span>រំលឹក</span>
-                              </button>
-                            )}
+                            {/* ប៊ូតុងវិក្កយបត្របំណុល (Statement of Account Ledger - ALWAYS AVAILABLE) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDebtCustomerForLedger(c);
+                                setDebtLedgerModalOpen(true);
+                              }}
+                              title="មើលប្រវត្តិវិក្កយបត្រ & សងបំណុល (Statement of Account)"
+                              className="px-2.5 py-1 text-xs font-black text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                            >
+                              <span>📜</span>
+                              <span>វិក្កយបត្រ</span>
+                            </button>
+
+                            {/* ប៊ូតុងផ្ញើសាររំលឹក (Debt Reminder / Telegram Message - ALWAYS AVAILABLE) */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDebtReminderModal(c)}
+                              title="ផ្ញើសាររំលឹកតាម Telegram / Phone"
+                              className="px-2 py-1 text-xs font-black text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95"
+                            >
+                              <span>💬</span>
+                              <span>រំលឹក</span>
+                            </button>
 
                             {/* ប៊ូតុងកាតសមាជិក VIP ឌីជីថល (Digital VIP Member Card) */}
                             <button
