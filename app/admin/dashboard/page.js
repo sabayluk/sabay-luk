@@ -26425,6 +26425,8 @@ export default function UnifiedAdminDashboard() {
       receiptNo: receiptData?.orderId || receiptData?.receiptNo || '',
       customerName: customerName || 'អតិថិជនទូទៅ',
       storeName: storeSettings?.storeName || activeStore?.name || (isTenant ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK'),
+      storeSlogan: storeSettings?.storeSlogan || activeStore?.slogan || 'ហាងលក់ស្បែកជើងទាន់សម័យ & គុណភាពខ្ពស់',
+      logoUrl: storeSettings?.logoUrl || activeStore?.logo_url || activeStore?.settings?.logoUrl || '',
       lastUpdated: Date.now()
     };
 

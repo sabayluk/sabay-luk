@@ -30,23 +30,67 @@ function CustomerDisplayContent() {
   const targetStoreKey = getTargetStoreKey();
   const isTenant = targetStoreKey !== 'default' && targetStoreKey !== 'sabay-luk' && targetStoreKey !== 'store_default_sabayluk';
 
-  const [displayState, setDisplayState] = useState({
-    status: 'idle', // 'idle' | 'scanning' | 'checkout' | 'completed'
-    items: [],
-    subtotal: 0,
-    discountAmount: 0,
-    taxAmount: 0,
-    taxRate: 0,
-    grandTotal: 0,
-    exchangeRate: 4100,
-    paymentMethod: 'KHQR',
-    qrCodeUrl: isTenant ? '' : '/khqr-aba.jpg',
-    cashReceived: 0,
-    changeAmount: 0,
-    receiptNo: '',
-    customerName: '',
-    storeName: isTenant ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK',
-    lastUpdated: 0
+  const [displayState, setDisplayState] = useState(() => {
+    let initLogo = '';
+    let initName = isTenant ? 'ហាងរបស់ខ្ញុំ' : 'SABAY LUK';
+    let initSlogan = 'ហាងលក់ស្បែកជើងទាន់សម័យ & គុណភាពខ្ពស់';
+
+    if (typeof window !== 'undefined') {
+      try {
+        const sKey = targetStoreKey !== 'default' ? `sabay_store_settings_${targetStoreKey}` : 'sabay_store_settings';
+        const rawSettings = localStorage.getItem(sKey) || localStorage.getItem('sabay_store_settings');
+        if (rawSettings) {
+          const parsed = JSON.parse(rawSettings);
+          if (parsed?.logoUrl) initLogo = parsed.logoUrl;
+          if (parsed?.storeName) initName = parsed.storeName;
+          if (parsed?.storeSlogan) initSlogan = parsed.storeSlogan;
+        }
+        if (!initLogo) {
+          const rawActive = localStorage.getItem('sabay_admin_active_store') || localStorage.getItem('sabay_active_store');
+          if (rawActive) {
+            const store = JSON.parse(rawActive);
+            if (store?.logo_url) initLogo = store.logo_url;
+            else if (store?.settings?.logoUrl) initLogo = store.settings.logoUrl;
+            if (store?.name) initName = store.name;
+            if (store?.slogan) initSlogan = store.slogan;
+          }
+        }
+        if (!initLogo) {
+          const rawReg = localStorage.getItem('sabay_registered_stores');
+          if (rawReg) {
+            const regList = JSON.parse(rawReg);
+            if (Array.isArray(regList)) {
+              const matched = regList.find(s => s && (s.slug === targetStoreKey || s.id === targetStoreKey));
+              if (matched?.logo_url) initLogo = matched.logo_url;
+              else if (matched?.settings?.logoUrl) initLogo = matched.settings.logoUrl;
+              if (matched?.name) initName = matched.name;
+              if (matched?.slogan) initSlogan = matched.slogan;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    return {
+      status: 'idle', // 'idle' | 'scanning' | 'checkout' | 'completed'
+      items: [],
+      subtotal: 0,
+      discountAmount: 0,
+      taxAmount: 0,
+      taxRate: 0,
+      grandTotal: 0,
+      exchangeRate: 4100,
+      paymentMethod: 'KHQR',
+      qrCodeUrl: isTenant ? '' : '/khqr-aba.jpg',
+      logoUrl: initLogo,
+      cashReceived: 0,
+      changeAmount: 0,
+      receiptNo: '',
+      customerName: '',
+      storeName: initName,
+      storeSlogan: initSlogan,
+      lastUpdated: 0
+    };
   });
 
   const [mounted, setMounted] = useState(false);
@@ -96,6 +140,9 @@ function CustomerDisplayContent() {
     setDisplayState(prev => ({
       ...prev,
       ...data,
+      logoUrl: data.logoUrl || prev.logoUrl || '',
+      storeName: data.storeName || prev.storeName,
+      storeSlogan: data.storeSlogan || prev.storeSlogan,
       items: Array.isArray(data.items) ? data.items : prev.items
     }));
     setIsConnected(true);
@@ -104,7 +151,7 @@ function CustomerDisplayContent() {
     }
   };
 
-  // 1. Digital clock & theme initial load
+  // 1. Digital clock, theme initial load & Store logo cloud fetch
   useEffect(() => {
     setMounted(true);
     if (typeof window !== 'undefined') {
@@ -113,8 +160,31 @@ function CustomerDisplayContent() {
       else if (savedTheme === 'light') setIsDarkTheme(false);
     }
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+
+    // Fetch store logo from Supabase if not yet loaded from localStorage
+    if (targetStoreKey) {
+      supabase
+        .from('stores')
+        .select('name, logo_url, settings')
+        .or(`slug.eq.${targetStoreKey},id.eq.${targetStoreKey}`)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            const fetchedLogo = data.logo_url || data.settings?.logoUrl;
+            if (fetchedLogo) {
+              setDisplayState(prev => ({
+                ...prev,
+                logoUrl: prev.logoUrl || fetchedLogo,
+                storeName: prev.storeName || data.name
+              }));
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
     return () => clearInterval(timer);
-  }, []);
+  }, [targetStoreKey]);
 
   const toggleTheme = () => {
     setIsDarkTheme(prev => {
@@ -272,9 +342,25 @@ function CustomerDisplayContent() {
             : 'border-b border-gray-200/90 bg-white/95 shadow-xs'
         }`}>
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-lg shadow-orange-500/25">
-              👟
-            </div>
+            {displayState.logoUrl ? (
+              <div className="w-12 h-12 rounded-2xl bg-white border-2 border-orange-400/40 shadow-md p-1 flex items-center justify-center overflow-hidden shrink-0">
+                <img 
+                  src={displayState.logoUrl} 
+                  alt={displayState.storeName || 'Store Logo'} 
+                  className="w-full h-full object-contain rounded-xl"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    if (e.currentTarget.parentElement) {
+                      e.currentTarget.parentElement.innerHTML = '<span class="text-2xl">🏪</span>';
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-2xl shadow-lg shadow-orange-500/25 shrink-0">
+                🏪
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
                 <h1 className={`font-black text-xl tracking-tight ${isDarkTheme ? 'text-white' : 'text-slate-900'}`}>
@@ -289,7 +375,7 @@ function CustomerDisplayContent() {
                 </span>
               </div>
               <p className={`text-[11px] font-bold ${isDarkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
-                ហាងលក់ស្បែកជើងទាន់សម័យ & គុណភាពខ្ពស់
+                {displayState.storeSlogan || 'ហាងលក់ស្បែកជើងទាន់សម័យ & គុណភាពខ្ពស់'}
               </p>
             </div>
           </div>
