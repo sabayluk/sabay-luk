@@ -26629,6 +26629,29 @@ export default function UnifiedAdminDashboard() {
                 <span>🖥️</span>
                 <span>អេក្រង់ក្រៅ ↗</span>
               </button>
+
+              {/* ⭐️ Mobile Auto-Print Toggle ⭐️ */}
+              <button
+                type="button"
+                onClick={() => {
+                  const newVal = !posAutoPrintSlip;
+                  setPosAutoPrintSlip(newVal);
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem('sabay_pos_auto_print', JSON.stringify(newVal));
+                  }
+                  setToastNotification(newVal ? '⚡ ព្រីនស្វ័យប្រវត្តិ: បានបើក (Auto-Print ON)' : '🔕 ព្រីនស្វ័យប្រវត្តិ: បានបិទ (Auto-Print OFF)');
+                  setTimeout(() => setToastNotification(null), 2500);
+                }}
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-black shadow-xs flex items-center gap-1 shrink-0 transition cursor-pointer active:scale-95 border ${
+                  posAutoPrintSlip
+                    ? 'bg-amber-100 border-amber-400 text-amber-950 font-black'
+                    : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+                title="ចុចដើម្បី បើក/បិទ ការព្រីនវិក្កយបត្រស្វ័យប្រវត្តពេលគិតលុយរួច"
+              >
+                <span>🖨️</span>
+                <span>ព្រីន: {posAutoPrintSlip ? 'ON' : 'OFF'}</span>
+              </button>
             </div>
           </div>
 
@@ -26697,6 +26720,39 @@ export default function UnifiedAdminDashboard() {
               <span className="text-sm">⚡</span>
               <span>ម៉ាស៊ីនស្កេន</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" title="ម៉ាស៊ីនស្កេនសកម្ម" />
+            </button>
+
+            {/* ⭐️ ព្រីនស្វ័យប្រវត្តិ (AUTO-PRINT HARDWARE TOGGLE IN TOP TOOLBAR) ⭐️ */}
+            <button
+              type="button"
+              onClick={() => {
+                const newVal = !posAutoPrintSlip;
+                setPosAutoPrintSlip(newVal);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('sabay_pos_auto_print', JSON.stringify(newVal));
+                }
+                setToastNotification(newVal ? '⚡ ព្រីនស្វ័យប្រវត្តិ: បានបើក (Auto-Print ON)' : '🔕 ព្រីនស្វ័យប្រវត្តិ: បានបិទ (Auto-Print OFF)');
+                setTimeout(() => setToastNotification(null), 2500);
+              }}
+              className={`px-3.5 py-2.5 rounded-2xl text-xs font-black transition transform hover:scale-[1.02] active:scale-95 flex items-center gap-2 cursor-pointer shrink-0 border-2 shadow-xs ${
+                posAutoPrintSlip
+                  ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-400 text-amber-900 shadow-amber-500/10'
+                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-600'
+              }`}
+              title="ចុចដើម្បី បើក/បិទ ការព្រីនវិក្កយបត្រស្វ័យប្រវត្តពេលគិតលុយរួច"
+            >
+              <span className="text-sm">🖨️</span>
+              <span>ព្រីនស្វ័យប្រវត្តិ</span>
+              <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                posAutoPrintSlip
+                  ? 'bg-amber-500 text-slate-950 font-black'
+                  : 'bg-gray-200 text-gray-600'
+              }`}>
+                {posAutoPrintSlip ? 'ON' : 'OFF'}
+              </span>
+              {posAutoPrintSlip && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+              )}
             </button>
 
             {/* ⭐️ ដោនឡូត APP ប្រើពេលគ្មាន INTERNET (OFFLINE POS PWA) ⭐️ */}
@@ -27528,40 +27584,6 @@ export default function UnifiedAdminDashboard() {
                 <span className="text-xs text-orange-600 font-black">{posTotalKHR.toLocaleString()} ៛</span>
               </div>
               <span className="text-4xl font-black text-blue-600">${posTotal.toFixed(2)}</span>
-            </div>
-
-            {/* ⭐️ Quick Toggle: ⚡ ព្រីនស្វ័យប្រវត្តិ (AUTO-PRINT SLIP ON CHECKOUT) ⭐️ */}
-            <div className="mb-3 p-2 bg-gradient-to-r from-amber-50 via-orange-50/50 to-amber-50/30 border border-amber-200/80 rounded-xl flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-base shrink-0">⚡</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-black text-amber-950 leading-tight">
-                    <span>ព្រីនស្វ័យប្រវត្តិ (Auto-Print)</span>
-                  </p>
-                  <p className="text-[10px] text-amber-700/80 font-medium truncate">
-                    {posAutoPrintSlip ? 'ព្រីន Slip ចេញភ្លាមពេលគិតលុយរួច' : 'បិទការព្រីនស្វ័យប្រវត្តិ'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const newVal = !posAutoPrintSlip;
-                  setPosAutoPrintSlip(newVal);
-                  if (typeof window !== 'undefined') {
-                    localStorage.setItem('sabay_pos_auto_print', JSON.stringify(newVal));
-                  }
-                  setToastNotification(newVal ? '⚡ បានបើកការព្រីនស្វ័យប្រវត្តិពេលគិតលុយ!' : '🔕 បានបិទការព្រីនស្វ័យប្រវត្តិ');
-                  setTimeout(() => setToastNotification(null), 2500);
-                }}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition cursor-pointer flex items-center gap-1 border active:scale-95 shrink-0 ${
-                  posAutoPrintSlip
-                    ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-600 shadow-xs'
-                    : 'bg-white hover:bg-gray-50 text-gray-600 border-gray-300'
-                }`}
-              >
-                <span>{posAutoPrintSlip ? '✓ បើក (ON)' : '✕ បិទ (OFF)'}</span>
-              </button>
             </div>
 
             <button
