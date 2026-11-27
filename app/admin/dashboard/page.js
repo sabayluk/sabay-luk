@@ -16501,504 +16501,7 @@ export default function UnifiedAdminDashboard() {
             )}
           </div>
 
-        {/* ⭐️ MODAL មើលលម្អិតមុខទំនិញក្នុង ORDER (VIEW ORDER DETAILS & MAPS) ⭐️ */}
-        {selectedOrderDetails && (() => {
-          const ord = selectedOrderDetails;
-          const orderItems = (ord.items && Array.isArray(ord.items) ? ord.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
-          const deliveryMeta = (Array.isArray(ord.items) ? ord.items : []).find(it => it && it.is_delivery_meta);
-          const deliveryFeeAmt = parseFloat(ord.delivery_fee || deliveryMeta?.delivery_fee || 0);
-          const taxMeta = (Array.isArray(ord.items) ? ord.items : []).find(it => it && it.is_tax_meta);
-          const taxAmt = parseFloat(ord.tax_amount || taxMeta?.tax_amount || 0);
-          const rawAddress = ord.address || ord.delivery_address || 'ទូទៅ / នៅហាង';
-          
-          // Extract Telegram & Email from all possible order sources
-          const tgAddressMatch = (rawAddress || '').match(/Telegram(?:\/Email)?:\s*([^\s\]]+)/i);
-          const emailAddressMatch = (rawAddress || '').match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-
-          const itemWithTg = orderItems.find(it => it && (it.telegram || it.customer_telegram));
-          const itemWithEmail = orderItems.find(it => it && (it.email || it.customer_email));
-
-          const rawTelegram = ord.telegram || ord.customer_telegram || 
-                              itemWithTg?.telegram || itemWithTg?.customer_telegram || 
-                              (tgAddressMatch ? tgAddressMatch[1] : null);
-
-          const isTelegramAnEmail = rawTelegram && rawTelegram.includes('@') && rawTelegram.includes('.');
-
-          const rawEmail = ord.email || ord.customer_email || 
-                           itemWithEmail?.email || itemWithEmail?.customer_email || 
-                           (emailAddressMatch ? emailAddressMatch[1] : null) || 
-                           (isTelegramAnEmail ? rawTelegram : null);
-
-          const finalCustomerTelegram = isTelegramAnEmail ? null : rawTelegram;
-          const finalCustomerEmail = rawEmail;
-
-          // Extract Google Maps URL
-          const mapMatch = (rawAddress || '').match(/Maps:\s*(https?:\/\/[^\s\]]+)/i) || 
-                           (rawAddress || '').match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)[^\s\]]+)/i);
-          const gMapUrl = ord.google_map_url || orderItems[0]?.google_map_url || (mapMatch ? mapMatch[1] : null);
-
-          // Extract Location Photo URL
-          const photoMatch = (rawAddress || '').match(/រូបផ្ទះ:\s*(https?:\/\/[^\s\]]+)/i);
-          const locPhotoUrl = ord.location_photo_url || orderItems[0]?.location_photo_url || (photoMatch ? photoMatch[1] : null);
-
-          // Clean display address (strip out bracketed Maps / Photo / Telegram tags)
-          const cleanDisplayAddress = rawAddress
-            .replace(/\[📍 Maps:.*?\]/gi, '')
-            .replace(/\[🏠 រូបផ្ទះ:.*?\]/gi, '')
-            .replace(/\[✈️ Telegram(?:\/Email)?:.*?\]/gi, '')
-            .replace(/\[✉️ Email:.*?\]/gi, '')
-            .trim();
-          const slipUrl = ord.payment_slip_url || orderItems[0]?.payment_slip_url || null;
-          const totalAmt = Number(ord.total || ord.total_amount || 0);
-          const subtotalAmt = Number(ord.subtotal || ord.total || 0);
-          const discountAmt = Number(ord.discount || 0);
-
-          return (
-            <div 
-              onClick={() => setSelectedOrderDetails(null)}
-              className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
-            >
-              <div 
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white w-full max-w-xl rounded-3xl shadow-2xl p-5 sm:p-6 border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200 cursor-default"
-              >
-                
-                {/* Header */}
-                <div className="flex justify-between items-start pb-3.5 mb-3.5 border-b border-slate-100 shrink-0">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-black text-slate-900">
-                        📦 វិក្កយបត្រ #{ord.order_id || ord.id}
-                      </h3>
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                        ord.order_type === 'ONLINE' ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
-                      }`}>
-                        {ord.order_type || 'ONLINE'}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      {ord.created_at ? new Date(ord.created_at).toLocaleString('km-KH') : 'កាលបរិច្ឆេទ N/A'}
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => setSelectedOrderDetails(null)} 
-                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {/* Scrollable Content Body */}
-                <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                  
-                  {/* 📍 Customer & Delivery Destination Card */}
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-black text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                        <span>👤</span> ព័ត៌មានអតិថិជន & ទីតាំងដឹក
-                      </span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                        ord.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
-                        ord.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
-                        ord.status === 'Preparing' ? 'bg-purple-100 text-purple-800' :
-                        'bg-amber-100 text-amber-800'
-                      }`}>
-                        {ord.status || 'Pending'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/80">
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">ឈ្មោះ:</span>
-                        <span className="font-black text-slate-800">{ord.customer || ord.customer_name || 'អតិថិជនទូទៅ'}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">លេខទូរស័ព្ទ:</span>
-                        <a href={`tel:${ord.phone || ord.phone_number || ''}`} className="font-bold text-blue-600 hover:underline">
-                          📞 {ord.phone || ord.phone_number || 'N/A'}
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* Telegram & Gmail/Email Row */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/80">
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">Telegram:</span>
-                        {finalCustomerTelegram ? (
-                          <a
-                            href={`https://t.me/${finalCustomerTelegram.replace(/^@/, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 font-bold text-sky-600 hover:text-sky-700 hover:underline"
-                          >
-                            <span>✈️</span>
-                            <span>@{finalCustomerTelegram.replace(/^@/, '')}</span>
-                            <span className="text-[10px] text-sky-400">↗</span>
-                          </a>
-                        ) : (ord.phone || ord.phone_number) ? (
-                          <a
-                            href={`https://t.me/+855${(ord.phone || ord.phone_number).replace(/[^0-9]/g, '').replace(/^0/, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 hover:underline"
-                          >
-                            <span>✈️</span>
-                            <span>ឆាត Telegram តាមលេខ ↗</span>
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 italic text-[11px]">មិនបានបញ្ជាក់</span>
-                        )}
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">Gmail / Email:</span>
-                        {finalCustomerEmail ? (
-                          <a
-                            href={`mailto:${finalCustomerEmail}`}
-                            className="inline-flex items-center gap-1 font-bold text-rose-600 hover:underline break-all"
-                          >
-                            <span>✉️</span>
-                            <span>{finalCustomerEmail}</span>
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 italic text-[11px]">មិនបានបញ្ជាក់</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">អាសយដ្ឋានដឹកជញ្ជូន:</span>
-                      <p className="font-bold text-slate-800 mt-0.5 whitespace-pre-wrap leading-relaxed">
-                        {cleanDisplayAddress || 'មិនបានបញ្ជាក់'}
-                      </p>
-                    </div>
-
-                    {/* Google Maps Button */}
-                    {gMapUrl ? (
-                      <div className="pt-2">
-                        <a 
-                          href={gMapUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 transition cursor-pointer"
-                        >
-                          <span>🗺️</span>
-                          <span>បើកមើលទីតាំងលើ Google Maps ↗</span>
-                        </a>
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-slate-400 italic">មិនមានតំណភ្ជាប់ Google Maps ភ្ជាប់មកជាមួយទេ</p>
-                    )}
-
-                    {/* House / Delivery Location Photo */}
-                    {locPhotoUrl && (
-                      <div className="pt-2 border-t border-slate-200/80">
-                        <span className="text-[10px] font-black text-slate-600 block mb-1.5">
-                          🏠 រូបថតទីតាំង / ផ្ទះទទួលទំនិញ:
-                        </span>
-                        <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
-                          <img 
-                            src={locPhotoUrl} 
-                            alt="Location" 
-                            className="w-16 h-16 object-cover rounded-lg border border-slate-200 shadow-2xs"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-slate-800">រូបថតបញ្ជាក់ទីតាំង</p>
-                            <a 
-                              href={locPhotoUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline font-bold text-[10px] mt-1 inline-block"
-                            >
-                              🔍 ពង្រីកមើលរូបភាព ↗
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 🔄 Refund Status Banner if Refunded */}
-                  {(ord.status === 'Refunded' || ord.status === 'Partially Refunded' || ord.refund_details) && (
-                    <div className="p-3.5 bg-gradient-to-r from-rose-50 via-pink-50 to-rose-50 rounded-2xl border border-rose-200 text-rose-950 space-y-1.5 shadow-2xs">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black flex items-center gap-1.5 text-rose-800">
-                          <span>🔄</span> {ord.status === 'Refunded' ? 'បានបង្វិលប្រាក់ពេញលេញ (Full Refund)' : 'បានបង្វិលប្រាក់ខ្លះ (Partial Refund)'}
-                        </span>
-                        <span className="font-mono text-sm font-black text-rose-700">
-                          -${parseFloat(ord.refunded_amount || ord.refund_details?.refunded_amount || 0).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-rose-800 flex flex-wrap items-center gap-x-3 gap-y-1">
-                        {ord.refund_details?.reason && (
-                          <span><b>មូលហេតុ:</b> {ord.refund_details.reason}</span>
-                        )}
-                        {ord.refund_details?.payment_method && (
-                          <span><b>វិធីសងប្រាក់:</b> {ord.refund_details.payment_method}</span>
-                        )}
-                        {parseFloat(ord.refund_details?.refund_delivery_fee || 0) > 0 && (
-                          <span className="text-amber-700 font-bold"><b>ថ្លៃដឹក:</b> +${parseFloat(ord.refund_details.refund_delivery_fee).toFixed(2)}</span>
-                        )}
-                        {parseFloat(ord.refund_details?.refund_tax_amount || 0) > 0 && (
-                          <span className="text-indigo-700 font-bold"><b>ពន្ធ:</b> +${parseFloat(ord.refund_details.refund_tax_amount).toFixed(2)}</span>
-                        )}
-                        {ord.refund_details?.processed_by && (
-                          <span><b>បុគ្គលិក:</b> {ord.refund_details.processed_by}</span>
-                        )}
-                      </div>
-                      {ord.refund_details && (
-                        <div className="pt-1 flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setCreditNoteData(ord.refund_details)}
-                            className="text-xs font-black bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-xl shadow-xs transition flex items-center gap-1 cursor-pointer"
-                          >
-                            <span>🧾</span> មើល / បោះពុម្ពប័ណ្ណ Credit Note (Refund Slip)
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 📦 Ordered Products List */}
-                  <div className="space-y-2">
-                    <h4 className="font-black text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <span>📦</span> បញ្ជីមុខទំនិញ ({orderItems.length} មុខ)
-                    </h4>
-                    
-                    <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                      {orderItems.length > 0 ? (
-                        orderItems.map((item, idx) => {
-                          const matchedProd = currentStoreProducts?.find(p => String(p.id) === String(item.id) || (p.sku && item.sku && p.sku === item.sku)) || products?.find(p => String(p.id) === String(item.id) || (p.sku && item.sku && p.sku === item.sku));
-                          const itemSku = item.sku || matchedProd?.sku || '';
-
-                          return (
-                            <div key={idx} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80">
-                              <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 shadow-2xs flex items-center justify-center">
-                                {item.image_url || item.image || matchedProd?.image_url ? (
-                                  <img 
-                                    src={item.image_url || item.image || matchedProd?.image_url} 
-                                    className="w-full h-full object-cover" 
-                                    alt={item.name || ''}
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                      if (e.currentTarget.parentElement) {
-                                        e.currentTarget.parentElement.innerHTML = '<span class="text-xl">📦</span>';
-                                      }
-                                    }}
-                                  />
-                                ) : (
-                                  <span className="text-xl">📦</span>
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h5 className="text-xs font-black text-slate-900 truncate">
-                                  {itemSku ? <span className="font-mono text-blue-600 mr-1.5 font-black">[{itemSku}]</span> : null}
-                                  {item.name}
-                                </h5>
-                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px]">
-                                  {itemSku && (
-                                    <span className="bg-blue-50 text-blue-700 font-mono font-black px-1.5 py-0.2 rounded border border-blue-200">
-                                      Code: {itemSku}
-                                    </span>
-                                  )}
-                                  {item.size && item.size !== 'N/A' && (
-                                    <span className="bg-white text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
-                                      Size: {item.size}
-                                    </span>
-                                  )}
-                                  {item.color && item.color !== 'N/A' && (
-                                    <span className="bg-white text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
-                                      {item.color}
-                                    </span>
-                                  )}
-                                  <span className="text-slate-400 font-mono">x{item.qty || 1}</span>
-                                </div>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-xs font-black text-slate-900 font-mono">
-                                  ${(parseFloat(item.price || 0) * (item.qty || 1)).toFixed(2)}
-                                </p>
-                                <p className="text-[10px] text-slate-400 font-mono">@${Number(item.price || 0).toFixed(2)}</p>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="text-center text-slate-400 py-6 text-xs">គ្មានមុខទំនិញលម្អិត</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 🧾 Payment Breakdown Summary */}
-                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5 text-xs">
-                    <div className="flex justify-between text-slate-600">
-                      <span>តម្លៃទំនិញសរុប:</span>
-                      <span className="font-mono text-slate-900">${subtotalAmt.toFixed(2)}</span>
-                    </div>
-                    {discountAmt > 0 && (
-                      <div className="flex justify-between text-emerald-600 font-bold">
-                        <span>បញ្ចុះតម្លៃ ({ord.coupon_code || 'Promo'}):</span>
-                        <span className="font-mono">-${discountAmt.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {deliveryFeeAmt > 0 && (
-                      <div className="flex justify-between text-slate-600">
-                        <span>ថ្លៃដឹកជញ្ជូន ({deliveryMeta?.destination || 'ដឹកជញ្ជូន'}):</span>
-                        <span className="font-mono text-slate-900">+${deliveryFeeAmt.toFixed(2)}</span>
-                      </div>
-                    )}
-                    {taxAmt > 0 && (
-                      <div className="flex justify-between text-slate-600">
-                        <span>{taxMeta?.tax_label || 'ពន្ធអាករ (VAT)'}:</span>
-                        <span className="font-mono text-slate-900">+${taxAmt.toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-slate-600">
-                      <span>វិធីទូទាត់:</span>
-                      <span className="font-black text-slate-900 uppercase">{ord.payment || ord.payment_method || 'Cash'}</span>
-                    </div>
-                    <div className="flex justify-between items-baseline pt-2 border-t border-slate-200 font-black text-sm">
-                      <span className="text-slate-900">សរុបទឹកប្រាក់:</span>
-                      <div className="text-right">
-                        <span className="text-[#ff6a00] font-mono text-lg block">${totalAmt.toFixed(2)}</span>
-                        <span className="text-[11px] text-slate-500 font-bold">({Math.round(totalAmt * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Payment Slip Preview in Details Modal */}
-                  {slipUrl && (
-                    <div className="p-3.5 bg-blue-50/80 rounded-2xl border border-blue-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-black text-blue-900 flex items-center gap-1.5">
-                          <span>🧾</span> វិក្កយបត្រផ្ទេរប្រាក់ KHQR (Payment Slip):
-                        </span>
-                        <a 
-                          href={slipUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="text-[11px] font-black text-blue-600 hover:text-blue-800 underline"
-                        >
-                          ពង្រីកមើលធំ ↗
-                        </a>
-                      </div>
-                      <div className="overflow-hidden rounded-xl border border-blue-200/80 bg-white flex justify-center p-1.5">
-                        <img 
-                          src={slipUrl} 
-                          alt="Payment Slip" 
-                          className="h-44 w-auto object-contain rounded-lg shadow-2xs" 
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                </div>
-
-                {/* Footer Action Buttons */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const sub = Number(ord.subtotal || ord.total || 0);
-                        const disc = Number(ord.discount || 0);
-                        const tot = Number(ord.total || ord.total_amount || 0);
-                        setReceiptData({
-                          orderId: ord.order_id || ord.id,
-                          date: ord.created_at ? new Date(ord.created_at).toLocaleString('km-KH') : new Date().toLocaleString('km-KH'),
-                          items: orderItems,
-                          subtotal: sub,
-                          discount: disc,
-                          taxAmount: 0,
-                          taxRate: 0,
-                          taxMode: 'exclusive',
-                          taxLabel: 'ពន្ធអាករ (VAT)',
-                          vatTin: storeSettings.vatTin || invoiceSettings.vatTin || '',
-                          total: tot,
-                          totalKHR: Math.round(tot * (storeSettings.exchangeRate || 4100)),
-                          method: ord.payment || ord.payment_method || 'Cash',
-                          tendered: tot,
-                          change: 0,
-                          customer: ord.customer || ord.customer_name || 'អតិថិជនទូទៅ',
-                          phone: ord.phone || ord.phone_number || ''
-                        });
-                      }}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-300 transition flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>🖨️</span> Re-Print
-                    </button>
-
-                    <a
-                      href={getInvoiceUrl(ord.order_id || ord.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => openInvoiceInBrowser(ord.order_id || ord.id, e)}
-                      className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-3 py-2.5 rounded-xl border border-purple-200 transition inline-flex items-center gap-1 cursor-pointer"
-                      title="មើល និងទាញយកវិក្កយបត្រ PDF លើ Web Browser"
-                    >
-                      <span>🌐</span> PDF Browser
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const res = await sendTelegramNotification({
-                          action: 'send_invoice',
-                          order: {
-                            order_id: ord.order_id || ord.id,
-                            customer_name: ord.customer || ord.customer_name || 'អតិថិជន',
-                            phone: ord.phone || ord.phone_number || 'N/A',
-                            delivery_address: ord.address || ord.delivery_address || 'N/A',
-                            address: ord.address || ord.delivery_address || 'N/A',
-                            google_map_url: gMapUrl,
-                            location_photo_url: locPhotoUrl,
-                            payment_slip_url: slipUrl,
-                            total_amount: totalAmt,
-                            subtotal: subtotalAmt,
-                            discount: discountAmt,
-                            coupon_code: ord.coupon_code || orderItems[0]?.coupon_code || null,
-                            items: orderItems,
-                            payment_method: ord.payment || ord.payment_method || 'Cash',
-                            exchange_rate: storeSettings.exchangeRate || 4100
-                          }
-                        });
-                        if (res && res.success) {
-                          setToastNotification(`✅ បានផ្ញើវិក្កយបត្រ PDF #${ord.order_id || ord.id} ទៅ Telegram ជោគជ័យ!`);
-                          setTimeout(() => setToastNotification(null), 3500);
-                        } else {
-                          alert('❌ ' + (res?.message || 'សូមពិនិត្យមើល Telegram Bot Token ក្នុង Settings'));
-                        }
-                      }}
-                      className="bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs px-3 py-2.5 rounded-xl border border-sky-200 transition flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>✈️</span> Telegram
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenRefundModal(ord)}
-                      className="bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-                      title="ស្នើសុំបង្វិលទំនិញ & សងប្រាក់វិញ (Auto Restock & Revenue Sync)"
-                    >
-                      <span>🔄</span>
-                      <span>{ord.status === 'Refunded' ? 'Refund បន្ថែម' : 'ស្នើសុំ Refund ទំនិញ'}</span>
-                    </button>
-
-                    <button 
-                      onClick={() => setSelectedOrderDetails(null)}
-                      className="bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
-                    >
-                      បិទ (Close)
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          );
-        })()}
+        {/* Note: selectedOrderDetails is rendered globally at root layer */}
 
       </div>
     );
@@ -31847,6 +31350,17 @@ export default function UnifiedAdminDashboard() {
                                             <span>👁️</span>
                                             <span>វិក្កយបត្រ</span>
                                           </button>
+                                          <a
+                                            href={getInvoiceUrl(matchedOrder.order_id || matchedOrder.id)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => openInvoiceInBrowser(matchedOrder.order_id || matchedOrder.id, e)}
+                                            className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-[11px] rounded-lg border border-purple-200 transition inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                                            title="បើកវិក្កយបត្រ PDF លើ Web Browser"
+                                          >
+                                            <span>🌐</span>
+                                            <span>PDF</span>
+                                          </a>
                                           <button
                                             type="button"
                                             onClick={() => {
@@ -31877,7 +31391,7 @@ export default function UnifiedAdminDashboard() {
                                               });
                                             }}
                                             className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] rounded-lg border border-slate-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
-                                            title="បោះពុម្ពវិក្កយបត្រឡើងវិញ"
+                                            title="បោះពុម្ពវិក្កយបត្រ Slip ឡើងវិញ"
                                           >
                                             <span>🖨️</span>
                                             <span>Slip</span>
@@ -39748,12 +39262,510 @@ export default function UnifiedAdminDashboard() {
         </div>
       )}
 
+      {/* ⭐️ MODAL មើលលម្អិតមុខទំនិញក្នុង ORDER (GLOBAL ROOT VIEW ORDER DETAILS & MAPS) ⭐️ */}
+      {selectedOrderDetails && (() => {
+        const ord = selectedOrderDetails;
+        const orderItems = (ord.items && Array.isArray(ord.items) ? ord.items : []).filter(it => it && !it.is_tax_meta && !it.is_delivery_meta && (it.name || it.title));
+        const deliveryMeta = (Array.isArray(ord.items) ? ord.items : []).find(it => it && it.is_delivery_meta);
+        const deliveryFeeAmt = parseFloat(ord.delivery_fee || deliveryMeta?.delivery_fee || 0);
+        const taxMeta = (Array.isArray(ord.items) ? ord.items : []).find(it => it && it.is_tax_meta);
+        const taxAmt = parseFloat(ord.tax_amount || taxMeta?.tax_amount || 0);
+        const rawAddress = ord.address || ord.delivery_address || 'ទូទៅ / នៅហាង';
+        
+        // Extract Telegram & Email from all possible order sources
+        const tgAddressMatch = (rawAddress || '').match(/Telegram(?:\/Email)?:\s*([^\s\]]+)/i);
+        const emailAddressMatch = (rawAddress || '').match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+
+        const itemWithTg = orderItems.find(it => it && (it.telegram || it.customer_telegram));
+        const itemWithEmail = orderItems.find(it => it && (it.email || it.customer_email));
+
+        const rawTelegram = ord.telegram || ord.customer_telegram || 
+                            itemWithTg?.telegram || itemWithTg?.customer_telegram || 
+                            (tgAddressMatch ? tgAddressMatch[1] : null);
+
+        const isTelegramAnEmail = rawTelegram && rawTelegram.includes('@') && rawTelegram.includes('.');
+
+        const rawEmail = ord.email || ord.customer_email || 
+                         itemWithEmail?.email || itemWithEmail?.customer_email || 
+                         (emailAddressMatch ? emailAddressMatch[1] : null) || 
+                         (isTelegramAnEmail ? rawTelegram : null);
+
+        const finalCustomerTelegram = isTelegramAnEmail ? null : rawTelegram;
+        const finalCustomerEmail = rawEmail;
+
+        // Extract Google Maps URL
+        const mapMatch = (rawAddress || '').match(/Maps:\s*(https?:\/\/[^\s\]]+)/i) || 
+                         (rawAddress || '').match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps)[^\s\]]+)/i);
+        const gMapUrl = ord.google_map_url || orderItems[0]?.google_map_url || (mapMatch ? mapMatch[1] : null);
+
+        // Extract Location Photo URL
+        const photoMatch = (rawAddress || '').match(/រូបផ្ទះ:\s*(https?:\/\/[^\s\]]+)/i);
+        const locPhotoUrl = ord.location_photo_url || orderItems[0]?.location_photo_url || (photoMatch ? photoMatch[1] : null);
+
+        // Clean display address (strip out bracketed Maps / Photo / Telegram tags)
+        const cleanDisplayAddress = rawAddress
+          .replace(/\[📍 Maps:.*?\]/gi, '')
+          .replace(/\[🏠 រូបផ្ទះ:.*?\]/gi, '')
+          .replace(/\[✈️ Telegram(?:\/Email)?:.*?\]/gi, '')
+          .replace(/\[✉️ Email:.*?\]/gi, '')
+          .trim();
+        const slipUrl = ord.payment_slip_url || orderItems[0]?.payment_slip_url || null;
+        const totalAmt = Number(ord.total || ord.total_amount || 0);
+        const subtotalAmt = Number(ord.subtotal || ord.total || 0);
+        const discountAmt = Number(ord.discount || 0);
+
+        return (
+          <div 
+            onClick={() => setSelectedOrderDetails(null)}
+            className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200 cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white w-full max-w-xl rounded-3xl shadow-2xl p-5 sm:p-6 border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200 cursor-default"
+            >
+              
+              {/* Header */}
+              <div className="flex justify-between items-start pb-3.5 mb-3.5 border-b border-slate-100 shrink-0">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-slate-900">
+                      📦 វិក្កយបត្រ #{ord.order_id || ord.id}
+                    </h3>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                      ord.order_type === 'ONLINE' ? 'bg-orange-100 text-orange-800 border border-orange-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                    }`}>
+                      {ord.order_type || 'ONLINE'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {ord.created_at ? new Date(ord.created_at).toLocaleString('km-KH') : 'កាលបរិច្ឆេទ N/A'}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setSelectedOrderDetails(null)} 
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Scrollable Content Body */}
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                
+                {/* 📍 Customer & Delivery Destination Card */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <span>👤</span> ព័ត៌មានអតិថិជន & ទីតាំងដឹក
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      ord.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' :
+                      ord.status === 'Shipped' ? 'bg-blue-100 text-blue-800' :
+                      ord.status === 'Preparing' ? 'bg-purple-100 text-purple-800' :
+                      'bg-amber-100 text-amber-800'
+                    }`}>
+                      {ord.status || 'Pending'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/80">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">ឈ្មោះ:</span>
+                      <span className="font-black text-slate-800">{ord.customer || ord.customer_name || 'អតិថិជនទូទៅ'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">លេខទូរស័ព្ទ:</span>
+                      <a href={`tel:${ord.phone || ord.phone_number || ''}`} className="font-bold text-blue-600 hover:underline">
+                        📞 {ord.phone || ord.phone_number || 'N/A'}
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Telegram & Gmail/Email Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/80">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Telegram:</span>
+                      {finalCustomerTelegram ? (
+                        <a
+                          href={`https://t.me/${finalCustomerTelegram.replace(/^@/, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-bold text-sky-600 hover:text-sky-700 hover:underline"
+                        >
+                          <span>✈️</span>
+                          <span>@{finalCustomerTelegram.replace(/^@/, '')}</span>
+                          <span className="text-[10px] text-sky-400">↗</span>
+                        </a>
+                      ) : (ord.phone || ord.phone_number) ? (
+                        <a
+                          href={`https://t.me/+855${(ord.phone || ord.phone_number).replace(/[^0-9]/g, '').replace(/^0/, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 hover:underline"
+                        >
+                          <span>✈️</span>
+                          <span>ឆាត Telegram តាមលេខ ↗</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 italic text-[11px]">មិនបានបញ្ជាក់</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Gmail / Email:</span>
+                      {finalCustomerEmail ? (
+                        <a
+                          href={`mailto:${finalCustomerEmail}`}
+                          className="inline-flex items-center gap-1 font-bold text-rose-600 hover:underline break-all"
+                        >
+                          <span>✉️</span>
+                          <span>{finalCustomerEmail}</span>
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 italic text-[11px]">មិនបានបញ្ជាក់</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">អាសយដ្ឋានដឹកជញ្ជូន:</span>
+                    <p className="font-bold text-slate-800 mt-0.5 whitespace-pre-wrap leading-relaxed">
+                      {cleanDisplayAddress || 'មិនបានបញ្ជាក់'}
+                    </p>
+                  </div>
+
+                  {/* Google Maps Button */}
+                  {gMapUrl ? (
+                    <div className="pt-2">
+                      <a 
+                        href={gMapUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md shadow-blue-600/20 transition cursor-pointer"
+                      >
+                        <span>🗺️</span>
+                        <span>បើកមើលទីតាំងលើ Google Maps ↗</span>
+                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 italic">មិនមានតំណភ្ជាប់ Google Maps ភ្ជាប់មកជាមួយទេ</p>
+                  )}
+
+                  {/* House / Delivery Location Photo */}
+                  {locPhotoUrl && (
+                    <div className="pt-2 border-t border-slate-200/80">
+                      <span className="text-[10px] font-black text-slate-600 block mb-1.5">
+                        🏠 រូបថតទីតាំង / ផ្ទះទទួលទំនិញ:
+                      </span>
+                      <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200">
+                        <img 
+                          src={locPhotoUrl} 
+                          alt="Location" 
+                          className="w-16 h-16 object-cover rounded-lg border border-slate-200 shadow-2xs"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-800">រូបថតបញ្ជាក់ទីតាំង</p>
+                          <a 
+                            href={locPhotoUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-blue-600 hover:underline font-bold text-[10px] mt-1 inline-block"
+                          >
+                            🔍 ពង្រីកមើលរូបភាព ↗
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 🔄 Refund Status Banner if Refunded */}
+                {(ord.status === 'Refunded' || ord.status === 'Partially Refunded' || ord.refund_details) && (
+                  <div className="p-3.5 bg-gradient-to-r from-rose-50 via-pink-50 to-rose-50 rounded-2xl border border-rose-200 text-rose-950 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black flex items-center gap-1.5 text-rose-800">
+                        <span>🔄</span> {ord.status === 'Refunded' ? 'បានបង្វិលប្រាក់ពេញលេញ (Full Refund)' : 'បានបង្វិលប្រាក់ខ្លះ (Partial Refund)'}
+                      </span>
+                      <span className="font-mono text-sm font-black text-rose-700">
+                        -${parseFloat(ord.refunded_amount || ord.refund_details?.refunded_amount || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-rose-800 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {ord.refund_details?.reason && (
+                        <span><b>មូលហេតុ:</b> {ord.refund_details.reason}</span>
+                      )}
+                      {ord.refund_details?.payment_method && (
+                        <span><b>វិធីសងប្រាក់:</b> {ord.refund_details.payment_method}</span>
+                      )}
+                      {parseFloat(ord.refund_details?.refund_delivery_fee || 0) > 0 && (
+                        <span className="text-amber-700 font-bold"><b>ថ្លៃដឹក:</b> +${parseFloat(ord.refund_details.refund_delivery_fee).toFixed(2)}</span>
+                      )}
+                      {parseFloat(ord.refund_details?.refund_tax_amount || 0) > 0 && (
+                        <span className="text-indigo-700 font-bold"><b>ពន្ធ:</b> +${parseFloat(ord.refund_details.refund_tax_amount).toFixed(2)}</span>
+                      )}
+                      {ord.refund_details?.processed_by && (
+                        <span><b>បុគ្គលិក:</b> {ord.refund_details.processed_by}</span>
+                      )}
+                    </div>
+                    {ord.refund_details && (
+                      <div className="pt-1 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCreditNoteData(ord.refund_details)}
+                          className="text-xs font-black bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-xl shadow-xs transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>🧾</span> មើល / បោះពុម្ពប័ណ្ណ Credit Note (Refund Slip)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 📦 Ordered Products List */}
+                <div className="space-y-2">
+                  <h4 className="font-black text-xs text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>📦</span> បញ្ជីមុខទំនិញ ({orderItems.length} មុខ)
+                  </h4>
+                  
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                    {orderItems.length > 0 ? (
+                      orderItems.map((item, idx) => {
+                        const matchedProd = currentStoreProducts?.find(p => String(p.id) === String(item.id) || (p.sku && item.sku && p.sku === item.sku)) || products?.find(p => String(p.id) === String(item.id) || (p.sku && item.sku && p.sku === item.sku));
+                        const itemSku = item.sku || matchedProd?.sku || '';
+
+                        return (
+                          <div key={idx} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                            <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 shadow-2xs flex items-center justify-center">
+                              {item.image_url || item.image || matchedProd?.image_url ? (
+                                <img 
+                                  src={item.image_url || item.image || matchedProd?.image_url} 
+                                  className="w-full h-full object-cover" 
+                                  alt={item.name || ''}
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    if (e.currentTarget.parentElement) {
+                                      e.currentTarget.parentElement.innerHTML = '<span class="text-xl">📦</span>';
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-xl">📦</span>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h5 className="text-xs font-black text-slate-900 truncate">
+                                {itemSku ? <span className="font-mono text-blue-600 mr-1.5 font-black">[{itemSku}]</span> : null}
+                                {item.name}
+                              </h5>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px]">
+                                {itemSku && (
+                                  <span className="bg-blue-50 text-blue-700 font-mono font-black px-1.5 py-0.2 rounded border border-blue-200">
+                                    Code: {itemSku}
+                                  </span>
+                                )}
+                                {item.size && item.size !== 'N/A' && (
+                                  <span className="bg-white text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
+                                    Size: {item.size}
+                                  </span>
+                                )}
+                                {item.color && item.color !== 'N/A' && (
+                                  <span className="bg-white text-slate-700 font-bold px-1.5 py-0.2 rounded border border-slate-200">
+                                    {item.color}
+                                  </span>
+                                )}
+                                <span className="text-slate-400 font-mono">x{item.qty || 1}</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-xs font-black text-slate-900 font-mono">
+                                ${(parseFloat(item.price || 0) * (item.qty || 1)).toFixed(2)}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-mono">@${Number(item.price || 0).toFixed(2)}</p>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-center text-slate-400 py-6 text-xs">គ្មានមុខទំនិញលម្អិត</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 🧾 Payment Breakdown Summary */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>តម្លៃទំនិញសរុប:</span>
+                    <span className="font-mono text-slate-900">${subtotalAmt.toFixed(2)}</span>
+                  </div>
+                  {discountAmt > 0 && (
+                    <div className="flex justify-between text-emerald-600 font-bold">
+                      <span>បញ្ចុះតម្លៃ ({ord.coupon_code || 'Promo'}):</span>
+                      <span className="font-mono">-${discountAmt.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {deliveryFeeAmt > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>ថ្លៃដឹកជញ្ជូន ({deliveryMeta?.destination || 'ដឹកជញ្ជូន'}):</span>
+                      <span className="font-mono text-slate-900">+${deliveryFeeAmt.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {taxAmt > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>{taxMeta?.tax_label || 'ពន្ធអាករ (VAT)'}:</span>
+                      <span className="font-mono text-slate-900">+${taxAmt.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-slate-600">
+                    <span>វិធីទូទាត់:</span>
+                    <span className="font-black text-slate-900 uppercase">{ord.payment || ord.payment_method || 'Cash'}</span>
+                  </div>
+                  <div className="flex justify-between items-baseline pt-2 border-t border-slate-200 font-black text-sm">
+                    <span className="text-slate-900">សរុបទឹកប្រាក់:</span>
+                    <div className="text-right">
+                      <span className="text-[#ff6a00] font-mono text-lg block">${totalAmt.toFixed(2)}</span>
+                      <span className="text-[11px] text-slate-500 font-bold">({Math.round(totalAmt * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Slip Preview in Details Modal */}
+                {slipUrl && (
+                  <div className="p-3.5 bg-blue-50/80 rounded-2xl border border-blue-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-black text-blue-900 flex items-center gap-1.5">
+                        <span>🧾</span> វិក្កយបត្រផ្ទេរប្រាក់ KHQR (Payment Slip):
+                      </span>
+                      <a 
+                        href={slipUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-[11px] font-black text-blue-600 hover:text-blue-800 underline"
+                      >
+                        ពង្រីកមើលធំ ↗
+                      </a>
+                    </div>
+                    <div className="overflow-hidden rounded-xl border border-blue-200/80 bg-white flex justify-center p-1.5">
+                      <img 
+                        src={slipUrl} 
+                        alt="Payment Slip" 
+                        className="h-44 w-auto object-contain rounded-lg shadow-2xs" 
+                      />
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Footer Action Buttons */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sub = Number(ord.subtotal || ord.total || 0);
+                      const disc = Number(ord.discount || 0);
+                      const tot = Number(ord.total || ord.total_amount || 0);
+                      setReceiptData({
+                        orderId: ord.order_id || ord.id,
+                        date: ord.created_at ? new Date(ord.created_at).toLocaleString('km-KH') : new Date().toLocaleString('km-KH'),
+                        items: orderItems,
+                        subtotal: sub,
+                        discount: disc,
+                        taxAmount: 0,
+                        taxRate: 0,
+                        taxMode: 'exclusive',
+                        taxLabel: 'ពន្ធអាករ (VAT)',
+                        vatTin: storeSettings.vatTin || invoiceSettings.vatTin || '',
+                        total: tot,
+                        totalKHR: Math.round(tot * (storeSettings.exchangeRate || 4100)),
+                        method: ord.payment || ord.payment_method || 'Cash',
+                        tendered: tot,
+                        change: 0,
+                        customer: ord.customer || ord.customer_name || 'អតិថិជនទូទៅ',
+                        phone: ord.phone || ord.phone_number || ''
+                      });
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-300 transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>🖨️</span> Re-Print
+                  </button>
+
+                  <a
+                    href={getInvoiceUrl(ord.order_id || ord.id)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => openInvoiceInBrowser(ord.order_id || ord.id, e)}
+                    className="bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold text-xs px-3 py-2.5 rounded-xl border border-purple-200 transition inline-flex items-center gap-1 cursor-pointer"
+                    title="មើល និងទាញយកវិក្កយបត្រ PDF លើ Web Browser"
+                  >
+                    <span>🌐</span> PDF Browser
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const res = await sendTelegramNotification({
+                        action: 'send_invoice',
+                        order: {
+                          order_id: ord.order_id || ord.id,
+                          customer_name: ord.customer || ord.customer_name || 'អតិថិជន',
+                          phone: ord.phone || ord.phone_number || 'N/A',
+                          delivery_address: ord.address || ord.delivery_address || 'N/A',
+                          address: ord.address || ord.delivery_address || 'N/A',
+                          google_map_url: gMapUrl,
+                          location_photo_url: locPhotoUrl,
+                          payment_slip_url: slipUrl,
+                          total_amount: totalAmt,
+                          subtotal: subtotalAmt,
+                          discount: discountAmt,
+                          coupon_code: ord.coupon_code || orderItems[0]?.coupon_code || null,
+                          items: orderItems,
+                          payment_method: ord.payment || ord.payment_method || 'Cash',
+                          exchange_rate: storeSettings.exchangeRate || 4100
+                        }
+                      });
+                      if (res && res.success) {
+                        setToastNotification(`✅ បានផ្ញើវិក្កយបត្រ PDF #${ord.order_id || ord.id} ទៅ Telegram ជោគជ័យ!`);
+                        setTimeout(() => setToastNotification(null), 3500);
+                      } else {
+                        alert('❌ ' + (res?.message || 'សូមពិនិត្យមើល Telegram Bot Token ក្នុង Settings'));
+                      }
+                    }}
+                    className="bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-xs px-3 py-2.5 rounded-xl border border-sky-200 transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>✈️</span> Telegram
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenRefundModal(ord)}
+                    className="bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs px-3.5 py-2.5 rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    title="ស្នើសុំបង្វិលទំនិញ & សងប្រាក់វិញ (Auto Restock & Revenue Sync)"
+                  >
+                    <span>🔄</span>
+                    <span>{ord.status === 'Refunded' ? 'Refund បន្ថែម' : 'ស្នើសុំ Refund ទំនិញ'}</span>
+                  </button>
+
+                  <button 
+                    onClick={() => setSelectedOrderDetails(null)} 
+                    className="bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer"
+                  >
+                    បិទ (Close)
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ⭐️ MODAL វិក្កយបត្រកម្តៅស្តង់ដារ (THERMAL RECEIPT 80MM / 58MM WITH KHQR) ⭐️ */}
         {receiptData && (
           <div 
             onClick={() => setReceiptData(null)}
-            className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in cursor-pointer"
+            className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in cursor-pointer"
           >
             <div 
               onClick={(e) => e.stopPropagation()}
