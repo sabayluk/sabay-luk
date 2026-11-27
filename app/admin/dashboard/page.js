@@ -41022,18 +41022,19 @@ export default function UnifiedAdminDashboard() {
                 <button 
                   type="button"
                   onClick={() => {
-                    const content = document.getElementById('receipt-print-area').innerHTML;
-                    const printWindow = window.open('', '_blank', 'height=650,width=450');
+                    const printArea = document.getElementById('receipt-print-area');
+                    if (!printArea) return;
+                    const content = printArea.innerHTML;
                     const widthCss = thermalPaperSize === '58mm' ? '54mm' : '76mm';
                     const pageCss = thermalPaperSize === '58mm' ? '58mm auto' : '80mm auto';
                     const fontSize = thermalPaperSize === '58mm' ? '10px' : '11px';
 
-                    printWindow.document.write(`
+                    const fullDoc = `
                       <!DOCTYPE html>
                       <html>
                         <head>
                           <meta charset="utf-8">
-                          <title>Receipt - ${receiptData.orderId}</title>
+                          <title>Receipt - ${receiptData?.orderId || ''}</title>
                           <style>
                             @page {
                               size: ${pageCss};
@@ -41083,29 +41084,55 @@ export default function UnifiedAdminDashboard() {
                         </head>
                         <body>
                           ${content}
-                          <script>
-                            function triggerReceiptPrint() {
-                              try {
-                                window.focus();
-                                window.print();
-                              } catch (e) {
-                                console.error('Print error', e);
-                              }
-                            }
-                            if (document.readyState === 'complete') {
-                              setTimeout(triggerReceiptPrint, 250);
-                            } else {
-                              window.addEventListener('load', function() { setTimeout(triggerReceiptPrint, 250); });
-                              setTimeout(triggerReceiptPrint, 1200);
-                            }
-                            window.onafterprint = function() {
-                              window.close();
-                            };
-                          </script>
                         </body>
                       </html>
-                    `);
-                    printWindow.document.close();
+                    `;
+
+                    // ⭐️ Seamless Hidden Iframe Print (No about:blank popup window, supports silent Kiosk Printing) ⭐️
+                    try {
+                      let printFrame = document.getElementById('receipt-hidden-print-frame');
+                      if (!printFrame) {
+                        printFrame = document.createElement('iframe');
+                        printFrame.id = 'receipt-hidden-print-frame';
+                        printFrame.style.position = 'fixed';
+                        printFrame.style.right = '0';
+                        printFrame.style.bottom = '0';
+                        printFrame.style.width = '0';
+                        printFrame.style.height = '0';
+                        printFrame.style.border = 'none';
+                        printFrame.style.opacity = '0';
+                        printFrame.style.zIndex = '-9999';
+                        document.body.appendChild(printFrame);
+                      }
+                      const fDoc = printFrame.contentWindow.document;
+                      fDoc.open();
+                      fDoc.write(fullDoc);
+                      fDoc.close();
+
+                      setTimeout(() => {
+                        try {
+                          printFrame.contentWindow.focus();
+                          printFrame.contentWindow.print();
+                        } catch (frameErr) {
+                          console.warn('Iframe print error, falling back to popup:', frameErr);
+                          const printWindow = window.open('', '_blank', 'height=650,width=450');
+                          if (printWindow) {
+                            printWindow.document.write(fullDoc);
+                            printWindow.document.close();
+                            printWindow.focus();
+                            setTimeout(() => printWindow.print(), 250);
+                          }
+                        }
+                      }, 200);
+                    } catch (e) {
+                      const printWindow = window.open('', '_blank', 'height=650,width=450');
+                      if (printWindow) {
+                        printWindow.document.write(fullDoc);
+                        printWindow.document.close();
+                        printWindow.focus();
+                        setTimeout(() => printWindow.print(), 250);
+                      }
+                    }
                   }} 
                   id="receipt-print-trigger-btn"
                   className="flex-1 bg-black hover:bg-gray-800 text-white py-3 rounded-2xl font-black text-xs transition shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
