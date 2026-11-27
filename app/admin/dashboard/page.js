@@ -4547,7 +4547,17 @@ export default function UnifiedAdminDashboard() {
     policyNote: 'ទំនិញដែលទិញរួចមិនអាចប្តូរជាប្រាក់វិញបានទេ (អាចប្តូរ Size បានក្នុងរង្វង់ ៧ ថ្ងៃ)',
     exchangeRate: 4100,
     themeColor: '#ff6a00',
-    themePreset: 'orange'
+    themePreset: 'orange',
+    // ⭐️ ការកំណត់កាត VIP & ពិន្ទុ LOYALTY ⭐️
+    enableVipSystem: true,
+    enableLoyaltyPoints: true,
+    loyaltyPointsPerDollar: 50, // 50 pts = $1.00
+    loyaltyEarnRate: 1, // $1.00 = 1 pt
+    loyaltyMinRedeemPoints: 10,
+    vipDiscountRegular: 0,
+    vipDiscountLoyal: 5,
+    vipDiscountVip: 10,
+    vipDiscountDiamond: 15
   };
 
   // Helper ទទួលបានការកំណត់ហាងនីមួយៗ (Store-specific Settings Isolation)
@@ -4697,7 +4707,17 @@ export default function UnifiedAdminDashboard() {
         ? (savedParsed?.abaApiKey ?? dbSettings.abaApiKey ?? DEFAULT_STORE_SETTINGS.abaApiKey ?? '')
         : (savedParsed?.abaApiKey ?? dbSettings.abaApiKey ?? ''),
       enableLowStockAlert: savedParsed?.enableLowStockAlert ?? dbSettings.enableLowStockAlert ?? true,
-      lowStockThreshold: savedParsed?.lowStockThreshold ?? dbSettings.lowStockThreshold ?? 5
+      lowStockThreshold: savedParsed?.lowStockThreshold ?? dbSettings.lowStockThreshold ?? 5,
+      // ⭐️ VIP & LOYALTY SCOPED SETTINGS ⭐️
+      enableVipSystem: savedParsed?.enableVipSystem ?? dbSettings?.enableVipSystem ?? true,
+      enableLoyaltyPoints: savedParsed?.enableLoyaltyPoints ?? dbSettings?.enableLoyaltyPoints ?? true,
+      loyaltyPointsPerDollar: Number(savedParsed?.loyaltyPointsPerDollar ?? dbSettings?.loyaltyPointsPerDollar ?? 50) || 50,
+      loyaltyEarnRate: Number(savedParsed?.loyaltyEarnRate ?? dbSettings?.loyaltyEarnRate ?? 1) || 1,
+      loyaltyMinRedeemPoints: Number(savedParsed?.loyaltyMinRedeemPoints ?? dbSettings?.loyaltyMinRedeemPoints ?? 10) || 10,
+      vipDiscountRegular: Number(savedParsed?.vipDiscountRegular ?? dbSettings?.vipDiscountRegular ?? 0),
+      vipDiscountLoyal: Number(savedParsed?.vipDiscountLoyal ?? dbSettings?.vipDiscountLoyal ?? 5),
+      vipDiscountVip: Number(savedParsed?.vipDiscountVip ?? dbSettings?.vipDiscountVip ?? 10),
+      vipDiscountDiamond: Number(savedParsed?.vipDiscountDiamond ?? dbSettings?.vipDiscountDiamond ?? 15)
     };
   };
 
@@ -6166,9 +6186,22 @@ export default function UnifiedAdminDashboard() {
     }
     setCustomerName(cust.name);
     setCustomerPhone(cust.phone || '');
+    // Check VIP discount if VIP system is enabled
+    const vipEnabled = storeSettings.enableVipSystem !== false;
+    let autoDiscount = 0;
     if (cust.discount_percent > 0) {
-      setDiscount(cust.discount_percent);
+      autoDiscount = cust.discount_percent;
+    } else if (vipEnabled && cust.tier) {
+      if (cust.tier === 'DIAMOND') autoDiscount = Number(storeSettings.vipDiscountDiamond ?? 15);
+      else if (cust.tier === 'VIP') autoDiscount = Number(storeSettings.vipDiscountVip ?? 10);
+      else if (cust.tier === 'LOYAL') autoDiscount = Number(storeSettings.vipDiscountLoyal ?? 5);
+      else if (cust.tier === 'REGULAR') autoDiscount = Number(storeSettings.vipDiscountRegular ?? 0);
+    }
+    if (autoDiscount > 0) {
+      setDiscount(autoDiscount);
       setDiscountType('%');
+    } else {
+      setDiscount(0);
     }
     if (cust.tier === 'WHOLESALE') {
       handleSwitchPriceMode('wholesale');
@@ -6610,8 +6643,10 @@ export default function UnifiedAdminDashboard() {
 
   // ៥. គណនាប្រាក់ ($ និង ៛) រួមទាំងពន្ធអាករ VAT 10% & Loyalty Discount Full Option
   const posSubtotal = posCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  const posPointsDiscount = (posUseLoyaltyPoints && posLoyaltyPointsToRedeem > 0)
-    ? Number(((posLoyaltyPointsToRedeem / 50) * 1.0).toFixed(2))
+  const pointsRate = Number(storeSettings.loyaltyPointsPerDollar) > 0 ? Number(storeSettings.loyaltyPointsPerDollar) : 50;
+  const isLoyaltyEnabled = storeSettings.enableLoyaltyPoints !== false;
+  const posPointsDiscount = (isLoyaltyEnabled && posUseLoyaltyPoints && posLoyaltyPointsToRedeem > 0)
+    ? Number(((posLoyaltyPointsToRedeem / pointsRate) * 1.0).toFixed(2))
     : 0;
   const baseDiscountVal = discountType === '%' ? posSubtotal * (Number(discount) / 100) : Number(discount);
   const posDiscountValue = baseDiscountVal + posPointsDiscount;
@@ -7081,11 +7116,13 @@ export default function UnifiedAdminDashboard() {
       const prevDebt = matchedCust ? (parseFloat(matchedCust.debt_balance) || 0) : 0;
       const newDebt = isCreditSale ? (prevDebt + debtChargeAmount) : prevDebt;
 
+      const isLoyaltyEnabled = storeSettings.enableLoyaltyPoints !== false;
+      const earnRate = Number(storeSettings.loyaltyEarnRate) > 0 ? Number(storeSettings.loyaltyEarnRate) : 1;
       const currentPts = matchedCust && matchedCust.loyalty_points != null ? Number(matchedCust.loyalty_points) : 0;
-      const redeemedPoints = (posUseLoyaltyPoints && posLoyaltyPointsToRedeem > 0)
+      const redeemedPoints = (isLoyaltyEnabled && posUseLoyaltyPoints && posLoyaltyPointsToRedeem > 0)
         ? Math.min(currentPts, posLoyaltyPointsToRedeem)
         : 0;
-      const earnedPoints = matchedCust ? Math.floor(posTotal) : 0; // $1 = 1 point
+      const earnedPoints = (matchedCust && isLoyaltyEnabled) ? Math.floor(posTotal * earnRate) : 0;
       const updatedPts = matchedCust ? Math.max(0, currentPts - redeemedPoints + earnedPoints) : null;
 
       if (matchedCust) {
@@ -27015,7 +27052,17 @@ export default function UnifiedAdminDashboard() {
                     );
                     if (matched) {
                       if (matched.phone) setCustomerPhone(matched.phone);
-                      if (matched.discount_percent > 0) setDiscount(matched.discount_percent);
+                      const vipEnabled = storeSettings.enableVipSystem !== false;
+                      let autoDiscount = 0;
+                      if (matched.discount_percent > 0) {
+                        autoDiscount = matched.discount_percent;
+                      } else if (vipEnabled && matched.tier) {
+                        if (matched.tier === 'DIAMOND') autoDiscount = Number(storeSettings.vipDiscountDiamond ?? 15);
+                        else if (matched.tier === 'VIP') autoDiscount = Number(storeSettings.vipDiscountVip ?? 10);
+                        else if (matched.tier === 'LOYAL') autoDiscount = Number(storeSettings.vipDiscountLoyal ?? 5);
+                        else if (matched.tier === 'REGULAR') autoDiscount = Number(storeSettings.vipDiscountRegular ?? 0);
+                      }
+                      if (autoDiscount > 0) setDiscount(autoDiscount);
                       if (matched.tier === 'WHOLESALE') handleSwitchPriceMode('wholesale');
                     }
                   }}
@@ -27158,7 +27205,17 @@ export default function UnifiedAdminDashboard() {
                     const matched = customers.find(c => c.phone && c.phone === val.trim());
                     if (matched) {
                       setCustomerName(matched.name);
-                      if (matched.discount_percent > 0) setDiscount(matched.discount_percent);
+                      const vipEnabled = storeSettings.enableVipSystem !== false;
+                      let autoDiscount = 0;
+                      if (matched.discount_percent > 0) {
+                        autoDiscount = matched.discount_percent;
+                      } else if (vipEnabled && matched.tier) {
+                        if (matched.tier === 'DIAMOND') autoDiscount = Number(storeSettings.vipDiscountDiamond ?? 15);
+                        else if (matched.tier === 'VIP') autoDiscount = Number(storeSettings.vipDiscountVip ?? 10);
+                        else if (matched.tier === 'LOYAL') autoDiscount = Number(storeSettings.vipDiscountLoyal ?? 5);
+                        else if (matched.tier === 'REGULAR') autoDiscount = Number(storeSettings.vipDiscountRegular ?? 0);
+                      }
+                      if (autoDiscount > 0) setDiscount(autoDiscount);
                       if (matched.tier === 'WHOLESALE') handleSwitchPriceMode('wholesale');
                     }
                   }}
@@ -27185,16 +27242,20 @@ export default function UnifiedAdminDashboard() {
                     <div className="flex items-center justify-between text-[11px] bg-slate-900/90 px-2.5 py-1.5 rounded-xl border border-slate-700">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-black text-amber-400 text-[10px]">
-                          {currentCust.tier === 'VIP' ? '🥇 VIP' : currentCust.tier === 'WHOLESALE' ? '💼 បោះដុំ' : currentCust.tier === 'LOYAL' ? '🥈 ស្មោះត្រង់' : '🥉 ទូទៅ'}
+                          {storeSettings.enableVipSystem !== false 
+                            ? (currentCust.tier === 'DIAMOND' ? '💎 Diamond' : currentCust.tier === 'VIP' ? '🥇 VIP' : currentCust.tier === 'WHOLESALE' ? '💼 បោះដុំ' : currentCust.tier === 'LOYAL' ? '🥈 ស្មោះត្រង់' : '🥉 ទូទៅ')
+                            : '🥉 ទូទៅ'}
                         </span>
                         {currentCust.discount_percent > 0 && (
                           <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded border border-emerald-500/30">
                             បញ្ចុះ {currentCust.discount_percent}%
                           </span>
                         )}
-                        <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.2 rounded border border-amber-500/30">
-                          🪙 {custPts} pts
-                        </span>
+                        {storeSettings.enableLoyaltyPoints !== false && (
+                          <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.2 rounded border border-amber-500/30">
+                            🪙 {custPts} pts
+                          </span>
+                        )}
                       </div>
                       
                       {/* ⭐️ ប៊ូតុងបើកកាត VIP ឌីជីថល ផ្ទាល់ក្នុង POS ⭐️ */}
@@ -27213,7 +27274,7 @@ export default function UnifiedAdminDashboard() {
                     </div>
 
                     {/* ⭐️ Loyalty Points Redemption directly inside POS Cart ⭐️ */}
-                    {custPts >= 10 ? (
+                    {storeSettings.enableLoyaltyPoints !== false && custPts >= (storeSettings.loyaltyMinRedeemPoints || 10) ? (
                       <div className="bg-gradient-to-r from-amber-950/70 via-slate-900 to-amber-950/50 border border-amber-500/50 rounded-xl p-2 space-y-1.5 shadow-sm">
                         <div className="flex items-center justify-between">
                           <label className="flex items-center gap-1.5 text-[11px] font-black text-amber-300 cursor-pointer select-none">
@@ -27223,57 +27284,66 @@ export default function UnifiedAdminDashboard() {
                               onChange={(e) => {
                                 const checked = e.target.checked;
                                 setPosUseLoyaltyPoints(checked);
+                                const ptsRate = Number(storeSettings.loyaltyPointsPerDollar) > 0 ? Number(storeSettings.loyaltyPointsPerDollar) : 50;
                                 if (checked && posLoyaltyPointsToRedeem === 0) {
-                                  const maxRedeemable = Math.min(custPts, Math.floor(posSubtotal * 50));
-                                  setPosLoyaltyPointsToRedeem(maxRedeemable >= 10 ? Math.min(50, maxRedeemable) : maxRedeemable);
+                                  const maxRedeemable = Math.min(custPts, Math.floor(posSubtotal * ptsRate));
+                                  setPosLoyaltyPointsToRedeem(maxRedeemable >= 10 ? Math.min(ptsRate, maxRedeemable) : maxRedeemable);
                                 }
                               }}
                               className="w-3.5 h-3.5 rounded text-amber-500 focus:ring-amber-400 cursor-pointer"
                             />
-                            <span>🎁 ប្រើពិន្ទុបញ្ចុះតម្លៃ (50 pts = $1)</span>
+                            <span>🎁 ប្រើពិន្ទុបញ្ចុះតម្លៃ ({storeSettings.loyaltyPointsPerDollar || 50} pts = $1)</span>
                           </label>
                           {posUseLoyaltyPoints && (
                             <span className="text-[11px] font-black text-emerald-400 font-mono">
-                              -${((posLoyaltyPointsToRedeem / 50) * 1.0).toFixed(2)}
+                              -${((posLoyaltyPointsToRedeem / (storeSettings.loyaltyPointsPerDollar || 50)) * 1.0).toFixed(2)}
                             </span>
                           )}
                         </div>
 
-                        {posUseLoyaltyPoints && (
-                          <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-amber-800/50">
-                            {[10, 25, 50, 100, 200].filter(pts => pts <= custPts).map(pts => (
+                        {posUseLoyaltyPoints && (() => {
+                          const ptsRate = Number(storeSettings.loyaltyPointsPerDollar) > 0 ? Number(storeSettings.loyaltyPointsPerDollar) : 50;
+                          const quickPicks = [
+                            Math.round(ptsRate * 0.2),
+                            Math.round(ptsRate * 0.5),
+                            ptsRate,
+                            ptsRate * 2,
+                            ptsRate * 4
+                          ].filter((p, idx, arr) => p > 0 && p <= custPts && arr.indexOf(p) === idx);
+                          const maxRedeem = Math.min(custPts, Math.floor(posSubtotal * ptsRate));
+                          return (
+                            <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-amber-800/50">
+                              {quickPicks.map(pts => (
+                                <button
+                                  key={pts}
+                                  type="button"
+                                  onClick={() => setPosLoyaltyPointsToRedeem(pts)}
+                                  className={`px-1.5 py-0.5 rounded-md text-[9px] font-black transition cursor-pointer ${
+                                    posLoyaltyPointsToRedeem === pts
+                                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                                      : 'bg-slate-900 border border-amber-600/50 text-amber-200 hover:bg-amber-950'
+                                  }`}
+                                >
+                                  {pts} pts (-${(pts / ptsRate).toFixed(2)})
+                                </button>
+                              ))}
                               <button
-                                key={pts}
                                 type="button"
-                                onClick={() => setPosLoyaltyPointsToRedeem(pts)}
-                                className={`px-1.5 py-0.5 rounded-md text-[9px] font-black transition cursor-pointer ${
-                                  posLoyaltyPointsToRedeem === pts
-                                    ? 'bg-amber-500 text-slate-950 shadow-xs'
-                                    : 'bg-slate-900 border border-amber-600/50 text-amber-200 hover:bg-amber-950'
-                                }`}
+                                onClick={() => setPosLoyaltyPointsToRedeem(maxRedeem)}
+                                className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-amber-600 text-white hover:bg-amber-500 transition cursor-pointer"
                               >
-                                {pts} pts (-${(pts/50).toFixed(2)})
+                                ប្រើអស់ ({maxRedeem} pts)
                               </button>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const maxPts = Math.min(custPts, Math.floor(posSubtotal * 50));
-                                setPosLoyaltyPointsToRedeem(maxPts);
-                              }}
-                              className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-amber-600 text-white hover:bg-amber-500 transition cursor-pointer"
-                            >
-                              ប្រើអស់ ({Math.min(custPts, Math.floor(posSubtotal * 50))} pts)
-                            </button>
-                          </div>
-                        )}
+                            </div>
+                          );
+                        })()}
                       </div>
-                    ) : (
+                    ) : storeSettings.enableLoyaltyPoints !== false ? (
                       <div className="text-[10px] text-slate-400 bg-slate-900/60 px-2 py-1 rounded-lg border border-slate-800 flex items-center justify-between">
                         <span>🪙 ពិន្ទុសន្សំ: {custPts} pts</span>
-                        <span className="text-amber-400/80">ទិញ $1 ទទួលបាន 1 pt</span>
+                        <span className="text-amber-400/80">ទិញ $1 ទទួលបាន {storeSettings.loyaltyEarnRate || 1} pt</span>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Credit & Debt Health Bar */}
                     <div className={`flex items-center justify-between text-[10px] font-bold px-2.5 py-1 rounded-xl border transition ${
@@ -28363,72 +28433,83 @@ export default function UnifiedAdminDashboard() {
                         </div>
 
                         {/* Loyalty Points Redemption Option */}
-                        {custPts >= 10 ? (
-                          <div className="bg-gradient-to-r from-amber-50 to-orange-50/60 border border-amber-300 rounded-2xl p-3 space-y-2 shadow-xs">
-                            <div className="flex items-center justify-between">
-                              <label className="flex items-center gap-2 text-xs font-black text-amber-900 cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  checked={posUseLoyaltyPoints}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setPosUseLoyaltyPoints(checked);
-                                    if (checked && posLoyaltyPointsToRedeem === 0) {
-                                      const maxRedeemable = Math.min(custPts, Math.floor(posSubtotal * 50));
-                                      setPosLoyaltyPointsToRedeem(maxRedeemable >= 10 ? Math.min(50, maxRedeemable) : maxRedeemable);
-                                    }
-                                  }}
-                                  className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
-                                />
-                                <span>🎁 ប្រើប្រាស់ពិន្ទុ Loyalty (៥០ ពិន្ទុ = $១.០០)</span>
-                              </label>
-                              {posUseLoyaltyPoints && (
-                                <span className="text-xs font-black text-emerald-700 font-mono">
-                                  បញ្ចុះតម្លៃ: -${((posLoyaltyPointsToRedeem / 50) * 1.0).toFixed(2)}
-                                </span>
-                              )}
-                            </div>
-
-                            {posUseLoyaltyPoints && (
-                              <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-amber-200">
-                                <span className="text-[10px] font-bold text-amber-800 mr-1">ជ្រើសរើសពិន្ទុ:</span>
-                                {[10, 25, 50, 100, 200, 500].filter(pts => pts <= custPts).map(pts => (
-                                  <button
-                                    key={pts}
-                                    type="button"
-                                    onClick={() => setPosLoyaltyPointsToRedeem(pts)}
-                                    className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer ${
-                                      posLoyaltyPointsToRedeem === pts
-                                        ? 'bg-amber-600 text-white shadow-xs'
-                                        : 'bg-white border border-amber-300 text-amber-900 hover:bg-amber-100'
-                                    }`}
-                                  >
-                                    {pts} pts (-${(pts/50).toFixed(2)})
-                                  </button>
-                                ))}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const maxPts = Math.min(custPts, Math.floor(posSubtotal * 50));
-                                    setPosLoyaltyPointsToRedeem(maxPts);
-                                  }}
-                                  className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-200 text-amber-950 hover:bg-amber-300 transition cursor-pointer"
-                                >
-                                  ប្រើអស់ ({Math.min(custPts, Math.floor(posSubtotal * 50))} pts)
-                                </button>
+                        {storeSettings.enableLoyaltyPoints !== false && (
+                          custPts >= (storeSettings.loyaltyMinRedeemPoints || 10) ? (
+                            <div className="bg-gradient-to-r from-amber-50 to-orange-50/60 border border-amber-300 rounded-2xl p-3 space-y-2 shadow-xs">
+                              <div className="flex items-center justify-between">
+                                <label className="flex items-center gap-2 text-xs font-black text-amber-900 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={posUseLoyaltyPoints}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setPosUseLoyaltyPoints(checked);
+                                      const ptsRate = Number(storeSettings.loyaltyPointsPerDollar) > 0 ? Number(storeSettings.loyaltyPointsPerDollar) : 50;
+                                      if (checked && posLoyaltyPointsToRedeem === 0) {
+                                        const maxRedeemable = Math.min(custPts, Math.floor(posSubtotal * ptsRate));
+                                        setPosLoyaltyPointsToRedeem(maxRedeemable >= 10 ? Math.min(ptsRate, maxRedeemable) : maxRedeemable);
+                                      }
+                                    }}
+                                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 cursor-pointer"
+                                  />
+                                  <span>🎁 ប្រើប្រាស់ពិន្ទុ Loyalty ({storeSettings.loyaltyPointsPerDollar || 50} ពិន្ទុ = $១.០០)</span>
+                                </label>
+                                {posUseLoyaltyPoints && (
+                                  <span className="text-xs font-black text-emerald-700 font-mono">
+                                    បញ្ចុះតម្លៃ: -${((posLoyaltyPointsToRedeem / (storeSettings.loyaltyPointsPerDollar || 50)) * 1.0).toFixed(2)}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-gray-500 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 flex items-center justify-between">
-                            <span className="flex items-center gap-1">
-                              <span>🪙</span>
-                              <span>ពិន្ទុសន្សំ: <b>{custPts} pts</b></span>
-                            </span>
-                            <span className="text-[10px] text-amber-800 font-medium">
-                              សន្សំឱ្យបាន 10 pts ឡើងទៅដើម្បីប្រើកាត់លុយ ($1 = 1 pt)
-                            </span>
-                          </div>
+
+                              {posUseLoyaltyPoints && (() => {
+                                const ptsRate = Number(storeSettings.loyaltyPointsPerDollar) > 0 ? Number(storeSettings.loyaltyPointsPerDollar) : 50;
+                                const quickPicks = [
+                                  Math.round(ptsRate * 0.2),
+                                  Math.round(ptsRate * 0.5),
+                                  ptsRate,
+                                  ptsRate * 2,
+                                  ptsRate * 4
+                                ].filter((p, idx, arr) => p > 0 && p <= custPts && arr.indexOf(p) === idx);
+                                const maxPts = Math.min(custPts, Math.floor(posSubtotal * ptsRate));
+                                return (
+                                  <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-amber-200">
+                                    <span className="text-[10px] font-bold text-amber-800 mr-1">ជ្រើសរើសពិន្ទុ:</span>
+                                    {quickPicks.map(pts => (
+                                      <button
+                                        key={pts}
+                                        type="button"
+                                        onClick={() => setPosLoyaltyPointsToRedeem(pts)}
+                                        className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                                          posLoyaltyPointsToRedeem === pts
+                                            ? 'bg-amber-600 text-white shadow-xs'
+                                            : 'bg-white border border-amber-300 text-amber-900 hover:bg-amber-100'
+                                        }`}
+                                      >
+                                        {pts} pts (-${(pts / ptsRate).toFixed(2)})
+                                      </button>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => setPosLoyaltyPointsToRedeem(maxPts)}
+                                      className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-amber-200 text-amber-950 hover:bg-amber-300 transition cursor-pointer"
+                                    >
+                                      ប្រើអស់ ({maxPts} pts)
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-gray-500 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200 flex items-center justify-between">
+                              <span className="flex items-center gap-1">
+                                <span>🪙</span>
+                                <span>ពិន្ទុសន្សំ: <b>{custPts} pts</b></span>
+                              </span>
+                              <span className="text-[10px] text-amber-800 font-medium">
+                                សន្សំឱ្យបាន {storeSettings.loyaltyMinRedeemPoints || 10} pts ឡើងទៅដើម្បីប្រើកាត់លុយ ($1 = {storeSettings.loyaltyEarnRate || 1} pt)
+                              </span>
+                            </div>
+                          )
                         )}
                       </div>
                     );
@@ -29718,6 +29799,318 @@ export default function UnifiedAdminDashboard() {
     </div>
   );
 
+
+  // ⭐️ ផ្ទាំងកំណត់ប្រព័ន្ធកាត VIP & ពិន្ទុ LOYALTY (VIP & LOYALTY SETTINGS CONTROL CENTER) ⭐️
+  const renderVipLoyaltySettings = () => {
+    const isVipOn = storeSettings.enableVipSystem !== false;
+    const isLoyaltyOn = storeSettings.enableLoyaltyPoints !== false;
+    const pointsPerDollar = Number(storeSettings.loyaltyPointsPerDollar) > 0 ? Number(storeSettings.loyaltyPointsPerDollar) : 50;
+    const earnRate = Number(storeSettings.loyaltyEarnRate) > 0 ? Number(storeSettings.loyaltyEarnRate) : 1;
+    const minRedeem = Number(storeSettings.loyaltyMinRedeemPoints) > 0 ? Number(storeSettings.loyaltyMinRedeemPoints) : 10;
+    const regularDisc = storeSettings.vipDiscountRegular ?? 0;
+    const loyalDisc = storeSettings.vipDiscountLoyal ?? 5;
+    const vipDisc = storeSettings.vipDiscountVip ?? 10;
+    const diamondDisc = storeSettings.vipDiscountDiamond ?? 15;
+
+    return (
+      <div className="bg-white rounded-3xl border-2 border-amber-200/90 shadow-md p-5 sm:p-6 space-y-6 animate-in fade-in">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <span className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center text-2xl shadow-md shadow-amber-500/25 shrink-0">
+              ⚙️
+            </span>
+            <div>
+              <h3 className="font-black text-gray-900 text-base sm:text-lg flex items-center gap-2 flex-wrap">
+                <span>កំណត់ប្រព័ន្ធកាត VIP & ពិន្ទុរង្វាន់</span>
+                <span className="text-[10px] bg-amber-100 text-amber-800 font-black px-2.5 py-0.5 rounded-full uppercase">
+                  VIP & Loyalty Settings
+                </span>
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                កន្លែងសារ៉េបើក/បិទ ដំណើរការកាត VIP, កំណត់ % បញ្ចុះតម្លៃតាមកាត, និងកំណត់អត្រាពិន្ទុប្តូរយកលុយ
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                handleSaveStoreSettings(null, 'loyalty');
+                showAlertModal({
+                  title: 'រក្សាទុកជោគជ័យ',
+                  message: '🎉 បានរក្សាទុកការកំណត់កាត VIP និងអត្រាពិន្ទុ Loyalty ដោយជោគជ័យ!',
+                  type: 'success',
+                  icon: '💾'
+                });
+              }}
+              className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white px-5 py-2.5 rounded-2xl text-xs font-black shadow-md shadow-orange-500/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <span>💾</span>
+              <span>រក្សាទុកការកំណត់</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 2 Main Columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* 🪪 COLUMN 1: កាត VIP (VIP MEMBER SYSTEM) */}
+          <div className={`p-5 rounded-3xl border-2 transition-all space-y-4 shadow-2xs ${
+            isVipOn
+              ? 'border-indigo-200 bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30'
+              : 'border-gray-200 bg-gray-50/60 opacity-80'
+          }`}>
+            <div className="flex items-center justify-between pb-3 border-b border-indigo-100">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">🪪</span>
+                <div>
+                  <h4 className="font-black text-sm text-indigo-950">ប្រព័ន្ធកាត VIP (VIP Member System)</h4>
+                  <p className="text-[11px] text-indigo-600 font-bold">បើក/បិទ & កំណត់បញ្ចុះតម្លៃតាមកាត</p>
+                </div>
+              </div>
+
+              {/* Master Toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  updateStoreSettingsImmediate({ enableVipSystem: !isVipOn });
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+                  isVipOn
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                }`}
+              >
+                <span>{isVipOn ? '✓ កំពុងបើក (ON)' : '✕ បានបិទ (OFF)'}</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs font-bold text-gray-600">
+                <span>កម្រិតសមាជិក (VIP Tiers)</span>
+                <span>% បញ្ចុះតម្លៃក្នុង POS</span>
+              </div>
+
+              {/* Regular */}
+              <div className="flex items-center justify-between p-2.5 bg-white rounded-2xl border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🥉</span>
+                  <div>
+                    <span className="text-xs font-black text-gray-800">Regular Member</span>
+                    <p className="text-[10px] text-gray-400 font-bold">0 - 99 ពិន្ទុ (កម្រិតទូទៅ)</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={regularDisc}
+                    onChange={(e) => updateStoreSettingsImmediate({ vipDiscountRegular: parseFloat(e.target.value) || 0 })}
+                    className="w-16 text-center font-black text-xs p-1.5 rounded-xl border border-gray-300 focus:border-indigo-500 outline-none"
+                  />
+                  <span className="text-xs font-black text-gray-600">%</span>
+                </div>
+              </div>
+
+              {/* Loyal */}
+              <div className="flex items-center justify-between p-2.5 bg-white rounded-2xl border border-emerald-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🥈</span>
+                  <div>
+                    <span className="text-xs font-black text-emerald-900">Loyal Member</span>
+                    <p className="text-[10px] text-emerald-600 font-bold">100 - 299 ពិន្ទុ (អតិថិជនស្មោះត្រង់)</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={loyalDisc}
+                    onChange={(e) => updateStoreSettingsImmediate({ vipDiscountLoyal: parseFloat(e.target.value) || 0 })}
+                    className="w-16 text-center font-black text-xs p-1.5 rounded-xl border-2 border-emerald-300 focus:border-emerald-500 outline-none text-emerald-700"
+                  />
+                  <span className="text-xs font-black text-emerald-800">%</span>
+                </div>
+              </div>
+
+              {/* VIP */}
+              <div className="flex items-center justify-between p-2.5 bg-white rounded-2xl border border-amber-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🥇</span>
+                  <div>
+                    <span className="text-xs font-black text-amber-900">VIP Member</span>
+                    <p className="text-[10px] text-amber-600 font-bold">300 - 999 ពិន្ទុ (កាត VIP)</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={vipDisc}
+                    onChange={(e) => updateStoreSettingsImmediate({ vipDiscountVip: parseFloat(e.target.value) || 0 })}
+                    className="w-16 text-center font-black text-xs p-1.5 rounded-xl border-2 border-amber-300 focus:border-amber-500 outline-none text-amber-700"
+                  />
+                  <span className="text-xs font-black text-amber-800">%</span>
+                </div>
+              </div>
+
+              {/* Diamond */}
+              <div className="flex items-center justify-between p-2.5 bg-white rounded-2xl border border-indigo-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">💎</span>
+                  <div>
+                    <span className="text-xs font-black text-indigo-900">Diamond VIP</span>
+                    <p className="text-[10px] text-indigo-600 font-bold">1,000+ ពិន្ទុ (កាតពេជ្រកំពូល)</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={diamondDisc}
+                    onChange={(e) => updateStoreSettingsImmediate({ vipDiscountDiamond: parseFloat(e.target.value) || 0 })}
+                    className="w-16 text-center font-black text-xs p-1.5 rounded-xl border-2 border-indigo-300 focus:border-indigo-500 outline-none text-indigo-700"
+                  />
+                  <span className="text-xs font-black text-indigo-800">%</span>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-indigo-50/70 rounded-xl border border-indigo-100 text-[11px] text-indigo-800 font-medium">
+                💡 <b>អត្ថប្រយោជន៍:</b> រាល់ពេលជ្រើសរើសឈ្មោះអតិថិជនក្នុង POS ប្រព័ន្ធនឹងបញ្ចុះតម្លៃ % តាមកាតដោយស្វ័យប្រវត្តិ។
+              </div>
+            </div>
+          </div>
+
+          {/* 🎁 COLUMN 2: ពិន្ទុ LOYALTY & ប្តូរយកលុយ (POINTS TO CASH) */}
+          <div className={`p-5 rounded-3xl border-2 transition-all space-y-4 shadow-2xs ${
+            isLoyaltyOn
+              ? 'border-amber-200 bg-gradient-to-br from-amber-50/50 via-white to-orange-50/30'
+              : 'border-gray-200 bg-gray-50/60 opacity-80'
+          }`}>
+            <div className="flex items-center justify-between pb-3 border-b border-amber-100">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">🎁</span>
+                <div>
+                  <h4 className="font-black text-sm text-amber-950">ប្រព័ន្ធពិន្ទុ Loyalty (Loyalty Points)</h4>
+                  <p className="text-[11px] text-amber-700 font-bold">បើក/បិទ & កំណត់អត្រាប្តូរយកលុយ</p>
+                </div>
+              </div>
+
+              {/* Master Toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  updateStoreSettingsImmediate({ enableLoyaltyPoints: !isLoyaltyOn });
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+                  isLoyaltyOn
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                }`}
+              >
+                <span>{isLoyaltyOn ? '✓ កំពុងបើក (ON)' : '✕ បានបិទ (OFF)'}</span>
+              </button>
+            </div>
+
+            <div className="space-y-3.5">
+              {/* Points to Cash Rate */}
+              <div className="bg-white p-3.5 rounded-2xl border border-amber-200 space-y-2.5">
+                <label className="block text-xs font-black text-amber-950 uppercase tracking-wide">
+                  💵 អត្រាប្តូរពិន្ទុទៅជាលុយ (Points to Cash Rate)
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-gray-600">កំណត់</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={pointsPerDollar}
+                    onChange={(e) => updateStoreSettingsImmediate({ loyaltyPointsPerDollar: Math.max(1, parseInt(e.target.value, 10) || 50) })}
+                    className="w-20 text-center font-black text-sm p-2 rounded-xl border-2 border-amber-400 focus:border-amber-600 outline-none text-amber-900 bg-amber-50/40"
+                  />
+                  <span className="text-xs font-black text-gray-800">ពិន្ទុ (pts) =</span>
+                  <span className="text-sm font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                    $1.00 USD
+                  </span>
+                </div>
+
+                {/* Quick preset buttons */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[10px] text-gray-500 font-bold">រើសកម្រិតទូទៅ:</span>
+                  {[20, 50, 100, 200].map(val => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => updateStoreSettingsImmediate({ loyaltyPointsPerDollar: val })}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                        pointsPerDollar === val
+                          ? 'bg-amber-500 text-slate-950 border-amber-500 font-black'
+                          : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                      }`}
+                    >
+                      {val} pts = $1
+                    </button>
+                  ))}
+                </div>
+
+                <p className="text-[11px] text-gray-500 font-medium">
+                  (១ ពិន្ទុស្មើនឹង ${(1 / pointsPerDollar).toFixed(3)} ដុល្លារ ឬ ≈ {Math.round((1 / pointsPerDollar) * (storeSettings.exchangeRate || 4100))} រៀល)
+                </p>
+              </div>
+
+              {/* Earning & Min Redeem */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="bg-white p-3 rounded-2xl border border-gray-200">
+                  <label className="block text-[11px] font-black text-gray-700 uppercase mb-1">
+                    ⭐ អត្រាសន្ំពិន្ទុពេលទិញ
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-gray-500">$1 =</span>
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.5"
+                      value={earnRate}
+                      onChange={(e) => updateStoreSettingsImmediate({ loyaltyEarnRate: parseFloat(e.target.value) || 1 })}
+                      className="w-16 text-center font-black text-xs p-1.5 rounded-xl border border-gray-300 focus:border-amber-500 outline-none"
+                    />
+                    <span className="text-xs font-black text-gray-700">pts</span>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-2xl border border-gray-200">
+                  <label className="block text-[11px] font-black text-gray-700 uppercase mb-1">
+                    🎯 ពិន្ទុអប្បបរមាដើម្បីប្តូរ
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="1"
+                      value={minRedeem}
+                      onChange={(e) => updateStoreSettingsImmediate({ loyaltyMinRedeemPoints: parseInt(e.target.value, 10) || 10 })}
+                      className="w-16 text-center font-black text-xs p-1.5 rounded-xl border border-gray-300 focus:border-amber-500 outline-none"
+                    />
+                    <span className="text-xs font-black text-gray-700">pts</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-2.5 bg-amber-50/70 rounded-xl border border-amber-100 text-[11px] text-amber-900 font-medium">
+                💡 <b>ចំណាំ:</b> នៅពេលបិទប្រព័ន្ធពិន្ទុ (OFF) ផ្ទាំង POS នឹងលាក់ប្រអប់កាត់ពិន្ទុ ហើយមិនបូកពិន្ទុថ្មីជូនភ្ញៀវឡើយ។
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
   const CustomersView = (initialSubView) => {
     const storeCustomers = currentStoreCustomers;
 
@@ -30077,7 +30470,9 @@ export default function UnifiedAdminDashboard() {
           </div>
         ) : effectiveSubView === 'loyalty' ? (
           /* LOYALTY KPIs (4 Focused Cards) */
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* ⭐️ VIP & LOYALTY SETTINGS CONTROL CENTER ⭐️ */}
+            {renderVipLoyaltySettings()}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
               <div className="bg-gradient-to-br from-amber-50 to-white p-5 rounded-3xl border-2 border-amber-200 shadow-xs">
                 <div className="flex items-center justify-between">
@@ -30102,8 +30497,12 @@ export default function UnifiedAdminDashboard() {
                   <span className="text-[11px] font-black text-emerald-900 uppercase">តម្លៃពិន្ទុជាសាច់ប្រាក់</span>
                   <span className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-black">💰</span>
                 </div>
-                <p className="text-3xl font-black text-emerald-700 mt-2">${estimatedPointsValue.toFixed(2)}</p>
-                <p className="text-[11px] text-emerald-600 font-bold mt-0.5">100 pts = $1.00 កាត់កងវិក្កយបត្រ</p>
+                <p className="text-3xl font-black text-emerald-700 mt-2">
+                  ${(totalLoyaltyPoints / (Number(storeSettings.loyaltyPointsPerDollar) || 50)).toFixed(2)}
+                </p>
+                <p className="text-[11px] text-emerald-600 font-bold mt-0.5">
+                  {storeSettings.loyaltyPointsPerDollar || 50} pts = $1.00 កាត់កងវិក្កយបត្រ
+                </p>
               </div>
 
               <div className="bg-gradient-to-br from-indigo-50 to-white p-5 rounded-3xl border border-indigo-200 shadow-xs">
@@ -30111,7 +30510,9 @@ export default function UnifiedAdminDashboard() {
                   <span className="text-[11px] font-black text-indigo-900 uppercase">បញ្ចុះតម្លៃអតិបរមា</span>
                   <span className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-black">💎</span>
                 </div>
-                <p className="text-3xl font-black text-indigo-950 mt-2">15% <span className="text-xs font-bold text-indigo-600">Off</span></p>
+                <p className="text-3xl font-black text-indigo-950 mt-2">
+                  {storeSettings.vipDiscountDiamond ?? 15}% <span className="text-xs font-bold text-indigo-600">Off</span>
+                </p>
                 <p className="text-[11px] text-indigo-600 font-bold mt-0.5">កម្រិត Diamond VIP</p>
               </div>
             </div>
@@ -30121,11 +30522,11 @@ export default function UnifiedAdminDashboard() {
               <div className="bg-gradient-to-br from-gray-50 to-white p-4.5 rounded-3xl border border-gray-200/80 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-black text-gray-700 uppercase">🥉 Regular Member</span>
-                  <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full font-black">0% Off</span>
+                  <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full font-black">{storeSettings.vipDiscountRegular ?? 0}% Off</span>
                 </div>
                 <p className="text-xs text-gray-500 font-bold">កម្រិតធម្មតា (0 - 99 ពិន្ទុ)</p>
                 <div className="mt-3 text-[11px] text-gray-600 space-y-1">
-                  <p className="flex items-center gap-1.5 font-bold">✓ រាល់ការទិញ $1 ទទួលបាន 1 ពិន្ទុ</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ រាល់ការទិញ $1 ទទួលបាន {storeSettings.loyaltyEarnRate || 1} ពិន្ទុ</p>
                   <p className="flex items-center gap-1.5 font-bold">✓ ប្តូរពិន្ទុកាត់កងវិក្កយបត្រ POS បាន</p>
                 </div>
               </div>
@@ -30133,23 +30534,23 @@ export default function UnifiedAdminDashboard() {
               <div className="bg-gradient-to-br from-emerald-50/70 to-white p-4.5 rounded-3xl border border-emerald-200/80 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-black text-emerald-800 uppercase">🥈 Loyal Member</span>
-                  <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-black">5% Off</span>
+                  <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-black">{storeSettings.vipDiscountLoyal ?? 5}% Off</span>
                 </div>
                 <p className="text-xs text-emerald-600 font-bold">អតិថិជនស្មោះត្រង់ (100 - 299 ពិន្ទុ)</p>
                 <div className="mt-3 text-[11px] text-emerald-800 space-y-1">
-                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃ 5% លើគ្រប់វិក្កយបត្រ</p>
-                  <p className="flex items-center gap-1.5 font-bold">✓ រាល់ការទិញ $1 ទទួលបាន 1.2 ពិន្ទុ</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃ {storeSettings.vipDiscountLoyal ?? 5}% លើគ្រប់វិក្កយបត្រ</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ សន្ំពិន្ទុប្តូរយកលុយវិញបាន</p>
                 </div>
               </div>
 
               <div className="bg-gradient-to-br from-amber-50/70 to-white p-4.5 rounded-3xl border border-amber-200/80 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-black text-amber-800 uppercase">🥇 VIP Member</span>
-                  <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black">10% Off</span>
+                  <span className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black">{storeSettings.vipDiscountVip ?? 10}% Off</span>
                 </div>
                 <p className="text-xs text-amber-700 font-bold">អតិថិជន VIP (300 - 999 ពិន្ទុ)</p>
                 <div className="mt-3 text-[11px] text-amber-900 space-y-1">
-                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃ 10% ស្វ័យប្រវត្តក្នុង POS</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃ {storeSettings.vipDiscountVip ?? 10}% ស្វ័យប្រវត្តក្នុង POS</p>
                   <p className="flex items-center gap-1.5 font-bold">✓ ទទួលបានកាតសមាជិក VIP ឌីជីថល</p>
                 </div>
               </div>
@@ -30157,11 +30558,11 @@ export default function UnifiedAdminDashboard() {
               <div className="bg-gradient-to-br from-indigo-50/70 to-white p-4.5 rounded-3xl border border-indigo-200/80 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-black text-indigo-800 uppercase">💎 Diamond VIP</span>
-                  <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-black">15% Off</span>
+                  <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-black">{storeSettings.vipDiscountDiamond ?? 15}% Off</span>
                 </div>
                 <p className="text-xs text-indigo-600 font-bold">កម្រិតពេជ្រកំពូល (1,000+ ពិន្ទុ)</p>
                 <div className="mt-3 text-[11px] text-indigo-900 space-y-1">
-                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃពិសេស 15%</p>
+                  <p className="flex items-center gap-1.5 font-bold">✓ បញ្ចុះតម្លៃពិសេស {storeSettings.vipDiscountDiamond ?? 15}%</p>
                   <p className="flex items-center gap-1.5 font-bold">✓ សេវាដឹកជញ្ជូនឥតគិតថ្លៃ & អាទិភាព</p>
                 </div>
               </div>
@@ -32052,34 +32453,46 @@ export default function UnifiedAdminDashboard() {
                   </div>
 
                   {/* ⭐️ Card Perks & Financial Value Description ⭐️ */}
-                  <div className="w-full bg-gradient-to-br from-orange-50/80 via-white to-amber-50/60 rounded-2xl p-4 border border-orange-200/90 text-xs space-y-2 shadow-xs">
-                    <div className="flex items-center justify-between pb-1.5 border-b border-orange-200/80">
-                      <span className="font-bold text-gray-600 flex items-center gap-1.5">
-                        <span>🎁</span> អត្ថប្រយោជន៍កម្រិតសមាជិក:
-                      </span>
-                      <span className="font-black text-orange-800 bg-orange-100 px-2 py-0.5 rounded-lg border border-orange-200">
-                        {tierLabel} (បញ្ចុះ {c.discount_percent || 0}%)
-                      </span>
-                    </div>
+                  {(() => {
+                    const ptsRate = Number(storeSettings.loyaltyPointsPerDollar) > 0 ? Number(storeSettings.loyaltyPointsPerDollar) : 50;
+                    const vipEnabled = storeSettings.enableVipSystem !== false;
+                    const tierDisc = c.discount_percent > 0 
+                      ? c.discount_percent 
+                      : (vipEnabled 
+                          ? (c.tier === 'DIAMOND' ? (storeSettings.vipDiscountDiamond ?? 15) : c.tier === 'VIP' ? (storeSettings.vipDiscountVip ?? 10) : c.tier === 'LOYAL' ? (storeSettings.vipDiscountLoyal ?? 5) : (storeSettings.vipDiscountRegular ?? 0))
+                          : 0);
+                    const pointsDollarVal = (m.loyaltyPoints / ptsRate);
+                    return (
+                      <div className="w-full bg-gradient-to-br from-orange-50/80 via-white to-amber-50/60 rounded-2xl p-4 border border-orange-200/90 text-xs space-y-2 shadow-xs">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-orange-200/80">
+                          <span className="font-bold text-gray-600 flex items-center gap-1.5">
+                            <span>🎁</span> អត្ថប្រយោជន៍កម្រិតសមាជិក:
+                          </span>
+                          <span className="font-black text-orange-800 bg-orange-100 px-2 py-0.5 rounded-lg border border-orange-200">
+                            {tierLabel} (បញ្ចុះ {tierDisc}%)
+                          </span>
+                        </div>
 
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-gray-600 flex items-center gap-1.5">
-                        <span>💰</span> តម្លៃទឹកប្រាក់ប្តូរបាន:
-                      </span>
-                      <span className="font-mono font-black text-emerald-700 text-sm">
-                        ${(m.loyaltyPoints / 50).toFixed(2)} <span className="text-gray-500 text-[11px] font-sans font-bold">(≈ {Math.round((m.loyaltyPoints / 50) * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
-                      </span>
-                    </div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-gray-600 flex items-center gap-1.5">
+                            <span>💰</span> តម្លៃទឹកប្រាក់ប្តូរបាន:
+                          </span>
+                          <span className="font-mono font-black text-emerald-700 text-sm">
+                            ${pointsDollarVal.toFixed(2)} <span className="text-gray-500 text-[11px] font-sans font-bold">(≈ {Math.round(pointsDollarVal * (storeSettings.exchangeRate || 4100)).toLocaleString()} ៛)</span>
+                          </span>
+                        </div>
 
-                    <div className="flex items-center justify-between text-gray-700 pt-1 border-t border-orange-100">
-                      <span className="font-bold flex items-center gap-1.5">
-                        <span>⚡</span> លក្ខខណ្ឌប្តូរពិន្ទុ:
-                      </span>
-                      <span className="font-bold text-gray-900">
-                        50 ពិន្ទុ = បញ្ចុះតម្លៃ $1 ក្នុង POS
-                      </span>
-                    </div>
-                  </div>
+                        <div className="flex items-center justify-between text-gray-700 pt-1 border-t border-orange-100">
+                          <span className="font-bold flex items-center gap-1.5">
+                            <span>⚡</span> លក្ខខណ្ឌប្តូរពិន្ទុ:
+                          </span>
+                          <span className="font-bold text-gray-900">
+                            {ptsRate} ពិន្ទុ = បញ្ចុះតម្លៃ $1 ក្នុង POS
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 </div>
 
@@ -32589,6 +33002,7 @@ export default function UnifiedAdminDashboard() {
           { id: 'contact', label: '📞 ទំនាក់ទំនង & បណ្តាញសង្គម', desc: 'Telegram, Facebook, TikTok, ទូរស័ព្ទ' },
           { id: 'announcement', label: '📢 សាររត់លើគេ', desc: 'Marquee Announcement' },
           { id: 'payment', label: '💳 គណនី KHQR / ABA', desc: 'Bank QR & Merchant Info' },
+          { id: 'loyalty', label: '🎁 កាត VIP & ពិន្ទុ Loyalty', desc: 'បើក/បិទ, អត្រាប្តូរពិន្ទុ, % បញ្ចុះតម្លៃ VIP' },
           { id: 'delivery', label: '🚚 ដឹកជញ្ជូន & 🏛️ ពន្ធអាករ (VAT)', desc: 'ថ្លៃដឹកជញ្ជូន, Free Shipping & ពន្ធ VAT' },
           { id: 'security', label: '🔒 ប្តូរលេខសម្ងាត់ហាង (Change Password)', desc: 'ប្តូរលេខសម្ងាត់/PIN ចូលគ្រប់គ្រងហាង' },
           { id: 'data', label: '🧹 សម្អាតទិន្នន័យ & Export', desc: 'Reset ទិន្នន័យតេស្ត & ទាញយក Excel' },
@@ -33459,6 +33873,13 @@ export default function UnifiedAdminDashboard() {
             </div>
           )}
 
+          {/* TAB: VIP & LOYALTY SETTINGS */}
+          {activeSettingsSubTab === 'loyalty' && (
+            <div className="space-y-6 animate-in fade-in">
+              {renderVipLoyaltySettings()}
+            </div>
+          )}
+
           {/* TAB 8: STORE PASSWORD / SECURITY */}
           {activeSettingsSubTab === 'security' && (
             <div className="space-y-6 animate-in fade-in">
@@ -34174,6 +34595,7 @@ export default function UnifiedAdminDashboard() {
                 {activeSettingsSubTab === 'contact' && '📞 ទំនាក់ទំនង & បណ្តាញសង្គម'}
                 {activeSettingsSubTab === 'announcement' && '📢 សាររត់លើគេ (Marquee)'}
                 {activeSettingsSubTab === 'payment' && '💳 គណនី KHQR / ABA'}
+                {activeSettingsSubTab === 'loyalty' && '🎁 កាត VIP & ពិន្ទុ Loyalty'}
                 {activeSettingsSubTab === 'delivery' && '🚚 ដឹកជញ្ជូន & អត្រាប្តូរប្រាក់'}
                 {activeSettingsSubTab === 'security' && '🔒 សុវត្ថិភាព & លេខសម្ងាត់'}
                 {activeSettingsSubTab === 'data' && '🧹 សុខភាពទិន្នន័យ & Export'}
