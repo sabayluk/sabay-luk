@@ -2784,6 +2784,13 @@ export default function UnifiedAdminDashboard() {
         return c;
       }));
       setCustomerModalOpen(false);
+      if (activeTab === 'pos' && editingCustomer && (customerName === editingCustomer.name || customerPhone === editingCustomer.phone)) {
+        setCustomerName(custFormName.trim());
+        setCustomerPhone(custFormPhone.trim());
+        if (parseFloat(custFormDiscount) > 0) {
+          setDiscount(parseFloat(custFormDiscount));
+        }
+      }
       showAlertModal({
         title: 'កែប្រែអតិថិជនជោគជ័យ',
         message: `✅ បានកែប្រែព័ត៌មានអតិថិជន "${custFormName.trim()}" ដោយជោគជ័យ!`,
@@ -2814,6 +2821,14 @@ export default function UnifiedAdminDashboard() {
       };
       setCustomers(prev => [newCustomer, ...prev]);
       setCustomerModalOpen(false);
+      // Auto-select into POS cart if in POS view
+      if (activeTab === 'pos') {
+        setCustomerName(newCustomer.name);
+        setCustomerPhone(newCustomer.phone || '');
+        if (newCustomer.discount_percent > 0) {
+          setDiscount(newCustomer.discount_percent);
+        }
+      }
       showAlertModal({
         title: 'បង្កើតអតិថិជនថ្មីជោគជ័យ',
         message: `🎉 បានបង្កើតអតិថិជនថ្មី "${newCustomer.name}" ចូលក្នុងប្រព័ន្ធដោយជោគជ័យ!`,
@@ -26912,30 +26927,9 @@ export default function UnifiedAdminDashboard() {
         {/* ផ្នែកខាងស្តាំ: កន្រ្តកលក់ (Cart Management - Desktop docked, Mobile Drawer) */}
         <div className="hidden lg:flex w-[420px] xl:w-[440px] bg-white border-l border-gray-200 shadow-2xl flex-col h-full z-10 shrink-0">
           <div className="p-4 border-b border-gray-100 bg-slate-900 text-white flex justify-between items-center">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-black text-base flex items-center gap-1.5">
-                  <span>🛒</span> កន្រ្តកទំនិញ (POS Cart)
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchPriceMode(posPriceMode === 'wholesale' ? 'retail' : 'wholesale')}
-                  className={`text-[10px] font-black px-2 py-0.5 rounded-lg border transition cursor-pointer flex items-center gap-1 ${
-                    posPriceMode === 'wholesale'
-                      ? 'bg-purple-500/20 text-purple-300 border-purple-400/40 hover:bg-purple-500/30'
-                      : 'bg-blue-500/20 text-blue-300 border-blue-400/40 hover:bg-blue-500/30'
-                  }`}
-                  title="ចុចដើម្បីប្តូររបៀបលក់ ដុំ / រាយ"
-                >
-                  <span>{posPriceMode === 'wholesale' ? '💼' : '🛍️'}</span>
-                  <span>{posPriceMode === 'wholesale' ? 'តម្លៃបោះដុំ' : 'តម្លៃលក់រាយ'}</span>
-                  <span className="text-[9px] opacity-70">↺</span>
-                </button>
-              </div>
-              <p className="text-[11px] text-slate-400 truncate max-w-[220px] mt-0.5">
-                អតិថិជន: <span className="text-white font-bold">{customerName || 'អតិថិជនទូទៅ'}</span>
-              </p>
-            </div>
+            <h3 className="font-black text-base flex items-center gap-1.5">
+              <span>🛒</span> កន្រ្តកទំនិញ (POS Cart)
+            </h3>
             <div className="flex gap-2 items-center">
               <span className="bg-blue-600 text-xs font-bold px-2.5 py-1 rounded-full">{posCart.length} មុខ</span>
               {posCart.length > 0 && (
@@ -28568,7 +28562,7 @@ export default function UnifiedAdminDashboard() {
                           type="button"
                           onClick={() => {
                             setPaymentModalOpen(false);
-                            setNewCustomerModalOpen(true);
+                            openCreateCustomerModal();
                           }}
                           className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-xs transition cursor-pointer"
                         >
@@ -30673,6 +30667,17 @@ export default function UnifiedAdminDashboard() {
           </div>
         </div>
 
+                {/* ⭐️ Customer, Debt & Loyalty modals are rendered globally at root level ⭐️ */}
+
+      </div>
+    );
+  };
+
+  // ⭐️ MODALS គ្រប់គ្រងអតិថិជន បំណុល និងពិន្ទុ LOYALTY (GLOBAL ROOT LEVEL MODALS) ⭐️
+  const renderCustomerModals = () => {
+    const storeCustomers = currentStoreCustomers;
+    return (
+      <>
         {/* ៥. MODAL បង្កើត / កែប្រែអតិថិជន (Add / Edit Customer Modal) */}
         {customerModalOpen && (
           <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
@@ -32518,10 +32523,10 @@ export default function UnifiedAdminDashboard() {
             </div>
           );
         })()}
-
-      </div>
+      </>
     );
   };
+
 
   // ================= 🏪 ផ្ទាំងកំណត់ហាង & ម៉ាកយីហោ (STORE SETTINGS & BRANDING VIEW) =================
   const StoreSettingsView = () => (
@@ -37026,6 +37031,10 @@ export default function UnifiedAdminDashboard() {
         {activeTab === 'upgrade_plan' && UpgradePlanFullView()}
         {activeTab === 'stores' && canManageStores && MasterStoresManagementView()}
       </main>
+
+      {/* ⭐️ GLOBAL CUSTOMER, DEBT & LOYALTY MODALS (ACCESSIBLE FROM POS & EVERYWHERE) ⭐️ */}
+      {renderCustomerModals()}
+
 
 
       {/* ⭐️ ផ្ទាំងដោនឡូត & ដំឡើងកម្មវិធីប្រើប្រាស់ពេលគ្មាន INTERNET (PWA INSTALL MODAL) ⭐️ */}
