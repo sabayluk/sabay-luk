@@ -37614,6 +37614,15 @@ export default function UnifiedAdminDashboard() {
                     iconColor: 'text-amber-400',
                     isSpecial: true
                   },
+                  { 
+                    id: 'faq_support', 
+                    name: 'ជំនួយ & FAQs ម្ចាស់ហាង', 
+                    icon: '💡', 
+                    perm: 'staff', 
+                    tag: 'ជំនួយ ↗', 
+                    iconColor: 'text-amber-400',
+                    linkUrl: '/faq'
+                  },
                   ...(canManageStores ? [{ id: 'stores', name: 'គ្រប់គ្រងហាងទាំងអស់', icon: '🌐', perm: 'stores', countText: inactiveStores.length > 0 ? `⚠️ ${inactiveStores.length} អសកម្ម` : `${registeredStores.length} ហាង`, iconColor: inactiveStores.length > 0 ? 'text-rose-400' : 'text-amber-400', isSpecial: true }] : [])
                 ]
               }
@@ -37687,6 +37696,10 @@ export default function UnifiedAdminDashboard() {
                             key={tab.id}
                             type="button"
                             onClick={() => {
+                              if (tab.linkUrl) {
+                                window.open(tab.linkUrl, '_blank');
+                                return;
+                              }
                               if (tab.id === 'upload') {
                                 handleOpenNewProductForm();
                               } else {
@@ -37817,6 +37830,24 @@ export default function UnifiedAdminDashboard() {
                 <span>ដោនឡូត / ដំឡើងកម្មវិធី</span>
               </button>
             </div>
+
+            {/* 💡 FAQ & Help Hub សម្រាប់ម្ចាស់ហាង (Dedicated Store Owner Support) */}
+            <a
+              href="/faq"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl transition-all duration-200 transform hover:scale-[1.02] active:scale-95 text-amber-300 bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-yellow-500/15 hover:from-amber-500/25 hover:to-orange-500/25 font-black border border-amber-500/30 shadow-xs group cursor-pointer text-left mb-2"
+              title="មជ្ឈមណ្ឌលសំណួរញឹកញាប់ និងជំនួយបច្ចេកទេសសម្រាប់ម្ចាស់ហាង (Store Owner FAQ & Help)"
+            >
+              <span className="flex items-center gap-2.5 text-xs">
+                <span className="text-base group-hover:rotate-12 transition-transform">💡</span>
+                <span>FAQ / ជំនួយម្ចាស់ហាង</span>
+              </span>
+              <span className="text-[10px] font-black bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-lg border border-amber-400/30 flex items-center gap-1 group-hover:bg-amber-400/30 transition">
+                <span>ជំនួយ</span>
+                <span className="group-hover:translate-x-0.5 transition-transform">↗</span>
+              </span>
+            </a>
 
             <button 
               type="button"

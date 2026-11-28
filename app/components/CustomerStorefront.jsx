@@ -3067,33 +3067,6 @@ export default function CustomerStorefront({ storeSlug: propStoreSlug } = {}) {
               <span className="hidden sm:inline">{t('trackOrder', 'តាមដានការកុម្ម៉ង់')}</span>
             </button>
 
-            {/* 💡 ប៊ូតុង សំណួរញឹកញាប់ & ជំនួយ (FAQ & Help Hub) */}
-            <Link
-              href="/faq"
-              className={`cursor-pointer hidden lg:flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl transition text-xs font-bold border shadow-2xs ${
-                themeMode === 'dark'
-                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700'
-                  : 'bg-amber-50/70 hover:bg-amber-100/80 text-amber-800 border-amber-200/80 hover:text-[#ff6a00]'
-              }`}
-              title="មជ្ឈមណ្ឌលសំណួរញឹកញាប់ និងជំនួយ (FAQs Hub)"
-            >
-              <span className="text-sm">💡</span>
-              <span>FAQ / ជំនួយ</span>
-            </Link>
-
-            {/* 🔑 ប៊ូតុង ចូលគ្រប់គ្រងហាង (Store Admin Login) */}
-            <a 
-              href="/login"
-              className={`cursor-pointer hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-2xl transition text-xs font-bold border shadow-2xs ${
-                themeMode === 'dark'
-                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-                  : 'bg-gray-50 hover:bg-orange-50 text-gray-700 hover:text-[#ff6a00] border-gray-200 hover:border-orange-200'
-              }`}
-              title="ចូលផ្ទាំងគ្រប់គ្រង Admin របស់ហាងនេះ"
-            >
-              <span>🔑</span>
-              <span>{language === 'km' ? 'ចូលគ្រប់គ្រង' : 'Admin Login'}</span>
-            </a>
 
             {/* Cart Button with Total Preview (Hidden on Mobile because Bottom Nav has Cart) */}
             <button 
