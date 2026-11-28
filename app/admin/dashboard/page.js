@@ -12241,6 +12241,9 @@ export default function UnifiedAdminDashboard() {
 
   const [feedbackSearch, setFeedbackSearch] = useState('');
   const [feedbackStarFilter, setFeedbackStarFilter] = useState('all');
+  const [replyingFeedbackId, setReplyingFeedbackId] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [viewingFeedbackPhoto, setViewingFeedbackPhoto] = useState(null);
 
   // Reload feedbacks on storage change
   useEffect(() => {
@@ -12313,6 +12316,70 @@ export default function UnifiedAdminDashboard() {
 
   const FeedbacksView = () => {
     const storeFeedbacks = currentStoreFeedbacks;
+
+    // Handle Admin Store Response to Review
+    const handleSaveReply = (fbId) => {
+      if (!replyText.trim()) return;
+      const updated = adminFeedbacks.map(f => f.id === fbId ? {
+        ...f,
+        admin_reply: replyText.trim(),
+        admin_reply_at: new Date().toISOString()
+      } : f);
+      setAdminFeedbacks(updated);
+      localStorage.setItem('sabay_luk_product_feedbacks', JSON.stringify(updated));
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('storage'));
+      setReplyingFeedbackId(null);
+      setReplyText('');
+      setToastNotification('✅ បានឆ្លើយតបទៅកាន់ Feedback រួចរាល់!');
+      setTimeout(() => setToastNotification(null), 3000);
+    };
+
+    const handleDeleteReply = (fbId) => {
+      const updated = adminFeedbacks.map(f => f.id === fbId ? {
+        ...f,
+        admin_reply: null,
+        admin_reply_at: null
+      } : f);
+      setAdminFeedbacks(updated);
+      localStorage.setItem('sabay_luk_product_feedbacks', JSON.stringify(updated));
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('storage'));
+    };
+
+    const handleToggleFeatured = (fbId) => {
+      const target = adminFeedbacks.find(f => f.id === fbId);
+      const nextVal = !target?.is_featured;
+      const updated = adminFeedbacks.map(f => f.id === fbId ? { ...f, is_featured: nextVal } : f);
+      setAdminFeedbacks(updated);
+      localStorage.setItem('sabay_luk_product_feedbacks', JSON.stringify(updated));
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('storage'));
+      setToastNotification(nextVal ? '⭐ បានដាក់ជា Featured Review!' : 'ដោះ Featured Review រួចរាល់');
+      setTimeout(() => setToastNotification(null), 2500);
+    };
+
+    // Export Feedbacks to Excel
+    const handleExportFeedbacksExcel = async () => {
+      if (filtered.length === 0) {
+        alert('មិនមាន Feedback សម្រាប់ Export ទេ!');
+        return;
+      }
+      const XLSX = await getXlsx();
+      const dataToExport = filtered.map((fb, idx) => ({
+        'ល.រ': idx + 1,
+        'លេខកុម្ម៉ង់ (Order ID)': fb.order_id || '',
+        'កាលបរិច្ឆេទ': fb.created_at ? new Date(fb.created_at).toLocaleString('km-KH') : '',
+        'អតិថិជន': fb.customer_name || 'អតិថិជន',
+        'ពិន្ទុ (Stars)': Number(fb.rating) || 5,
+        'មុខទំនិញ': fb.product_name || '',
+        'មតិយោបល់ (Comment)': fb.comment || '',
+        'Tags': Array.isArray(fb.tags) ? fb.tags.join(', ') : '',
+        'ការឆ្លើយតបពីហាង': fb.admin_reply || ''
+      }));
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Customer_Feedbacks');
+      XLSX.writeFile(wb, `Sabay_Luk_Feedbacks_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    };
+
     const filtered = storeFeedbacks.filter(fb => {
       const matchSearch = !feedbackSearch || 
         (fb.customer_name && fb.customer_name.toLowerCase().includes(feedbackSearch.toLowerCase())) ||
@@ -12347,6 +12414,9 @@ export default function UnifiedAdminDashboard() {
                 <span className="text-[11px] font-black bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full uppercase tracking-wider">
                   100% Verified Buyers
                 </span>
+                <span className="text-[11px] font-black bg-amber-100 text-amber-800 px-3 py-1 rounded-full uppercase tracking-wider">
+                  Full Option
+                </span>
               </div>
               <p className="text-xs sm:text-sm text-gray-500 mt-1">
                 មតិយោបល់ពិតប្រាកដដែលផ្ទៀងផ្ទាត់ដោយប្រព័ន្ធ (១ ការបញ្ជាទិញ = ១ Feedback លើទំនិញដែលបានទិញ)
@@ -12357,8 +12427,16 @@ export default function UnifiedAdminDashboard() {
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               type="button"
+              onClick={handleExportFeedbacksExcel}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black text-xs transition border border-emerald-300 flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              title="ទាញចេញជា Excel"
+            >
+              <span>📥</span> Export Excel
+            </button>
+            <button
+              type="button"
               onClick={markFeedbacksAsRead}
-              className="px-4 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black text-xs transition border border-emerald-200 flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              className="px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs transition border border-slate-200 flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
             >
               <span>✓</span> សម្គាល់ថាបានអានរួច
             </button>
@@ -12366,7 +12444,7 @@ export default function UnifiedAdminDashboard() {
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-4 py-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xs transition border border-gray-200 flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2.5 rounded-2xl bg-gray-900 hover:bg-black text-white font-black text-xs transition shadow-md flex items-center gap-1.5 cursor-pointer"
             >
               <span>👁️</span> មើលលើមុខហាង
             </a>
@@ -12452,59 +12530,203 @@ export default function UnifiedAdminDashboard() {
           ) : (
             <div className="divide-y divide-gray-100">
               {filtered.map((fb) => (
-                <div key={fb.id} className="p-5 hover:bg-gray-50/60 transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-black text-xs text-gray-900">{fb.customer_name || 'អតិថិជន'}</span>
-                      <span className="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
-                        <span>✅</span> Verified Buyer
-                      </span>
-                      <span className="text-[11px] font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">
-                        #{fb.order_id}
-                      </span>
-                      <span className="text-amber-400 text-xs font-black ml-1">
-                        {'★'.repeat(Number(fb.rating) || 5)}
-                      </span>
-                      <span className="text-[10px] text-gray-400">
-                        {fb.created_at ? new Date(fb.created_at).toLocaleString('km-KH') : 'ថ្មីៗ'}
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-gray-500 font-bold flex items-center gap-1.5">
-                      <span>🛍️ ទំនិញ:</span>
-                      <span className="text-gray-900">{fb.product_name}</span>
-                    </div>
-
-                    <p className="text-xs text-gray-700 leading-relaxed font-medium pt-0.5">
-                      "{fb.comment}"
-                    </p>
-
-                    {Array.isArray(fb.tags) && fb.tags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-1">
-                        {fb.tags.map((t, idx) => (
-                          <span key={idx} className="text-[9px] font-bold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
-                            {t}
+                <div key={fb.id} className="p-5 hover:bg-gray-50/60 transition flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-xs text-gray-900">{fb.customer_name || 'អតិថិជន'}</span>
+                        <span className="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                          <span>✅</span> Verified Buyer
+                        </span>
+                        {fb.is_featured && (
+                          <span className="text-[10px] font-black bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1">
+                            <span>⭐</span> Featured Review
                           </span>
-                        ))}
+                        )}
+                        <span className="text-[11px] font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">
+                          #{fb.order_id}
+                        </span>
+                        <span className="text-amber-400 text-xs font-black ml-1">
+                          {'★'.repeat(Number(fb.rating) || 5)}
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          {fb.created_at ? new Date(fb.created_at).toLocaleString('km-KH') : 'ថ្មីៗ'}
+                        </span>
                       </div>
-                    )}
+
+                      <div className="text-xs text-gray-500 font-bold flex items-center gap-1.5">
+                        <span>🛍️ ទំនិញ:</span>
+                        <span className="text-gray-900 font-black">{fb.product_name}</span>
+                      </div>
+
+                      <p className="text-xs text-gray-800 leading-relaxed font-medium pt-0.5">
+                        "{fb.comment}"
+                      </p>
+
+                      {/* Customer Uploaded Photo Thumbnail */}
+                      {(fb.photo_url || fb.photo) && (
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setViewingFeedbackPhoto(fb.photo_url || fb.photo)}
+                            className="inline-flex items-center gap-2 p-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer group/photo"
+                          >
+                            <img
+                              src={fb.photo_url || fb.photo}
+                              alt="Review Photo"
+                              className="w-14 h-14 object-cover rounded-lg group-hover/photo:scale-105 transition"
+                            />
+                            <span className="text-[10px] text-slate-500 font-bold pr-2 flex items-center gap-1">
+                              <span>📸</span> ចុចមើលរូបភាពធំ
+                            </span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Review Tags */}
+                      {Array.isArray(fb.tags) && fb.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {fb.tags.map((t, idx) => (
+                            <span key={idx} className="text-[9px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md">
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFeatured(fb.id)}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs border transition cursor-pointer flex items-center gap-1 ${
+                          fb.is_featured
+                            ? 'bg-amber-100 text-amber-800 border-amber-300'
+                            : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-200'
+                        }`}
+                        title={fb.is_featured ? 'ដោះចេញពី Featured' : 'ដាក់ជា Featured Review'}
+                      >
+                        <span>{fb.is_featured ? '⭐' : '☆'}</span>
+                        <span>{fb.is_featured ? 'Featured' : 'Pin'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (replyingFeedbackId === fb.id) {
+                            setReplyingFeedbackId(null);
+                            setReplyText('');
+                          } else {
+                            setReplyingFeedbackId(fb.id);
+                            setReplyText(fb.admin_reply || '');
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-black text-xs border border-blue-200 transition cursor-pointer flex items-center gap-1"
+                        title="ឆ្លើយតបទៅកាន់អតិថិជន"
+                      >
+                        <span>💬</span> ឆ្លើយតប
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFeedback(fb.id)}
+                        className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-black text-xs border border-red-200 transition cursor-pointer flex items-center gap-1"
+                        title="លុប Feedback នេះ"
+                      >
+                        <span>🗑️</span> លុប
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-center">
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFeedback(fb.id)}
-                      className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-black text-xs border border-red-200 transition cursor-pointer flex items-center gap-1"
-                      title="លុប Feedback នេះ"
-                    >
-                      <span>🗑️</span> លុប
-                    </button>
-                  </div>
+                  {/* Public Store Response Box */}
+                  {fb.admin_reply && (
+                    <div className="ml-0 sm:ml-4 bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3 text-xs space-y-1">
+                      <div className="flex items-center justify-between font-black text-amber-900 text-[11px]">
+                        <span className="flex items-center gap-1.5">
+                          <span>🏪</span> ការឆ្លើយតបពីហាង ({storeSettings.storeName || 'SABAY LUK'})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReply(fb.id)}
+                          className="text-gray-400 hover:text-rose-600 text-[10px] font-bold cursor-pointer transition"
+                        >
+                          ✕ លុប
+                        </button>
+                      </div>
+                      <p className="text-gray-700 italic font-medium">"{fb.admin_reply}"</p>
+                    </div>
+                  )}
+
+                  {/* Inline Reply Form */}
+                  {replyingFeedbackId === fb.id && (
+                    <div className="ml-0 sm:ml-4 bg-blue-50/60 border border-blue-200 rounded-2xl p-3.5 space-y-2.5 animate-in fade-in duration-150">
+                      <label className="text-xs font-black text-blue-900 block">
+                        💬 សរសេរការឆ្លើយតបផ្លូវការពីហាង (Store Public Response):
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="ឧ. អរគុណបងសម្រាប់ការគាំទ្រ និងការជឿជាក់លើហាងយើងខ្ញុំ! សង្ឃឹមថានឹងបានបម្រើបងម្តងទៀត 🙏✨"
+                        className="w-full bg-white border border-blue-200 focus:border-blue-500 rounded-xl p-2.5 text-xs font-medium outline-none"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setReplyingFeedbackId(null); setReplyText(''); }}
+                          className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-xs font-bold cursor-pointer"
+                        >
+                          បោះបង់
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveReply(fb.id)}
+                          className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black cursor-pointer shadow-sm active:scale-95"
+                        >
+                          រក្សាទុកការឆ្លើយតប
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* ⭐️ Fullscreen Lightbox for Customer Review Photo ⭐️ */}
+        {viewingFeedbackPhoto && (
+          <div 
+            onClick={() => setViewingFeedbackPhoto(null)}
+            className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()} 
+              className="relative max-w-xl w-full bg-white rounded-3xl overflow-hidden shadow-2xl p-4 animate-in zoom-in-95 cursor-default"
+            >
+              <div className="flex justify-between items-center pb-2 mb-2 border-b border-gray-100">
+                <span className="font-black text-sm text-gray-900 flex items-center gap-1.5">
+                  <span>📸</span> រូបថតជាក់ស្តែងពីអតិថិជន (Customer Review Photo)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setViewingFeedbackPhoto(null)}
+                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="max-h-[75vh] overflow-auto rounded-2xl flex items-center justify-center bg-gray-950">
+                <img 
+                  src={viewingFeedbackPhoto} 
+                  alt="Customer Review Photo Full" 
+                  className="max-w-full max-h-[72vh] object-contain"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     );
