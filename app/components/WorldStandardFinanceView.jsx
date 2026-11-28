@@ -411,6 +411,167 @@ export default function WorldStandardFinanceView({
     };
   }, [filteredOrders, filteredExpenses, products, bankBalances, exchangeRate]);
 
+  // Print Official A4 Statement of Profit or Loss (IFRS Format)
+  const handlePrintPnLStatement = () => {
+    const storeName = storeSettings.storeName || activeStore?.name || 'SABAY LUK';
+    const storePhone = storeSettings.phone || activeStore?.phone || '';
+    const storeAddress = storeSettings.address || activeStore?.address || '';
+    const periodLabel = getPeriodLabel();
+    const curr = currencyMode;
+
+    const htmlContent = `
+      <div style="font-family: 'Kantumruy Pro', 'Segoe UI', Tahoma, sans-serif; padding: 25px 35px; color: #0f172a; max-width: 800px; margin: 0 auto; line-height: 1.5;">
+        <!-- Header -->
+        <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.5px;">${storeName}</h1>
+          <p style="margin: 3px 0 0; font-size: 11px; color: #475569;">${storeAddress ? storeAddress + ' • ' : ''}${storePhone ? 'ទូរស័ព្ទ៖ ' + storePhone : ''}</p>
+          <div style="margin-top: 10px; display: inline-block; background: #f1f5f9; padding: 6px 16px; border-radius: 6px; border: 1px solid #cbd5e1;">
+            <h2 style="margin: 0; font-size: 14px; font-weight: 900; text-transform: uppercase;">របាយការណ៍ចំណេញ និងខាត (STATEMENT OF PROFIT OR LOSS)</h2>
+            <p style="margin: 2px 0 0; font-size: 11px; color: #334155;">ស្ដង់ដារគណនេយ្យអន្តរជាតិ IFRS for SMEs • គ្រាគណនេយ្យ៖ <b>${periodLabel}</b></p>
+          </div>
+        </div>
+
+        <!-- Meta Info -->
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 15px; color: #475569;">
+          <div><b>កាលបរិច្ឆេទចេញរបាយការណ៍៖</b> ${new Date().toLocaleDateString('km-KH')} • ${new Date().toLocaleTimeString('km-KH')}</div>
+          <div><b>រូបិយប័ណ្ណ៖</b> <b>${curr}</b> (1 USD = ${exchangeRate.toLocaleString()} KHR)</div>
+        </div>
+
+        <!-- Multi-Step P&L Table -->
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <thead>
+            <tr style="border-bottom: 2px solid #0f172a; background: #f8fafc; font-weight: 900; text-transform: uppercase;">
+              <th style="padding: 8px 10px; text-align: left; width: 80px;">កូដ IFRS</th>
+              <th style="padding: 8px 10px; text-align: left;">បរិយាយធាតុគណនេយ្យ</th>
+              <th style="padding: 8px 10px; text-align: right; width: 120px;">ទឹកប្រាក់ (${curr})</th>
+              <th style="padding: 8px 10px; text-align: right; width: 70px;">ភាគរយ %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="background: #f8fafc; font-weight: bold;">
+              <td style="padding: 7px 10px; font-family: monospace;">4000</td>
+              <td style="padding: 7px 10px;">ចំណូលដុលពីការលក់ (Gross Sales Revenue)</td>
+              <td style="padding: 7px 10px; text-align: right; font-family: monospace;">${formatMoney(metrics.grossSales)}</td>
+              <td style="padding: 7px 10px; text-align: right; font-family: monospace;">100%</td>
+            </tr>
+            <tr style="color: #64748b;">
+              <td style="padding: 6px 10px; font-family: monospace;">4090</td>
+              <td style="padding: 6px 10px; padding-left: 25px;">ដក៖ ការបញ្ចុះតម្លៃ & ប័ណ្ណ Promotion (Discounts)</td>
+              <td style="padding: 6px 10px; text-align: right; font-family: monospace; color: #dc2626;">-${formatMoney(metrics.totalDiscounts)}</td>
+              <td style="padding: 6px 10px; text-align: right; font-family: monospace;">${metrics.grossSales > 0 ? ((metrics.totalDiscounts / metrics.grossSales) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="background: #ecfdf5; font-weight: 900; border-top: 1px solid #10b981; border-bottom: 1px solid #10b981;">
+              <td style="padding: 8px 10px; font-family: monospace; color: #047857;">4100</td>
+              <td style="padding: 8px 10px; color: #047857;">ចំណូលលក់សុទ្ធ (NET SALES REVENUE)</td>
+              <td style="padding: 8px 10px; text-align: right; font-family: monospace; font-size: 12px; color: #047857;">${formatMoney(metrics.netRevenue)}</td>
+              <td style="padding: 8px 10px; text-align: right; font-family: monospace; color: #047857;">${metrics.grossSales > 0 ? ((metrics.netRevenue / metrics.grossSales) * 100).toFixed(1) : 100}%</td>
+            </tr>
+            <tr style="color: #334155; font-weight: bold;">
+              <td style="padding: 7px 10px; font-family: monospace;">5000</td>
+              <td style="padding: 7px 10px; padding-left: 25px;">ដក៖ ថ្លៃដើមទំនិញលក់ចេញ (Cost of Goods Sold - COGS)</td>
+              <td style="padding: 7px 10px; text-align: right; font-family: monospace; color: #b45309;">-${formatMoney(metrics.totalCOGS)}</td>
+              <td style="padding: 7px 10px; text-align: right; font-family: monospace;">${metrics.netRevenue > 0 ? ((metrics.totalCOGS / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="background: #eff6ff; font-weight: 900; border-top: 2px solid #3b82f6; border-bottom: 2px solid #3b82f6;">
+              <td style="padding: 8px 10px; font-family: monospace; color: #1d4ed8;">5900</td>
+              <td style="padding: 8px 10px; color: #1d4ed8;">ប្រាក់ចំណេញដុល (GROSS PROFIT)</td>
+              <td style="padding: 8px 10px; text-align: right; font-family: monospace; font-size: 12px; color: #1d4ed8;">${formatMoney(metrics.grossProfit)}</td>
+              <td style="padding: 8px 10px; text-align: right; font-family: monospace; color: #1d4ed8;">${metrics.grossMarginPercent.toFixed(1)}%</td>
+            </tr>
+            <tr style="background: #f8fafc; font-weight: 900;">
+              <td style="padding: 7px 10px; font-family: monospace;">6000</td>
+              <td style="padding: 7px 10px;" colspan="3">ដក៖ ចំណាយប្រតិបត្តិការទូទៅ (OPERATING EXPENSES - OPEX)</td>
+            </tr>
+            <tr style="color: #475569;">
+              <td style="padding: 5px 10px; font-family: monospace;">6100</td>
+              <td style="padding: 5px 10px; padding-left: 25px;">ថ្លៃជួលទីតាំង & តូបលក់ (Store Rent)</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">-${formatMoney(metrics.opexBreakdown.rent)}</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">${metrics.netRevenue > 0 ? ((metrics.opexBreakdown.rent / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="color: #475569;">
+              <td style="padding: 5px 10px; font-family: monospace;">6200</td>
+              <td style="padding: 5px 10px; padding-left: 25px;">ប្រាក់ខែបុគ្គលិក & បេឡាករ (Salaries & Wages)</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">-${formatMoney(metrics.opexBreakdown.salaries)}</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">${metrics.netRevenue > 0 ? ((metrics.opexBreakdown.salaries / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="color: #475569;">
+              <td style="padding: 5px 10px; font-family: monospace;">6300</td>
+              <td style="padding: 5px 10px; padding-left: 25px;">ផ្សព្វផ្សាយ & ទីផ្សារ (Marketing & Ads)</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">-${formatMoney(metrics.opexBreakdown.marketing)}</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">${metrics.netRevenue > 0 ? ((metrics.opexBreakdown.marketing / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="color: #475569;">
+              <td style="padding: 5px 10px; font-family: monospace;">6400</td>
+              <td style="padding: 5px 10px; padding-left: 25px;">ទឹក ភ្លើង & អ៊ីនធឺណិត (Utilities)</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">-${formatMoney(metrics.opexBreakdown.utilities)}</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">${metrics.netRevenue > 0 ? ((metrics.opexBreakdown.utilities / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="color: #475569;">
+              <td style="padding: 5px 10px; font-family: monospace;">6500</td>
+              <td style="padding: 5px 10px; padding-left: 25px;">សេវាដឹកជញ្ជូន & វេចខ្ចប់ (Delivery & Packaging)</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">-${formatMoney(metrics.opexBreakdown.delivery)}</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">${metrics.netRevenue > 0 ? ((metrics.opexBreakdown.delivery / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="color: #475569;">
+              <td style="padding: 5px 10px; font-family: monospace;">6600</td>
+              <td style="padding: 5px 10px; padding-left: 25px;">សេវាប្រព័ន្ធ POS Cloud & Software</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">-${formatMoney(metrics.opexBreakdown.software)}</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">${metrics.netRevenue > 0 ? ((metrics.opexBreakdown.software / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="color: #475569;">
+              <td style="padding: 5px 10px; font-family: monospace;">6900</td>
+              <td style="padding: 5px 10px; padding-left: 25px;">ចំណាយប្រតិបត្តិការផ្សេងៗ (Other OPEX)</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">-${formatMoney(metrics.opexBreakdown.other + metrics.opexBreakdown.maintenance)}</td>
+              <td style="padding: 5px 10px; text-align: right; font-family: monospace;">${metrics.netRevenue > 0 ? (((metrics.opexBreakdown.other + metrics.opexBreakdown.maintenance) / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="background: #fff1f2; font-weight: 900; border-top: 1px solid #f43f5e;">
+              <td style="padding: 7px 10px; font-family: monospace; color: #be123c;">6999</td>
+              <td style="padding: 7px 10px; color: #be123c;">សរុបចំណាយប្រតិបត្តិការ (TOTAL OPEX)</td>
+              <td style="padding: 7px 10px; text-align: right; font-family: monospace; color: #be123c;">-${formatMoney(metrics.totalOPEX)}</td>
+              <td style="padding: 7px 10px; text-align: right; font-family: monospace; color: #be123c;">${metrics.netRevenue > 0 ? ((metrics.totalOPEX / metrics.netRevenue) * 100).toFixed(1) : 0}%</td>
+            </tr>
+            <tr style="background: ${metrics.netProfit >= 0 ? '#dcfce7' : '#fee2e2'}; font-weight: 900; border-top: 3px solid ${metrics.netProfit >= 0 ? '#16a34a' : '#dc2626'}; border-bottom: 3px double ${metrics.netProfit >= 0 ? '#16a34a' : '#dc2626'};">
+              <td style="padding: 10px; font-family: monospace; font-size: 13px;">7000</td>
+              <td style="padding: 10px; font-size: 12px;">
+                ប្រាក់ចំណេញសុទ្ធពិតប្រាកដ (NET OPERATING PROFIT / NET INCOME)
+              </td>
+              <td style="padding: 10px; text-align: right; font-family: monospace; font-size: 14px; color: ${metrics.netProfit >= 0 ? '#15803d' : '#b91c1c'};">
+                ${formatMoney(metrics.netProfit)}
+              </td>
+              <td style="padding: 10px; text-align: right; font-family: monospace; font-size: 12px; color: ${metrics.netProfit >= 0 ? '#15803d' : '#b91c1c'};">
+                ${metrics.netProfitMarginPercent.toFixed(1)}%
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Signatures -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 50px; text-align: center; font-size: 11px;">
+          <div>
+            <b>អ្នករៀបចំ (Prepared By)</b>
+            <div style="margin-top: 60px; border-top: 1px dotted #94a3b8; padding-top: 4px;">ហត្ថលេខា & ឈ្មោះ</div>
+          </div>
+          <div>
+            <b>ប្រធានគណនេយ្យ (Chief Accountant)</b>
+            <div style="margin-top: 60px; border-top: 1px dotted #94a3b8; padding-top: 4px;">ហត្ថលេខា & ឈ្មោះ</div>
+          </div>
+          <div>
+            <b>នាយកប្រតិបត្តិ / ម្ចាស់ហាង (Approved By)</b>
+            <div style="margin-top: 60px; border-top: 1px dotted #94a3b8; padding-top: 4px;">ហត្ថលេខា & ត្រា</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 35px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px dashed #cbd5e1; padding-top: 8px;">
+          ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុស្ដង់ដារអន្តរជាតិ Sabay Luk POS • IFRS Compliance Engine
+        </div>
+      </div>
+    `;
+
+    const printWin = window.open('', '_blank', 'height=800,width=850');
+    printWin.document.write(`<html><head><title>P&L Statement - ${periodLabel}</title></head><body onload="window.focus(); window.print();" onafterprint="window.close();">${htmlContent}</body></html>`);
+    printWin.document.close();
+  };
+
   // Export Financial Statements to Multi-Sheet Excel
   const handleExportFullFinancialAudit = () => {
     const wb = XLSX.utils.book_new();
@@ -732,6 +893,17 @@ export default function WorldStandardFinanceView({
               </div>
             </div>
           )}
+
+          {/* Print Official P&L Statement */}
+          <button
+            type="button"
+            onClick={handlePrintPnLStatement}
+            className="bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-2xl font-black text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="ព្រីនរបាយការណ៍ចំណេញ និងខាតផ្លូវការ (A4 Print Statement)"
+          >
+            <span>🖨️</span>
+            <span>ព្រីន P&L (Print)</span>
+          </button>
 
           {/* Export Full Financial Audit */}
           <button
