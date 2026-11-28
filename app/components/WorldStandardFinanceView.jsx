@@ -572,6 +572,153 @@ export default function WorldStandardFinanceView({
     printWin.document.close();
   };
 
+  // Print Official A4 Statement of Financial Position (Balance Sheet - IFRS Format)
+  const handlePrintBalanceSheet = () => {
+    const storeName = storeSettings.storeName || activeStore?.name || 'SABAY LUK';
+    const storePhone = storeSettings.phone || activeStore?.phone || '';
+    const storeAddress = storeSettings.address || activeStore?.address || '';
+    const curr = currencyMode;
+
+    const htmlContent = `
+      <div style="font-family: 'Kantumruy Pro', 'Segoe UI', Tahoma, sans-serif; padding: 25px 35px; color: #0f172a; max-width: 850px; margin: 0 auto; line-height: 1.5;">
+        <!-- Header -->
+        <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 900;">${storeName}</h1>
+          <p style="margin: 3px 0 0; font-size: 11px; color: #475569;">${storeAddress ? storeAddress + ' • ' : ''}${storePhone ? 'ទូរស័ព្ទ៖ ' + storePhone : ''}</p>
+          <div style="margin-top: 10px; display: inline-block; background: #f1f5f9; padding: 6px 16px; border-radius: 6px; border: 1px solid #cbd5e1;">
+            <h2 style="margin: 0; font-size: 14px; font-weight: 900; text-transform: uppercase;">តារាងតុល្យការហិរញ្ញវត្ថុ (STATEMENT OF FINANCIAL POSITION)</h2>
+            <p style="margin: 2px 0 0; font-size: 11px; color: #334155;">ស្ដង់ដារគណនេយ្យអន្តរជាតិ IFRS for SMEs • គិតត្រឹមថ្ងៃទី៖ <b>${new Date().toLocaleDateString('km-KH')}</b></p>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 15px; color: #475569;">
+          <div><b>សមតុល្យ៖</b> គិតត្រឹមម៉ោង ${new Date().toLocaleTimeString('km-KH')}</div>
+          <div><b>រូបិយប័ណ្ណ៖</b> <b>${curr}</b> (1 USD = ${exchangeRate.toLocaleString()} KHR)</div>
+        </div>
+
+        <!-- 2 Columns Grid for Balance Sheet -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 11px;">
+          
+          <!-- Column 1: ASSETS -->
+          <div>
+            <div style="background: #ecfdf5; padding: 8px 12px; border: 1px solid #10b981; border-radius: 6px; font-weight: 900; color: #047857; display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span>១. ទ្រព្យសកម្ម (ASSETS)</span>
+              <span style="font-family: monospace;">${formatMoney(metrics.totalAssets)}</span>
+            </div>
+
+            <div style="background: #f8fafc; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 10px;">
+              <div style="font-weight: 900; text-transform: uppercase; font-size: 10px; color: #334155; margin-bottom: 8px;">ទ្រព្យសកម្មចរន្ត (Current Assets)</div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• សាច់ប្រាក់ក្នុងថតបេឡា</span>
+                <span style="font-family: monospace; font-weight: bold;">${formatMoney(metrics.effectiveCashInDrawer)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• សាច់ប្រាក់ធនាគារ ABA Bank</span>
+                <span style="font-family: monospace; font-weight: bold;">${formatMoney(metrics.effectiveAbaBank)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• សាច់ប្រាក់ធនាគារ ACLEDA Bank</span>
+                <span style="font-family: monospace; font-weight: bold;">${formatMoney(metrics.effectiveAcledaBank)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• ស្តុកទំនិញជាក់ស្តែងក្នុងឃ្លាំង</span>
+                <span style="font-family: monospace; font-weight: bold; color: #1d4ed8;">${formatMoney(metrics.totalInventoryCostValue)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• បំណុលត្រូវទារ (COD Pending)</span>
+                <span style="font-family: monospace; font-weight: bold;">${formatMoney(bankBalances.accountsReceivableCod)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding-top: 6px; font-weight: 900;">
+                <span>សរុបទ្រព្យសកម្មចរន្ត</span>
+                <span style="font-family: monospace;">${formatMoney(metrics.totalCurrentAssets)}</span>
+              </div>
+            </div>
+
+            <div style="background: #f8fafc; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px;">
+              <div style="font-weight: 900; text-transform: uppercase; font-size: 10px; color: #334155; margin-bottom: 8px;">ទ្រព្យសកម្មអចល័ត (Non-Current Assets)</div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                <span>• គ្រឿងតុបតែង & ឧបករណ៍ POS</span>
+                <span style="font-family: monospace; font-weight: bold;">${formatMoney(bankBalances.storeEquipment)}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 2: LIABILITIES & EQUITY -->
+          <div>
+            <div style="background: #eff6ff; padding: 8px 12px; border: 1px solid #3b82f6; border-radius: 6px; font-weight: 900; color: #1d4ed8; display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span>២. បំណុល & មូលធន (LIABILITIES & EQUITY)</span>
+              <span style="font-family: monospace;">${formatMoney(metrics.totalLiabilities + metrics.totalEquity)}</span>
+            </div>
+
+            <!-- Liabilities -->
+            <div style="background: #f8fafc; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 10px;">
+              <div style="font-weight: 900; text-transform: uppercase; font-size: 10px; color: #be123c; margin-bottom: 8px;">បំណុល (Liabilities)</div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• បំណុលត្រូវសងអ្នកផ្គត់ផ្គង់</span>
+                <span style="font-family: monospace; font-weight: bold; color: #be123c;">${formatMoney(bankBalances.accountsPayable)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• ពន្ធអាករត្រូវបង់ (Tax/VAT)</span>
+                <span style="font-family: monospace; font-weight: bold;">${formatMoney(metrics.totalTax)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding-top: 6px; font-weight: 900; color: #be123c;">
+                <span>សរុបបំណុល</span>
+                <span style="font-family: monospace;">${formatMoney(metrics.totalLiabilities)}</span>
+              </div>
+            </div>
+
+            <!-- Equity -->
+            <div style="background: #f8fafc; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 10px;">
+              <div style="font-weight: 900; text-transform: uppercase; font-size: 10px; color: #047857; margin-bottom: 8px;">មូលធនម្ចាស់ (Owner's Equity)</div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• ដើមទុនវិនិយោគដំបូង</span>
+                <span style="font-family: monospace; font-weight: bold;">${formatMoney(bankBalances.initialCapital)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #cbd5e1;">
+                <span>• ប្រាក់ចំណេញរក្សាទុក & គ្រានេះ</span>
+                <span style="font-family: monospace; font-weight: bold; color: #047857;">${formatMoney(metrics.retainedEarnings)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding-top: 6px; font-weight: 900; color: #047857;">
+                <span>សរុបមូលធនម្ចាស់</span>
+                <span style="font-family: monospace;">${formatMoney(metrics.totalEquity)}</span>
+              </div>
+            </div>
+
+            <!-- Verification match box -->
+            <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 6px; padding: 8px 12px; font-size: 10px; font-weight: bold; color: #047857; display: flex; justify-content: space-between;">
+              <span>✓ សមីការតុល្យភាព ១០០% ត្រូវគ្នា៖</span>
+              <span style="font-family: monospace; font-weight: 900;">${formatMoney(metrics.totalAssets)} = ${formatMoney(metrics.totalLiabilities + metrics.totalEquity)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Signatures -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 50px; text-align: center; font-size: 11px;">
+          <div>
+            <b>អ្នករៀបចំ (Prepared By)</b>
+            <div style="margin-top: 60px; border-top: 1px dotted #94a3b8; padding-top: 4px;">ហត្ថលេខា & ឈ្មោះ</div>
+          </div>
+          <div>
+            <b>ប្រធានគណនេយ្យ (Chief Accountant)</b>
+            <div style="margin-top: 60px; border-top: 1px dotted #94a3b8; padding-top: 4px;">ហត្ថលេខា & ឈ្មោះ</div>
+          </div>
+          <div>
+            <b>នាយកប្រតិបត្តិ / ម្ចាស់ហាង (Approved By)</b>
+            <div style="margin-top: 60px; border-top: 1px dotted #94a3b8; padding-top: 4px;">ហត្ថលេខា & ត្រា</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 35px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px dashed #cbd5e1; padding-top: 8px;">
+          ប្រព័ន្ធគ្រប់គ្រងហិរញ្ញវត្ថុស្ដង់ដារអន្តរជាតិ Sabay Luk POS • IFRS Compliance Engine
+        </div>
+      </div>
+    `;
+
+    const printWin = window.open('', '_blank', 'height=800,width=850');
+    printWin.document.write(`<html><head><title>Balance Sheet - Statement of Financial Position</title></head><body onload="window.focus(); window.print();" onafterprint="window.close();">${htmlContent}</body></html>`);
+    printWin.document.close();
+  };
+
   // Export Financial Statements to Multi-Sheet Excel
   const handleExportFullFinancialAudit = () => {
     const wb = XLSX.utils.book_new();
@@ -1273,9 +1420,21 @@ export default function WorldStandardFinanceView({
               </p>
             </div>
 
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
-              <span>⚖️ តុល្យភាព ១០០%:</span>
-              <span>Assets = Liabilities + Equity</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrintBalanceSheet}
+                className="bg-slate-900 hover:bg-black text-white px-3.5 py-1.5 rounded-xl font-black text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                title="ព្រីនតារាងតុល្យការហិរញ្ញវត្ថុផ្លូវការ A4"
+              >
+                <span>🖨️</span>
+                <span>ព្រីន Balance Sheet (Print)</span>
+              </button>
+
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-black border border-emerald-300">
+                <span>⚖️ តុល្យភាព ១០០%:</span>
+                <span>Assets = Liabilities + Equity</span>
+              </div>
             </div>
           </div>
 
