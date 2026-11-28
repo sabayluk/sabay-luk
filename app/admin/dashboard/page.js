@@ -5561,7 +5561,7 @@ export default function UnifiedAdminDashboard() {
   };
 
   // ⭐️ មុខងារផ្ញើសារតាម Telegram (Telegram Notification Dispatcher) ⭐️
-  const sendTelegramNotification = async ({ action, items, message, stockData, order, customer, targetChatId }) => {
+  const sendTelegramNotification = async ({ action, items, message, stockData, order, customer, targetChatId, zReport }) => {
     const token = storeSettings.telegramBotToken || activeStore?.settings?.telegramBotToken || '';
     const chat = targetChatId || storeSettings.telegramChatId || activeStore?.settings?.telegramChatId || '';
 
@@ -5587,7 +5587,8 @@ export default function UnifiedAdminDashboard() {
           items,
           message,
           stockData,
-          order
+          order,
+          zReport
         })
       });
 
@@ -6243,6 +6244,10 @@ export default function UnifiedAdminDashboard() {
     return 50.00;
   });
   const [actualCashInput, setActualCashInput] = useState('');
+  const [actualCashKhrInput, setActualCashKhrInput] = useState('');
+  const [isEditingStartingCash, setIsEditingStartingCash] = useState(false);
+  const [tempStartingCashInput, setTempStartingCashInput] = useState('');
+  const [isSendingZReportTelegram, setIsSendingZReportTelegram] = useState(false);
   const [actualKhqrInput, setActualKhqrInput] = useState('');
   const [shiftClosingNote, setShiftClosingNote] = useState('');
   const [shiftHistory, setShiftHistory] = useState(() => {
@@ -6802,7 +6807,7 @@ export default function UnifiedAdminDashboard() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTab, posPriceMode, posCart, posTotal, paymentModalOpen, receiptData, variantModalOpen, zReportModalOpen, thermalPaperSize]);
 
-  // ⭐️ គណនាស្ថិតិវេនលក់បច្ចុប្បន្ន (Z-Report Shift Calculation) ⭐️
+  // ⭐️ គណនាស្ថិតិវេនលក់បច្ចុប្បន្ន FULL OPTION (Z-Report Shift Calculation) ⭐️
   const getShiftReportStats = () => {
     // ស្វែងរក Orders ថ្ងៃនេះ
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -6812,18 +6817,38 @@ export default function UnifiedAdminDashboard() {
     });
 
     const cashOrders = todayOrders.filter(o => o.payment_method === 'Cash' || !o.payment_method);
-    const khqrOrders = todayOrders.filter(o => o.payment_method && o.payment_method.toLowerCase().includes('khqr') || o.payment_method === 'Transfer' || o.payment_method === 'Bank');
+    const khqrOrders = todayOrders.filter(o => (o.payment_method && o.payment_method.toLowerCase().includes('khqr')) || o.payment_method === 'Transfer' || o.payment_method === 'Bank');
 
     const systemCashSales = cashOrders.reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0);
     const systemKhqrSales = khqrOrders.reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0);
     const systemTotalSales = systemCashSales + systemKhqrSales;
     const expectedDrawerCash = shiftStartingCash + systemCashSales;
 
-    const actualCash = actualCashInput !== '' ? parseFloat(actualCashInput) : expectedDrawerCash;
+    const rate = exchangeRate || 4100;
+    const actualUsdVal = actualCashInput !== '' ? parseFloat(actualCashInput) : 0;
+    const actualKhrVal = actualCashKhrInput !== '' ? parseFloat(actualCashKhrInput) : 0;
+    const khrInUsd = actualKhrVal > 0 ? (actualKhrVal / rate) : 0;
+
+    const hasEnteredCash = actualCashInput !== '' || actualCashKhrInput !== '';
+    const actualCashTotalUSD = hasEnteredCash ? (actualUsdVal + khrInUsd) : expectedDrawerCash;
     const actualKhqr = actualKhqrInput !== '' ? parseFloat(actualKhqrInput) : systemKhqrSales;
 
-    const cashDiff = actualCash - expectedDrawerCash;
+    const cashDiff = actualCashTotalUSD - expectedDrawerCash;
     const khqrDiff = actualKhqr - systemKhqrSales;
+
+    // Top 5 មុខទំនិញលក់ដាច់បំផុតប្រចាំថ្ងៃ (Top Selling Items)
+    const itemMap = {};
+    todayOrders.forEach(o => {
+      (o.items || []).forEach(item => {
+        const name = item.name || item.title || 'មុខទំនិញ';
+        const qty = Number(item.quantity || item.qty || 1);
+        const price = parseFloat(item.price || item.unitPrice || 0);
+        if (!itemMap[name]) itemMap[name] = { name, qty: 0, total: 0 };
+        itemMap[name].qty += qty;
+        itemMap[name].total += (price * qty);
+      });
+    });
+    const topSellingItems = Object.values(itemMap).sort((a, b) => b.qty - a.qty).slice(0, 5);
 
     return {
       todayStr,
@@ -6835,16 +6860,72 @@ export default function UnifiedAdminDashboard() {
       systemKhqrSales,
       systemTotalSales,
       expectedDrawerCash,
-      actualCash,
+      actualCash: actualCashTotalUSD,
+      actualUsd: actualUsdVal,
+      actualKhr: actualKhrVal,
       actualKhqr,
       cashDiff,
       khqrDiff,
-      todayOrders
+      todayOrders,
+      topSellingItems,
+      exchangeRate: rate
     };
   };
 
+  // មុខងារកែប្រែលុយអាប់ដើមវេន (Update Starting Cash Float)
+  const handleUpdateStartingCash = (newVal) => {
+    const val = parseFloat(newVal);
+    if (!isNaN(val) && val >= 0) {
+      setShiftStartingCash(val);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sabay_shift_starting_cash', val.toString());
+      }
+    }
+    setIsEditingStartingCash(false);
+  };
+
+  // មុខងារផ្ញើ Z-Report ទៅកាន់ Telegram (Send Z-Report to Telegram)
+  const handleSendZReportTelegram = async () => {
+    setIsSendingZReportTelegram(true);
+    const stats = getShiftReportStats();
+    try {
+      const res = await sendTelegramNotification({
+        action: 'z_report',
+        zReport: {
+          todayStr: stats.todayStr,
+          closedAtTime: new Date().toLocaleTimeString('km-KH'),
+          closedBy: storeSettings.storeName || 'បេឡាករ (Cashier)',
+          orderCount: stats.orderCount,
+          startingCash: stats.startingCash,
+          systemCashSales: stats.systemCashSales,
+          systemCashSalesUSD: stats.systemCashSales,
+          systemCashSalesKHR: Math.round(stats.systemCashSales * stats.exchangeRate),
+          systemKhqrSales: stats.systemKhqrSales,
+          systemTotalSales: stats.systemTotalSales,
+          expectedDrawerCash: stats.expectedDrawerCash,
+          actualCashUSD: stats.actualUsd,
+          actualCashKHR: stats.actualKhr,
+          actualCashTotalUSD: stats.actualCash,
+          actualCash: stats.actualCash,
+          cashDiff: stats.cashDiff,
+          notes: shiftClosingNote.trim(),
+          exchangeRate: stats.exchangeRate
+        }
+      });
+      if (res && res.success) {
+        alert('✅ បានផ្ញើរបាយការណ៍បិទបញ្ជី (Z-Report) ទៅកាន់ Telegram របស់ម្ចាស់ហាងដោយជោគជ័យ!');
+      } else {
+        alert('⚠️ មិនអាចផ្ញើទៅ Telegram បានទេ៖ ' + (res?.message || 'សូមពិនិត្យ Bot Token & Chat ID ក្នុង Settings'));
+      }
+    } catch (e) {
+      alert('⚠️ បរាជ័យក្នុងការផ្ញើទៅ Telegram៖ ' + (e.message || ''));
+    } finally {
+      setIsSendingZReportTelegram(false);
+    }
+  };
+
   // មុខងារបិទបញ្ជីវេនលក់ (Close Shift / Save Z-Report)
-  const handleSaveShiftClose = () => {
+  const handleSaveShiftClose = async () => {
     const stats = getShiftReportStats();
     const newRecord = {
       id: 'Z-' + Date.now().toString().slice(-6),
@@ -6856,11 +6937,13 @@ export default function UnifiedAdminDashboard() {
       systemTotalSales: stats.systemTotalSales,
       expectedDrawerCash: stats.expectedDrawerCash,
       actualCash: stats.actualCash,
-      actualKhqr: stats.actualKhqr,
+      actualCashUSD: stats.actualUsd,
+      actualCashKHR: stats.actualKhr,
       cashDiff: stats.cashDiff,
       khqrDiff: stats.khqrDiff,
       orderCount: stats.orderCount,
-      notes: shiftClosingNote.trim()
+      notes: shiftClosingNote.trim(),
+      topItems: stats.topSellingItems
     };
 
     const updated = [newRecord, ...shiftHistory];
@@ -6868,8 +6951,36 @@ export default function UnifiedAdminDashboard() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('sabay_shift_history', JSON.stringify(updated));
     }
+
+    // Auto send to Telegram if Bot Token & Chat ID are configured
+    const hasTg = storeSettings.telegramBotToken || activeStore?.settings?.telegramBotToken;
+    const hasChat = storeSettings.telegramChatId || activeStore?.settings?.telegramChatId;
+    if (hasTg && hasChat) {
+      try {
+        await sendTelegramNotification({
+          action: 'z_report',
+          zReport: {
+            ...newRecord,
+            todayStr: stats.todayStr,
+            closedAtTime: new Date().toLocaleTimeString('km-KH'),
+            systemCashSalesUSD: stats.systemCashSales,
+            systemCashSalesKHR: Math.round(stats.systemCashSales * stats.exchangeRate),
+            actualCashUSD: stats.actualUsd,
+            actualCashKHR: stats.actualKhr,
+            actualCashTotalUSD: stats.actualCash,
+            exchangeRate: stats.exchangeRate
+          }
+        });
+      } catch (err) {
+        console.warn('Auto telegram z-report notice:', err);
+      }
+    }
+
     alert('✅ បានកត់ត្រាបិទបញ្ជីវេនលក់ប្រចាំថ្ងៃ (Z-Report) ដោយជោគជ័យ!');
     setShiftClosingNote('');
+    setActualCashInput('');
+    setActualCashKhrInput('');
+    setZReportModalOpen(false);
   };
 
   // ៦. ផ្អាកការលក់ (Hold/Park) និងបន្ត (Resume) រួមទាំងឈ្មោះអតិថិជន
@@ -28889,127 +29000,212 @@ export default function UnifiedAdminDashboard() {
         )}
 
         {/* ⭐️ MODAL វិក្កយបត្រកម្តៅស្តង់ដារ MOVED TO GLOBAL ROOT ⭐️ */}
-                {/* ⭐️ MODAL របាយការណ៍បិទបញ្ជីវេនលក់ប្រចាំថ្ងៃ (DAILY CASH DRAWER & Z-REPORT MODAL) ⭐️ */}
+                {/* ⭐️ MODAL របាយការណ៍បិទបញ្ជីវេនលក់ប្រចាំថ្ងៃ FULL OPTION (DAILY CASH DRAWER & Z-REPORT MODAL) ⭐️ */}
         {zReportModalOpen && (() => {
           const stats = getShiftReportStats();
           return (
-            <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-              <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-gray-100 animate-in zoom-in-95">
+            <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[94vh] border border-gray-100 animate-in zoom-in-95">
                 
                 {/* Header */}
-                <div className="p-6 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white flex items-center justify-between">
+                <div className="p-5 sm:p-6 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-2xl font-black">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-2xl font-black shrink-0">
                       📋
                     </div>
                     <div>
-                      <h3 className="text-lg font-black text-white flex items-center gap-2">
-                        របាយការណ៍បិទបញ្ជីវេនលក់ប្រចាំថ្ងៃ (Z-Report)
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base sm:text-lg font-black text-white">
+                          របាយការណ៍បិទបញ្ជីវេនលក់ប្រចាំថ្ងៃ (Z-Report)
+                        </h3>
+                        <span className="text-[10px] bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
+                          Full Option
+                        </span>
+                      </div>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        កាលបរិច្ឆេទ៖ {stats.todayStr} • ម៉ោង៖ {new Date().toLocaleTimeString()}
+                        កាលបរិច្ឆេទ៖ {stats.todayStr} • ម៉ោង៖ {new Date().toLocaleTimeString('km-KH')}
                       </p>
                     </div>
                   </div>
                   <button 
                     type="button"
                     onClick={() => setZReportModalOpen(false)}
-                    className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center font-bold text-sm transition cursor-pointer"
+                    className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center font-bold text-sm transition cursor-pointer shrink-0"
                   >
                     ✕
                   </button>
                 </div>
 
                 {/* Body Content */}
-                <div className="p-6 overflow-y-auto space-y-6 flex-1 text-gray-800 text-xs">
+                <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-1 text-gray-800 text-xs">
                   
                   {/* Summary KPI Cards */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-emerald-50 p-3.5 sm:p-4 rounded-2xl border border-emerald-200">
                       <span className="text-[11px] font-bold text-emerald-700 block">💵 សរុបការលក់សាច់ប្រាក់ (Cash)</span>
                       <span className="text-xl font-black text-emerald-900 mt-1 block">
                         ${stats.systemCashSales.toFixed(2)}
                       </span>
-                      <span className="text-[10px] text-emerald-600 font-bold">({stats.cashOrderCount} វិក្កយបត្រ)</span>
+                      <div className="flex justify-between items-center text-[10px] text-emerald-700 font-bold mt-1">
+                        <span>({stats.cashOrderCount} វិក្កយបត្រ)</span>
+                        <span>≈ {Math.round(stats.systemCashSales * stats.exchangeRate).toLocaleString()} ៛</span>
+                      </div>
                     </div>
 
-                    <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200">
+                    <div className="bg-blue-50 p-3.5 sm:p-4 rounded-2xl border border-blue-200">
                       <span className="text-[11px] font-bold text-blue-700 block">📱 សរុបផ្ទេរ (KHQR / Bank)</span>
                       <span className="text-xl font-black text-blue-900 mt-1 block">
                         ${stats.systemKhqrSales.toFixed(2)}
                       </span>
-                      <span className="text-[10px] text-blue-600 font-bold">({stats.khqrOrderCount} វិក្កយបត្រ)</span>
+                      <div className="flex justify-between items-center text-[10px] text-blue-700 font-bold mt-1">
+                        <span>({stats.khqrOrderCount} វិក្កយបត្រ)</span>
+                        <span>≈ {Math.round(stats.systemKhqrSales * stats.exchangeRate).toLocaleString()} ៛</span>
+                      </div>
                     </div>
 
-                    <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200">
-                      <span className="text-[11px] font-bold text-purple-700 block">✨ ចំណូលសរុបប្រចាំវេន</span>
+                    <div className="bg-purple-50 p-3.5 sm:p-4 rounded-2xl border border-purple-200">
+                      <span className="text-[11px] font-bold text-purple-700 block">✨ ចំណូលសរុបប្រចាំវេន (Total)</span>
                       <span className="text-xl font-black text-purple-900 mt-1 block">
                         ${stats.systemTotalSales.toFixed(2)}
                       </span>
-                      <span className="text-[10px] text-purple-600 font-bold">≈ {(stats.systemTotalSales * exchangeRate).toLocaleString()} ៛</span>
+                      <div className="flex justify-between items-center text-[10px] text-purple-700 font-bold mt-1">
+                        <span>({stats.orderCount} វិក្កយបត្រសរុប)</span>
+                        <span>≈ {Math.round(stats.systemTotalSales * stats.exchangeRate).toLocaleString()} ៛</span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Cash Drawer Comparison Section */}
-                  <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 space-y-4">
-                    <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+                  {/* Cash Drawer Comparison Section (Dual-Currency: USD + KHR) */}
+                  <div className="bg-gray-50 p-4 sm:p-5 rounded-2xl border border-gray-200 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-3">
                       <div>
-                        <h4 className="font-black text-sm text-gray-900">💰 ផ្ទៀងផ្ទាត់សាច់ប្រាក់ក្នុងកេស (Cash in Drawer Reconciliation)</h4>
-                        <p className="text-[11px] text-gray-500 mt-0.5">ប្រៀបធៀបសាច់ប្រាក់ជាក់ស្តែង ជាមួយតួលេខក្នុងប្រព័ន្ធ</p>
+                        <h4 className="font-black text-sm text-gray-900">💰 ផ្ទៀងផ្ទាត់សាច់ប្រាក់ក្នុងកេស (Cash Drawer Reconciliation)</h4>
+                        <p className="text-[11px] text-gray-500 mt-0.5">ប្រៀបធៀបសាច់ប្រាក់រាប់ជាក់ស្តែង (USD + ៛) ជាមួយតួលេខក្នុងប្រព័ន្ធ</p>
                       </div>
-                      <span className="text-xs font-black text-blue-600 bg-blue-100 px-3 py-1 rounded-xl">
-                        លុយដើមវេន៖ ${stats.startingCash.toFixed(2)}
-                      </span>
+
+                      {/* Opening Cash Float Badge with Quick Edit */}
+                      <div className="flex items-center gap-2">
+                        {isEditingStartingCash ? (
+                          <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-blue-300 shadow-xs">
+                            <span className="text-[11px] font-bold text-gray-500 pl-1.5">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={tempStartingCashInput}
+                              onChange={(e) => setTempStartingCashInput(e.target.value)}
+                              placeholder={stats.startingCash.toFixed(2)}
+                              className="w-16 text-xs font-black outline-none"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStartingCash(tempStartingCashInput)}
+                              className="px-2 py-0.5 bg-blue-600 text-white rounded-lg text-[10px] font-black hover:bg-blue-700 cursor-pointer"
+                            >
+                              រក្សាទុក
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingStartingCash(false)}
+                              className="px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded-lg text-[10px] font-bold cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTempStartingCashInput(stats.startingCash.toString());
+                              setIsEditingStartingCash(true);
+                            }}
+                            title="ចុចដើម្បីកែប្រែលុយអាប់ដើមវេន"
+                            className="text-xs font-black text-blue-700 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span>🪙 លុយអាប់ដើមវេន៖ ${stats.startingCash.toFixed(2)}</span>
+                            <span className="text-[10px] text-blue-500">✏️</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Expected */}
-                      <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-2">
-                        <span className="text-[11px] font-bold text-gray-500 block uppercase">១. ប្រព័ន្ធគណនាឃើញ (Expected)</span>
+                      <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-2.5">
+                        <span className="text-[11px] font-bold text-gray-500 block uppercase">១. ប្រព័ន្ធគណនាឃើញ (Expected in Drawer)</span>
                         <div className="flex justify-between items-center text-xs">
-                          <span>លុយអាប់ដើមវេន៖</span>
-                          <span className="font-black">${stats.startingCash.toFixed(2)}</span>
+                          <span className="text-gray-600">លុយអាប់ដើមវេន៖</span>
+                          <span className="font-black text-gray-800">${stats.startingCash.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
-                          <span>+ លក់បានសាច់ប្រាក់៖</span>
+                          <span className="text-gray-600">+ លក់បានសាច់ប្រាក់៖</span>
                           <span className="font-black text-emerald-600">+${stats.systemCashSales.toFixed(2)}</span>
                         </div>
-                        <div className="border-t border-dashed pt-2 flex justify-between items-center font-black text-sm text-gray-900">
+                        <div className="border-t border-dashed border-gray-200 pt-2.5 flex justify-between items-center font-black text-sm text-gray-900">
                           <span>សរុបលុយត្រូវមានក្នុងកេស៖</span>
-                          <span className="text-blue-600">${stats.expectedDrawerCash.toFixed(2)}</span>
+                          <div className="text-right">
+                            <span className="text-blue-600 block">${stats.expectedDrawerCash.toFixed(2)}</span>
+                            <span className="text-[10px] text-gray-500 font-bold block">≈ {Math.round(stats.expectedDrawerCash * stats.exchangeRate).toLocaleString()} ៛</span>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Actual Input */}
-                      <div className="bg-white p-3.5 rounded-xl border border-gray-200 space-y-3">
-                        <span className="text-[11px] font-bold text-gray-500 block uppercase">២. សាច់ប្រាក់រាប់ជាក់ស្តែង (Actual Count)</span>
-                        <div>
-                          <label className="text-[11px] font-bold text-gray-700 block mb-1">
-                            💵 លុយសុទ្ធរាប់ឃើញជាក់ស្តែង ($):
-                          </label>
-                          <input 
-                            type="number"
-                            step="0.01"
-                            value={actualCashInput}
-                            onChange={(e) => setActualCashInput(e.target.value)}
-                            placeholder={`ឧ. ${stats.expectedDrawerCash.toFixed(2)}`}
-                            className="w-full bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-xl p-2 font-black text-sm text-gray-900 outline-none"
-                          />
+                      {/* Actual Input (USD & KHR Dual-Currency) */}
+                      <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-2.5">
+                        <span className="text-[11px] font-bold text-gray-500 block uppercase">២. សាច់ប្រាក់រាប់ជាក់ស្តែង (Actual Cash Count)</span>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-700 block mb-1">
+                              💵 សាច់ប្រាក់ដុល្លារ ($):
+                            </label>
+                            <input 
+                              type="number"
+                              step="0.01"
+                              value={actualCashInput}
+                              onChange={(e) => setActualCashInput(e.target.value)}
+                              placeholder="0.00"
+                              className="w-full bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-xl p-2 font-mono font-black text-xs text-gray-900 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-700 block mb-1">
+                              🇰🇭 សាច់ប្រាក់រៀល (៛):
+                            </label>
+                            <input 
+                              type="number"
+                              step="100"
+                              value={actualCashKhrInput}
+                              onChange={(e) => setActualCashKhrInput(e.target.value)}
+                              placeholder="0 ៛"
+                              className="w-full bg-gray-50 border-2 border-gray-200 focus:border-blue-500 rounded-xl p-2 font-mono font-black text-xs text-gray-900 outline-none"
+                            />
+                          </div>
                         </div>
+
+                        {/* Combined Actual Total */}
+                        <div className="flex justify-between items-center text-xs pt-1 border-t border-gray-100">
+                          <span className="text-gray-500 font-bold">សរុបរាប់ឃើញជាក់ស្តែង៖</span>
+                          <span className="font-mono font-black text-gray-900">
+                            ${stats.actualCash.toFixed(2)} <span className="text-[10px] font-normal text-gray-500">({Math.round(stats.actualCash * stats.exchangeRate).toLocaleString()} ៛)</span>
+                          </span>
+                        </div>
+
+                        {/* Discrepancy Status Badge */}
                         <div className={`p-2.5 rounded-xl font-black text-xs flex justify-between items-center ${
                           Math.abs(stats.cashDiff) < 0.01 
-                            ? 'bg-emerald-100 text-emerald-800' 
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
                             : stats.cashDiff > 0 
-                              ? 'bg-amber-100 text-amber-800' 
-                              : 'bg-rose-100 text-rose-800'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                              : 'bg-rose-100 text-rose-800 border border-rose-200'
                         }`}>
                           <span>ភាពខុសគ្នា (Discrepancy):</span>
                           <span>
                             {Math.abs(stats.cashDiff) < 0.01 
                               ? '✅ ស្មើគ្នាត្រឹមត្រូវ (Perfect Match)' 
                               : stats.cashDiff > 0 
-                                ? `+${stats.cashDiff.toFixed(2)} (លើស)` 
-                                : `-${Math.abs(stats.cashDiff).toFixed(2)} (ខ្វះ)`}
+                                ? `+${stats.cashDiff.toFixed(2)} (លើស ${Math.round(stats.cashDiff * stats.exchangeRate).toLocaleString()} ៛)` 
+                                : `-${Math.abs(stats.cashDiff).toFixed(2)} (ខ្វះ ${Math.round(Math.abs(stats.cashDiff) * stats.exchangeRate).toLocaleString()} ៛)`}
                           </span>
                         </div>
                       </div>
@@ -29024,11 +29220,41 @@ export default function UnifiedAdminDashboard() {
                         type="text"
                         value={shiftClosingNote}
                         onChange={(e) => setShiftClosingNote(e.target.value)}
-                        placeholder="ឧ. ប្តូរវេនទៅកញ្ញា ធីតា, ប្រគល់លុយគ្រប់ចំនួន..."
+                        placeholder="ឧ. ប្តូរវេនទៅកញ្ញា ធីតា, ប្រគល់លុយគ្រប់ចំនួន, លុយរៀល 20,000៛ ទុកជាលុយអាប់..."
                         className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-xs font-medium outline-none focus:border-blue-500"
                       />
                     </div>
                   </div>
+
+                  {/* Top Selling Products in Shift (Best Sellers) */}
+                  {stats.topSellingItems && stats.topSellingItems.length > 0 && (
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-black text-xs text-slate-800 flex items-center gap-1.5">
+                          <span>🔥 មុខទំនិញលក់ដាច់បំផុតប្រចាំវេន (Top Best Sellers)</span>
+                        </h4>
+                        <span className="text-[10px] text-slate-500 font-bold">
+                          {stats.topSellingItems.length} មុខ
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {stats.topSellingItems.map((item, idx) => (
+                          <div key={idx} className="bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs">
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-700 font-black text-[10px] flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <span className="font-bold text-gray-800 truncate">{item.name}</span>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-xs font-black text-emerald-600 block">${item.total.toFixed(2)}</span>
+                              <span className="text-[10px] text-gray-400 font-bold">({item.qty} ឯកតា)</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Previous Shift Closings Table */}
                   {shiftHistory.length > 0 && (
@@ -29049,7 +29275,7 @@ export default function UnifiedAdminDashboard() {
                           <tbody className="divide-y divide-gray-100">
                             {shiftHistory.slice(0, 5).map((sh, idx) => (
                               <tr key={idx} className="hover:bg-gray-50">
-                                <td className="p-3 font-medium text-gray-600">{new Date(sh.closedAt).toLocaleString()}</td>
+                                <td className="p-3 font-medium text-gray-600">{new Date(sh.closedAt).toLocaleString('km-KH')}</td>
                                 <td className="p-3 font-bold text-gray-900">{sh.orderCount} កុម្ម៉ង់</td>
                                 <td className="p-3 font-black text-emerald-600">${parseFloat(sh.systemCashSales || 0).toFixed(2)}</td>
                                 <td className="p-3 font-black text-blue-600">${parseFloat(sh.systemKhqrSales || 0).toFixed(2)}</td>
@@ -29074,54 +29300,96 @@ export default function UnifiedAdminDashboard() {
                 </div>
 
                 {/* Footer Buttons */}
-                <div className="p-5 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const printContent = `
-                        <div style="font-family: monospace; padding: 10px; width: 300px; text-align: center;">
-                          <h2 style="margin: 0;">${storeSettings.storeName || 'SABAY LUK'}</h2>
-                          <p style="margin: 4px 0; font-size: 11px;">របាយការណ៍បិទបញ្ជីវេនលក់ (Z-Report)</p>
-                          <hr style="border-style: dashed;" />
-                          <div style="text-align: left; font-size: 11px; line-height: 1.6;">
-                            <div>កាលបរិច្ឆេទ៖ ${stats.todayStr}</div>
-                            <div>ម៉ោងបិទ៖ ${new Date().toLocaleTimeString()}</div>
-                            <div>សរុបវិក្កយបត្រ៖ ${stats.orderCount}</div>
-                            <hr style="border-style: dashed;" />
-                            <div>លុយដើមវេន៖ ${stats.startingCash.toFixed(2)}</div>
-                            <div>លក់សាច់ប្រាក់៖ +${stats.systemCashSales.toFixed(2)}</div>
-                            <div>លក់ KHQR៖ ${stats.systemKhqrSales.toFixed(2)}</div>
-                            <div style="font-weight: bold;">ចំណូលសរុប៖ ${stats.systemTotalSales.toFixed(2)}</div>
-                            <hr style="border-style: dashed;" />
-                            <div>លុយត្រូវមានក្នុងកេស៖ ${stats.expectedDrawerCash.toFixed(2)}</div>
-                            <div>លុយរាប់ជាក់ស្តែង៖ ${stats.actualCash.toFixed(2)}</div>
-                            <div style="font-weight: bold;">ខុសគ្នា៖ ${stats.cashDiff.toFixed(2)}</div>
+                <div className="p-4 sm:p-5 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    {/* Print Z-Report Thermal Slip */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const topItemsHtml = (stats.topSellingItems || []).map((it, i) => 
+                          `<div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 2px;">
+                            <span>${i+1}. ${it.name} (x${it.qty})</span>
+                            <span style="font-weight: bold;">$${it.total.toFixed(2)}</span>
+                          </div>`
+                        ).join('');
+
+                        const printContent = `
+                          <div style="font-family: monospace, sans-serif; padding: 12px; width: 300px; text-align: center; color: #111; line-height: 1.5;">
+                            <h2 style="margin: 0; font-size: 16px; font-weight: 900;">${storeSettings.storeName || 'SABAY LUK'}</h2>
+                            <p style="margin: 2px 0 6px; font-size: 11px; font-weight: bold; text-transform: uppercase;">របាយការណ៍បិទបញ្ជីវេនលក់ (Z-REPORT)</p>
+                            <hr style="border: 0.5px dashed #000; margin: 6px 0;" />
+                            <div style="text-align: left; font-size: 11px;">
+                              <div>📅 កាលបរិច្ឆេទ៖ ${stats.todayStr}</div>
+                              <div>⏰ ម៉ោងបិទ៖ ${new Date().toLocaleTimeString('km-KH')}</div>
+                              <div>👤 បេឡាករ៖ ${storeSettings.storeName || 'Cashier'}</div>
+                              <div>🧾 សរុបវិក្កយបត្រ៖ <b>${stats.orderCount} កុម្ម៉ង់</b></div>
+                              <hr style="border: 0.5px dashed #000; margin: 6px 0;" />
+                              <div style="font-weight: bold; margin-bottom: 3px;">💰 សង្ខេបការលក់ (SALES SUMMARY)</div>
+                              <div>លក់សាច់ប្រាក់ (Cash): <b>$${stats.systemCashSales.toFixed(2)}</b> (≈ ${Math.round(stats.systemCashSales * stats.exchangeRate).toLocaleString()} ៛)</div>
+                              <div>លក់ផ្ទេរ (KHQR/Bank): <b>$${stats.systemKhqrSales.toFixed(2)}</b> (≈ ${Math.round(stats.systemKhqrSales * stats.exchangeRate).toLocaleString()} ៛)</div>
+                              <div style="font-weight: 900; font-size: 12px; margin-top: 4px;">ចំណូលសរុប៖ $${stats.systemTotalSales.toFixed(2)} (≈ ${Math.round(stats.systemTotalSales * stats.exchangeRate).toLocaleString()} ៛)</div>
+                              <hr style="border: 0.5px dashed #000; margin: 6px 0;" />
+                              <div style="font-weight: bold; margin-bottom: 3px;">📥 ផ្ទៀងផ្ទាត់សាច់ប្រាក់ក្នុងកេស (RECONCILIATION)</div>
+                              <div>លុយអាប់ដើមវេន៖ $${stats.startingCash.toFixed(2)}</div>
+                              <div>លុយត្រូវមានក្នុងកេស៖ <b>$${stats.expectedDrawerCash.toFixed(2)}</b></div>
+                              <div>លុយដុល្លាររាប់ជាក់ស្តែង៖ $${stats.actualUsd.toFixed(2)}</div>
+                              <div>លុយរៀលរាប់ជាក់ស្តែង៖ ${stats.actualKhr.toLocaleString()} ៛</div>
+                              <div>សរុបរាប់ជាក់ស្តែង៖ <b>$${stats.actualCash.toFixed(2)}</b></div>
+                              <div style="font-weight: 900; margin-top: 3px; font-size: 11px;">
+                                ស្ថានភាព៖ ${Math.abs(stats.cashDiff) < 0.01 ? '✅ គ្រប់ចំនួន (MATCH)' : (stats.cashDiff > 0 ? `+ លើស $${stats.cashDiff.toFixed(2)}` : `- ខ្វះ $${Math.abs(stats.cashDiff).toFixed(2)}`)}
+                              </div>
+                              ${topItemsHtml ? `
+                                <hr style="border: 0.5px dashed #000; margin: 6px 0;" />
+                                <div style="font-weight: bold; margin-bottom: 3px;">🔥 មុខទំនិញលក់ដាច់បំផុត</div>
+                                ${topItemsHtml}
+                              ` : ''}
+                              ${shiftClosingNote ? `
+                                <hr style="border: 0.5px dashed #000; margin: 6px 0;" />
+                                <div>📝 ចំណាំ៖ <i>${shiftClosingNote}</i></div>
+                              ` : ''}
+                            </div>
+                            <hr style="border: 0.5px dashed #000; margin: 10px 0 15px;" />
+                            <div style="font-size: 10px; text-align: center; margin-top: 15px;">
+                              ហត្ថលេខាបេឡាករ៖ .....................................
+                            </div>
+                            <div style="font-size: 9px; margin-top: 10px; color: #666;">
+                              *** System Powered by Sabay Luk POS ***
+                            </div>
                           </div>
-                          <hr style="border-style: dashed;" />
-                          <p style="font-size: 10px; margin-top: 15px;">ហត្ថលេខាបេឡាករ៖ .....................</p>
-                        </div>
-                      `;
-                      const printWin = window.open('', '_blank', 'height=650,width=450');
-                      printWin.document.write(`<html><body onload="window.focus(); window.print();" onafterprint="window.close();">${printContent}</body></html>`);
-                      printWin.document.close();
-                    }}
-                    className="px-5 py-3 rounded-2xl border border-gray-300 hover:bg-gray-100 text-gray-700 font-black text-xs flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <span>🖨️</span> ព្រីន Z-Report (Slip)
-                  </button>
+                        `;
+                        const printWin = window.open('', '_blank', 'height=650,width=450');
+                        printWin.document.write(`<html><body onload="window.focus(); window.print();" onafterprint="window.close();">${printContent}</body></html>`);
+                        printWin.document.close();
+                      }}
+                      className="px-4 py-2.5 rounded-2xl border border-gray-300 hover:bg-gray-100 text-gray-700 font-black text-xs flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <span>🖨️</span> ព្រីន Slip
+                    </button>
+
+                    {/* Send to Telegram Button */}
+                    <button
+                      type="button"
+                      disabled={isSendingZReportTelegram}
+                      onClick={handleSendZReportTelegram}
+                      title="ផ្ញើរបាយការណ៍បិទបញ្ជីទៅកាន់ Telegram របស់ថៅកែ"
+                      className="px-4 py-2.5 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-black text-xs flex items-center gap-1.5 shadow-md shadow-sky-500/20 transition cursor-pointer disabled:opacity-50"
+                    >
+                      <span>{isSendingZReportTelegram ? '⏳' : '📲'}</span> ផ្ញើទៅ Telegram
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setZReportModalOpen(false)}
-                      className="px-5 py-3 rounded-2xl border border-gray-200 text-gray-600 font-black text-xs hover:bg-gray-100 transition cursor-pointer"
+                      className="px-4 py-2.5 rounded-2xl border border-gray-200 text-gray-600 font-black text-xs hover:bg-gray-100 transition cursor-pointer"
                     >
                       បិទផ្ទាំង
                     </button>
                     <button
                       type="button"
                       onClick={handleSaveShiftClose}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-lg shadow-emerald-600/30 transition transform hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-2xl font-black text-xs shadow-lg shadow-emerald-600/30 transition transform hover:scale-[1.02] active:scale-95 flex items-center gap-1.5 cursor-pointer"
                     >
                       <span>💾</span> បញ្ជាក់បិទបញ្ជីវេនលក់ (Confirm Close)
                     </button>
