@@ -1540,10 +1540,14 @@ export default function UnifiedAdminDashboard() {
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
 
-  // Form states for Add/Edit Expense
+  // Form states for Add/Edit Expense Full Option
   const [expTitle, setExpTitle] = useState('');
   const [expCategory, setExpCategory] = useState('rent');
+  const [expCurrency, setExpCurrency] = useState('USD'); // 'USD' | 'KHR'
   const [expAmount, setExpAmount] = useState('');
+  const [expAmountKhr, setExpAmountKhr] = useState('');
+  const [expReceiptImage, setExpReceiptImage] = useState(null);
+  const [viewingExpenseReceipt, setViewingExpenseReceipt] = useState(null);
   const [expDate, setExpDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expPaymentMethod, setExpPaymentMethod] = useState('Cash');
   const [expRecipient, setExpRecipient] = useState('');
@@ -5561,7 +5565,7 @@ export default function UnifiedAdminDashboard() {
   };
 
   // ⭐️ មុខងារផ្ញើសារតាម Telegram (Telegram Notification Dispatcher) ⭐️
-  const sendTelegramNotification = async ({ action, items, message, stockData, order, customer, targetChatId, zReport }) => {
+  const sendTelegramNotification = async ({ action, items, message, stockData, order, customer, targetChatId, zReport, expense }) => {
     const token = storeSettings.telegramBotToken || activeStore?.settings?.telegramBotToken || '';
     const chat = targetChatId || storeSettings.telegramChatId || activeStore?.settings?.telegramChatId || '';
 
@@ -5588,7 +5592,8 @@ export default function UnifiedAdminDashboard() {
           message,
           stockData,
           order,
-          zReport
+          zReport,
+          expense
         })
       });
 
@@ -16871,20 +16876,32 @@ export default function UnifiedAdminDashboard() {
       return { ...cat, total, percent, count: catExpenses.length };
     }).filter(c => c.total > 0).sort((a, b) => b.total - a.total);
 
-    // Save or Edit Expense
+    // Save or Edit Expense Full Option
     const handleSaveExpense = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (guardDemoAction("បន្ថែមចំណាយ")) return;
-      e.preventDefault();
+      if (e && e.preventDefault) e.preventDefault();
+      if (guardDemoAction("បន្ថែមចំណាយ")) return;
       if (!expTitle.trim()) {
         alert('សូមបញ្ចូលឈ្មោះ ឬបរិយាយចំណាយ!');
         return;
       }
-      const numAmount = parseFloat(expAmount);
-      if (isNaN(numAmount) || numAmount <= 0) {
-        alert('សូមបញ្ចូលចំនួនទឹកប្រាក់ឱ្យបានត្រឹមត្រូវ (ធំជាង 0)!');
-        return;
+
+      let numAmount = 0;
+      if (expCurrency === 'KHR') {
+        const khr = parseFloat(expAmountKhr);
+        if (isNaN(khr) || khr <= 0) {
+          alert('សូមបញ្ចូលចំនួនទឹកប្រាក់ជារៀលឱ្យបានត្រឹមត្រូវ (ធំជាង 0)!');
+          return;
+        }
+        numAmount = parseFloat((khr / (exchangeRate || 4100)).toFixed(2));
+      } else {
+        numAmount = parseFloat(expAmount);
+        if (isNaN(numAmount) || numAmount <= 0) {
+          alert('សូមបញ្ចូលចំនួនទឹកប្រាក់ឱ្យបានត្រឹមត្រូវ (ធំជាង 0)!');
+          return;
+        }
       }
+
+      const catObj = EXPENSE_CATEGORIES.find(c => c.id === expCategory);
 
       if (editingExpense) {
         const updated = expenses.map(item => item.id === editingExpense.id ? {
@@ -16892,6 +16909,8 @@ export default function UnifiedAdminDashboard() {
           title: expTitle.trim(),
           category: expCategory,
           amount: numAmount,
+          currency: expCurrency,
+          receiptImage: expReceiptImage,
           date: expDate,
           paymentMethod: expPaymentMethod,
           recipient: expRecipient.trim(),
@@ -16918,6 +16937,8 @@ export default function UnifiedAdminDashboard() {
           title: expTitle.trim(),
           category: expCategory,
           amount: numAmount,
+          currency: expCurrency,
+          receiptImage: expReceiptImage,
           date: expDate,
           paymentMethod: expPaymentMethod,
           recipient: expRecipient.trim(),
@@ -16938,6 +16959,30 @@ export default function UnifiedAdminDashboard() {
             note: expNote.trim()
           }]);
         } catch (err) {}
+
+        // Send Telegram alert to store owner
+        const hasTg = storeSettings.telegramBotToken || activeStore?.settings?.telegramBotToken;
+        const hasChat = storeSettings.telegramChatId || activeStore?.settings?.telegramChatId;
+        if (hasTg && hasChat) {
+          try {
+            await sendTelegramNotification({
+              action: 'expense',
+              expense: {
+                title: expTitle.trim(),
+                categoryLabel: catObj ? catObj.label : expCategory,
+                amount: numAmount,
+                date: expDate,
+                paymentMethod: expPaymentMethod,
+                recipient: expRecipient.trim(),
+                note: expNote.trim(),
+                exchangeRate: exchangeRate || 4100
+              }
+            });
+          } catch (tgErr) {
+            console.warn('Expense telegram alert error:', tgErr);
+          }
+        }
+
         setToastNotification(`✅ បានកត់ត្រាចំណាយថ្មី $${numAmount.toFixed(2)} ជោគជ័យ!`);
       }
       setTimeout(() => setToastNotification(null), 3500);
@@ -16945,6 +16990,8 @@ export default function UnifiedAdminDashboard() {
       setEditingExpense(null);
       setExpTitle('');
       setExpAmount('');
+      setExpAmountKhr('');
+      setExpReceiptImage(null);
       setExpRecipient('');
       setExpNote('');
     };
@@ -16953,12 +17000,76 @@ export default function UnifiedAdminDashboard() {
       setEditingExpense(exp);
       setExpTitle(exp.title || '');
       setExpCategory(exp.category || 'rent');
+      setExpCurrency(exp.currency || 'USD');
       setExpAmount(String(exp.amount || ''));
+      setExpAmountKhr(exp.currency === 'KHR' ? String(Math.round((exp.amount || 0) * (exchangeRate || 4100))) : '');
+      setExpReceiptImage(exp.receiptImage || null);
       setExpDate(exp.date ? exp.date.slice(0, 10) : new Date().toISOString().slice(0, 10));
       setExpPaymentMethod(exp.paymentMethod || 'Cash');
       setExpRecipient(exp.recipient || '');
       setExpNote(exp.note || '');
       setExpenseModalOpen(true);
+    };
+
+    // Print Payment Voucher (បង្កាន់ដៃបើកប្រាក់ចំណាយ)
+    const handlePrintPaymentVoucher = (exp) => {
+      const catObj = EXPENSE_CATEGORIES.find(c => c.id === exp.category) || { label: exp.category };
+      const amountUSD = parseFloat(exp.amount || 0).toFixed(2);
+      const amountKHR = Math.round(parseFloat(exp.amount || 0) * exchangeRate).toLocaleString();
+
+      const voucherContent = `
+        <div style="font-family: 'Kantumruy Pro', sans-serif, monospace; padding: 20px; width: 450px; margin: 0 auto; border: 2px solid #111; border-radius: 8px; color: #111; line-height: 1.6;">
+          <div style="text-align: center; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 15px;">
+            <h2 style="margin: 0; font-size: 18px; font-weight: 900;">${storeSettings.storeName || 'SABAY LUK'}</h2>
+            <p style="margin: 3px 0 0; font-size: 11px; color: #555;">${storeSettings.phone ? 'ទូរស័ព្ទ៖ ' + storeSettings.phone : ''}</p>
+            <h3 style="margin: 8px 0 0; font-size: 15px; font-weight: 900; text-transform: uppercase; background: #eee; padding: 4px; border-radius: 4px;">
+              បង្កាន់ដៃបើកប្រាក់ចំណាយ (PAYMENT VOUCHER)
+            </h3>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 10px;">
+            <div><b>លេខប័ណ្ណ៖</b> <span style="font-family: monospace;">${exp.id}</span></div>
+            <div><b>កាលបរិច្ឆេទ៖</b> ${exp.date || new Date().toISOString().slice(0, 10)}</div>
+          </div>
+
+          <div style="font-size: 12px; line-height: 1.8;">
+            <div><b>បើកជូនអ្នកទទួល៖</b> ${exp.recipient || '...................................................'}</div>
+            <div><b>បរិយាយការចំណាយ៖</b> <b>${exp.title}</b></div>
+            <div><b>ប្រភេទចំណាយ៖</b> ${catObj.label}</div>
+            <div><b>វិធីទូទាត់៖</b> ${exp.paymentMethod || 'សាច់ប្រាក់ (Cash)'}</div>
+            ${exp.note ? `<div><b>កំណត់ចំណាំ៖</b> <i>${exp.note}</i></div>` : ''}
+          </div>
+
+          <div style="margin: 15px 0; padding: 12px; border: 2px dashed #111; border-radius: 6px; text-align: center; background: #fafafa;">
+            <div style="font-size: 11px; font-weight: bold; text-transform: uppercase;">ទឹកប្រាក់ទូទាត់សរុប (TOTAL AMOUNT PAID)</div>
+            <div style="font-size: 22px; font-weight: 900; color: #d97706; margin: 4px 0;">$${amountUSD}</div>
+            <div style="font-size: 13px; font-weight: bold; color: #444;">≈ ${amountKHR} រៀល (KHR)</div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 30px; text-align: center; font-size: 11px;">
+            <div>
+              <b>អ្នកស្នើសុំ</b>
+              <div style="margin-top: 45px; border-top: 1px dotted #888;">ហត្ថលេខា</div>
+            </div>
+            <div>
+              <b>អ្នកអនុញ្ញាត</b>
+              <div style="margin-top: 45px; border-top: 1px dotted #888;">ហត្ថលេខា</div>
+            </div>
+            <div>
+              <b>អ្នកទទួលប្រាក់</b>
+              <div style="margin-top: 45px; border-top: 1px dotted #888;">ហត្ថលេខា</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 25px; text-align: center; font-size: 9px; color: #888; border-top: 1px dashed #ccc; padding-top: 6px;">
+            បង្កាន់ដៃចេញដោយប្រព័ន្ធគ្រប់គ្រង Sabay Luk POS • បោះពុម្ពម៉ោង ${new Date().toLocaleTimeString('km-KH')}
+          </div>
+        </div>
+      `;
+
+      const printWin = window.open('', '_blank', 'height=650,width=550');
+      printWin.document.write(`<html><head><title>Payment Voucher - ${exp.id}</title></head><body onload="window.focus(); window.print();" onafterprint="window.close();">${voucherContent}</body></html>`);
+      printWin.document.close();
     };
 
     const handleDeleteExpense = async (id, title) => {
@@ -17358,6 +17469,7 @@ export default function UnifiedAdminDashboard() {
                   <th className="px-5 py-3">កាលបរិច្ឆេទ</th>
                   <th className="px-5 py-3">បរិយាយចំណាយ</th>
                   <th className="px-5 py-3">ប្រភេទចំណាយ</th>
+                  <th className="px-5 py-3 text-center">បង្កាន់ដៃ (Slip)</th>
                   <th className="px-5 py-3 text-right">ទឹកប្រាក់ ($)</th>
                   <th className="px-5 py-3 text-center">វិធីទូទាត់</th>
                   <th className="px-5 py-3">អ្នកទទួល / សម្គាល់</th>
@@ -17391,6 +17503,21 @@ export default function UnifiedAdminDashboard() {
                             <span>{catObj.label.split('(')[0]}</span>
                           </span>
                         </td>
+                        <td className="px-5 py-3.5 text-center whitespace-nowrap">
+                          {exp.receiptImage ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewingExpenseReceipt(exp.receiptImage)}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-bold cursor-pointer transition shadow-2xs"
+                              title="ចុចដើម្បីមើលរូបវិក្កយបត្រ"
+                            >
+                              <span>🧾</span>
+                              <span>មើល Slip</span>
+                            </button>
+                          ) : (
+                            <span className="text-gray-300 text-[11px]">-</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5 text-right whitespace-nowrap">
                           <span className="font-black text-sm text-amber-600 block">
                             -${parseFloat(exp.amount || 0).toFixed(2)}
@@ -17408,6 +17535,14 @@ export default function UnifiedAdminDashboard() {
                           {exp.recipient || '-'}
                         </td>
                         <td className="px-5 py-3.5 text-right pr-6 whitespace-nowrap space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handlePrintPaymentVoucher(exp)}
+                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-[11px] px-2.5 py-1.5 rounded-xl border border-emerald-200 transition cursor-pointer"
+                            title="ព្រីនបង្កាន់ដៃចំណាយ (Payment Voucher)"
+                          >
+                            🖨️ PV
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(exp)}
@@ -17430,7 +17565,7 @@ export default function UnifiedAdminDashboard() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-gray-400">
+                    <td colSpan={8} className="py-12 text-center text-gray-400">
                       <div className="text-3xl mb-2">💸</div>
                       <p className="font-bold text-gray-600 text-xs">មិនទាន់មានទិន្នន័យចំណាយក្នុងកាលបរិច្ឆេទនេះឡើយ!</p>
                       <p className="text-[11px] text-gray-400 mt-1">សូមចុចប៊ូតុង "កត់ត្រាចំណាយថ្មី" ខាងលើដើម្បីចាប់ផ្តើម។</p>
@@ -17443,10 +17578,10 @@ export default function UnifiedAdminDashboard() {
 
         </div>
 
-        {/* ⭐️ ADD / EDIT EXPENSE MODAL ⭐️ */}
+        {/* ⭐️ ADD / EDIT EXPENSE MODAL FULL OPTION ⭐️ */}
         {expenseModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 max-h-[94vh] overflow-y-auto">
               
               <div className="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
                 <div className="flex items-center gap-2">
@@ -17454,16 +17589,17 @@ export default function UnifiedAdminDashboard() {
                     {editingExpense ? '✏️' : '➕'}
                   </span>
                   <div>
-                    <h3 className="font-black text-sm text-gray-900">
-                      {editingExpense ? 'កែប្រែទិន្នន័យចំណាយ' : 'កត់ត្រាចំណាយប្រតិបត្តិការថ្មី'}
+                    <h3 className="font-black text-sm text-gray-900 flex items-center gap-2">
+                      <span>{editingExpense ? 'កែប្រែទិន្នន័យចំណាយ' : 'កត់ត្រាចំណាយប្រតិបត្តិការថ្មី'}</span>
+                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded-md uppercase">Full Option</span>
                     </h3>
-                    <p className="text-[10px] text-gray-400">បញ្ចូលទឹកប្រាក់ និងព័ត៌មានលម្អិតនៃចំណាយ</p>
+                    <p className="text-[10px] text-gray-400">បញ្ចូលទឹកប្រាក់ ($ / ៛) ភ្ជាប់រូបបង្កាន់ដៃ និងព័ត៌មានលម្អិត</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setExpenseModalOpen(false)}
-                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xs"
+                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 font-bold flex items-center justify-center text-xs cursor-pointer"
                 >
                   ✕
                 </button>
@@ -17481,38 +17617,126 @@ export default function UnifiedAdminDashboard() {
                     required
                     value={expTitle}
                     onChange={(e) => setExpTitle(e.target.value)}
-                    placeholder="ឧ. ថ្លៃជួលតូបខែនេះ, ថ្លៃភ្លើង, ទិញថង់វេចខ្ចប់..."
+                    placeholder="ឧ. ថ្លៃជួលតូបខែនេះ, ថ្លៃភ្លើង, ទិញថង់វេចខ្ចប់, កាហ្វេភ្ញៀវ..."
                     className="w-full bg-gray-50 border border-gray-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3 py-2.5 font-medium outline-none transition"
                   />
                 </div>
 
-                {/* Amount in USD & KHR live preview */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-gray-700 block mb-1">
-                      ចំនួនទឹកប្រាក់ ($ USD) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      required
-                      min="0.01"
-                      value={expAmount}
-                      onChange={(e) => setExpAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-emerald-500 focus:bg-white rounded-xl px-3 py-2.5 font-black text-base text-amber-600 outline-none transition"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-gray-400 block mb-1">
-                      សមមូលជារៀល (៛ KHR)
-                    </label>
-                    <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5 font-black text-sm text-gray-600 flex items-center">
-                      {expAmount && !isNaN(parseFloat(expAmount)) 
-                        ? `${Math.round(parseFloat(expAmount) * exchangeRate).toLocaleString()} ៛` 
-                        : '0 ៛'}
+                {/* Currency Switcher & Amount Input with Live Conversion */}
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-700 text-[11px]">រូបិយប័ណ្ណទូទាត់៖</span>
+                    <div className="flex rounded-xl bg-gray-200 p-0.5 text-[11px] font-black">
+                      <button
+                        type="button"
+                        onClick={() => setExpCurrency('USD')}
+                        className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                          expCurrency === 'USD' ? 'bg-white text-emerald-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'
+                        }`}
+                      >
+                        💵 ដុល្លារ ($)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpCurrency('KHR')}
+                        className={`px-3 py-1 rounded-lg transition cursor-pointer ${
+                          expCurrency === 'KHR' ? 'bg-white text-blue-700 shadow-xs' : 'text-gray-500 hover:text-gray-800'
+                        }`}
+                      >
+                        🇰🇭 រៀល (៛)
+                      </button>
                     </div>
                   </div>
+
+                  {expCurrency === 'USD' ? (
+                    <div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="font-bold text-gray-700 block mb-1 text-[10px]">
+                            ទឹកប្រាក់ ($ USD) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            min="0.01"
+                            value={expAmount}
+                            onChange={(e) => setExpAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full bg-white border border-gray-300 focus:border-emerald-500 rounded-xl px-3 py-2 font-mono font-black text-sm text-amber-600 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-bold text-gray-400 block mb-1 text-[10px]">
+                            សមមូលជារៀល (៛ KHR)
+                          </label>
+                          <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 font-mono font-bold text-xs text-gray-600 flex items-center h-[38px]">
+                            {expAmount && !isNaN(parseFloat(expAmount)) 
+                              ? `${Math.round(parseFloat(expAmount) * exchangeRate).toLocaleString()} ៛` 
+                              : '0 ៛'}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Fast USD Presets */}
+                      <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-0.5">
+                        <span className="text-[10px] text-gray-400 font-bold shrink-0">រហ័ស:</span>
+                        {[5, 10, 20, 50, 100].map(v => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setExpAmount(v.toString())}
+                            className="px-2 py-0.5 bg-white hover:bg-emerald-50 hover:text-emerald-700 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 cursor-pointer transition shrink-0"
+                          >
+                            +${v}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="font-bold text-gray-700 block mb-1 text-[10px]">
+                            ទឹកប្រាក់ (៛ KHR) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="100"
+                            required
+                            min="100"
+                            value={expAmountKhr}
+                            onChange={(e) => setExpAmountKhr(e.target.value)}
+                            placeholder="0 ៛"
+                            className="w-full bg-white border border-gray-300 focus:border-emerald-500 rounded-xl px-3 py-2 font-mono font-black text-sm text-blue-600 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="font-bold text-gray-400 block mb-1 text-[10px]">
+                            សមមូលជាដុល្លារ ($ USD)
+                          </label>
+                          <div className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 font-mono font-bold text-xs text-amber-700 flex items-center h-[38px]">
+                            {expAmountKhr && !isNaN(parseFloat(expAmountKhr)) 
+                              ? `$${(parseFloat(expAmountKhr) / exchangeRate).toFixed(2)}` 
+                              : '$0.00'}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Fast KHR Presets */}
+                      <div className="flex items-center gap-1.5 mt-2 overflow-x-auto pb-0.5">
+                        <span className="text-[10px] text-gray-400 font-bold shrink-0">រហ័ស:</span>
+                        {[10000, 20000, 50000, 100000].map(v => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setExpAmountKhr(v.toString())}
+                            className="px-2 py-0.5 bg-white hover:bg-blue-50 hover:text-blue-700 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 cursor-pointer transition shrink-0"
+                          >
+                            +{v.toLocaleString()}៛
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Category & Payment Method */}
@@ -17589,17 +17813,59 @@ export default function UnifiedAdminDashboard() {
                   />
                 </div>
 
+                {/* Receipt Slip Photo Attachment */}
+                <div>
+                  <label className="font-bold text-gray-700 block mb-1">
+                    📸 ភ្ជាប់រូបវិក្កយបត្រ / បង្កាន់ដៃ (Receipt Slip Photo)
+                  </label>
+                  {expReceiptImage ? (
+                    <div className="relative inline-block border-2 border-emerald-400 rounded-2xl overflow-hidden p-1 bg-white">
+                      <img 
+                        src={expReceiptImage} 
+                        alt="Receipt Preview" 
+                        className="w-24 h-24 object-cover rounded-xl"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setExpReceiptImage(null)}
+                        className="absolute top-2 right-2 w-6 h-6 rounded-full bg-rose-600 text-white font-bold text-xs flex items-center justify-center cursor-pointer shadow-md hover:bg-rose-700"
+                        title="លុបរូបភាពចេញ"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 hover:border-emerald-500 rounded-2xl p-3 bg-gray-50 hover:bg-emerald-50/30 cursor-pointer transition">
+                      <span className="text-xl">📷</span>
+                      <span className="text-gray-600 font-bold text-[11px]">ចុចដើម្បីថតរូប ឬជ្រើសរើសរូបបង្កាន់ដៃ</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => setExpReceiptImage(reader.result);
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
                 <div className="flex gap-2 pt-2 border-t border-gray-100">
                   <button
                     type="button"
                     onClick={() => setExpenseModalOpen(false)}
-                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold transition"
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold transition cursor-pointer"
                   >
                     បោះបង់
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-black transition shadow-md shadow-emerald-600/20"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-black transition shadow-md shadow-emerald-600/20 cursor-pointer"
                   >
                     {editingExpense ? 'រក្សាទុកការកែប្រែ' : 'កត់ត្រាចំណាយ'}
                   </button>
@@ -17607,6 +17873,39 @@ export default function UnifiedAdminDashboard() {
 
               </form>
 
+            </div>
+          </div>
+        )}
+
+        {/* ⭐️ LIGHTBOX MODAL FOR EXPENSE RECEIPT SLIP ⭐️ */}
+        {viewingExpenseReceipt && (
+          <div 
+            onClick={() => setViewingExpenseReceipt(null)}
+            className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in cursor-pointer"
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()} 
+              className="relative max-w-xl w-full bg-white rounded-3xl overflow-hidden shadow-2xl p-4 animate-in zoom-in-95 cursor-default"
+            >
+              <div className="flex justify-between items-center pb-2 mb-2 border-b border-gray-100">
+                <span className="font-black text-sm text-gray-900 flex items-center gap-1.5">
+                  <span>🧾</span> រូបភាពវិក្កយបត្រ / បង្កាន់ដៃចំណាយ
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setViewingExpenseReceipt(null)}
+                  className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="max-h-[75vh] overflow-auto rounded-2xl flex items-center justify-center bg-gray-950">
+                <img 
+                  src={viewingExpenseReceipt} 
+                  alt="Expense Slip Full" 
+                  className="max-w-full max-h-[72vh] object-contain"
+                />
+              </div>
             </div>
           </div>
         )}

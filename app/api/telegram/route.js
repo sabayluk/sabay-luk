@@ -672,6 +672,24 @@ export async function POST(request) {
         `━━━━━━━━━━━━━━━━━━\n` +
         `<i>សូមលោក/លោកស្រីមេត្តាជួយទូទាត់បំណុលតាមការកំណត់។ សូមអរគុណ! 🙏✨</i>`
       );
+    } else if (action === 'expense' && body.expense) {
+      const exp = body.expense;
+      const rate = exp.exchangeRate || 4100;
+      const amountUSD = Number(exp.amount || 0).toFixed(2);
+      const amountKHR = Math.round(Number(exp.amount || 0) * rate).toLocaleString();
+
+      finalMessage = `💸 <b>កត់ត្រាចំណាយប្រតិបត្តិការថ្មី (STORE EXPENSE)</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🏪 <b>ហាង:</b> <b>${escapeHtml(storeName || 'SABAY LUK')}</b>\n` +
+        `📝 <b>បរិយាយ:</b> <b>${escapeHtml(exp.title || 'ចំណាយប្រតិបត្តិការ')}</b>\n` +
+        `📁 <b>ប្រភេទចំណាយ:</b> <b>${escapeHtml(exp.categoryLabel || exp.category || 'ទូទៅ')}</b>\n` +
+        `💵 <b>ទឹកប្រាក់ ($):</b> <b>$${amountUSD}</b> (≈ ${amountKHR} ៛)\n` +
+        `💳 <b>វិធីទូទាត់:</b> ${escapeHtml(exp.paymentMethod || 'Cash')}\n` +
+        `👤 <b>អ្នកទទួល / ក្រុមហ៊ុន:</b> <b>${escapeHtml(exp.recipient || '-')}</b>\n` +
+        `📅 <b>កាលបរិច្ឆេទ:</b> ${escapeHtml(exp.date || new Date().toISOString().slice(0, 10))}\n` +
+        (exp.note ? `📌 <b>ចំណាំ:</b> <i>${escapeHtml(exp.note)}</i>\n` : '') +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `⚡ <i>បានកត់ត្រាចូលក្នុងរបាយការណ៍ហិរញ្ញវត្ថុដោយជោគជ័យ!</i>`;
     }
 
     if (!finalMessage) {
